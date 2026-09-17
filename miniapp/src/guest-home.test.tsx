@@ -5,9 +5,11 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { TabKey } from './App';
+import type { NewsItem, PublicNewsResponse } from './api';
 import type { LoginSource } from './screens/GuestHome';
-import { GuestShell, guestAction, lockedCopy, startLogin } from './screens/GuestHome';
+import { GuestShell, LockedFeedBody, guestAction, lockedCopy, openGuestNews, startLogin } from './screens/GuestHome';
 import { stubLocalStorage, userAgent } from './test-fixtures';
+import { openExternal, trackEvent } from './toss';
 import type { Trial } from './trial';
 import { TRIAL_CAP_SECONDS, beginTrial, flushTrial, readTrial, trialDurationSeconds, writeTrial } from './trial';
 
@@ -25,14 +27,15 @@ vi.mock('./toss', () => ({
   trackEvent: vi.fn(),
   trackScreen: vi.fn(),
   tossLogin: vi.fn(),
+  openExternal: vi.fn(),
 }));
 
 beforeEach(stubLocalStorage);
 
-const shell = (trial: Trial | null, tab: TabKey = 'home') =>
+const shell = (trial: Trial | null, tab: TabKey = 'home', extra: { news?: PublicNewsResponse | null } = {}) =>
   renderToStaticMarkup(
     <TDSMobileProvider userAgent={userAgent}>
-      <GuestShell tab={tab} onTabChange={() => {}} onLogin={() => {}} trial={trial} />
+      <GuestShell tab={tab} onTabChange={() => {}} onLogin={() => {}} trial={trial} {...extra} />
     </TDSMobileProvider>,
   );
 
@@ -170,6 +173,86 @@ describe('게스트 홈 — 잠긴 피드', () => {
     expect(markup).toContain('책 뉴스');
     expect(markup).toContain('소식·여백·책 뉴스는 계정이 있어야 보여요');
     expect(markup).toContain('다른 독서가들이 무엇을 읽고 무슨 글을 남겼는지');
+  });
+});
+
+/**
+ * 게스트 「책 뉴스」(2026-09-17) — 공개 뉴스를 받으면 피드 박스의 뉴스 탭만 열린다. 받기 전·실패·꺼짐·빈 목록은
+ * 옛 잠금 그대로다(게스트 홈은 에러 화면·로그인 화면으로 떨어지지 않는다).
+ */
+describe('게스트 홈 — 책 뉴스', () => {
+  const item = (title: string, link: string): NewsItem => ({
+    title,
+    link,
+    publishedAt: '2026-09-16T01:00:00Z',
+    bookTitle: '신간', // 공개 뉴스는 주제 라벨이 온다(일반 책 뉴스)
+    source: '불교신문',
+  });
+  const opened: PublicNewsResponse = {
+    newsEnabled: true,
+    news: [item('헤세 특별전', 'https://a.example/1'), item('데미안 새 번역', 'https://a.example/2')],
+  };
+
+  it('받은 뉴스가 첫 화면 피드 박스에 선다 — 기본 탭이 뉴스다', () => {
+    const markup = shell(null, 'home', { news: opened });
+
+    expect(markup).toContain('헤세 특별전');
+    expect(markup).toContain('데미안 새 번역');
+    // 뉴스가 열렸으면 옛 전체 잠금 문구는 없다(양성 대조군은 아래 「못 받았으면」).
+    expect(markup).not.toContain('소식·여백·책 뉴스는 계정이 있어야 보여요');
+  });
+
+  it('못 받았으면(null)·꺼졌으면·비었으면 옛 잠금 그대로다', () => {
+    for (const news of [null, { newsEnabled: false, news: opened.news }, { newsEnabled: true, news: [] }]) {
+      const markup = shell(null, 'home', { news });
+      expect(markup).toContain('소식·여백·책 뉴스는 계정이 있어야 보여요');
+      expect(markup).not.toContain('헤세 특별전');
+    }
+  });
+
+  it('잠긴 탭 안내는 뉴스가 열렸으면 「책 뉴스」를 빼고 말한다 — 열린 것을 잠겼다고 하지 않는다', () => {
+    const render = (newsOpen: boolean) =>
+      renderToStaticMarkup(
+        <TDSMobileProvider userAgent={userAgent}>
+          <LockedFeedBody newsOpen={newsOpen} />
+        </TDSMobileProvider>,
+      );
+
+    expect(render(true)).toContain('소식·여백은 계정이 있어야 보여요');
+    expect(render(true)).not.toContain('책 뉴스는');
+    expect(render(false)).toContain('소식·여백·책 뉴스는 계정이 있어야 보여요');
+  });
+
+  it('뉴스가 열려도 떠 있는 것은 탭바 하나뿐이다 (T-183)', () => {
+    expect(shell(null, 'home', { news: opened }).match(/position:fixed/g) ?? []).toHaveLength(1);
+  });
+
+  // 셸→피드 박스 배선 세 줄 — 하니스가 클릭·effect를 못 돌려(T-149) 행동으로 못 잰다. 기본 탭이 뉴스라
+  // 잠금 안내(newsOpen)도 첫 렌더에 안 선다. 공백 정규화 소스 가드로 잠근다.
+  it('피드 박스에 게스트 핸들러·열림 상태를 그대로 넘긴다', () => {
+    const src = readFileSync(new URL('./screens/GuestHome.tsx', import.meta.url), 'utf8').replace(/\s+/g, ' ');
+
+    expect(src).toContain('locked={<LockedFeedBody newsOpen={newsOpen} />}');
+    expect(src).toContain('onOpenNews={openGuestNews}');
+    expect(src).toContain('onTab={setFeedTab}');
+  });
+
+  it('기사를 열면 guest_news_opened를 남기고 외부로 나간다 — 로그인 홈과 같은 문', () => {
+    vi.mocked(trackEvent).mockReset();
+    vi.mocked(openExternal).mockReset();
+
+    openGuestNews('https://a.example/1');
+
+    expect(vi.mocked(trackEvent).mock.calls).toEqual([['guest_news_opened']]);
+    expect(vi.mocked(openExternal)).toHaveBeenCalledWith('https://a.example/1');
+  });
+
+  // effect는 정적 하니스에서 안 돈다(T-149) — 마운트 배선은 소스로 잠근다(app.test.tsx 관례).
+  it('셸이 마운트 때 공개 뉴스를 받고, 진입 이벤트에 새 번들 표지를 싣는다', () => {
+    const src = readFileSync(new URL('./screens/GuestHome.tsx', import.meta.url), 'utf8').replace(/\s+/g, ' ');
+
+    expect(src).toContain('fetchPublicNews().then(setNews).catch(() => {})');
+    expect(src).toContain("trackEvent('guest_entered', { variant: 'news' })");
   });
 });
 

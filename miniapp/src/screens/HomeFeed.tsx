@@ -157,6 +157,21 @@ export function visibleTabs(newsEnabled: boolean): FeedTab[] {
 }
 
 /**
+ * 게스트 피드에서 「책 뉴스」를 여는가 — 받았고(null 아님) 켜져 있고 한 건이라도 있어야 연다.
+ *
+ * <p>하나라도 어긋나면 옛 잠금 모드다: 실패·킬스위치·빈 목록에서 살아 있는 척하는 빈 탭을 세우지 않는다.
+ * 공개 뉴스 응답(`PublicNewsResponse`)과 로그인 피드(`HomeFeedResponse`)가 같은 두 필드를 가져 둘 다 받는다.
+ */
+export function guestFeedOpen<T extends { newsEnabled: boolean; news: NewsItem[] }>(news: T | null): news is T {
+  return news !== null && news.newsEnabled && news.news.length > 0;
+}
+
+/** 게스트 피드의 탭 — 고른 것이 있으면 그것, 아니면 뉴스가 열렸을 때 뉴스(유일하게 살아 있는 탭), 닫혔으면 옛 소식. */
+export function guestFeedTab(chosen: FeedTab | null, open: boolean): FeedTab {
+  return chosen ?? (open ? 'news' : 'social');
+}
+
+/**
  * 「함께 읽는 사람」 한 줄의 문장.
  *
  * <p>읽는 중이 다른 무엇보다 앞선다(과거 기록이 있어도). 그 밖에는 <b>사실만 적는다</b> —
@@ -557,6 +572,56 @@ export function FeedBox({
   locked?: ReactNode;
 }) {
   const shut = locked !== undefined;
+  /** 게스트인데 공개 뉴스를 받았다 — 뉴스 탭 하나만 살아나고 나머지는 알약별로 흐리다. */
+  const guestOpen = shut && guestFeedOpen(feed);
+  /** 알약이 하나도 안 눌리는 옛 잠금 — 데이터가 없거나 뉴스가 꺼졌을 때. */
+  const allShut = shut && !guestOpen;
+
+  // 뉴스 목록 — 로그인 홈과 게스트가 같이 쓴다. 배지만 다르다: 게스트 공개 뉴스는 일반 책 뉴스라 `bookTitle`에
+  // 운영자 고정 주제 라벨(`신간` 등)이 온다 — 「내 책」도 책 제목 기호 『』도 거짓이라 라벨을 그대로 쓴다.
+  const newsList = (items: NewsItem[], mine: boolean) => (
+    <FeedList
+      items={items}
+      expanded={expanded}
+      empty={EMPTY_MESSAGE.news}
+      onToggle={onToggle}
+      row={(item: NewsItem, index) => (
+        <a
+          key={item.link}
+          data-feed-row=""
+          href={item.link}
+          // 기본 이동을 막고 SDK로 넘긴다 — href는 남겨 둔다(무엇을 여는 줄인지가 마크업에 남는다).
+          onClick={(e) => {
+            e.preventDefault();
+            onOpenNews(item.link);
+          }}
+          style={rowStyle(index)}
+        >
+          <Text typography="st11" style={{ display: 'block', wordBreak: 'keep-all' }}>
+            {item.title}
+          </Text>
+          <Text typography="st12" color="grey600" style={{ display: 'block', marginTop: 2 }}>
+            {/* 여기만 절대 날짜다 — 「N일 전」은 「수집이 지금도 도는가」에 답하지 못한다.
+                소식·사람 탭은 상대 시각 그대로다(거기선 「방금」이 값이다). */}
+            {[sourceLabel(item), formatDate(item.publishedAt)].filter((s) => s !== '').join(' · ')}
+          </Text>
+          <span
+            style={{
+              display: 'inline-block',
+              marginTop: 6,
+              padding: '3px 8px',
+              borderRadius: 20,
+              background: 'var(--adaptiveGrey200, #E4DDD0)',
+              color: 'var(--adaptiveGrey700, #57534A)',
+              fontSize: 12,
+            }}
+          >
+            {mine ? `내 책 · 『${item.bookTitle}』` : item.bookTitle}
+          </span>
+        </a>
+      )}
+    />
+  );
 
   return (
     <section style={sectionStyle}>
@@ -572,7 +637,8 @@ export function FeedBox({
           paddingBottom: 11,
           borderBottom: SECTION_RULE,
           // 흐림은 줄 전체에 건다 — 알약마다 걸면 구분선만 또렷해 잠긴 줄이 반만 잠겨 보인다.
-          opacity: shut ? 0.45 : undefined,
+          // 게스트 뉴스가 열렸을 때만 알약별이다(뉴스 하나가 또렷해야 「이건 열렸다」가 읽힌다).
+          opacity: allShut ? 0.45 : undefined,
         }}
       >
         {/* 잠금 머리는 뉴스 게이트(서버 값)를 안 본다 — 게스트에겐 그 값이 없고, 여기 머리는
@@ -585,9 +651,12 @@ export function FeedBox({
               // 그림뿐인 탭은 접근성 이름이 없으면 스크린리더에 무명 버튼이 된다.
               aria-label={key === 'readers' ? '함께 읽는 사람' : undefined}
               aria-current={key === tab ? 'true' : undefined}
-              aria-disabled={shut ? 'true' : undefined}
-              onClick={shut ? undefined : () => onTab(key)}
-              style={key === 'readers' ? iconPillStyle(key === tab) : pillStyle(key === tab)}
+              aria-disabled={allShut ? 'true' : undefined}
+              onClick={allShut ? undefined : () => onTab(key)}
+              style={{
+                ...(key === 'readers' ? iconPillStyle(key === tab) : pillStyle(key === tab)),
+                ...(guestOpen && key !== 'news' ? { opacity: 0.45 } : {}),
+              }}
             >
               {key === 'readers' ? <PersonMark /> : TAB_LABEL[key]}
             </button>
@@ -598,7 +667,7 @@ export function FeedBox({
 
       {/* 실패는 이 한 줄로 끝난다 — 홈 전체를 에러 화면으로 바꾸지 않는다(폴드 아래 카드다). */}
       {shut ? (
-        locked
+        guestOpen && tab === 'news' ? newsList(feed.news, false) : locked
       ) : error !== null ? (
         <Text typography="st12" color="red500" style={{ display: 'block', wordBreak: 'keep-all' }}>
           {error}
@@ -619,47 +688,7 @@ export function FeedBox({
           )}
         />
       ) : tab === 'news' ? (
-        <FeedList
-          items={feed.news}
-          expanded={expanded}
-          empty={EMPTY_MESSAGE.news}
-          onToggle={onToggle}
-          row={(item: NewsItem, index) => (
-            <a
-              key={item.link}
-              data-feed-row=""
-              href={item.link}
-              // 기본 이동을 막고 SDK로 넘긴다 — href는 남겨 둔다(무엇을 여는 줄인지가 마크업에 남는다).
-              onClick={(e) => {
-                e.preventDefault();
-                onOpenNews(item.link);
-              }}
-              style={rowStyle(index)}
-            >
-              <Text typography="st11" style={{ display: 'block', wordBreak: 'keep-all' }}>
-                {item.title}
-              </Text>
-              <Text typography="st12" color="grey600" style={{ display: 'block', marginTop: 2 }}>
-                {/* 여기만 절대 날짜다 — 「N일 전」은 「수집이 지금도 도는가」에 답하지 못한다.
-                    소식·사람 탭은 상대 시각 그대로다(거기선 「방금」이 값이다). */}
-                {[sourceLabel(item), formatDate(item.publishedAt)].filter((s) => s !== '').join(' · ')}
-              </Text>
-              <span
-                style={{
-                  display: 'inline-block',
-                  marginTop: 6,
-                  padding: '3px 8px',
-                  borderRadius: 20,
-                  background: 'var(--adaptiveGrey200, #E4DDD0)',
-                  color: 'var(--adaptiveGrey700, #57534A)',
-                  fontSize: 12,
-                }}
-              >
-                내 책 · 『{item.bookTitle}』
-              </span>
-            </a>
-          )}
-        />
+        newsList(feed.news, true)
       ) : tab === 'discover' ? (
         <FeedList
           // `?? []` — readers와 같은 이유로 이 필드를 아직 안 내려주는 서버와도 붙는다.

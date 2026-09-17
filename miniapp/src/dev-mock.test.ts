@@ -10,6 +10,7 @@ import type {
   PersonalityMutation,
   PersonalityStatus,
   ProfileBook,
+  PublicNewsResponse,
   ShelfResponse,
   StopResponse,
   StudyCalendarResponse,
@@ -272,6 +273,13 @@ describe('dev-mock 핸들러', () => {
     expect(feed.newsEnabled).toBe(true);
     expect(feed.news.length).toBeGreaterThan(0);
     expect(feed.social.length).toBeGreaterThan(3);
+  });
+
+  it('공개 뉴스(게스트) — 켜져 있고 비지 않는다. 안 그러면 게스트 홈의 뉴스 탭을 브라우저로 볼 길이 없다', async () => {
+    const data = await mockRequest<PublicNewsResponse>('/api/public/news', {});
+
+    expect(data.newsEnabled).toBe(true);
+    expect(data.news.length).toBeGreaterThan(0);
   });
 
   it('핸들 만들기 — 이미 핸들이 있는 기본 픽스처에선 409다(핸들 불변 규칙을 목도 지킨다)', async () => {

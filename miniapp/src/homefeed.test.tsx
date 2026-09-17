@@ -1,3 +1,5 @@
+import { readFileSync } from 'node:fs';
+
 import { TDSMobileProvider } from '@toss/tds-mobile';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { beforeEach, describe, expect, it } from 'vitest';
@@ -14,6 +16,8 @@ import {
   ReaderRow,
   eventLine,
   eventBadge,
+  guestFeedOpen,
+  guestFeedTab,
   previewOf,
   readerStatusLine,
   sourceLabel,
@@ -109,6 +113,25 @@ const lockedBox = () =>
       <FeedBox
         feed={null}
         tab="social"
+        expanded={false}
+        error={null}
+        now={NOW}
+        onTab={() => {}}
+        onToggle={() => {}}
+        onOpenNews={() => {}}
+        onOpenMargin={() => {}}
+        locked={<span>잠김</span>}
+      />
+    </TDSMobileProvider>,
+  );
+
+/** 게스트 홈이 공개 뉴스를 받은 뒤 부르는 꼴 — 잠금 모드인데 `feed`가 있다(소식·여백·사람은 늘 빈 배열). */
+const guestBox = (data: HomeFeedResponse | null, tab: FeedTab) =>
+  renderToStaticMarkup(
+    <TDSMobileProvider userAgent={userAgent}>
+      <FeedBox
+        feed={data}
+        tab={tab}
         expanded={false}
         error={null}
         now={NOW}
@@ -596,6 +619,88 @@ describe('피드 박스 — 잠김 (로그인 전)', () => {
     expect(lockedBox()).toContain('data-feed-locked');
     expect(renderBox(feed(), 'news')).not.toContain('data-feed-locked');
     expect(renderBox(feed(), 'news')).not.toContain('aria-disabled');
+  });
+});
+
+/**
+ * 게스트에게 「책 뉴스」만 연다(2026-09-17) — 앱인토스 프로모션이 데려올 「책이 없는 사람」이 로그인 전에
+ * 만질 수 있는 것이 타이머뿐이었다. 공개 뉴스(`GET /api/public/news`)를 받으면 잠금 박스의 뉴스 탭 하나만
+ * 살아나고, 소식·여백·사람은 흐린 알약으로 남아 「로그인하면 열린다」를 계속 말한다.
+ */
+describe('피드 박스 — 게스트 뉴스 열림', () => {
+  // 게스트 공개 뉴스는 일반 책 뉴스라 `bookTitle`에 책 제목이 아니라 운영자 고정 주제 라벨이 온다.
+  const opened = () =>
+    feed({ news: [news('헤세 특별전', 'https://a.example/1', 2, '신간'), news('데미안 새 번역', 'https://a.example/2', 5, '출판계')] });
+  const lockedRowStyle = (markup: string) => markup.match(/data-feed-locked="" style="([^"]*)"/)?.[1] ?? '';
+
+  it('열림 판정 — 받았고 켜져 있고 한 건이라도 있어야 연다', () => {
+    expect(guestFeedOpen(null)).toBe(false);
+    expect(guestFeedOpen({ newsEnabled: false, news: [news('t', 'https://a.example/1', 1)] })).toBe(false);
+    expect(guestFeedOpen({ newsEnabled: true, news: [] })).toBe(false);
+    expect(guestFeedOpen({ newsEnabled: true, news: [news('t', 'https://a.example/1', 1)] })).toBe(true);
+  });
+
+  it('기본 탭 — 열렸으면 뉴스(유일하게 살아 있는 탭), 아니면 옛 소식. 고른 탭이 있으면 그것', () => {
+    expect(guestFeedTab(null, true)).toBe('news');
+    expect(guestFeedTab(null, false)).toBe('social');
+    expect(guestFeedTab('social', true)).toBe('social');
+  });
+
+  it('뉴스 탭이면 기사가 서고 배지는 주제 라벨 그대로다 — 「내 책」도 겹낫표도 없다', () => {
+    const markup = guestBox(opened(), 'news');
+
+    expect(markup).toContain('헤세 특별전');
+    expect(markup).toContain('데미안 새 번역');
+    expect(markup).toContain('신간');
+    expect(markup).toContain('출판계');
+    // 양성 대조군: 로그인 홈 뉴스 탭은 같은 값에 「내 책 · 『…』」을 단다(책 제목 표기).
+    expect(renderBox(opened(), 'news')).toContain('내 책 · 『신간』');
+    expect(markup).not.toContain('내 책 · ');
+    // 겹낫표는 책 제목 기호라 주제 라벨에 붙으면 틀린 표기다(「『신간』」).
+    expect(markup).not.toContain('『신간』');
+    expect(markup).not.toContain('『출판계』');
+  });
+
+  it('알약이 다 눌린다 — 잠긴 탭을 누르면 본문이 잠금 안내로 바뀌는 것이 곧 답이다', () => {
+    // 양성 대조군: 데이터 없는 잠금은 넷 다 aria-disabled다.
+    expect(lockedBox().match(/aria-disabled="true"/g)).toHaveLength(4);
+    expect(guestBox(opened(), 'news')).not.toContain('aria-disabled');
+  });
+
+  it('흐림은 줄 전체가 아니라 알약별이다 — 뉴스만 또렷하고 나머지는 흐리다', () => {
+    const markup = guestBox(opened(), 'news');
+
+    // 양성 대조군: 데이터 없는 잠금은 줄 전체에 흐림을 건다.
+    expect(lockedRowStyle(lockedBox())).toContain('opacity:0.45');
+    expect(lockedRowStyle(markup)).not.toContain('opacity');
+    const pill = (key: string) => markup.match(new RegExp(`data-feed-tab="${key}"[^>]*style="([^"]*)"`))?.[1] ?? '';
+    expect(pill('news')).not.toContain('opacity');
+    expect(pill('social')).toContain('opacity:0.45');
+    expect(pill('discover')).toContain('opacity:0.45');
+    expect(pill('readers')).toContain('opacity:0.45');
+  });
+
+  // 클릭 핸들러는 마크업에 안 실린다(정적 렌더) — aria-disabled와 같은 판정(allShut)을 쓰는지 소스로 잠근다.
+  it('열렸으면 알약이 실제로 눌린다 — onClick도 aria-disabled와 같은 판정을 쓴다', () => {
+    const src = readFileSync(new URL('./screens/HomeFeed.tsx', import.meta.url), 'utf8').replace(/\s+/g, ' ');
+
+    expect(src).toContain('onClick={allShut ? undefined : () => onTab(key)}');
+  });
+
+  it('잠긴 탭을 고르면 잠금 안내가 선다 — 기사는 안 보인다', () => {
+    const markup = guestBox(opened(), 'social');
+
+    expect(markup).toContain('잠김');
+    expect(markup).not.toContain('헤세 특별전');
+  });
+
+  it('뉴스가 꺼졌거나 비었으면 옛 잠금 그대로다 — 죽은 탭 없음', () => {
+    for (const data of [feed({ newsEnabled: false, news: [news('t', 'https://a.example/1', 1)] }), feed()]) {
+      const markup = guestBox(data, 'news');
+      expect(markup.match(/aria-disabled="true"/g)).toHaveLength(4);
+      expect(lockedRowStyle(markup)).toContain('opacity:0.45');
+      expect(markup).toContain('잠김');
+    }
   });
 });
 

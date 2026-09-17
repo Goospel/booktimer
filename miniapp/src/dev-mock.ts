@@ -18,6 +18,7 @@ import type {
   PersonalityMutation,
   PersonalityStatus,
   ProfileBook,
+  PublicNewsResponse,
   ReaderStatus,
   RequestOptions,
   SearchRow,
@@ -788,6 +789,14 @@ const discoverStories: SocialEvent[] = [
     bookId: 25, excerpt: '창백한 푸른 점 이야기에서 한참 멈췄다.', count: 1, coverUrl: null },
 ];
 
+/** 게스트 공개 뉴스 픽스처 — 서버 일반 책 뉴스와 같게 `bookTitle`에 운영자 고정 주제 라벨이 실린다. */
+const publicNewsItems: NewsItem[] = [
+  { title: '[신간] 공간은 어떻게 권력이 되는가', link: 'https://news.google.com/rss/articles/mock-public-1?oc=5', publishedAt: isoTime(3), bookTitle: '신간', source: '독서신문' },
+  { title: '출판 진흥 예산 645억원, 내년 어디에 쓰이나', link: 'https://news.google.com/rss/articles/mock-public-2?oc=5', publishedAt: isoTime(9), bookTitle: '출판계', source: '연합뉴스' },
+  { title: "[베스트셀러] '세네카' 다시 1위…고전·철학서 강세", link: 'https://news.google.com/rss/articles/mock-public-3?oc=5', publishedAt: isoTime(20), bookTitle: '베스트셀러', source: '한국일보' },
+  { title: '[신간] 과학적으로 옳다는 착각', link: 'https://news.google.com/rss/articles/mock-public-4?oc=5', publishedAt: isoTime(30), bookTitle: '신간', source: '주간경향' },
+];
+
 const newsItems: NewsItem[] = [
   {
     title: '헤르만 헤세 『데미안』 출간 100년, 다시 읽히는 이유',
@@ -952,6 +961,8 @@ const routes: [Method, RegExp, (ctx: Ctx) => unknown][] = [
     readers: readerStatuses,
     discover: discoverStories,
   })],
+  // 게스트 공개 뉴스 — 켜 둬야 게스트 홈의 뉴스 탭을 브라우저로 볼 수 있다. 일반 책 뉴스라 bookTitle이 주제 라벨이다.
+  ['GET', /^\/api\/public\/news$/, (): PublicNewsResponse => ({ newsEnabled: true, news: publicNewsItems })],
 
   // ── 타이머 ──
   ['POST', /^\/api\/sessions\/start$/, ({ body }) => {
