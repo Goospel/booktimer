@@ -12,8 +12,8 @@ function pick(next: TimerMode, current: TimerMode, locked: boolean) {
 </script>
 
 <template>
-    <div class="dash-mode-toggle-wrap">
-        <div class="dash-mode-toggle" :class="{ 'is-locked': locked }" role="group" aria-label="타이머 모드">
+    <div class="dash-mode-toggle-wrap" :class="{ 'is-study': mode === 'study' }">
+        <div class="dash-mode-toggle" :class="{ 'is-locked': locked }" role="group" aria-label="독서·공부 모드">
             <button type="button" :aria-pressed="mode === 'reading'" :aria-disabled="locked || undefined"
                     @click="pick('reading', mode, locked)">독서</button>
             <button type="button" :aria-pressed="mode === 'study'" :aria-disabled="locked || undefined"

@@ -474,14 +474,18 @@ function onSheetAdded(book: { id: number; title: string; status: string }) {
              격언(BrandQuote)은 Teleport로 #brand-quote-slot(대시보드 발밑)에 렌더되므로 여기 순서상 위치는 무관. -->
         <DashHeader :login-id="data.loginId" />
 
+        <!-- 모드 스위치 — 페이지 단위(타이머 카드·아래 카드·양옆 바를 한꺼번에 바꾼다)라 카드 밖, 화면 아래 가운데에
+             띄운다(2026-09-17 D안). DOM은 헤더 다음 — Tab 순서가 「헤더 → 스위치 → 타이머」로 지금과 같다.
+             공부 측정 중(독서등)엔 그리지 않는다 — 밤 화면엔 합쳐진 카드만 낮 종이로 남긴다(2026-09-15 결정 5·6),
+             잠긴 스위치의 설명은 곁의 「측정 종료」가 한다. 독서 측정 중엔 잠긴 채 남아 이유를 말한다. -->
+        <ModeToggle v-if="!studyFocus" :mode="mode" :locked="toggleLocked" :hint="modeHint" @change="setMode" @blocked="onModeBlocked" />
+
         <WelcomeBanner v-if="showWelcome" :nickname="data.nickname" @close="showWelcome = false" />
 
         <EmailVerifyBanner v-if="!data.emailVerified" />
 
         <div v-if="actionError" class="alert alert-error">{{ actionError }}</div>
 
-        <!-- 토글은 두 카드 안에 각각 든다. 옛 근거("카드 밖이면 아래 잔디·서재와 거짓말이 된다")는
-             잔디·타일·정원이 mode를 같이 타면서 사라졌지만, 옮길 이유도 없어 자리는 그대로 둔다. -->
         <template v-if="mode === 'reading'">
         <TimerCard
             :remaining-seconds="remainingSeconds"
@@ -504,11 +508,7 @@ function onSheetAdded(book: { id: number; title: string; status: string }) {
             @start="handleStart"
             @stop="handleStop"
             @open-sheet="openStartSheet"
-        >
-            <template #mode>
-                <ModeToggle :mode="mode" :locked="toggleLocked" :hint="modeHint" @change="setMode" @blocked="onModeBlocked" />
-            </template>
-        </TimerCard>
+        />
 
         <!-- 잔디가 있던 자리(2026-09-07) — 넓힌 폭에서 1년치 격자가 늘어져 걷었다. 기록은 /history와
              /study/history에 그대로 있고, 홈은 「오늘 쓰는 자리」가 된다.
@@ -540,11 +540,7 @@ function onSheetAdded(book: { id: number; title: string; status: string }) {
                 @set-session-goal="handleSessionGoal"
                 @open-sheet="openStudySheet('start')"
                 @change-book="openStudySheet('change')"
-            >
-                <template #mode>
-                    <ModeToggle :mode="mode" :locked="toggleLocked" :hint="modeHint" @change="setMode" @blocked="onModeBlocked" />
-                </template>
-            </StudyTimerCard>
+            />
             <StudyNotesCard ref="notesCard" :books="study.books" :default-book-id="notesBookId" />
         </div>
 

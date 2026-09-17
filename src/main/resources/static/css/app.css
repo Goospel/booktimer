@@ -2947,22 +2947,34 @@ body.dashboard-page #dashboard-app { gap: 20px; }
 
 .dash-card-link { font-size: 13.5px; color: var(--accent-hover); text-decoration: none; }
 .dash-card-link:hover { text-decoration: underline; }
-/* 모드 토글 — pill과 한 줄(.dash-timer-head). 전역 button{width:100%}를 width:auto로 상쇄한다
-   (안 하면 알약이 풀폭으로 늘어 머리줄이 깨진다). */
-.dash-timer-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
-/* 알약은 줄이지 않는다 — 힌트가 뜨면 토글 wrap이 2행으로 벌어지고, flex가 형제인 알약을 max-content
-   아래로 짜부라뜨려 "오늘 읽은 시 / 간"처럼 단어 중간에서 쪼갠다(독서·공부 둘 다). */
-.dash-timer-head .dash-pill { white-space: nowrap; }
-.dash-mode-toggle-wrap { display: inline-flex; align-items: center; gap: 8px; flex-wrap: wrap; justify-content: flex-end; }
-.dash-mode-toggle { display: inline-flex; padding: 2px; border-radius: 999px; background: color-mix(in srgb, var(--text) 6%, transparent); }
+/* 모드 스위치 — 페이지 단위(타이머 카드·아래 카드·양옆 바)라 카드 밖 화면 아래 가운데에 띄운다(2026-09-17 D안).
+   z 94 = 결(body::before 90) 위 · 바(95) 아래 · 칩·스킵링크(100) 아래. 결 위에 뜨므로 표면에 결을 직접 얹는다(.rail과 같은 이유, T-192).
+   PWA 설치 칩(pwa-install.js — bottom 72px+safe-area, 띠 72~109px)과는 세로 띠가 다르다(여긴 16~55px) — 가로 폭·바 유무와 무관하게 안 겹친다.
+   좁은 창에서 펼친 바가 힌트 칩에 닿으면 바가 이긴다(힌트는 일시적). 공부 잉크는 .is-study 스코프 스왑을 그대로 탄다
+   (ModeToggle이 공부 모드에 is-study를 붙인다 — .rail-study와 같은 관용구라 다크·독서등판 0줄). 잠김은 버튼만 옅게 —
+   떠 있는 종이 자체를 반투명으로 두면 밑 콘텐츠가 비쳐 깨진 것처럼 보인다. 전역 button{width:100%; border-image}는 width:auto·border:0으로 상쇄. */
+.dash-mode-toggle-wrap {
+    position: fixed; left: 0; right: 0; bottom: calc(16px + env(safe-area-inset-bottom, 0px));
+    z-index: 94; width: max-content; margin-inline: auto;
+    display: flex; flex-direction: column-reverse; align-items: center; gap: 6px;   /* 힌트(DOM 뒤)가 알약 위에 선다 */
+}
+.dash-mode-toggle {
+    display: inline-flex; padding: 3px; border-radius: 999px;
+    background-color: var(--card-bg);
+    background-image: var(--grain), var(--fiber); background-size: 300px 300px, 440px 440px;
+    /* 연필테(border-image)는 그림 속 모서리가 rx 7로 고정이라 알약이 각진 사각형으로 보였다 — 둥근 연필색 선으로 바꿨다(2026-09-17 사용자) */
+    border: 1.5px solid color-mix(in srgb, var(--graphite) 70%, transparent);
+    box-shadow: 0 2px 4px rgba(44, 42, 36, .05), 0 10px 28px rgba(44, 42, 36, .12);
+}
 .dash-mode-toggle button {
-    width: auto; padding: 3px 10px; border: 0; border-radius: 999px;
-    background: transparent; color: var(--muted); font: inherit; font-size: 12.5px; cursor: pointer;
+    width: auto; padding: 5px 18px; border: 0; border-radius: 999px;
+    background: transparent; color: var(--muted); font: inherit; font-size: 13px; cursor: pointer;
 }
 .dash-mode-toggle button[aria-pressed="true"] { background: var(--sage-soft); color: var(--accent-hover); font-weight: 700; }
-.dash-mode-toggle.is-locked { opacity: .4; }
-.dash-mode-toggle.is-locked button { cursor: not-allowed; }
-.dash-mode-hint { font-size: 12px; color: var(--muted); }
+.dash-mode-toggle.is-locked button { opacity: .5; cursor: not-allowed; }
+.dash-mode-hint { padding: 4px 10px; border-radius: 8px; background: var(--card-bg); border: 1px solid var(--border); font-size: 12px; color: var(--muted); }
+/* 마지막 콘텐츠(명언·광고)가 스위치 밑에 깔리지 않게 — body 기본 32 + 스위치 띠 상단 55 + 숨 13. 홈 전용이라 다른 페이지 0줄. */
+body.dashboard-page { padding-bottom: calc(100px + env(safe-area-inset-bottom, 0px)); }
 
 /* 공부 잉크 — 카드 스코프 토큰 스왑(미니앱 body.study-mode의 카드 한정판, 값은 그쪽과 같다).
    대시보드 카드(.dash-card)와 /study/history의 .card가 같은 클래스를 쓴다 — 규칙 하나가 두 화면을 덮는다.
