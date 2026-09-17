@@ -55,7 +55,7 @@ describe('readMode / writeMode — 미지값·접근 불가는 reading으로 떨
     });
 });
 
-describe('syncRailMode — 홈 모드를 양옆 바 흐림 상태(#side-rails[data-mode])로', () => {
+describe('syncRailMode — 홈 모드를 세로 바 모드(#side-rails[data-mode] — 한쪽 메뉴만 보임)로', () => {
     test('바가 있으면 data-mode를 그 모드로 쓴다', () => {
         const attrs: Record<string, string> = { 'data-mode': 'reading' };
         const el = { setAttribute: (k: string, v: string) => { attrs[k] = v; } };
@@ -73,6 +73,20 @@ describe('syncRailMode — 홈 모드를 양옆 바 흐림 상태(#side-rails[da
         const src = readFileSync(join(here, '..', '..', 'src', 'main', 'resources', 'templates', 'fragments', 'side-rails.html'), 'utf8');
         expect(src).toContain(`localStorage.getItem('${MODE_KEY}')==='study'`);
         expect(src).toContain(".dataset.mode='study'");
+    });
+
+    test('스위치 마크업 동기 — 비홈 SSR 알약(side-rails)과 홈 ModeToggle.vue가 같은 클래스·aria·버튼 텍스트를 쓴다', () => {
+        // 색·모양은 공유 CSS(.dash-mode-toggle*) 한 벌이라 이 리터럴이 갈라지면 한쪽 화면만 조용히 모양이 깨진다(설계 2026-09-17 D1).
+        const here = new URL('.', import.meta.url).pathname.replace(/^\/([A-Za-z]:)/, '$1');
+        const fragment = readFileSync(join(here, '..', '..', 'src', 'main', 'resources', 'templates', 'fragments', 'side-rails.html'), 'utf8');
+        const vue = readFileSync(join(here, '..', 'src', 'dashboard', 'ModeToggle.vue'), 'utf8');
+        for (const [name, src] of [['side-rails.html', fragment], ['ModeToggle.vue', vue]] as const) {
+            expect(src, name).toContain('class="dash-mode-toggle-wrap"');
+            expect(src, name).toContain('class="dash-mode-toggle"');
+            expect(src, name).toContain('role="group" aria-label="독서·공부 모드"');
+            expect(src, name).toContain('>독서<');
+            expect(src, name).toContain('>공부<');
+        }
     });
 
     test('리터럴 동기 — rail.js도 MODE_KEY를 그대로 적는다(정적 ESM이라 이 모듈을 import 못 한다)', () => {

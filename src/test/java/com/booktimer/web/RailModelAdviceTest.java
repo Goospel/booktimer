@@ -154,6 +154,44 @@ class RailModelAdviceTest {
     }
 
     @Test
+    @DisplayName("/settings — 중립 페이지는 바 모드를 비우고(부트가 저장값으로 채운다) SSR 스위치를 그린다(설계 2026-09-17 D4·D1)")
+    void settings_noModeAttrButSwitch() throws Exception {
+        // 양성 대조는 books_readingModeAndActive의 data-mode="reading" — 같은 fragment가 경로 페이지엔 속성을 싣는다.
+        registerUser("alice@booktimer.com", "alice", Role.USER);
+
+        String body = html("/settings", "alice@booktimer.com");
+
+        assertThat(body).as("경로상 reading을 싣으면 공부 모드 사용자가 설정에서 독서 메뉴로 뒤집힌다").doesNotContain("data-mode=");
+        assertThat(body).contains("class=\"dash-mode-toggle\"");
+        // 속성만 비우고 부트가 안 나가면 저장값 study여도 독서 메뉴가 뜬다. 부트 본문 리터럴로 단언한다 —
+        // "booktimer.timerMode"는 스크립트 위 HTML 주석에도 있어 모든 페이지에서 공허하게 통과한다(리뷰 중요-1).
+        assertThat(body).as("중립 화면엔 저장값으로 바 모드를 채우는 인라인 부트가 나가야 한다").contains("if(!r.dataset.mode");
+    }
+
+    @Test
+    @DisplayName("홈 / — 바 모드 속성 없음(부트가 채운다) · SSR 스위치 없음(홈은 Vue ModeToggle 몫)")
+    void home_noModeAttrNoSsrSwitch() throws Exception {
+        registerOnboardedUser("alice@booktimer.com", "alice");
+
+        String body = html("/", "alice@booktimer.com");
+
+        assertThat(body).contains("id=\"side-rails\"");
+        assertThat(body).doesNotContain("data-mode=");
+        assertThat(body).doesNotContain("dash-mode-toggle");
+    }
+
+    @Test
+    @DisplayName("/study/history — 경로 모드 study + SSR 스위치")
+    void studyHistory_switchRendered() throws Exception {
+        registerUser("alice@booktimer.com", "alice", Role.USER);
+
+        String body = html("/study/history", "alice@booktimer.com");
+
+        assertThat(body).contains("data-mode=\"study\"").contains("class=\"dash-mode-toggle\"");
+        assertThat(body).as("경로 페이지는 서버가 모드를 정하므로 부트가 나가지 않는다(음성 짝)").doesNotContain("if(!r.dataset.mode");
+    }
+
+    @Test
     @DisplayName("온보딩 전 OAuth 사용자(loginId null) — 바는 뜨되 /u/ 링크가 없다")
     void oauthUserWithoutLoginId_noShopLink() throws Exception {
         registrationService.registerOAuth("oauth@booktimer.com", "소셜", SEOUL, AuthProvider.GOOGLE, today());

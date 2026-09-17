@@ -193,7 +193,7 @@ describe('DashboardApp — 모드 토글', () => {
         before();
     });
 
-    // (k) 카드 밖에서 공부 잉크를 받는 유일한 경로 — wrap의 is-study(.rail-study와 같은 관용구)
+    // (k) 카드 밖에서 공부 잉크를 받는 유일한 경로 — wrap의 is-study(카드 스코프 토큰 스왑 관용구)
     test('(k) 공부 모드면 스위치 wrap에 is-study, 독서면 없다', async () => {
         const w = await mountDashboard();
         expect(w.find('.dash-mode-toggle-wrap').classes()).not.toContain('is-study');
@@ -211,5 +211,31 @@ describe('DashboardApp — 모드 토글', () => {
         await modeBtn(w, '공부').trigger('click');
         expect(w.find('.dash-timer-hero').classes()).not.toContain('is-study');   // 모드 안 바뀜
         expect(w.find('.dash-mode-hint[role="status"]').text()).toBe('측정을 끝내면 바꿀 수 있어요');
+    });
+
+    // 비홈 스위치는 측정 상태를 모른다 — 다른 화면에서 반대 모드를 눌러 왔는데 서버 진실이 되돌렸으면
+    // 홈이 로드 때 이유를 한 번 말한다(설계 2026-09-17 D2 ③).
+    test('(m) 저장값 study + 독서 측정 중으로 열리면 누르지 않아도 힌트가 뜨고 독서가 눌려 있다', async () => {
+        localStorage.setItem('booktimer.timerMode', 'study');
+        dashboardPayload = { ...DASHBOARD, hasActiveSession: true, activeStartedAt: '2026-09-04T00:00:00Z' };
+        const w = await mountDashboard();
+        await flushPromises();
+        expect(w.find('.dash-mode-hint[role="status"]').text()).toBe('측정을 끝내면 바꿀 수 있어요');
+        expect(modeBtn(w, '독서').attributes('aria-pressed')).toBe('true');
+    });
+
+    test('(n) 음성 대조 — 저장값 reading + 독서 측정 중이면 불일치가 없어 힌트가 없다', async () => {
+        localStorage.setItem('booktimer.timerMode', 'reading');
+        dashboardPayload = { ...DASHBOARD, hasActiveSession: true, activeStartedAt: '2026-09-04T00:00:00Z' };
+        const w = await mountDashboard();
+        await flushPromises();
+        expect(w.find('.dash-mode-hint').exists()).toBe(false);
+    });
+
+    test('(o) 음성 대조 — 저장값 study + 측정 없음이면 저장값과 열린 모드가 같아 힌트가 없다', async () => {
+        localStorage.setItem('booktimer.timerMode', 'study');
+        const w = await mountDashboard();
+        await flushPromises();
+        expect(w.find('.dash-mode-hint').exists()).toBe(false);
     });
 });

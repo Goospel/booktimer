@@ -2,13 +2,16 @@
 <html xmlns:th="http://www.thymeleaf.org">
 <body>
 <!--
-  양옆 세로 바(side rails) — 로그인 사용자 화면의 페이지 이동 단일 출처.
-  설계: claude-docs/plans/2026-09-15-web-side-rails.md. 호출(페이지 <body class="has-rails"> 바로 다음 줄):
+  세로 바(side rail) 하나 — 로그인 사용자 화면의 페이지 이동 단일 출처.
+  설계: claude-docs/plans/2026-09-15-web-side-rails.md · 2026-09-17-single-rail-mode-switch.md.
+  호출(페이지 <body class="has-rails"> 바로 다음 줄):
     <th:block th:replace="~{fragments/side-rails :: rails}"></th:block>
 
   - rail(RailModelAdvice)이 활성 메뉴·모드·내 책방 href를 준다. 미인증이면 null이라 통째로 안 그린다.
-  - data-mode = 지금 모드(반대쪽 바를 흐린다). 서버는 경로로 그리고, 홈만 아래 인라인 부트가 저장값으로,
+  - data-mode = 지금 모드 — 바 안의 독서·공부 nav 중 한쪽만 보인다(CSS). 속성 부재 = 독서.
+    경로가 정하는 페이지(활성 키 있음)는 서버가 쓰고, 홈·중립 화면은 서버가 비우고 아래 인라인 부트가 저장값으로 채우며,
     홈 Vue가 모드 토글마다 같은 속성을 덮는다(timerMode.ts syncRailMode).
+  - 「독서 | 공부」 스위치: 홈은 Vue ModeToggle, 비홈은 아래 SSR 알약(같은 클래스·aria — 동기는 timer-mode.test.ts).
   - 홈 항목은 없다 — 로고(a.brand-home)가 모든 화면의 홈 링크다(설계 2026-09-16-rail-home-entry).
   - data-remember = 홈이 열릴 모드(rail.js가 저장). 활성 키 있는 비홈 페이지에만 나온다 — 중립 화면은
     경로상 reading이라 무조건 쓰면 「공부 모드 → 설정 → 로고 → 독서 타이머」로 튄다. null이면 th:attr가 안 그린다.
@@ -20,8 +23,8 @@
      도착 지점 id="main-content"는 바를 쓰는 페이지 전수에 있다. th:href가 아니라 href — 컨텍스트 경로가 붙으면 안 된다. -->
 <a class="skip-link" href="#main-content">본문으로 건너뛰기</a>
 <div id="side-rails" th:attr="data-mode=${rail.mode},data-remember=${rail.rememberMode}">
-    <aside class="rail rail-reading">
-        <nav aria-label="독서 이동">
+    <aside class="rail">
+        <nav class="rail-nav-reading" aria-label="독서 이동">
             <span class="rail-pill">독서</span>
             <a class="rail-item" th:href="@{/books}" th:aria-current="${rail.activeKey == 'books'} ? 'page' : null"><th:block th:replace="~{fragments/nav-icons :: icon('books')}"></th:block><span>내 책장</span></a>
             <a class="rail-item" th:if="${rail.shopHref != null}" th:href="@{${rail.shopHref}}" th:aria-current="${rail.activeKey == 'shop'} ? 'page' : null"><th:block th:replace="~{fragments/nav-icons :: icon('user')}"></th:block><span>내 책방</span></a>
@@ -29,9 +32,7 @@
             <a class="rail-item" th:href="@{/history}" th:aria-current="${rail.activeKey == 'history'} ? 'page' : null"><th:block th:replace="~{fragments/nav-icons :: icon('history')}"></th:block><span>독서 기록</span></a>
             <a class="rail-item" th:href="@{/search}" th:aria-current="${rail.activeKey == 'search'} ? 'page' : null"><th:block th:replace="~{fragments/nav-icons :: icon('search')}"></th:block><span>사용자 검색</span></a>
         </nav>
-    </aside>
-    <aside class="rail rail-study is-study">
-        <nav aria-label="공부 이동">
+        <nav class="rail-nav-study" aria-label="공부 이동">
             <span class="rail-pill">공부</span>
             <a class="rail-item" th:href="@{/study}" th:aria-current="${rail.activeKey == 'plan'} ? 'page' : null"><th:block th:replace="~{fragments/nav-icons :: icon('calendar')}"></th:block><span>일정</span></a>
             <a class="rail-item" th:href="@{/study/recall}" th:aria-current="${rail.activeKey == 'recall'} ? 'page' : null"><th:block th:replace="~{fragments/nav-icons :: icon('note')}"></th:block><span>백지노트</span></a>
@@ -39,15 +40,29 @@
             <a class="rail-item" th:href="@{/study/history}" th:aria-current="${rail.activeKey == 'shistory'} ? 'page' : null"><th:block th:replace="~{fragments/nav-icons :: icon('history')}"></th:block><span>공부 기록</span></a>
         </nav>
     </aside>
+    <!-- 비홈 스위치 — 홈은 Vue ModeToggle이 같은 클래스로 그린다. 눌림 표시는 CSS(#side-rails[data-mode]), aria-pressed는 rail.js.
+         클릭 = 그 모드를 저장하고 홈으로(rail.js bindModeSwitch). 지금 모드는 무동작. 마크업 동기는 timer-mode.test.ts.
+         버튼 속성은 data-pick — 루트의 data-mode와 이름을 갈라 둔다(같으면 서버 테스트의 data-mode 단언이 공허해진다).
+         #side-rails 안에 두는 이유: 공부 모드의 잉크 토큰(app.css .is-study 셀렉터 목록의 #side-rails)을 상속으로 받는다.
+         주의 — 이 주석은 렌더 응답에 실린다. 속성 리터럴(등호 포함)을 적으면 RailModelAdviceTest의 속성 부재 단언이 거짓 실패한다. -->
+    <div class="dash-mode-toggle-wrap" th:unless="${rail.activeKey == 'home'}">
+        <div class="dash-mode-toggle" role="group" aria-label="독서·공부 모드">
+            <button type="button" data-pick="reading">독서</button>
+            <button type="button" data-pick="study">공부</button>
+        </div>
+    </div>
 </div>
-<!-- 홈만: 저장 모드를 첫 페인트 전에 반영(theme-head :: boot와 같은 이유 — 서버는 경로만 알고 저장값은 모른다).
-     같은 태그 안에서 독서등 힌트도 붙인다(공부 측정 중 새로고침의 낮→밤 깜빡임 방지 — 서버 응답 뒤 Vue가 진실로 덮는다).
+<!-- 홈·중립 화면만(서버가 바 모드를 비운 곳): 저장 모드를 첫 페인트 전에 반영(theme-head :: boot와 같은 이유 — 서버는 저장값을 모른다).
+     서버가 모드를 쓴 경로 페이지면 이 태그가 안 나가고, 나가더라도 이미 있는 값은 덮지 않는다(경로가 이긴다).
+     reading은 명시하지 않는다 — 속성 부재 = 독서라 JS 꺼짐·저장소 예외에서도 독서 메뉴가 뜬다.
+     독서등 힌트는 홈(body.dashboard-page)에서만 붙인다(공부 측정 중 새로고침의 낮→밤 깜빡임 방지 — 서버 응답 뒤 Vue가 진실로 덮는다).
+     중립 화면에선 램프 힌트를 모드 판정에만 쓴다(설계 2026-09-17 D4·D8).
      주의 — 램프 힌트가 켜졌으면 모드 힌트가 reading이어도 data-mode를 study로 세운다. 공부 측정 중에 왼쪽 바를
      들르면 저장 모드가 reading이 되고, 그 뒤 홈에 오면 밤 배경에 독서 바가 선명한 구간이 응답 전까지 남기 때문.
      램프가 켜졌다는 건 공부 세션 진행 중이라는 뜻이고 effectiveMode가 낼 최종 값도 study라 여기서 미리 맞춘다.
      램프 힌트가 낡았을 수 있지만 그 경우는 지금도 배경이 이미 틀리게 뜨므로 이 변경이 더 나쁘게 만들지 않는다.
      리터럴 'booktimer.timerMode'·'booktimer.studyLamp'·'study-lamp'는 timerMode.ts와 따로 적힌다 — 동기는 timer-mode.test.ts가 지킨다. -->
-<script th:if="${rail.activeKey == 'home'}" th:attr="nonce=${cspNonce}">try{var l=localStorage.getItem('booktimer.studyLamp')==='1';if(localStorage.getItem('booktimer.timerMode')==='study'||l)document.getElementById('side-rails').dataset.mode='study';if(l)document.body.classList.add('study-lamp')}catch(e){}</script>
+<script th:if="${rail.mode == null}" th:attr="nonce=${cspNonce}">try{var r=document.getElementById('side-rails'),l=localStorage.getItem('booktimer.studyLamp')==='1';if(!r.dataset.mode&&(localStorage.getItem('booktimer.timerMode')==='study'||l))r.dataset.mode='study';if(l&&document.body.classList.contains('dashboard-page'))document.body.classList.add('study-lamp')}catch(e){}</script>
 <script type="module" th:attr="nonce=${cspNonce}" th:src="@{/js/rail.js}"></script>
 </th:block>
 </body>

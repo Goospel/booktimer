@@ -6,7 +6,7 @@ import java.util.Locale;
 import java.util.function.Supplier;
 
 /**
- * 양옆 세로 바 뷰 모델 — Thymeleaf가 getter로 읽는다.
+ * 세로 바 뷰 모델 — Thymeleaf가 getter로 읽는다.
  *
  * <p>사용자는 <b>첫 getter에서 한 번만</b> 해석한다. {@code @ModelAttribute}는 REST·바 없는 화면에서도
  * 실행되므로, 즉시 해석하면 모든 요청에 DB 조회가 붙는다(설계 §3-2).
@@ -27,8 +27,9 @@ public final class RailModel {
         return user;
     }
 
+    /** 바 모드("reading"|"study") — 홈·중립 화면은 null이라 속성이 안 그려지고 인라인 부트가 저장값으로 채운다. */
     public String getMode() {
-        return RailNav.mode(path);
+        return RailNav.pageMode(path, user().getLoginId());
     }
 
     /** 활성 메뉴 키(enum 이름 소문자) — 없으면 null. */

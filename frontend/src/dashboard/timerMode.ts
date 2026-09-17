@@ -42,7 +42,7 @@ export function effectiveMode(readingActive: boolean, studyActive: boolean, stor
 }
 
 /**
- * 홈 모드 → 양옆 바 흐림 상태(SSR `fragments/side-rails`의 #side-rails[data-mode]).
+ * 홈 모드 → 세로 바 모드 — 한쪽 메뉴만 보인다(SSR `fragments/side-rails`의 #side-rails[data-mode]).
  * 바가 없는 문서(테스트·바 없는 페이지)면 no-op.
  */
 export function syncRailMode(doc: Pick<Document, 'getElementById'>, mode: TimerMode): void {

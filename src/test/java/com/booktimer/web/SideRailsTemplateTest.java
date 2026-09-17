@@ -177,14 +177,50 @@ class SideRailsTemplateTest {
         assertThat(css).doesNotContainPattern("\\.rail:hover");
     }
 
+    // ── 바 하나 + 스위치(설계 2026-09-17-single-rail-mode-switch) ──
+
+    private static int count(String src, String needle) {
+        int n = 0;
+        for (int i = src.indexOf(needle); i >= 0; i = src.indexOf(needle, i + 1)) n++;
+        return n;
+    }
+
     @Test
-    @DisplayName("흐린 바 opacity ≥ .7 — 12.5px 라벨 4.5:1 · 아이콘 3:1(WCAG AA)")
-    void dimmedRailKeepsContrast() throws IOException {
-        java.util.List<String> decls = declarationsOf("#side-rails[data-mode=\"reading\"] .rail-study");
-        assertThat(decls).hasSize(1);
-        Matcher o = Pattern.compile("opacity\\s*:\\s*([0-9.]+)").matcher(decls.get(0));
-        assertThat(o.find()).isTrue();
-        assertThat(Double.parseDouble(o.group(1))).isGreaterThanOrEqualTo(0.7);
+    @DisplayName("fragment의 바는 <aside class=\"rail\"> 하나, 안에 독서·공부 nav 각 하나(D1·D9)")
+    void singleRailWithTwoNavs() throws IOException {
+        String src = Files.readString(TEMPLATES.resolve("fragments/side-rails.html"));
+        assertThat(count(src, "<aside")).as("바가 둘이면 모드가 흐림으로만 드러난다").isEqualTo(1);
+        assertThat(count(src, "<aside class=\"rail\">")).isEqualTo(1);
+        assertThat(count(src, "<nav class=\"rail-nav-reading\" aria-label=\"독서 이동\">")).isEqualTo(1);
+        assertThat(count(src, "<nav class=\"rail-nav-study\" aria-label=\"공부 이동\">")).isEqualTo(1);
+    }
+
+    @Test
+    @DisplayName("app.css에 옛 두 바 셀렉터(.rail-reading·.rail-study)가 없고 모드 nav 셀렉터가 있다")
+    void noOldTwoRailSelectors() throws IOException {
+        String css = Files.readString(APP_CSS).replaceAll("(?s)/\\*.*?\\*/", "");
+        assertThat(css).as("양성 대조 — 모드별 nav 숨김 규칙").contains(".rail-nav-study");
+        assertThat(css).doesNotContainPattern("\\.rail-study\\b").doesNotContainPattern("\\.rail-reading\\b");
+    }
+
+    @Test
+    @DisplayName("PWA 칩 오른쪽 바 우회 규칙이 없다(오른쪽 바가 사라졌다) — 음성 판정 전용: 칩 발화는 브라우저 몫이라 양성 대조군 없음")
+    void noPwaChipRightRailOffset() throws IOException {
+        assertThat(declarationsOf("body.has-rails #pwa-install-chip")).isEmpty();
+    }
+
+    @Test
+    @DisplayName("하단 여백은 바 있는 화면 전부(body.has-rails) — 스위치가 모든 바 화면에 뜬다(D7)")
+    void railPagesClearSwitchAtBottom() throws IOException {
+        assertThat(declarationsOf("body.has-rails"))
+                .anySatisfy(d -> assertThat(d).containsPattern("padding-bottom\\s*:"));
+    }
+
+    @Test
+    @DisplayName("비홈 SSR 스위치는 홈에서 안 그린다(홈은 Vue ModeToggle) — th:unless 홈")
+    void ssrSwitchSkipsHome() throws IOException {
+        String src = Files.readString(TEMPLATES.resolve("fragments/side-rails.html"));
+        assertThat(src).containsPattern("<div class=\"dash-mode-toggle-wrap\" th:unless=\"\\$\\{rail\\.activeKey == 'home'}\">");
     }
 
     @Test
@@ -193,13 +229,6 @@ class SideRailsTemplateTest {
         java.util.List<String> decls = declarationsOf(".rail");
         assertThat(decls).anySatisfy(d -> assertThat(d).containsPattern("overflow-y\\s*:\\s*auto"));
         assertThat(decls).noneSatisfy(d -> assertThat(d).containsPattern("overflow\\s*:\\s*hidden"));
-    }
-
-    @Test
-    @DisplayName("PWA 설치 칩은 바가 있는 화면에서 오른쪽 바(16+92+16) 안쪽으로 비킨다")
-    void pwaChipClearsRightRail() throws IOException {
-        assertThat(declarationsOf("body.has-rails #pwa-install-chip"))
-                .anySatisfy(d -> assertThat(d).containsPattern("right\\s*:\\s*124px\\s*!important"));
     }
 
     // ── 본문으로 건너뛰기(skip link) ──
