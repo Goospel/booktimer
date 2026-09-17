@@ -107,9 +107,12 @@ const notesBookId = computed(() => study.value.activeBook?.id
 
 // 필기 화면(/study/notes)의 행 → `/?note=<id>` — 필기 카드가 그 장을 연다(설계 2026-09-17 D2).
 // 읽자마자 주소에서 지운다: 남겨 두면 새로고침·로고 재진입마다 그 장이 다시 열려 「홈 진입 = 빈 새 필기」가 깨진다.
-// 독서 모드(독서 측정 중)면 카드가 없어 조용히 버려진다 — 측정 중인 독서를 밀어낼 이유가 없다.
-const initialNoteId = noteIdParam(location.search)
-if (initialNoteId !== null) history.replaceState(null, '', location.pathname)
+// 값도 **한 번 쓰고 끝**이다 — 모드가 바뀌면 비운다. 카드는 모드 전환마다 다시 마운트되므로, 남겨 두면
+// 「＋ 새 필기」로 쓰던 사람이 독서→공부를 다녀올 때 옛 장이 또 열리고, 지워진 장이면 오류 문구가 또 뜬다(리뷰 I-1).
+// 독서 모드(독서 측정 중)로 열렸으면 카드가 없어 그 장은 열리지 않고, 첫 모드 전환에서 값도 버려진다.
+const initialNoteId = ref(noteIdParam(location.search))
+if (initialNoteId.value !== null) history.replaceState(null, '', location.pathname)
+watch(mode, () => { initialNoteId.value = null })
 
 // 책 고르기/태깅 통합 시트(발견 1, §6.5) — 'start'=측정 전 고르기, 'tag'=종료 후 태깅. 같은 시트를 모드로 겸한다.
 const sheetMode = ref<'start' | 'tag' | null>(null)

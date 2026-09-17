@@ -46,6 +46,8 @@ let stopStudyBody: Record<string, unknown> = { ...STUDY_IDLE };
 let shelf = SHELF;
 // 필드가 빠진 옛 응답을 돌려줄 문 하나(''=없음) — 정규화 계측기 (i1)~(i3)가 켠다.
 let partialDoor = '';
+// ?note= 핸드오프의 필기 조회 응답 상태 — (h5)가 404로 바꾼다.
+let noteStatus = 200;
 /**
  * 옛 서버 응답 흉내 — todaySeconds·books·activeBook 등이 통째로 없고, **10분 전에 시작한 측정 중**이다.
  * 정규화하면 히어로 숫자가 0 + 600 = 10:00, 날것 res.json()이면 undefined + 600 = NaN → '00:00'.
@@ -99,7 +101,7 @@ function fetchImpl(url: string, init?: RequestInit) {
     // 홈 필기 카드(2026-09-15)가 필기할 책의 목록을 부른다 — (n1)·(n2)가 이 호출의 bookId로 필기 책을 잰다.
     if (url.includes('/api/study/notes?')) return ok({ notes: [] });
     // ?note= 핸드오프(2026-09-17) — 홈이 그 장을 연다. 형법(6) 필기라 기본 책(헌법 5)과 갈린다.
-    if (/\/api\/study\/notes\/\d+$/.test(url)) return ok({ id: 31, bookId: 6, title: '총론', body: '구성요건', revision: 0, updatedAt: '2026-09-17T00:00:00Z' });
+    if (/\/api\/study\/notes\/\d+$/.test(url)) return noteStatus !== 200 ? ok({}, noteStatus) : ok({ id: 31, bookId: 6, title: '총론', body: '구성요건', revision: 0, updatedAt: '2026-09-17T00:00:00Z' });
     if (url.includes('/api/dashboard')) {
         if (partialDoor === 'dashboard') return ok({ ...DASHBOARD, study: PARTIAL_ACTIVE() });
         return ok({ ...DASHBOARD, study: { ...STUDY_IDLE, books: shelf } });
@@ -494,7 +496,7 @@ describe('DashboardApp — 전환이 끝난 뒤에 캐럿·태깅 시트', () =>
 // 필기 화면(/study/notes)의 행 → /?note=<id> — 홈이 파라미터를 필기 카드에 넘기고 **주소에서 지운다**
 // (설계 2026-09-17 D2). 안 지우면 새로고침·로고 재진입마다 그 장이 다시 열려 「홈 진입 = 빈 새 필기」(목표 5)가 깨진다.
 describe('DashboardApp — ?note= 핸드오프', () => {
-    afterEach(() => { vi.restoreAllMocks(); window.history.replaceState(null, '', '/'); });
+    afterEach(() => { vi.restoreAllMocks(); noteStatus = 200; window.history.replaceState(null, '', '/'); });
 
     test('(h1) 공부 모드: 필기 카드가 그 장을 열고, 주소의 ?note=는 한 번 지워진다', async () => {
         localStorage.setItem('booktimer.timerMode', 'study');
@@ -531,5 +533,45 @@ describe('DashboardApp — ?note= 핸드오프', () => {
         expect(w.find('.dash-recall-card').exists()).toBe(false);
         expect(countOf('/api/study/notes/')).toBe(0);
         expect(window.location.search).toBe('');
+    });
+
+    // 리뷰 I-1 — ?note=는 **한 번 쓰고 끝**이다. 값이 상수로 남으면 모드를 오갈 때마다 카드가 다시 마운트되며 그 장을 또 연다:
+    // 「＋ 새 필기」로 쓰던 사람이 독서→공부를 다녀오면 새 글 대신 옛 장이 뜬다.
+    const toggle = (w: ReturnType<typeof mount>, label: string) =>
+        w.findAll('.dash-mode-toggle button').find(b => b.text() === label)!.trigger('click');
+
+    test('(h4) ?note=로 연 뒤 「＋ 새 필기」 → 독서 → 공부: 그 장을 다시 열지 않는다', async () => {
+        localStorage.setItem('booktimer.timerMode', 'study');
+        window.history.replaceState(null, '', '/?note=31');
+        const w = mount(DashboardApp, { attachTo: document.body });
+        await vi.waitFor(() => expect(w.find('[data-testid="notes-book"]').attributes('data-book-id')).toBe('6'));
+        await w.find('[data-testid="notes-new"]').trigger('click');
+        await flushPromises();
+
+        await toggle(w, '독서');
+        await vi.waitFor(() => expect(w.find('.dash-recall-card').exists()).toBe(false));
+        await toggle(w, '공부');
+        await vi.waitFor(() => expect(w.find('[data-testid="notes-book"]').exists()).toBe(true));
+        await flushPromises();
+
+        expect(countOf('/api/study/notes/31')).toBe(1);
+        expect(w.find('[data-testid="notes-book"]').attributes('data-book-id')).toBe('5');   // 기본 책 — 옛 장의 책(6)으로 되돌아가지 않는다
+    });
+
+    test('(h5) 그 장이 404여도 모드를 한 번 오간 뒤엔 오류 문구가 다시 뜨지 않는다', async () => {
+        noteStatus = 404;
+        localStorage.setItem('booktimer.timerMode', 'study');
+        window.history.replaceState(null, '', '/?note=31');
+        const w = mount(DashboardApp, { attachTo: document.body });
+        await vi.waitFor(() => expect(w.text()).toContain('필기를 불러오지 못했어요.'));   // 전제 — 처음 한 번은 알린다
+
+        await toggle(w, '독서');
+        await vi.waitFor(() => expect(w.find('.dash-recall-card').exists()).toBe(false));
+        await toggle(w, '공부');
+        await vi.waitFor(() => expect(w.find('[data-testid="notes-book"]').exists()).toBe(true));
+        await flushPromises();
+
+        expect(countOf('/api/study/notes/31')).toBe(1);
+        expect(w.text()).not.toContain('필기를 불러오지 못했어요.');
     });
 });

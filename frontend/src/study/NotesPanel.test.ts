@@ -611,6 +611,22 @@ describe('필기 패널 — 이어 쓰기 칩', () => {
         expect(wrapper.text()).toContain('필기 목록을 불러오지 못했어요.');
     });
 
+    // 리뷰 M-2 — 책을 바꿔 목록을 다시 받는 동안 옛 책의 칩이 남으면, 누르는 순간 다른 책의 장이 열린다.
+    test('책이 바뀌어 목록을 다시 받는 동안엔 옛 책의 칩이 없다', async () => {
+        const wrapper = await mountPanel({ defaultBookId: 7 }, FOUR);
+        expect(chips(wrapper)).toHaveLength(3);   // 전제 — 7의 칩이 떠 있었다
+
+        const pending = deferred();
+        vi.mocked(fetch).mockReturnValueOnce(pending.promise);
+        await wrapper.setProps({ defaultBookId: 9 });
+        await flushPromises();
+        expect(chips(wrapper)).toHaveLength(0);
+
+        pending.resolve(okJson({ notes: [rowOf(20, '토익')] }));
+        await flushPromises();
+        expect(chips(wrapper).map((c) => c.text())).toEqual(['토익']);
+    });
+
     test('제목만 쳐도 사라진다', async () => {
         const wrapper = await mountPanel({}, FOUR);
         await wrapper.find('[data-testid="notes-title"]').setValue('3장');
@@ -675,6 +691,8 @@ describe('필기 패널 — 최근 필기 팝오버', () => {
     test('처음엔 닫혀 있고, 누르면 5장까지 + 「전체 필기 보기」', async () => {
         const wrapper = await mountPanel({}, SIX);
         expect(trigger(wrapper).attributes('aria-expanded')).toBe('false');
+        // aria-haspopup="true"는 ARIA에서 menu와 같은 뜻이다 — role="menu"를 안 쓰는 이유와 같이 붙이지 않는다(리뷰 M-4).
+        expect(trigger(wrapper).attributes('aria-haspopup')).toBeUndefined();
         expect(menu(wrapper).exists()).toBe(false);
 
         await trigger(wrapper).trigger('click');
@@ -707,14 +725,38 @@ describe('필기 패널 — 최근 필기 팝오버', () => {
         expect(document.activeElement).toBe(trigger(wrapper).element);
     });
 
-    test('바깥을 누르면 닫힌다 — 팝오버 안을 누르는 것은 아니다', async () => {
+    // Esc가 포커스를 옮기는 것은 포커스가 팝오버 **안**에 있을 때뿐이다(리뷰 M-4) — 안 그러면 제목을 치다 누른 Esc가 캐럿을 뺏는다.
+    test('포커스가 팝오버 밖이면 Esc는 닫기만 하고 포커스를 옮기지 않는다', async () => {
         const wrapper = await mountPanel({}, SIX);
         await openMenu(wrapper);
-        (menu(wrapper).element as HTMLElement).click();   // 양성 대조 — 안쪽 클릭엔 안 닫힌다
+        const title = wrapper.find('[data-testid="notes-title"]').element as HTMLInputElement;
+        title.focus();
+
+        document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+        await wrapper.vm.$nextTick();
+        expect(menu(wrapper).exists()).toBe(false);
+        expect(document.activeElement).toBe(title);
+    });
+
+    test('팝오버가 닫혀 있으면 Esc는 아무것도 안 한다 — 포커스 그대로', async () => {
+        const wrapper = await mountPanel({}, SIX);
+        const title = wrapper.find('[data-testid="notes-title"]').element as HTMLInputElement;
+        title.focus();
+
+        document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+        await wrapper.vm.$nextTick();
+        expect(document.activeElement).toBe(title);
+    });
+
+    // 바깥 판정은 pointerdown이다 — iOS 사파리는 클릭할 수 없는 영역을 탭하면 document까지 click을 안 보낸다(아이패드가 주 기기).
+    test('바깥을 누르면(pointerdown) 닫힌다 — 팝오버 안을 누르는 것은 아니다', async () => {
+        const wrapper = await mountPanel({}, SIX);
+        await openMenu(wrapper);
+        menu(wrapper).element.dispatchEvent(new Event('pointerdown', { bubbles: true }));   // 양성 대조 — 안쪽엔 안 닫힌다
         await wrapper.vm.$nextTick();
         expect(menu(wrapper).exists()).toBe(true);
 
-        document.body.click();
+        document.body.dispatchEvent(new Event('pointerdown', { bubbles: true }));
         await wrapper.vm.$nextTick();
         expect(menu(wrapper).exists()).toBe(false);
     });
@@ -743,8 +785,8 @@ describe('필기 패널 — 최근 필기 팝오버', () => {
         const added = vi.spyOn(document, 'addEventListener');
         const removed = vi.spyOn(document, 'removeEventListener');
         const wrapper = await mountPanel({}, SIX);
-        const mine = added.mock.calls.filter(([type]) => type === 'click' || type === 'keydown');
-        expect(mine.length).toBeGreaterThan(0);   // 양성 대조 — 리스너를 실제로 건다
+        const mine = added.mock.calls.filter(([type]) => type === 'pointerdown' || type === 'keydown');
+        expect(mine.map(([type]) => type).sort()).toEqual(['keydown', 'pointerdown']);   // 양성 대조 — 리스너를 실제로 건다
 
         wrapper.unmount();
         for (const [type, fn] of mine) {
@@ -791,6 +833,42 @@ describe('필기 패널 — ?note= 핸드오프', () => {
         expect(bookOf(wrapper)).toBe('9');
         expect((wrapper.find('[data-testid="recall-body"]').element as HTMLTextAreaElement).value).toBe('');
         expect(wrapper.text()).toContain('필기를 불러오지 못했어요.');
+    });
+
+    // 리뷰 M-1 — 조회 중에 친 글자의 디바운스가 살아 있으면, 장이 열리자마자 **고치지도 않은 그 장**에 갱신이 나간다.
+    test('조회 중에 쳤던 입력의 디바운스가 연 장으로 새지 않는다', async () => {
+        const pending = deferred();
+        vi.mocked(fetch).mockReturnValueOnce(pending.promise).mockResolvedValueOnce(okJson({ notes: [] }));
+        const wrapper = mount(NotesPanel, { attachTo: document.body, props: { books: BOOKS, defaultBookId: 9, initialNoteId: 5 } });
+        await flushPromises();
+        await type(wrapper, '조회 중 입력');
+
+        pending.resolve(okJson(noteOf({ id: 5, bookId: 7, body: '열린 글', revision: 4 })));
+        await flushPromises();
+        await settle(5000);
+
+        expect((wrapper.find('[data-testid="recall-body"]').element as HTMLTextAreaElement).value).toBe('열린 글');   // 전제 — 장이 열렸다
+        expect(posts()).toHaveLength(0);
+    });
+
+    // 리뷰 M-3 — 조회를 붙잡은 사이에 기본 책 prop이 먼저 책을 정하면, 늦게 온 장이 그 초기화를 덮지 않는다.
+    // 기본 책(7)과 장의 책(9)을 가른다 — 같으면 「덮었다」와 「안 덮었다」가 같은 값이다.
+    test('조회 중에 기본 책이 먼저 정해지면 늦게 온 장이 그 자리를 덮지 않는다', async () => {
+        const pending = deferred();
+        vi.mocked(fetch).mockReturnValueOnce(pending.promise).mockResolvedValueOnce(okJson({ notes: [] }));
+        const wrapper = mount(NotesPanel, { attachTo: document.body, props: { books: BOOKS, defaultBookId: null, initialNoteId: 5 } });
+        await flushPromises();
+        await wrapper.setProps({ defaultBookId: 7 });
+        await flushPromises();
+        expect(bookOf(wrapper)).toBe('7');   // 전제 — 기본 책 watch가 먼저 초기화했다
+
+        pending.resolve(okJson(noteOf({ id: 5, bookId: 9, body: '늦게 온 장', revision: 4 })));
+        await flushPromises();
+
+        expect(bookOf(wrapper)).toBe('7');
+        expect((wrapper.find('[data-testid="recall-body"]').element as HTMLTextAreaElement).value).toBe('');
+        expect(urls()).toEqual(['/api/study/notes/5', '/api/study/notes?bookId=7']);   // 목록을 두 번 부르지 않는다
+        expect(wrapper.text()).not.toContain('필기를 불러오지 못했어요.');
     });
 
     test('서재에 없는 책의 필기면 기본 책의 빈 새 필기', async () => {

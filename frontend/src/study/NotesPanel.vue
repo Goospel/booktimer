@@ -102,15 +102,20 @@ onMounted(async () => {
  * <p>⚠️ <b>초안(책 포함)과 bookId를 await 없이 한 번에</b> 바꾸는 것이 요점이다(설계 R1). 그러면 뒤이어 도는
  * `watch(bookId)`가 첫 확정 분기(`before === null`)에서 「초안이 이미 책을 들고 있다」를 보고 그냥 지나간다.
  * 둘 사이에 await가 끼면 watch가 빈 초안으로 갈아 끼워 방금 연 장이 사라진다.
+ *
+ * <p>조회 중에 친 글자의 디바운스는 먼저 끊는다(리뷰 M-1) — 남겨 두면 열자마자 고치지도 않은 그 장에 갱신이 나간다.
+ * (그 사이 초안은 책이 없어 저장될 수 없던 글이다.)
  */
 async function openInitial(id: number): Promise<boolean> {
     try {
         const found = await fetchNote(id);
+        // 조회 중에 기본 책 watch가 먼저 책을 정했으면 그 초기화를 덮지 않는다.
         if (bookId.value !== null || !props.books.some((b) => b.id === found.bookId)) return false;
-        draft.value = {
+        clearTimer();
+        retarget({
             id: found.id, bookId: found.bookId, title: found.title ?? '',
             body: found.body, revision: found.revision,
-        };
+        });
         bookId.value = found.bookId;
         await loadList();
         return true;
@@ -119,26 +124,34 @@ async function openInitial(id: number): Promise<boolean> {
     }
 }
 
-// 「최근 필기 ▾」 — 디스클로저 팝오버(DashHeader 선례). 바깥 클릭·Esc·고르기로 닫는다.
+// 「최근 필기 ▾」 — 디스클로저 팝오버(DashHeader 선례). 바깥 탭·Esc·고르기로 닫는다.
 const menuOpen = ref(false);
 const menuId = useId();
 const recentRoot = ref<HTMLElement | null>(null);
 const recentTrigger = ref<HTMLButtonElement | null>(null);
+const recentMenu = ref<HTMLElement | null>(null);
 
-function onDocClick(e: MouseEvent): void {
+/**
+ * 바깥 판정은 click이 아니라 pointerdown이다 — iOS 사파리는 클릭할 수 없는 영역(빈 여백)을 탭하면 document까지
+ * click을 보내지 않아 팝오버가 안 닫힌다. 사용자의 주 기기가 아이패드다.
+ */
+function onDocPointerDown(e: Event): void {
     if (menuOpen.value && recentRoot.value && !recentRoot.value.contains(e.target as Node)) menuOpen.value = false;
 }
 function onDocKeydown(e: KeyboardEvent): void {
     if (e.key !== 'Escape' || !menuOpen.value) return;
+    // 포커스가 팝오버 **안**에 있을 때만 트리거로 되돌린다 — 사라질 요소에 포커스가 남지 않게. 밖(제목 입력 등)이면
+    // 그대로 둔다: 쓰던 캐럿을 뺏지 않는다(리뷰 M-4).
+    const inside = recentMenu.value?.contains(document.activeElement) ?? false;
     menuOpen.value = false;
-    recentTrigger.value?.focus();   // Tab으로 항목에 들어가 있던 포커스가 사라진 요소에 남지 않게
+    if (inside) recentTrigger.value?.focus();
 }
 onMounted(() => {
-    document.addEventListener('click', onDocClick);
+    document.addEventListener('pointerdown', onDocPointerDown);
     document.addEventListener('keydown', onDocKeydown);
 });
 onBeforeUnmount(() => {
-    document.removeEventListener('click', onDocClick);
+    document.removeEventListener('pointerdown', onDocPointerDown);
     document.removeEventListener('keydown', onDocKeydown);
 });
 
@@ -193,6 +206,8 @@ watch(bookId, async (id, before) => {
 
 async function loadList(): Promise<void> {
     if (bookId.value === null) return;
+    // 옛 책의 목록을 먼저 비운다 — 받는 동안 칩·팝오버가 이전 책의 장을 보여 주면 누르는 순간 다른 책의 장이 열린다(리뷰 M-2).
+    notes.value = [];
     listError.value = '';
     try {
         notes.value = await fetchNotes(bookId.value);
@@ -369,7 +384,6 @@ async function remove(): Promise<void> {
                         type="button"
                         class="btn btn-ghost btn-small"
                         data-testid="notes-recent"
-                        aria-haspopup="true"
                         :aria-expanded="menuOpen"
                         :aria-controls="menuId"
                         @click="menuOpen = !menuOpen"
@@ -377,8 +391,9 @@ async function remove(): Promise<void> {
                         최근 필기
                         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg>
                     </button>
-                    <!-- role="menu"를 쓰지 않는다 — 화살표 키를 안 붙이면서 menu 역할을 주면 스크린리더 기대와 어긋난다(Tab 이동, 설계 D6). -->
-                    <div v-if="menuOpen" :id="menuId" class="study-notes-recent-menu" role="group" aria-label="최근 필기">
+                    <!-- role="menu"도 aria-haspopup도 쓰지 않는다 — 둘 다 ARIA에서 menu를 뜻하고, 화살표 키를 안 붙이면서
+                         menu라고 말하면 스크린리더 기대와 어긋난다(Tab 이동 디스클로저, 설계 D6 · 리뷰 M-4). -->
+                    <div v-if="menuOpen" :id="menuId" ref="recentMenu" class="study-notes-recent-menu" role="group" aria-label="최근 필기">
                         <ul v-if="notes.length" class="study-notes-list">
                             <li v-for="note in notes.slice(0, RECENT_MENU)" :key="note.id">
                                 <button
