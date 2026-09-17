@@ -10,8 +10,12 @@ import { h } from 'vue';
 
 import NotesPanel from './NotesPanel.vue';
 
+const { focusEndSpy } = vi.hoisted(() => ({ focusEndSpy: vi.fn() }));
+
 // 본문 편집기는 얇은 textarea 대역 — 이 파일의 관심은 편집기가 아니라 자동저장의 배선이다
 // (편집기 자체는 editor/RecallEditor.test.ts가 실제 Tiptap을 마운트해 잰다).
+// ⚠️ 빈자리 슬롯(`empty`)을 실제 편집기와 같은 자리 조건(글이 없을 때)으로 그린다 — 대역이 슬롯을 안 그리면
+// 아래 「이어 쓰기」 칩 테스트가 전부 공허하게 0개를 센다. `focusEnd`도 스파이로 노출한다.
 vi.mock('./editor/RecallEditor.vue', () => ({
     default: {
         name: 'RecallEditorStub',
@@ -23,14 +27,24 @@ vi.mock('./editor/RecallEditor.vue', () => ({
         },
         emits: ['update:modelValue'],
         setup(props: { modelValue: string; disabled: boolean; ariaLabel: string },
-              { emit }: { emit: (e: 'update:modelValue', v: string) => void }) {
-            return () => h('textarea', {
-                'data-testid': 'recall-body',
-                'aria-label': props.ariaLabel,
-                'disabled': props.disabled,
-                'value': props.modelValue,
-                'onInput': (e: Event) => emit('update:modelValue', (e.target as HTMLTextAreaElement).value),
-            });
+              { emit, slots, expose }: {
+                  emit: (e: 'update:modelValue', v: string) => void;
+                  slots: Record<string, (() => unknown) | undefined>;
+                  expose: (e: Record<string, unknown>) => void;
+              }) {
+            expose({ focusEnd: focusEndSpy });
+            return () => h('div', [
+                h('textarea', {
+                    'data-testid': 'recall-body',
+                    'aria-label': props.ariaLabel,
+                    'disabled': props.disabled,
+                    'value': props.modelValue,
+                    'onInput': (e: Event) => emit('update:modelValue', (e.target as HTMLTextAreaElement).value),
+                }),
+                props.modelValue === '' && slots.empty
+                    ? h('div', { 'data-testid': 'editor-empty-slot' }, slots.empty() as never)
+                    : null,
+            ]);
         },
     },
 }));
@@ -93,7 +107,23 @@ async function settle(ms = 1500): Promise<void> {
     await flushPromises();
 }
 
+/** 책 이름 줄이 가리키는 책 — select를 걷은 뒤(설계 D7) 필기 책의 유일한 표시다. */
+function bookOf(wrapper: VueWrapper): string | undefined {
+    return wrapper.find('[data-testid="notes-book"]').attributes('data-book-id');
+}
+
+/** 「최근 필기 ▾」를 연다 — 목록 행(notes-item)은 이 팝오버 안에만 있다. */
+async function openMenu(wrapper: VueWrapper): Promise<void> {
+    if (wrapper.find('.study-notes-recent-menu').exists()) return;
+    await wrapper.find('[data-testid="notes-recent"]').trigger('click');
+}
+
+function rowOf(id: number, title: string | null, preview = '') {
+    return { id, title, chars: 1, preview, updatedAt: AT };
+}
+
 beforeEach(() => {
+    focusEndSpy.mockClear();
     vi.useFakeTimers();
     document.body.innerHTML = '<div></div>';
     vi.stubGlobal('fetch', vi.fn());
@@ -117,9 +147,10 @@ describe('필기 패널 — 책이 있어야 쓴다', () => {
         expect(fetch).not.toHaveBeenCalled();
     });
 
-    test('그날 일정의 책이 기본 선택이다', async () => {
+    test('부모가 준 책이 필기 책이고, 첫 줄에 그 책 이름이 뜬다', async () => {
         const wrapper = await mountPanel({ defaultBookId: 9 });
-        expect((wrapper.find('[data-testid="notes-book"]').element as HTMLSelectElement).value).toBe('9');
+        expect(bookOf(wrapper)).toBe('9');
+        expect(wrapper.find('[data-testid="notes-book"]').text()).toBe('토익 보카');
         expect(String(vi.mocked(fetch).mock.calls[0][0])).toBe('/api/study/notes?bookId=9');
     });
 });
@@ -137,7 +168,7 @@ describe('필기 패널 — 기본 책이 바뀌면 따라간다', () => {
         await wrapper.setProps({ defaultBookId: 9 });
         await flushPromises();
 
-        expect((wrapper.find('[data-testid="notes-book"]').element as HTMLSelectElement).value).toBe('9');
+        expect(bookOf(wrapper)).toBe('9');
         const urls = vi.mocked(fetch).mock.calls.map((c) => String(c[0]));
         const saveAt = urls.indexOf('/api/study/notes');
         const listAt = urls.indexOf('/api/study/notes?bookId=9');
@@ -152,7 +183,7 @@ describe('필기 패널 — 기본 책이 바뀌면 따라간다', () => {
         const wrapper = await mountPanel({ defaultBookId: 9 });
         await wrapper.setProps({ defaultBookId: null });
         await flushPromises();
-        expect((wrapper.find('[data-testid="notes-book"]').element as HTMLSelectElement).value).toBe('9');
+        expect(bookOf(wrapper)).toBe('9');
     });
 
     // 리뷰 Important-1 — 서재 0권으로 마운트된 패널에 책이 늦게 온다(다른 탭에서 담고 돌아와 재조회).
@@ -172,29 +203,14 @@ describe('필기 패널 — 기본 책이 바뀌면 따라간다', () => {
         expect(posts()).toEqual([{ url: '/api/study/notes', body: { bookId: 9, title: '', body: '늦게 온 책' } }]);
     });
 
-    test('서재 0권으로 마운트 → 책이 오고 select로 직접 고른 경로도 그 책에 저장된다', async () => {
-        const wrapper = mount(NotesPanel, { attachTo: document.body, props: { books: [], defaultBookId: null } });
-        await flushPromises();
-        await wrapper.setProps({ books: BOOKS });   // 기본 책 prop은 그대로 null
-        await flushPromises();
-
-        vi.mocked(fetch).mockResolvedValueOnce(okJson({ notes: [] }));
-        await wrapper.find('[data-testid="notes-book"]').setValue('7');
-        await flushPromises();
-        expect(vi.mocked(fetch).mock.calls.map((c) => String(c[0]))).toEqual(['/api/study/notes?bookId=7']);
-
-        vi.mocked(fetch).mockResolvedValueOnce(okJson(noteOf({ id: 8, bookId: 7, body: '직접 고름' })));
-        await type(wrapper, '직접 고름');
-        await settle();
-        expect(posts()).toEqual([{ url: '/api/study/notes', body: { bookId: 7, title: '', body: '직접 고름' } }]);
-    });
+    // (옛 「select로 직접 고른 경로」 테스트는 select와 함께 걷었다 — 설계 2026-09-17 D7·R2. 필기 책은 이제 prop 단일 출처다.)
 
     // 서재에서 지운 책 id로 옮기면 fetchNotes가 404를 맞는다.
     test('서재에 없는 id면 그대로 둔다', async () => {
         const wrapper = await mountPanel({ defaultBookId: 9 });
         await wrapper.setProps({ defaultBookId: 999 });
         await flushPromises();
-        expect((wrapper.find('[data-testid="notes-book"]').element as HTMLSelectElement).value).toBe('9');
+        expect(bookOf(wrapper)).toBe('9');
         expect(vi.mocked(fetch).mock.calls.map((c) => String(c[0]))).not.toContain('/api/study/notes?bookId=999');
     });
 });
@@ -358,7 +374,7 @@ describe('필기 패널 — 실패는 셋으로 갈린다', () => {
 
 describe('필기 패널 — 즉시 플러시', () => {
     test('다른 필기를 열면 디바운스를 기다리지 않고 먼저 저장한다', async () => {
-        const wrapper = await mountPanel();
+        const wrapper = await mountPanel({}, [rowOf(6, '다른')]);
         vi.mocked(fetch).mockResolvedValueOnce(okJson(noteOf()));
         await type(wrapper, 'ㄱ');
         await settle();
@@ -369,7 +385,8 @@ describe('필기 패널 — 즉시 플러시', () => {
             .mockResolvedValueOnce(okJson(noteOf({ revision: 1 })))
             .mockResolvedValueOnce(okJson(noteOf({ id: 6, body: '다른 필기', revision: 3 })));
 
-        await wrapper.findAll('[data-testid="notes-item"]')[0].trigger('click');
+        await openMenu(wrapper);
+        await wrapper.findAll('[data-testid="notes-item"]').find((b) => b.text().includes('다른'))!.trigger('click');
         await flushPromises();
 
         expect(posts()).toHaveLength(2);
@@ -443,6 +460,7 @@ describe('필기 패널 — 왕복 중에 갈아타도 남의 자리에 쓰지 �
         const wrapper = await withNote([{ id: 6, title: 'B', chars: 1, updatedAt: AT }]);
         const pending = await inflightUpdate(wrapper, 'A2');
 
+        await openMenu(wrapper);
         const rowB = wrapper.findAll('[data-testid="notes-item"]')
             .find((li) => li.text().includes('B'))!;
         vi.mocked(fetch).mockResolvedValueOnce(okJson(noteOf({ id: 6, title: 'B', body: 'B본문', revision: 4 })));
@@ -521,7 +539,8 @@ describe('필기 패널 — 왕복 중에 갈아타도 남의 자리에 쓰지 �
         vi.mocked(fetch)
             .mockResolvedValueOnce(okJson(noteOf({ id: 8, bookId: 7, body: '정처기 필기' })))
             .mockResolvedValueOnce(okJson({ notes: [] }));
-        await wrapper.find('[data-testid="notes-book"]').setValue('9');
+        // 책을 바꾸는 입구는 이제 부모 prop 하나다(select를 걷었다 — 설계 D7).
+        await wrapper.setProps({ defaultBookId: 9 });
         await flushPromises();
 
         expect(posts()).toEqual([
@@ -539,6 +558,7 @@ describe('필기 패널 — 목록 라벨', () => {
             { id: 7, title: '3장 함수', chars: 10, preview: '매개변수는', updatedAt: AT },
         ]);
 
+        await openMenu(wrapper);
         const labels = wrapper.findAll('[data-testid="notes-item"]').map((li) => li.text());
         expect(labels[0]).toContain('미분계수');
         expect(labels[0]).not.toContain('제목 없음');
@@ -556,6 +576,228 @@ describe('필기 패널 — 목록 라벨', () => {
         await wrapper.find('[data-testid="notes-new"]').trigger('click');
         await flushPromises();
 
+        await openMenu(wrapper);
         expect(wrapper.find('[data-testid="notes-item"]').text()).toContain('새 장');
+    });
+});
+
+// 이어 쓰기 칩 — 빈 새 필기일 때만 편집기 빈자리에 최근 3장(설계 2026-09-17 목표 4 · §4-2 chipsOn).
+// 조건 3항(서버에 없는 장 · 제목 비었음 · 고를 것 있음)과 편집기 쪽 empty가 AND로 겹친다 — 항마다 따로 죽인다.
+describe('필기 패널 — 이어 쓰기 칩', () => {
+    const FOUR = [rowOf(5, '가'), rowOf(6, '나'), rowOf(8, '다'), rowOf(10, '라')];
+    const chips = (w: VueWrapper) => w.findAll('[data-testid="editor-empty-slot"] [data-testid="notes-continue"]');
+    const chipAll = (w: VueWrapper) => w.find('[data-testid="editor-empty-slot"] [data-testid="notes-all"]');
+
+    test('필기 3장 → 칩 3개 + 「전체」(이 책의 필기 화면)', async () => {
+        const wrapper = await mountPanel({ defaultBookId: 9 }, FOUR.slice(0, 3));
+        expect(chips(wrapper).map((c) => c.text())).toEqual(['가', '나', '다']);
+        expect(chipAll(wrapper).attributes('href')).toBe('/study/notes?bookId=9');
+    });
+
+    test('4장이어도 3개까지', async () => {
+        expect(chips(await mountPanel({}, FOUR))).toHaveLength(3);
+    });
+
+    test('필기 0장이면 칩이 없다', async () => {
+        const wrapper = await mountPanel({}, []);
+        expect(wrapper.find('[data-testid="editor-empty-slot"]').exists()).toBe(false);
+    });
+
+    test('목록 500이면 칩이 없고 오류를 말한다', async () => {
+        vi.mocked(fetch).mockResolvedValueOnce(fail(500, ''));
+        const wrapper = mount(NotesPanel, { attachTo: document.body, props: { books: BOOKS, defaultBookId: null } });
+        await flushPromises();
+        expect(chips(wrapper)).toHaveLength(0);
+        expect(wrapper.text()).toContain('필기 목록을 불러오지 못했어요.');
+    });
+
+    test('제목만 쳐도 사라진다', async () => {
+        const wrapper = await mountPanel({}, FOUR);
+        await wrapper.find('[data-testid="notes-title"]').setValue('3장');
+        expect(chips(wrapper)).toHaveLength(0);
+    });
+
+    test('본문을 치면 사라진다', async () => {
+        const wrapper = await mountPanel({}, FOUR);
+        await type(wrapper, 'ㄱ');
+        expect(chips(wrapper)).toHaveLength(0);
+    });
+
+    test('「＋ 새 필기」로 빈 필기가 되면 다시 뜬다', async () => {
+        const wrapper = await mountPanel({}, FOUR);
+        vi.mocked(fetch).mockResolvedValueOnce(okJson(noteOf({ id: 12, body: 'ㄱ' })));
+        await type(wrapper, 'ㄱ');
+        await settle();
+        expect(chips(wrapper)).toHaveLength(0);
+
+        await wrapper.find('[data-testid="notes-new"]').trigger('click');
+        await flushPromises();
+        expect(chips(wrapper)).toHaveLength(3);
+    });
+
+    // 저장돼 id가 붙은 장은 「새 필기」가 아니다 — 본문을 다 지워도 그 장을 쓰는 중이다.
+    test('저장된 장에서 본문을 지워도 칩이 안 뜬다', async () => {
+        const wrapper = await mountPanel({}, FOUR);
+        vi.mocked(fetch).mockResolvedValueOnce(okJson(noteOf({ id: 12, body: 'ㄱ' })));
+        await type(wrapper, 'ㄱ');
+        await settle();
+        await type(wrapper, '');
+        // 전제 확인 — 본문은 비었고(편집기 쪽 조건은 켜질 자리) 이 장은 저장된 장이다(지우기 버튼 = id 있음).
+        expect((wrapper.find('[data-testid="recall-body"]').element as HTMLTextAreaElement).value).toBe('');
+        expect(wrapper.find('[data-testid="notes-delete"]').exists()).toBe(true);
+        expect(chips(wrapper)).toHaveLength(0);
+    });
+
+    // 갈아타기는 기존 openNote 경로다 — 새 전환 경로를 만들지 않는다(설계 §2 상태기계).
+    test('칩을 누르면 그 장이 열리고 캐럿이 끝으로 가며, 이어 쓴 글은 그 장의 갱신이다', async () => {
+        const wrapper = await mountPanel({}, FOUR);
+        vi.mocked(fetch).mockResolvedValueOnce(okJson(noteOf({ id: 5, title: '가', body: '가 본문', revision: 2 })));
+        await chips(wrapper)[0].trigger('click');
+        await flushPromises();
+
+        expect(vi.mocked(fetch).mock.calls.map((c) => String(c[0]))).toContain('/api/study/notes/5');
+        expect((wrapper.find('[data-testid="recall-body"]').element as HTMLTextAreaElement).value).toBe('가 본문');
+        expect(focusEndSpy).toHaveBeenCalledTimes(1);
+
+        vi.mocked(fetch).mockResolvedValueOnce(okJson(noteOf({ id: 5, title: '가', body: '가 본문+', revision: 3 })));
+        await type(wrapper, '가 본문+');
+        await settle();
+        expect(posts()).toEqual([{ url: '/api/study/notes/5', body: { title: '가', body: '가 본문+', revision: 2 } }]);
+    });
+});
+
+// 「최근 필기 ▾」 — 디스클로저 팝오버(설계 D6). 닫힘 세 경로(고르기·Esc·바깥 클릭)와 리스너 수명을 잰다.
+describe('필기 패널 — 최근 필기 팝오버', () => {
+    const SIX = [rowOf(5, '가'), rowOf(6, '나'), rowOf(8, '다'), rowOf(10, '라'), rowOf(11, '마'), rowOf(12, '바')];
+    const trigger = (w: VueWrapper) => w.find('[data-testid="notes-recent"]');
+    const menu = (w: VueWrapper) => w.find('.study-notes-recent-menu');
+
+    test('처음엔 닫혀 있고, 누르면 5장까지 + 「전체 필기 보기」', async () => {
+        const wrapper = await mountPanel({}, SIX);
+        expect(trigger(wrapper).attributes('aria-expanded')).toBe('false');
+        expect(menu(wrapper).exists()).toBe(false);
+
+        await trigger(wrapper).trigger('click');
+        expect(trigger(wrapper).attributes('aria-expanded')).toBe('true');
+        expect(trigger(wrapper).attributes('aria-controls')).toBe(menu(wrapper).attributes('id'));
+        expect(menu(wrapper).findAll('[data-testid="notes-item"]').map((b) => b.text().slice(0, 1))).toEqual(['가', '나', '다', '라', '마']);
+        expect(menu(wrapper).find('[data-testid="notes-all"]').attributes('href')).toBe('/study/notes?bookId=7');
+    });
+
+    test('항목을 고르면 닫히고 그 장이 열린다', async () => {
+        const wrapper = await mountPanel({}, SIX);
+        await openMenu(wrapper);
+        vi.mocked(fetch).mockResolvedValueOnce(okJson(noteOf({ id: 6, title: '나', body: '나 본문' })));
+        await menu(wrapper).findAll('[data-testid="notes-item"]')[1].trigger('click');
+        await flushPromises();
+
+        expect(menu(wrapper).exists()).toBe(false);
+        expect((wrapper.find('[data-testid="recall-body"]').element as HTMLTextAreaElement).value).toBe('나 본문');
+        expect(focusEndSpy).toHaveBeenCalledTimes(1);
+    });
+
+    test('Esc로 닫히고 포커스가 트리거로 돌아온다', async () => {
+        const wrapper = await mountPanel({}, SIX);
+        await openMenu(wrapper);
+        (menu(wrapper).find('[data-testid="notes-item"]').element as HTMLElement).focus();
+
+        document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+        await wrapper.vm.$nextTick();
+        expect(menu(wrapper).exists()).toBe(false);
+        expect(document.activeElement).toBe(trigger(wrapper).element);
+    });
+
+    test('바깥을 누르면 닫힌다 — 팝오버 안을 누르는 것은 아니다', async () => {
+        const wrapper = await mountPanel({}, SIX);
+        await openMenu(wrapper);
+        (menu(wrapper).element as HTMLElement).click();   // 양성 대조 — 안쪽 클릭엔 안 닫힌다
+        await wrapper.vm.$nextTick();
+        expect(menu(wrapper).exists()).toBe(true);
+
+        document.body.click();
+        await wrapper.vm.$nextTick();
+        expect(menu(wrapper).exists()).toBe(false);
+    });
+
+    test('지금 열린 장은 표시되고, 눌러도 다시 부르지 않고 닫기만 한다', async () => {
+        const wrapper = await mountPanel({}, SIX);
+        vi.mocked(fetch).mockResolvedValueOnce(okJson(noteOf({ id: 6, title: '나', body: '나 본문' })));
+        await openMenu(wrapper);
+        await menu(wrapper).findAll('[data-testid="notes-item"]')[1].trigger('click');
+        await flushPromises();
+        const callsBefore = vi.mocked(fetch).mock.calls.length;
+
+        await openMenu(wrapper);
+        const current = menu(wrapper).findAll('[data-testid="notes-item"]')[1];
+        expect(current.classes()).toContain('is-active');
+        expect(current.attributes('aria-current')).toBe('true');
+        expect(menu(wrapper).findAll('[data-testid="notes-item"]')[0].attributes('aria-current')).toBeUndefined();
+
+        await current.trigger('click');
+        await flushPromises();
+        expect(vi.mocked(fetch).mock.calls.length).toBe(callsBefore);
+        expect(menu(wrapper).exists()).toBe(false);
+    });
+
+    test('사라질 때 document 리스너를 남기지 않는다', async () => {
+        const added = vi.spyOn(document, 'addEventListener');
+        const removed = vi.spyOn(document, 'removeEventListener');
+        const wrapper = await mountPanel({}, SIX);
+        const mine = added.mock.calls.filter(([type]) => type === 'click' || type === 'keydown');
+        expect(mine.length).toBeGreaterThan(0);   // 양성 대조 — 리스너를 실제로 건다
+
+        wrapper.unmount();
+        for (const [type, fn] of mine) {
+            expect(removed.mock.calls.some(([t, f]) => t === type && f === fn)).toBe(true);
+        }
+        added.mockRestore();
+        removed.mockRestore();
+    });
+});
+
+// `/study/notes`의 행 → `/?note=<id>` → 홈 편집기가 그 장을 연다(설계 D2). ⚠️ R1 — 마운트 경로는 초안에 책을
+// 먼저 채워 watch(bookId)의 첫 확정 분기를 통과시킨다. 순서가 틀어지면 방금 연 장이 빈 초안으로 지워진다.
+describe('필기 패널 — ?note= 핸드오프', () => {
+    async function mountWith(initialNoteId: number, noteRes: Response, rows: unknown[] = []): Promise<VueWrapper> {
+        vi.mocked(fetch).mockResolvedValueOnce(noteRes).mockResolvedValueOnce(okJson({ notes: rows }));
+        const wrapper = mount(NotesPanel, {
+            attachTo: document.body,
+            props: { books: BOOKS, defaultBookId: 9, initialNoteId },
+        });
+        await flushPromises();
+        return wrapper;
+    }
+    const urls = () => vi.mocked(fetch).mock.calls.map((c) => String(c[0]));
+
+    // 기본 책(9)과 필기의 책(7)을 일부러 가른다 — 같으면 「필기의 책을 따랐다」와 「기본 책 그대로」가 같은 값이다.
+    test('다른 책의 필기면 그 책으로 옮겨 열고, 이어 쓴 글이 그 장에 저장된다', async () => {
+        const wrapper = await mountWith(5, okJson(noteOf({ id: 5, bookId: 7, title: '3장', body: '열린 글', revision: 4 })));
+
+        expect(urls()).toEqual(['/api/study/notes/5', '/api/study/notes?bookId=7']);
+        expect(bookOf(wrapper)).toBe('7');
+        expect((wrapper.find('[data-testid="recall-body"]').element as HTMLTextAreaElement).value).toBe('열린 글');
+        expect((wrapper.find('[data-testid="notes-title"]').element as HTMLInputElement).value).toBe('3장');
+
+        vi.mocked(fetch).mockResolvedValueOnce(okJson(noteOf({ id: 5, bookId: 7, body: '열린 글+', revision: 5 })));
+        await type(wrapper, '열린 글+');
+        await settle();
+        expect(posts()).toEqual([{ url: '/api/study/notes/5', body: { title: '3장', body: '열린 글+', revision: 4 } }]);
+    });
+
+    test('404면 기본 책의 빈 새 필기 + 오류 문구', async () => {
+        const wrapper = await mountWith(5, fail(404, ''));
+
+        expect(urls()).toEqual(['/api/study/notes/5', '/api/study/notes?bookId=9']);
+        expect(bookOf(wrapper)).toBe('9');
+        expect((wrapper.find('[data-testid="recall-body"]').element as HTMLTextAreaElement).value).toBe('');
+        expect(wrapper.text()).toContain('필기를 불러오지 못했어요.');
+    });
+
+    test('서재에 없는 책의 필기면 기본 책의 빈 새 필기', async () => {
+        const wrapper = await mountWith(5, okJson(noteOf({ id: 5, bookId: 99, body: '지운 책' })));
+
+        expect(urls()).toEqual(['/api/study/notes/5', '/api/study/notes?bookId=9']);
+        expect(bookOf(wrapper)).toBe('9');
+        expect((wrapper.find('[data-testid="recall-body"]').element as HTMLTextAreaElement).value).toBe('');
     });
 });

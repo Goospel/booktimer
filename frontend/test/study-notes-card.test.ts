@@ -47,7 +47,7 @@ describe('홈 필기 카드', () => {
     // ⚠️ 서재 첫 책(7)이 아닌 9를 쓴다 — 7이면 「prop이 닿았다」와 「그냥 첫 책」이 같은 값이다.
     test('부모가 준 책(지금 공부하는 책)이 필기의 선택이다', async () => {
         const w = await mountCard(9);
-        expect((w.find('[data-testid="notes-book"]').element as HTMLSelectElement).value).toBe('9');
+        expect(w.find('[data-testid="notes-book"]').attributes('data-book-id')).toBe('9');
         expect(calls()).toContain('/api/study/notes?bookId=9');
     });
 

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
+import { computed, onBeforeUnmount, onMounted, ref, useId, watch } from 'vue';
 
 import {
     ApiError, createNote, deleteNote, fetchNote, fetchNotes, updateNote,
@@ -22,8 +22,13 @@ import { nextSaveState, noteDateLabel, noteLabel, previewOf, savedAtLabel, type 
  */
 const props = defineProps<{
     books: StudyBookRow[];
-    /** 기본 선택 — 홈에선 지금 공부하는 책. 없으면 서재 첫 책. 바뀌면 따라간다(아래 watch). */
+    /**
+     * 필기 책 — 홈에선 지금 공부하는 책. 없으면 서재 첫 책. 바뀌면 따라간다(아래 watch).
+     * 사용자가 여기서 책을 고르는 입구는 없다(2026-09-17 select 제거 — 필기할 책의 진실은 타이머 카드다).
+     */
     defaultBookId: number | null;
+    /** 마운트할 때 열 장 — 필기 화면(/study/notes)의 행이 `/?note=<id>`로 넘긴다. 없으면 빈 새 필기로 시작한다. */
+    initialNoteId?: number | null;
 }>();
 
 /** 편집기 캐럿 중계 — 홈 필기 카드가 공부 측정 시작 전환 뒤 부른다. 서재 0권이면 편집기가 없어 no-op. */
@@ -32,6 +37,9 @@ defineExpose({ focusEnd: () => editorRef.value?.focusEnd() });
 
 /** 마지막 타이핑에서 저장까지의 틈. 잃을 수 있는 최대치가 이만큼이다. */
 const DEBOUNCE_MS = 1500;
+/** 「최근 필기 ▾」 팝오버와 빈 필기의 「이어 쓰기」 칩에 올리는 장 수(설계 D5). 전부는 필기 화면에 있다. */
+const RECENT_MENU = 5;
+const RECENT_CHIPS = 3;
 
 const bookId = ref<number | null>(null);
 const notes = ref<NoteRow[]>([]);
@@ -75,12 +83,78 @@ const hasBooks = computed(() => props.books.length > 0);
 /** 409 뒤엔 잠근다 — 더 쓰게 두면 새로고침할 때 그만큼을 버리게 된다. */
 const locked = computed(() => state.value.kind === 'conflict');
 
-onMounted(() => {
+onMounted(async () => {
     if (!hasBooks.value) return;
+    if (props.initialNoteId != null) {
+        if (await openInitial(props.initialNoteId)) return;
+        if (bookId.value !== null) return;   // 조회 중에 기본 책 watch가 먼저 초기화했다
+    }
     bookId.value = props.defaultBookId ?? props.books[0].id;
     draft.value = blank(); // 초안이 첫 책을 들고 시작한다(ref 초기화 시점엔 아직 책이 없었다)
-    void loadList();
+    await loadList();
+    // loadList가 오류를 먼저 비우므로 그 뒤에 적는다.
+    if (props.initialNoteId != null) listError.value = '필기를 불러오지 못했어요.';
 });
+
+/**
+ * `?note=`로 받은 장을 연다 — 성공하면 true. 404·조회 실패·서재에 없는 책이면 false(부르는 쪽이 빈 새 필기로 간다).
+ *
+ * <p>⚠️ <b>초안(책 포함)과 bookId를 await 없이 한 번에</b> 바꾸는 것이 요점이다(설계 R1). 그러면 뒤이어 도는
+ * `watch(bookId)`가 첫 확정 분기(`before === null`)에서 「초안이 이미 책을 들고 있다」를 보고 그냥 지나간다.
+ * 둘 사이에 await가 끼면 watch가 빈 초안으로 갈아 끼워 방금 연 장이 사라진다.
+ */
+async function openInitial(id: number): Promise<boolean> {
+    try {
+        const found = await fetchNote(id);
+        if (bookId.value !== null || !props.books.some((b) => b.id === found.bookId)) return false;
+        draft.value = {
+            id: found.id, bookId: found.bookId, title: found.title ?? '',
+            body: found.body, revision: found.revision,
+        };
+        bookId.value = found.bookId;
+        await loadList();
+        return true;
+    } catch {
+        return false;
+    }
+}
+
+// 「최근 필기 ▾」 — 디스클로저 팝오버(DashHeader 선례). 바깥 클릭·Esc·고르기로 닫는다.
+const menuOpen = ref(false);
+const menuId = useId();
+const recentRoot = ref<HTMLElement | null>(null);
+const recentTrigger = ref<HTMLButtonElement | null>(null);
+
+function onDocClick(e: MouseEvent): void {
+    if (menuOpen.value && recentRoot.value && !recentRoot.value.contains(e.target as Node)) menuOpen.value = false;
+}
+function onDocKeydown(e: KeyboardEvent): void {
+    if (e.key !== 'Escape' || !menuOpen.value) return;
+    menuOpen.value = false;
+    recentTrigger.value?.focus();   // Tab으로 항목에 들어가 있던 포커스가 사라진 요소에 남지 않게
+}
+onMounted(() => {
+    document.addEventListener('click', onDocClick);
+    document.addEventListener('keydown', onDocKeydown);
+});
+onBeforeUnmount(() => {
+    document.removeEventListener('click', onDocClick);
+    document.removeEventListener('keydown', onDocKeydown);
+});
+
+/** 팝오버·칩에서 고른 장 — 지금 장이면 닫기만 한다. 전환은 기존 openNote 경로 그대로(새 전환 경로를 만들지 않는다). */
+async function pick(id: number): Promise<void> {
+    menuOpen.value = false;
+    if (id !== draft.value.id) await openNote(id);
+    editorRef.value?.focusEnd();
+}
+
+/**
+ * 「이어 쓰기」 칩 — 아직 서버에 없는 장 + 제목도 비었음 + 고를 것이 있음. 목록 로딩 중·실패면 notes가 비어 저절로 꺼진다.
+ * 편집기 쪽 조건(글자 없음 + 문단뿐)은 RecallEditor의 빈자리 슬롯이 AND로 건다.
+ */
+const chipsOn = computed(() => draft.value.id === null && draft.value.title === '' && notes.value.length > 0);
+const bookTitle = computed(() => props.books.find((b) => b.id === bookId.value)?.title ?? '');
 
 // 탭이 닫히는 중의 마지막 보험. 1차 방어는 디바운스와 즉시 플러시이고, 이건 잃는 1.5초를 줄인다.
 const onPageHide = (): void => { void flush(true); };
@@ -93,7 +167,7 @@ onBeforeUnmount(() => {
 });
 
 /**
- * 기본 책이 바뀌면 따라간다 — 홈에서 측정 중 「책 바꾸기」로 A→B가 되면 「지금 공부하는 책: B」와 필기 select
+ * 기본 책이 바뀌면 따라간다 — 홈에서 측정 중 「책 바꾸기」로 A→B가 되면 「지금 공부하는 책: B」와 필기 책
  * 「A」가 한 화면에서 갈리면 안 된다(2026-09-15). 옮기는 일(flush·목록 교체)은 아래 bookId watch가 한다.
  * null(책 없이)·서재에 없는 id(지운 책 — fetchNotes 404)면 그대로 둔다: 필기는 책이 필수다.
  */
@@ -266,46 +340,18 @@ async function remove(): Promise<void> {
 
 <template>
     <div class="study-notes">
-        <p class="study-day-label">필기</p>
-
         <p v-if="!hasBooks" class="status-line muted" data-testid="notes-no-books">
             공부 서재에 책을 먼저 담아 주세요 — 필기는 책에 붙어요.
             <a href="/study/books">공부 서재 열기</a>
         </p>
 
-        <div v-else class="study-recall-split">
-            <div class="study-recall-side">
-                <div class="study-select-wrap">
-                    <select v-model="bookId" class="study-recall-book" aria-label="필기할 책" data-testid="notes-book">
-                        <option v-for="book in books" :key="book.id" :value="book.id">{{ book.title }}</option>
-                    </select>
-                    <svg class="study-select-chevron" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg>
-                </div>
+        <!-- 목록 열을 걷었다(설계 2026-09-17) — 편집기가 카드 폭 전체를 쓴다. 지난 필기로 가는 길은 셋:
+             공부 바 「필기」(전체) · 제목 줄 「최근 필기 ▾」 · 빈 필기의 「이어 쓰기」 칩. -->
+        <template v-else>
+            <!-- 필기 책 — 고르는 곳이 아니라 알리는 줄이다(책은 타이머 카드가 정한다). ?note=로 다른 책의 장을 열었을 때 이 줄만이 실제 책을 말한다. -->
+            <p class="study-notes-book" data-testid="notes-book" :data-book-id="bookId">{{ bookTitle }}</p>
 
-                <ul v-if="notes.length" class="study-notes-list">
-                    <li v-for="note in notes" :key="note.id">
-                        <button
-                            type="button"
-                            class="study-notes-item"
-                            :class="{ 'is-active': note.id === draft.id }"
-                            data-testid="notes-item"
-                            @click="openNote(note.id)"
-                        >
-                            <!-- 목록 행에는 본문이 없다(설계 §3.6) — 대신 서버가 <b>첫 줄</b>(`preview`)을
-                                 실어 준다. 열어 둔 장만 `draft.body`를 쓰는 것은 아직 저장 전인 글자까지
-                                 라벨에 비추기 위해서다(방금 친 제목 줄이 바로 이름이 된다). -->
-                            <span class="study-notes-label">{{ noteLabel(note.title, note.id === draft.id ? draft.body : note.preview) }}</span>
-                            <span class="study-notes-meta">{{ noteDateLabel(note.updatedAt) }} · {{ note.chars }}자</span>
-                        </button>
-                    </li>
-                </ul>
-                <p v-else class="status-line muted">이 책의 필기가 아직 없어요.</p>
-
-                <button type="button" class="btn btn-ghost btn-small" data-testid="notes-new" @click="newNote">＋ 새 필기</button>
-                <p v-if="listError" class="status-line study-error">{{ listError }}</p>
-            </div>
-
-            <div class="study-recall-main">
+            <div class="study-notes-titlerow">
                 <input
                     v-model="draft.title"
                     type="text"
@@ -317,46 +363,103 @@ async function remove(): Promise<void> {
                     @input="onEdit"
                 >
 
-                <RecallEditor
-                    ref="editorRef"
-                    v-model="draft.body"
-                    aria-label="필기 본문"
-                    :disabled="locked"
-                    placeholder="책을 보며 그때그때 적어 보세요 — 쓰는 대로 저장돼요."
-                    @update:model-value="onEdit"
-                />
-
-                <!-- 상태줄이 저장 버튼을 대신한다 — 「지금 저장됐나」를 사용자가 물을 곳이 여기뿐이다. -->
-                <p class="status-line study-notes-status" :class="{ 'study-error': state.kind !== 'saving' && state.kind !== 'saved' }" data-testid="notes-status">
-                    <template v-if="state.kind === 'saving'">저장 중…</template>
-                    <template v-else-if="state.kind === 'saved'">저장됨 · {{ savedAtLabel(state.at) }}</template>
-                    <template v-else-if="state.kind === 'conflict' || state.kind === 'invalid' || state.kind === 'error'">{{ state.message }}</template>
-                </p>
-
-                <div class="study-recall-actions">
+                <div ref="recentRoot" class="study-notes-recent">
                     <button
-                        v-if="state.kind === 'conflict'"
-                        type="button"
-                        class="btn btn-primary btn-small"
-                        data-testid="notes-reload"
-                        @click="reload"
-                    >새로고침</button>
-                    <button
-                        v-if="state.kind === 'error'"
+                        ref="recentTrigger"
                         type="button"
                         class="btn btn-ghost btn-small"
-                        data-testid="notes-retry"
-                        @click="flush()"
-                    >다시 저장</button>
-                    <button
-                        v-if="draft.id !== null"
-                        type="button"
-                        class="btn btn-ghost btn-small"
-                        data-testid="notes-delete"
-                        @click="remove"
-                    >지우기</button>
+                        data-testid="notes-recent"
+                        aria-haspopup="true"
+                        :aria-expanded="menuOpen"
+                        :aria-controls="menuId"
+                        @click="menuOpen = !menuOpen"
+                    >
+                        최근 필기
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg>
+                    </button>
+                    <!-- role="menu"를 쓰지 않는다 — 화살표 키를 안 붙이면서 menu 역할을 주면 스크린리더 기대와 어긋난다(Tab 이동, 설계 D6). -->
+                    <div v-if="menuOpen" :id="menuId" class="study-notes-recent-menu" role="group" aria-label="최근 필기">
+                        <ul v-if="notes.length" class="study-notes-list">
+                            <li v-for="note in notes.slice(0, RECENT_MENU)" :key="note.id">
+                                <button
+                                    type="button"
+                                    class="study-notes-item"
+                                    :class="{ 'is-active': note.id === draft.id }"
+                                    :aria-current="note.id === draft.id ? 'true' : undefined"
+                                    data-testid="notes-item"
+                                    @click="pick(note.id)"
+                                >
+                                    <!-- 목록 행에는 본문이 없다(설계 §3.6) — 대신 서버가 <b>첫 줄</b>(`preview`)을
+                                         실어 준다. 열어 둔 장만 `draft.body`를 쓰는 것은 아직 저장 전인 글자까지
+                                         라벨에 비추기 위해서다(방금 친 제목 줄이 바로 이름이 된다). -->
+                                    <span class="study-notes-label">{{ noteLabel(note.title, note.id === draft.id ? draft.body : note.preview) }}</span>
+                                    <span class="study-notes-meta">{{ noteDateLabel(note.updatedAt) }} · {{ note.chars }}자</span>
+                                </button>
+                            </li>
+                        </ul>
+                        <p v-else class="status-line muted">이 책의 필기가 아직 없어요.</p>
+                        <a class="btn btn-ghost btn-small" :href="`/study/notes?bookId=${bookId}`" data-testid="notes-all">전체 필기 보기 →</a>
+                    </div>
                 </div>
+
+                <button type="button" class="btn btn-ghost btn-small" data-testid="notes-new" @click="newNote">＋ 새 필기</button>
             </div>
-        </div>
+            <!-- 오류는 팝오버 밖에 둔다 — ?note= 조회 실패는 팝오버를 열기 전에 알려야 한다. -->
+            <p v-if="listError" class="status-line study-error">{{ listError }}</p>
+
+            <RecallEditor
+                ref="editorRef"
+                v-model="draft.body"
+                aria-label="필기 본문"
+                :disabled="locked"
+                placeholder="책을 보며 그때그때 적어 보세요 — 쓰는 대로 저장돼요."
+                @update:model-value="onEdit"
+            >
+                <template v-if="chipsOn" #empty>
+                    <div class="study-notes-chips" role="group" aria-label="이어 쓰기">
+                        <button
+                            v-for="note in notes.slice(0, RECENT_CHIPS)"
+                            :key="note.id"
+                            type="button"
+                            class="study-notes-chip"
+                            data-testid="notes-continue"
+                            @click="pick(note.id)"
+                        >{{ noteLabel(note.title, note.preview) }}</button>
+                        <a class="study-notes-chip" :href="`/study/notes?bookId=${bookId}`" data-testid="notes-all">전체 →</a>
+                    </div>
+                </template>
+            </RecallEditor>
+
+            <!-- 상태줄이 저장 버튼을 대신한다 — 「지금 저장됐나」를 사용자가 물을 곳이 여기뿐이다. -->
+            <p class="status-line study-notes-status" :class="{ 'study-error': state.kind !== 'saving' && state.kind !== 'saved' }" data-testid="notes-status">
+                <template v-if="state.kind === 'saving'">저장 중…</template>
+                <template v-else-if="state.kind === 'saved'">저장됨 · {{ savedAtLabel(state.at) }}</template>
+                <template v-else-if="state.kind === 'conflict' || state.kind === 'invalid' || state.kind === 'error'">{{ state.message }}</template>
+            </p>
+
+            <div class="study-recall-actions">
+                <button
+                    v-if="state.kind === 'conflict'"
+                    type="button"
+                    class="btn btn-primary btn-small"
+                    data-testid="notes-reload"
+                    @click="reload"
+                >새로고침</button>
+                <button
+                    v-if="state.kind === 'error'"
+                    type="button"
+                    class="btn btn-ghost btn-small"
+                    data-testid="notes-retry"
+                    @click="flush()"
+                >다시 저장</button>
+                <button
+                    v-if="draft.id !== null"
+                    type="button"
+                    class="btn btn-ghost btn-small"
+                    data-testid="notes-delete"
+                    @click="remove"
+                >지우기</button>
+            </div>
+        </template>
     </div>
 </template>

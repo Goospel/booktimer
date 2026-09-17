@@ -2,6 +2,7 @@
 import { ref, computed, watch, watchEffect, onMounted, onUnmounted } from 'vue'
 import type { DashboardResponse, TimerState, StopResponse, BookOption, StudyState } from './types'
 import type { StudyBookRow } from '../study/api'
+import { noteIdParam } from '../study/notes'
 import { IDLE_STUDY, studyStateOf } from './types'
 import { getCsrfToken } from '../shared/follow'
 import type { TimerMode } from './timerMode'
@@ -103,6 +104,12 @@ const marginBook = computed(() => pickedBook.value ??
 // 측정 중인 책이 곧 필기할 책이다: 「책 바꾸기」로 activeBook이 바뀌면 필기도 따라간다(NotesPanel watch).
 const notesBookId = computed(() => study.value.activeBook?.id
     ?? defaultStudyBookOf(study.value.books, study.value.recentBookId, pickedStudyBook.value)?.id ?? null)
+
+// 필기 화면(/study/notes)의 행 → `/?note=<id>` — 필기 카드가 그 장을 연다(설계 2026-09-17 D2).
+// 읽자마자 주소에서 지운다: 남겨 두면 새로고침·로고 재진입마다 그 장이 다시 열려 「홈 진입 = 빈 새 필기」가 깨진다.
+// 독서 모드(독서 측정 중)면 카드가 없어 조용히 버려진다 — 측정 중인 독서를 밀어낼 이유가 없다.
+const initialNoteId = noteIdParam(location.search)
+if (initialNoteId !== null) history.replaceState(null, '', location.pathname)
 
 // 책 고르기/태깅 통합 시트(발견 1, §6.5) — 'start'=측정 전 고르기, 'tag'=종료 후 태깅. 같은 시트를 모드로 겸한다.
 const sheetMode = ref<'start' | 'tag' | null>(null)
@@ -543,7 +550,7 @@ function onSheetAdded(book: { id: number; title: string; status: string }) {
                 @open-sheet="openStudySheet('start')"
                 @change-book="openStudySheet('change')"
             />
-            <StudyNotesCard ref="notesCard" :books="study.books" :default-book-id="notesBookId" />
+            <StudyNotesCard ref="notesCard" :books="study.books" :default-book-id="notesBookId" :initial-note-id="initialNoteId" />
         </div>
 
 

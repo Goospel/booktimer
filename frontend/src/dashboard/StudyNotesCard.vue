@@ -12,7 +12,12 @@ import type { StudyBookRow } from '../study/api'
  *
  * <p>focus-body — 측정 중엔 타이머 카드와 한 장으로 합쳐지고 이 카드의 머리는 숨는다(app.css 「공부 집중」 절).
  */
-defineProps<{ books: StudyBookRow[]; defaultBookId: number | null }>()
+defineProps<{
+    books: StudyBookRow[]
+    defaultBookId: number | null
+    /** `/?note=<id>`로 들어왔을 때 열 장 — 부모가 주소에서 읽어 넘긴다(설계 2026-09-17 D2). */
+    initialNoteId?: number | null
+}>()
 
 const panel = ref<{ focusEnd: () => void } | null>(null)
 /** 캐럿 중계 — 부모(DashboardApp)가 공부 측정 시작 전환 뒤 부른다. */
@@ -28,7 +33,7 @@ defineExpose({ focusEnd: () => panel.value?.focusEnd() })
         </div>
         <!-- .study-day — /study의 입력 스타일이 걸리는 스코프(카드 자체에 붙이면 .dash-card의 gap을 덮는다). -->
         <div class="study-day">
-            <NotesPanel ref="panel" :books="books" :default-book-id="defaultBookId" />
+            <NotesPanel ref="panel" :books="books" :default-book-id="defaultBookId" :initial-note-id="initialNoteId" />
         </div>
     </section>
 </template>

@@ -98,6 +98,8 @@ function fetchImpl(url: string, init?: RequestInit) {
     if (url.includes('/api/study/history')) return ok({ graph: GRAPH, months: [] });
     // 홈 필기 카드(2026-09-15)가 필기할 책의 목록을 부른다 — (n1)·(n2)가 이 호출의 bookId로 필기 책을 잰다.
     if (url.includes('/api/study/notes?')) return ok({ notes: [] });
+    // ?note= 핸드오프(2026-09-17) — 홈이 그 장을 연다. 형법(6) 필기라 기본 책(헌법 5)과 갈린다.
+    if (/\/api\/study\/notes\/\d+$/.test(url)) return ok({ id: 31, bookId: 6, title: '총론', body: '구성요건', revision: 0, updatedAt: '2026-09-17T00:00:00Z' });
     if (url.includes('/api/dashboard')) {
         if (partialDoor === 'dashboard') return ok({ ...DASHBOARD, study: PARTIAL_ACTIVE() });
         return ok({ ...DASHBOARD, study: { ...STUDY_IDLE, books: shelf } });
@@ -200,7 +202,7 @@ describe('DashboardApp — 공부 시작 시 책 선택', () => {
 // (편집기가 비워진다 — PR-2에서 카드가 갈라지는 순간 쓰던 글이 사라지는 장면). 고르기는 시작 전까지만 유효하다.
 describe('DashboardApp — 측정 종료 뒤 필기 책이 제자리에 남는다', () => {
     const notesSelect = (w: ReturnType<typeof mount>) =>
-        (w.find('[data-testid="notes-book"]').element as HTMLSelectElement).value;
+        w.find('[data-testid="notes-book"]').attributes('data-book-id');
 
     test('(n1) 형법을 골라 시작 → 헌법으로 교체 → 종료: 필기는 헌법 그대로, 목록 재조회 없음', async () => {
         const w = await mountStudy();
@@ -486,5 +488,48 @@ describe('DashboardApp — 전환이 끝난 뒤에 캐럿·태깅 시트', () =>
 
         release();
         await vi.waitFor(() => expect(w.find('.book-sheet-overlay').exists()).toBe(true));
+    });
+});
+
+// 필기 화면(/study/notes)의 행 → /?note=<id> — 홈이 파라미터를 필기 카드에 넘기고 **주소에서 지운다**
+// (설계 2026-09-17 D2). 안 지우면 새로고침·로고 재진입마다 그 장이 다시 열려 「홈 진입 = 빈 새 필기」(목표 5)가 깨진다.
+describe('DashboardApp — ?note= 핸드오프', () => {
+    afterEach(() => { vi.restoreAllMocks(); window.history.replaceState(null, '', '/'); });
+
+    test('(h1) 공부 모드: 필기 카드가 그 장을 열고, 주소의 ?note=는 한 번 지워진다', async () => {
+        localStorage.setItem('booktimer.timerMode', 'study');
+        window.history.replaceState(null, '', '/?note=31');
+        const replace = vi.spyOn(window.history, 'replaceState');
+
+        const w = mount(DashboardApp, { attachTo: document.body });
+        await vi.waitFor(() => expect(w.find('[data-testid="notes-book"]').attributes('data-book-id')).toBe('6'));
+
+        expect(replace).toHaveBeenCalledTimes(1);
+        expect(window.location.search).toBe('');
+        expect(countOf('/api/study/notes/31')).toBe(1);
+        expect(w.findComponent({ name: 'NotesPanel' }).props('initialNoteId')).toBe(31);
+    });
+
+    test('(h2) ?note= 없이 오면 주소를 건드리지 않는다', async () => {
+        localStorage.setItem('booktimer.timerMode', 'study');
+        const replace = vi.spyOn(window.history, 'replaceState');
+        const w = mount(DashboardApp, { attachTo: document.body });
+        await vi.waitFor(() => expect(w.find('[data-testid="notes-book"]').exists()).toBe(true));
+
+        expect(replace).not.toHaveBeenCalled();
+        expect(countOf('/api/study/notes/')).toBe(0);
+        expect(w.find('[data-testid="notes-book"]').attributes('data-book-id')).toBe('5');   // 기본 책 — (h1)의 6과 갈린다
+    });
+
+    // 음성 경로 — 독서 모드면 필기 카드가 없어 ?note=는 조용히 버려진다(측정 중인 독서를 밀어내지 않는다).
+    test('(h3) 독서 모드: 필기 카드도 조회도 없고, 주소는 지워진다', async () => {
+        window.history.replaceState(null, '', '/?note=31');
+        const w = mount(DashboardApp, { attachTo: document.body });
+        await vi.waitFor(() => expect(w.find('.dash-timer-hero').exists()).toBe(true));
+        await flushPromises();
+
+        expect(w.find('.dash-recall-card').exists()).toBe(false);
+        expect(countOf('/api/study/notes/')).toBe(0);
+        expect(window.location.search).toBe('');
     });
 });
