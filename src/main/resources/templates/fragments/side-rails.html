@@ -35,6 +35,7 @@
         <nav class="rail-nav-study" aria-label="공부 이동">
             <span class="rail-pill">공부</span>
             <a class="rail-item" th:href="@{/study}" th:aria-current="${rail.activeKey == 'plan'} ? 'page' : null"><th:block th:replace="~{fragments/nav-icons :: icon('calendar')}"></th:block><span>일정</span></a>
+            <a class="rail-item" th:href="@{/study/notes}" th:aria-current="${rail.activeKey == 'notes'} ? 'page' : null"><th:block th:replace="~{fragments/nav-icons :: icon('notes')}"></th:block><span>필기</span></a>
             <a class="rail-item" th:href="@{/study/recall}" th:aria-current="${rail.activeKey == 'recall'} ? 'page' : null"><th:block th:replace="~{fragments/nav-icons :: icon('note')}"></th:block><span>백지노트</span></a>
             <a class="rail-item" th:href="@{/study/books}" th:aria-current="${rail.activeKey == 'sbooks'} ? 'page' : null"><th:block th:replace="~{fragments/nav-icons :: icon('books')}"></th:block><span>공부 서재</span></a>
             <a class="rail-item" th:href="@{/study/history}" th:aria-current="${rail.activeKey == 'shistory'} ? 'page' : null"><th:block th:replace="~{fragments/nav-icons :: icon('history')}"></th:block><span>공부 기록</span></a>

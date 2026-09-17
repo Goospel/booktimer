@@ -30,7 +30,7 @@ public class StudyController {
         this.currentUserService = currentUserService;
     }
 
-    @GetMapping({"/study", "/study/recall", "/study/history", "/study/books"})   // 같은 셸 — 섬(main.ts)이 경로로 달력/백지노트/기록/서재를 고른다
+    @GetMapping({"/study", "/study/notes", "/study/recall", "/study/history", "/study/books"})   // 같은 셸 — 섬(main.ts)이 경로로 달력/필기/백지노트/기록/서재를 고른다
     public String study(Principal principal, HttpServletRequest request) {
         currentUserService.resolve(principal); // 인증 트리거 + 존재 확인
         CsrfTokenUtil.precommit(request);

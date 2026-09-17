@@ -37,6 +37,8 @@ class RailNavTest {
             "/study/,        alice, PLAN",
             "/study/recall,  alice, RECALL",
             "/study/recall/, alice, RECALL",
+            "/study/notes,   alice, NOTES",
+            "/study/notes/,  alice, NOTES",
             "/study/books,   alice, SBOOKS",
             "/study/history, alice, SHISTORY",
             "/me/blocks,     alice, NULL",
@@ -64,6 +66,7 @@ class RailNavTest {
             "/search,         alice, NULL",
             "/study,          alice, study",
             "/study/recall,   alice, study",
+            "/study/notes,    alice, study",
             "/study/books,    alice, study",
             "/study/history,  alice, study",
             "/settings,       alice, NULL",       // 중립 페이지 — 공부 모드가 독서로 튀면 안 된다

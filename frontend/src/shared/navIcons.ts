@@ -36,6 +36,8 @@ export const NAV_ICONS: Record<string, string> = {
     calendar: '<path d="M4.5 6.5h15v13h-15zM4.5 10.5h15M8.5 4v4M15.5 4v4"/>',
     // 종이 + 연필 (백지노트)
     note: '<path d="M13.5 3.5H6v17h12V9"/><path d="M13.5 3.5V9H18"/><path d="M20.5 3.5l-7 7-1 3 3-1 7-7z"/>',
+    // 줄노트 (필기)
+    notes: '<rect x="5" y="3.5" width="14" height="17" rx="1.5"/><path d="M8.5 8.5h7M8.5 12h7M8.5 15.5h4.5"/>',
     // 돋보기 (탐색/검색)
     search: '<circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/>',
     // DNA 나선 (책BTI)
