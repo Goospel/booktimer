@@ -140,6 +140,8 @@ export interface TossAuthResponse {
   registered: boolean;
   token: string | null;
   loginId: string | null;
+  /** 이 응답에서 계정이 <b>방금 만들어졌는가</b> — `register`만 true일 수 있다(login·link는 늘 false). */
+  created: boolean;
 }
 
 /** 세 인증 엔드포인트의 공통부 — 매번 fresh 인가코드로 신원을 다시 증명한다(서버에 pending 상태 없음). */
@@ -155,10 +157,10 @@ async function authenticate(path: string, extra?: Record<string, string>): Promi
   return result;
 }
 
-/** 조회만 — 미등록이면 `registered:false`(계정 미생성)라 미니앱이 선택 화면을 띄운다. */
+/** 조회만 — 미등록이면 `registered:false`(계정 미생성). 「기존 계정 연결」 손잡이만 쓴다. */
 export const login = (): Promise<TossAuthResponse> => authenticate('/api/toss/login');
 
-/** "새로 시작" — 토스 신원으로 신규 계정 생성. 멱등. */
+/** 토스 신원으로 find-or-create — 멱등. 손잡이 여섯의 기본 문이고 신규면 `created:true`. */
 export const register = (): Promise<TossAuthResponse> => authenticate('/api/toss/register');
 
 /** "기존 계정 연결" — 웹 설정에서 발급한 일회용 코드가 계정 소유 증명. */

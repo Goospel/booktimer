@@ -503,7 +503,7 @@ export function Settings({
           setQuitBusy(true);
           setQuitError(null);
           deleteAccount()
-            // 계정이 사라졌으니 로그인 브릿지로 — 거기서 `registered:false`를 받아 "새로 시작" 화면이 뜬다.
+            // 계정이 사라졌으니 게스트 홈으로 — 웹 계정에 붙이려면 거기 「기존 계정 연결」로 간다.
             .then(onLogout)
             // 실패는 시트를 닫지 않는다 — 닫으면 왜 안 됐는지(만료된 인가코드인지) 알 길이 없다.
             .catch((e: Error) => setQuitError(e.message))
