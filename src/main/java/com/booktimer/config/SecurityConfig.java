@@ -68,6 +68,9 @@ public class SecurityConfig {
      * <ul>
      *   <li>{@code /api/toss/**} — 로그인·가입·연결 요청은 <b>아직 토큰이 없어서</b> Bearer 헤더를 달 수 없다.
      *       헤더 조건만 두면 이 경로가 기존 체인으로 흘러 {@code /login} 302가 되어 미니앱이 시작조차 못 한다.</li>
+     *   <li>{@code /api/public/**} — <b>익명 공개 계약</b>: 로그인 전 게스트가 토큰 없이 부르는 읽기 경로.
+     *       기존 체인으로 흐르면 302 + CORS 헤더 없음이라 WebView가 못 읽는다. 이 접두 아래엔 <b>사용자 입력과
+     *       무관하게</b> 인증 없이 보여도 되는 것만 둔다(끝 슬래시까지가 접두 — {@code /api/publicX}는 해당 없음).</li>
      *   <li>CORS 프리플라이트(OPTIONS) — 브라우저는 프리플라이트에 {@code Authorization}을 싣지 않는다
      *       (요청 헤더 이름만 알린다). 여기서 안 받으면 교차 출처 호출이 첫 왕복부터 막힌다.</li>
      * </ul>
@@ -90,6 +93,8 @@ public class SecurityConfig {
                         // 토큰을 받기 전 단계라 인증을 요구할 수 없다. 대신 매 요청이 일회성 토스 인가코드로
                         // 신원을 다시 증명하고(서버에 pending 상태 없음), 레이트리밋이 남용을 막는다.
                         .requestMatchers("/api/toss/login", "/api/toss/register", "/api/toss/link").permitAll()
+                        // 익명 공개 계약 — 로그인 전 게스트도 읽는다(사용자 입력과 무관한 것만 둔다).
+                        .requestMatchers("/api/public/**").permitAll()
                         .anyRequest().authenticated())
                 .addFilterBefore(new BearerTokenFilter(apiTokenService),
                         UsernamePasswordAuthenticationFilter.class)
@@ -100,13 +105,14 @@ public class SecurityConfig {
         return http.build();
     }
 
-    /** 이 요청을 미니앱 체인이 맡는가 — {@code /api/toss/**} 전부, 그 외 {@code /api/**}는 Bearer·프리플라이트일 때만. */
+    /** 이 요청을 미니앱 체인이 맡는가 — {@code /api/toss/**}·{@code /api/public/**} 전부, 그 외 {@code /api/**}는 Bearer·프리플라이트일 때만. */
     private static boolean isMiniappApiRequest(HttpServletRequest request) {
         String path = request.getRequestURI().substring(request.getContextPath().length());
         if (!path.startsWith("/api/")) {
             return false;
         }
         return path.startsWith("/api/toss/")
+                || path.startsWith("/api/public/")
                 || BearerTokenFilter.extractToken(request) != null
                 || CorsUtils.isPreFlightRequest(request);
     }

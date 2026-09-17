@@ -3,6 +3,7 @@ package com.booktimer.book;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.http.client.SimpleClientHttpRequestFactory;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestClient;
 import org.springframework.web.util.UriComponentsBuilder;
@@ -18,6 +19,7 @@ import javax.xml.parsers.DocumentBuilder;
 import javax.xml.parsers.DocumentBuilderFactory;
 import java.io.StringReader;
 import java.net.URI;
+import java.time.Duration;
 import java.time.Instant;
 import java.time.ZonedDateTime;
 import java.time.format.DateTimeFormatter;
@@ -49,7 +51,11 @@ public class GoogleNewsRssClient {
 
     public GoogleNewsRssClient(@Value("${booktimer.news.enabled:true}") boolean enabled) {
         this.enabled = enabled;
-        this.restClient = RestClient.create();
+        // 스케줄러가 기본 1스레드라 구글이 응답을 멈추면 푸시·스윕 잡까지 전부 선다 — 연결 3초·읽기 5초로 끊는다.
+        SimpleClientHttpRequestFactory requestFactory = new SimpleClientHttpRequestFactory();
+        requestFactory.setConnectTimeout(Duration.ofSeconds(3));
+        requestFactory.setReadTimeout(Duration.ofSeconds(5));
+        this.restClient = RestClient.builder().requestFactory(requestFactory).build();
     }
 
     /** 킬스위치. 기본 true — 끄려면 SSM {@code BOOKTIMER_NEWS_ENABLED=false}. */
