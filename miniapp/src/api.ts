@@ -83,13 +83,15 @@ export interface RequestOptions {
   query?: Record<string, string | number | undefined>;
   /** 익명 공개 경로 — 토큰을 안 싣고 401도 토큰 폐기를 안 탄다(게스트 요청이 방금 로그인한 토큰을 지우지 않게). */
   anonymous?: boolean;
+  /** 이 시간(ms) 안에 응답이 끝나지 않으면 끊고 `NetworkError`. `fetch`엔 기본 타임아웃이 없다. */
+  timeoutMs?: number;
 }
 
 export async function request<T>(path: string, options: RequestOptions = {}): Promise<T> {
   // 목 모드에서는 서버에 나가지 않는다 — dynamic import라 프로드 번들엔 이 모듈이 들어가지 않는다.
   if (DEV_MOCK) return (await import('./dev-mock')).mockRequest<T>(path, options);
 
-  const { body, query, anonymous } = options;
+  const { body, query, anonymous, timeoutMs } = options;
   const saved = token.get();
   const headers: Record<string, string> = {};
   if (body !== undefined) headers['Content-Type'] = 'application/json';
@@ -102,16 +104,22 @@ export async function request<T>(path: string, options: RequestOptions = {}): Pr
   }
   const search = params.toString();
 
-  // 연결 실패는 여기서만 잡는다 — 응답을 받은 뒤의 실패(상태코드)는 아래 계약이 그대로 처리한다.
+  const abort = timeoutMs === undefined ? null : new AbortController();
+  const timer = abort === null ? null : setTimeout(() => abort.abort(), timeoutMs);
+
+  // 연결 실패(타임아웃 포함)는 여기서만 잡는다 — 응답을 받은 뒤의 실패(상태코드)는 아래 계약이 그대로 처리한다.
   let response: Response;
   try {
     response = await fetch(`${BASE_URL}${path}${search === '' ? '' : `?${search}`}`, {
       method: options.method ?? (body === undefined ? 'GET' : 'POST'),
       headers,
       body: body === undefined ? undefined : JSON.stringify(body),
+      signal: abort?.signal,
     });
   } catch {
     throw new NetworkError();
+  } finally {
+    if (timer !== null) clearTimeout(timer);
   }
 
   if (response.status === 401 && !anonymous) {
@@ -501,7 +509,14 @@ export interface PublicNewsResponse {
   news: NewsItem[];
 }
 
-export const fetchPublicNews = (): Promise<PublicNewsResponse> => request('/api/public/news', { anonymous: true });
+/**
+ * 5초 상한 — 게스트 홈 첫 화면에서 나가는 유일한 요청이라, 막힌 네트워크에서 끝나지 않으면 「최초 접속」이 늘어진다
+ * (2026-09-17 심사 반려 「최초 접속 20초 초과」). 못 받으면 게스트 홈은 옛 잠금으로 남는다.
+ */
+export const PUBLIC_NEWS_TIMEOUT_MS = 5_000;
+
+export const fetchPublicNews = (): Promise<PublicNewsResponse> =>
+  request('/api/public/news', { anonymous: true, timeoutMs: PUBLIC_NEWS_TIMEOUT_MS });
 
 /** bookId를 안 주면 책 미지정 세션으로 시작한다(종료 후 태깅). */
 export const startSession = (bookId: number | null): Promise<TimerState> =>

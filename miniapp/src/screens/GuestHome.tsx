@@ -596,6 +596,26 @@ export function GuestHome({
  * `dashboard`가 non-null인 전제로 15곳을 읽어, 게스트에 끌어오면 회귀 표면이 가장 넓어진다.
  * 잠금 집합(`locked`)이 <b>측정 중 잠금과 정확히 같아</b>(홈만 열림) 새 규칙도 필요 없다.
  */
+/**
+ * 페이지 로드(`load`)가 끝난 뒤에 `fn`을 한 번 부른다 — 정리 함수를 돌려준다(effect cleanup용).
+ *
+ * <p>2026-09-17 심사가 「미니앱 최초 접속 20초 초과」로 반려했다. 게스트 홈은 원래 첫 화면에서 서버를 한 번도 안 불렀는데,
+ * 게스트 뉴스가 들어오며 첫 화면 로드 중에 요청이 하나 섞였다. 화면 표시는 그 요청을 기다리지 않지만, 로드가 끝나는 시점에
+ * 요청이 아직 열려 있을 수 있다 — 그래서 요청을 로드 뒤로 민다(상한은 `PUBLIC_NEWS_TIMEOUT_MS`).
+ */
+export function whenPageLoaded(
+  doc: { readyState: string },
+  win: { addEventListener(type: 'load', fn: () => void): void; removeEventListener(type: 'load', fn: () => void): void },
+  fn: () => void,
+): () => void {
+  if (doc.readyState === 'complete') {
+    fn();
+    return () => {};
+  }
+  win.addEventListener('load', fn);
+  return () => win.removeEventListener('load', fn);
+}
+
 export function GuestShell({
   tab,
   onTabChange,
@@ -633,10 +653,13 @@ export function GuestShell({
     trackEvent('guest_entered', { variant: 'news' });
   }, []);
 
-  // 공개 뉴스 — 마운트 1회. 실패는 삼킨다: 게스트 홈은 에러 화면·로그인 화면으로 떨어지지 않고 옛 잠금으로 남는다.
+  // 공개 뉴스 — 마운트 1회, 페이지 로드가 끝난 뒤. 실패는 삼킨다: 게스트 홈은 에러 화면·로그인 화면으로 떨어지지 않고
+  // 옛 잠금으로 남는다. load 뒤로 미루는 이유는 {@link whenPageLoaded}.
   useEffect(() => {
     if (injectedNews !== undefined) return;
-    fetchPublicNews().then(setNews).catch(() => {});
+    return whenPageLoaded(document, window, () => {
+      fetchPublicNews().then(setNews).catch(() => {});
+    });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
