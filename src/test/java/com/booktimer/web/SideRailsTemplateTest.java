@@ -110,9 +110,10 @@ class SideRailsTemplateTest {
         Matcher u = Pattern.compile("nav-icons\\s*::\\s*icon\\('([^']+)'\\)").matcher(rails);
         while (u.find()) used.add(u.group(1));
 
-        assertThat(used).as("훑을 대상이 있어야 한다(공허 방지)").hasSize(7);
+        assertThat(used).as("훑을 대상이 있어야 한다(공허 방지)").hasSize(8);
         assertThat(keys).containsAll(used);
         assertThat(used).as("백지노트 바 항목의 아이콘").contains("note");
+        assertThat(used).as("필기 바 항목의 아이콘").contains("notes");
         assertThat(used).as("홈 항목은 로고(a.brand-home)가 대신한다 — 바에 없다").doesNotContain("home");
     }
 

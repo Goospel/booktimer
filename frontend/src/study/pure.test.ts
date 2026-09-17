@@ -10,6 +10,7 @@ import {
     errorMessage,
     monthTitle,
     nextDay,
+    notesBookParam,
     planSummary,
     planWeeks,
     prevDay,
@@ -134,6 +135,33 @@ describe('studyView', () => {
 
     it('/study/recall은 백지노트 화면 — 바 「백지노트」가 여는 곳', () => {
         expect(studyView('/study/recall')).toBe('recall');
+    });
+
+    it('/study/notes는 필기 화면 — 바 「필기」가 여는 곳(컨텍스트 패스 포함)', () => {
+        expect(studyView('/study/notes')).toBe('notes');
+        expect(studyView('/ctx/study/notes')).toBe('notes');
+    });
+});
+
+describe('notesBookParam', () => {
+    const shelf = [{ id: 7 }, { id: 9 }];
+
+    // 첫 책(7)이 아닌 id로 잰다 — 첫 책이면 「param이 닿았다」와 「폴백」이 같은 값이다.
+    it('?bookId=가 서재에 있으면 그 id', () => {
+        expect(notesBookParam('?bookId=9', shelf)).toBe(9);
+    });
+
+    it('서재에 없는 id는 첫 책으로 — 남의 책 id로 목록을 부르지 않는다', () => {
+        expect(notesBookParam('?bookId=42', shelf)).toBe(7);
+    });
+
+    it('숫자가 아니거나 없으면 첫 책', () => {
+        expect(notesBookParam('?bookId=abc', shelf)).toBe(7);
+        expect(notesBookParam('', shelf)).toBe(7);
+    });
+
+    it('서재가 비었으면 null', () => {
+        expect(notesBookParam('?bookId=9', [])).toBeNull();
     });
 });
 

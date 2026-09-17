@@ -282,10 +282,11 @@ export function planWeeks(days: DraftDay[]): { label: string; days: DraftDay[] }
     }));
 }
 
-export type StudyView = 'calendar' | 'recall' | 'history' | 'books';
+export type StudyView = 'calendar' | 'notes' | 'recall' | 'history' | 'books';
 
-/** 이 셸이 그릴 화면 — /study는 달력, /study/recall은 백지노트, /study/history는 기록, /study/books는 서재(같은 셸·같은 번들, 경로로 고른다). */
+/** 이 셸이 그릴 화면 — /study는 달력, /study/notes는 필기, /study/recall은 백지노트, /study/history는 기록, /study/books는 서재(같은 셸·같은 번들, 경로로 고른다). */
 export function studyView(pathname: string): StudyView {
+    if (pathname.endsWith('/study/notes')) return 'notes';
     if (pathname.endsWith('/study/recall')) return 'recall';
     if (pathname.endsWith('/study/history')) return 'history';
     if (pathname.endsWith('/study/books')) return 'books';
@@ -300,6 +301,12 @@ export function recallDateParam(search: string): string | null {
     const [y, m, d] = date.split('-').map(Number);
     const back = new Date(y, m - 1, d);
     return back.getFullYear() === y && back.getMonth() === m - 1 && back.getDate() === d ? date : null;
+}
+
+/** 필기 화면이 열 책 — `?bookId=`가 내 서재에 있으면 그 id, 아니면 첫 책, 서재가 비었으면 null(남의 책 id로 목록을 부르지 않는다). */
+export function notesBookParam(search: string, books: readonly { id: number }[]): number | null {
+    const id = Number(new URLSearchParams(search).get('bookId'));
+    return books.some((b) => b.id === id) ? id : (books[0]?.id ?? null);
 }
 
 /**
