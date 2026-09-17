@@ -147,6 +147,45 @@ class TossAuthApiControllerTest {
         assertThat(created.isOnboarded()).isFalse(); // onboarded ⟹ login_id 불변식 유지
     }
 
+    @Test
+    @DisplayName("register: 신규 userKey → created:true (미니앱이 목표 화면을 띄울 근거)")
+    void register_newUserKey_createdTrue() throws Exception {
+        tossReturns("uk-created", null);
+
+        callToss("/api/toss/register", body("authorizationCode", "c", "referrer", "r"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.registered").value(true))
+                .andExpect(jsonPath("$.created").value(true));
+    }
+
+    @Test
+    @DisplayName("register: 이미 있는 userKey → created:false, 계정을 또 만들지 않는다(find-or-create)")
+    void register_existingUserKey_createdFalse() throws Exception {
+        tossReturns("uk-again", null);
+        callToss("/api/toss/register", body("authorizationCode", "c", "referrer", "r"))
+                .andExpect(status().isOk());
+        long before = userRepository.count();
+
+        callToss("/api/toss/register", body("authorizationCode", "c2", "referrer", "r"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.registered").value(true))
+                .andExpect(jsonPath("$.created").value(false));
+
+        assertThat(userRepository.count()).isEqualTo(before);
+    }
+
+    @Test
+    @DisplayName("login: 등록된 userKey → created:false (조회는 생성이 아니다)")
+    void login_registered_createdFalse() throws Exception {
+        tossReturns("uk-login-created", null);
+        callToss("/api/toss/register", body("authorizationCode", "c", "referrer", "r"))
+                .andExpect(status().isOk());
+
+        callToss("/api/toss/login", body("authorizationCode", "c2", "referrer", "r"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.created").value(false));
+    }
+
     // ── link ─────────────────────────────────────────────────────────────────
 
     @Test
@@ -158,7 +197,8 @@ class TossAuthApiControllerTest {
 
         callToss("/api/toss/link", body("authorizationCode", "c", "referrer", "r", "linkCode", code))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.token").isString());
+                .andExpect(jsonPath("$.token").isString())
+                .andExpect(jsonPath("$.created").value(false)); // 연결은 기존 계정이다 — 목표 화면으로 보내면 안 된다
 
         assertThat(userRepository.findById(web.getId()).orElseThrow().getTossUserKey()).isEqualTo("uk-link");
         assertThat(userRepository.findByTossUserKey("uk-link").orElseThrow().getLoginId()).isEqualTo("webowner");
