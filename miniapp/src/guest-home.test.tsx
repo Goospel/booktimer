@@ -275,14 +275,6 @@ describe('상한을 넘겨 돌아온 체험', () => {
 });
 
 /**
- * 재는 중 <b>히어로가 아닌</b> 손잡이로 로그인한다 — 헤더 사람 아이콘(로그아웃한 기존 사용자의 길)과
- * 잠긴 탭의 「토스로 시작하기」 둘이다. 둘 다 「그만 읽기」를 안 거치므로 `endedAt:null`인 채 넘어간다.
- *
- * <p>접지 않고 넘기면 손해가 둘이다: ① `flushTrial`이 「끝난 것만 올린다」는 규칙대로 `'none'`으로
- * 지나쳐 방금 잰 시간이 조용히 사라지고 ② 고아 체험이 storage에 남아, 나중에 로그아웃하고 돌아오면
- * {@link restoreTrial}이 상한으로 접어 <b>가짜 6시간</b>이 올라간다.
- */
-/**
  * 「이미 booktimer.app 계정이 있나요?」 — 선택 화면을 없앤 뒤(2026-09-17) 웹 계정 보유자가 남은 유일한 문이다.
  * 다른 손잡이는 누르는 즉시 토스 계정을 만들고, 만들어진 토스 신원은 웹 계정에 다시 못 붙는다(once-set).
  * 그래서 이 문은 <b>인가 전</b>, 게스트 홈 맨 아래에 선다.
@@ -303,12 +295,13 @@ describe('게스트 홈 — 기존 계정 연결', () => {
     expect(shell(null).match(/position:fixed/g) ?? []).toHaveLength(1);
   });
 
-  it('재는 중에도 같은 문을 지난다 — web_link가 그대로 흘러간다', () => {
+  it('재는 중에도 같은 문을 지난다 — 체험을 접고 web_link가 그대로 흘러간다', () => {
     const seen: LoginSource[] = [];
 
-    startLogin(null, (source) => seen.push(source), 'web_link');
+    const folded = startLogin(beginTrial(Date.now() - 90_000), (source) => seen.push(source), 'web_link');
 
     expect(seen).toEqual(['web_link']);
+    expect(folded?.endedAt).toEqual(expect.any(String)); // undefined(안 접음)도 null도 아니어야 한다
   });
 
   // 정적 하니스는 클릭을 못 돌린다(T-149) — 버튼이 어느 source를 싣는지는 소스로 잠근다(book_card와 같은 방식).
@@ -318,6 +311,14 @@ describe('게스트 홈 — 기존 계정 연결', () => {
   });
 });
 
+/**
+ * 재는 중 <b>히어로가 아닌</b> 손잡이로 로그인한다 — 헤더 사람 아이콘(로그아웃한 기존 사용자의 길)과
+ * 잠긴 탭의 「토스로 시작하기」 둘이다. 둘 다 「그만 읽기」를 안 거치므로 `endedAt:null`인 채 넘어간다.
+ *
+ * <p>접지 않고 넘기면 손해가 둘이다: ① `flushTrial`이 「끝난 것만 올린다」는 규칙대로 `'none'`으로
+ * 지나쳐 방금 잰 시간이 조용히 사라지고 ② 고아 체험이 storage에 남아, 나중에 로그아웃하고 돌아오면
+ * {@link restoreTrial}이 상한으로 접어 <b>가짜 6시간</b>이 올라간다.
+ */
 describe('재는 중 다른 손잡이로 로그인 (startLogin)', () => {
   it('체험을 접어 storage에 박고 넘긴다 — 잰 시간이 그대로 합류한다', async () => {
     const started = beginTrial(Date.now() - 90_000);

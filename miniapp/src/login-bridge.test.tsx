@@ -7,12 +7,12 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { login, register } from './api';
 import type { LoginSource } from './screens/GuestHome';
 import { LinkAccount } from './screens/LinkAccount';
-import { LoginBridge, beginLogin } from './screens/LoginBridge';
+import { LoginBridge, beginLogin, routeLoginResult } from './screens/LoginBridge';
 import { userAgent } from './test-fixtures';
 import { trackEvent } from './toss';
 
 /**
- * 로그인 <b>진행</b> 화면 — 인가 왕복(`checking`)과 그 결말(`choice`·`failed`)만 남은 화면이다.
+ * 로그인 <b>진행</b> 화면 — 인가 왕복(`checking`)과 실패(`failed`)만 남은 화면이다(결말 셋은 곧장 다음 화면으로 넘긴다).
  * 체험(인트로·재는 중·끝남)은 2026-09-11 게스트 홈으로 옮겼고, 「진입 즉시 로그인 유도」 반려 1의
  * 계측기도 그리로 따라갔다(`guest-home.test.tsx`) — 앱 첫 렌더가 `GuestShell`인지를 거기서 잰다.
  *
@@ -70,6 +70,17 @@ describe('로그인 시작 (beginLogin)', () => {
     await expect(beginLogin('header')).resolves.toBe('created');
     expect(registerMock).toHaveBeenCalledTimes(1);
     expect(loginMock).toHaveBeenCalledTimes(0);
+  });
+
+  /**
+   * 옛 서버 호환 — 서버 PR 전 응답엔 `created` 필드 자체가 없다. 없음을 「기존 계정」으로 읽어야 한다
+   * (`created === false`로 판정하면 undefined가 신규로 읽혀 기존 사용자가 목표 화면·가입 이벤트를 받는다).
+   */
+  it('created 필드가 없는 옛 응답은 기존 계정으로 읽는다', async () => {
+    registerMock.mockResolvedValue({ registered: true, token: 'tok', loginId: 'x' } as Awaited<ReturnType<typeof register>>);
+
+    await expect(beginLogin('header')).resolves.toBe('authenticated');
+    expect(trackEventMock.mock.calls).toEqual([['login_started', { source: 'header' }]]);
   });
 
   it('이미 있는 계정이면 홈으로 보낼 신호를 준다', async () => {
@@ -163,6 +174,33 @@ describe('로그인 시작 (beginLogin)', () => {
     const src = readFileSync(new URL('./screens/LoginBridge.tsx', import.meta.url), 'utf8');
 
     expect(src.match(/새로 시작/g)).toBeNull();
+  });
+});
+
+/**
+ * 결말 → 다음 화면 — effect 안의 배선은 정적 하니스가 못 돌린다(T-149). 그래서 분기를 순수 함수로 꺼내
+ * 결말마다 <b>어느 핸들러가 불렸는가</b>를 행동으로 잰다. 신규가 홈으로 새면 목표 설정을 건너뛰고,
+ * 연결이 홈으로 새면 웹 계정 보유자가 빈 게스트로 떨어진다.
+ */
+describe('결말별 다음 화면 (routeLoginResult)', () => {
+  const route = (next: Parameters<typeof routeLoginResult>[0]) => {
+    const called: string[] = [];
+    routeLoginResult(next, {
+      onAuthenticated: () => called.push('home'),
+      onNewAccount: () => called.push('goal'),
+      onLinkAccount: () => called.push('link'),
+    });
+    return called;
+  };
+
+  it('새 계정은 목표 설정으로', () => expect(route('created')).toEqual(['goal']));
+  it('연결 손잡이의 미등록은 연결 화면으로', () => expect(route('link')).toEqual(['link']));
+  it('기존 계정은 홈으로', () => expect(route('authenticated')).toEqual(['home']));
+
+  // effect가 핸들러를 이 함수에 넘기는 한 줄은 하니스가 못 돈다 — 이름째 넘기는지 소스로 잠근다.
+  it('화면은 받은 핸들러를 이름 그대로 넘긴다', () => {
+    const src = readFileSync(new URL('./screens/LoginBridge.tsx', import.meta.url), 'utf8').replace(/\s+/g, ' ');
+    expect(src).toContain('routeLoginResult(next, { onAuthenticated, onNewAccount, onLinkAccount })');
   });
 });
 

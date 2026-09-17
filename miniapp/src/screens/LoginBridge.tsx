@@ -37,6 +37,23 @@ export async function beginLogin(source: LoginSource): Promise<'authenticated' |
   return 'created';
 }
 
+/** 결말별로 부를 다음 화면 — `App`이 넘기는 세 핸들러 그대로다. */
+export interface LoginRoutes {
+  onAuthenticated: () => void;
+  onNewAccount: () => void;
+  onLinkAccount: () => void;
+}
+
+/**
+ * 결말 → 다음 화면. effect 안에 두면 정적 하니스가 못 돌려(T-149) 신규가 홈으로 새도 아무 테스트도 안 깨진다 —
+ * 그래서 순수 함수로 꺼냈다.
+ */
+export function routeLoginResult(next: Awaited<ReturnType<typeof beginLogin>>, routes: LoginRoutes): void {
+  if (next === 'created') routes.onNewAccount();
+  else if (next === 'link') routes.onLinkAccount();
+  else routes.onAuthenticated();
+}
+
 /**
  * 로그인 진행 화면 — <b>인가 왕복과 그 결말만</b> 든다.
  *
@@ -68,11 +85,7 @@ export function LoginBridge({
    */
   useEffect(() => {
     beginLogin(source)
-      .then((next) => {
-        if (next === 'created') onNewAccount();
-        else if (next === 'link') onLinkAccount();
-        else onAuthenticated();
-      })
+      .then((next) => routeLoginResult(next, { onAuthenticated, onNewAccount, onLinkAccount }))
       .catch((e: Error) => {
         setError(e.message);
         setPhase('failed');
