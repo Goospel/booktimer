@@ -55,8 +55,11 @@ public class StudyBookService {
      * <p>이미 담은 책(같은 user+isbn13)이면 새 행을 만들지 않고 기존 책을 돌려준다(멱등).
      * <b>회독 수는 보존한다</b> — 「추가」가 4독짜리 책을 0독으로 리셋하면 안 된다. isbn이 없는 결과는
      * 동일성 키가 없어 가드 미적용(여러 권 허용) — 독서 {@link BookService#addFromSearch}와 같은 규약.
+     *
+     * @param linkUrl 바로가기 링크(인강 페이지 등, 선택). <b>멱등 가드에 걸리면 무시된다</b> — 검색 경로엔
+     *                링크가 없고, 링크를 적는 「직접 추가」는 isbn이 null이라 애초에 가드에 안 걸린다.
      */
-    public StudyBook add(User user, BookSearchResult result) {
+    public StudyBook add(User user, BookSearchResult result, String linkUrl) {
         if (result == null) {
             throw new IllegalArgumentException("result must not be null");
         }
@@ -69,7 +72,21 @@ public class StudyBookService {
         }
         // category·pubDate는 받지 않는다 — 책BTI(독서 성향 분석) 입력이라 공부엔 소비처가 없다.
         StudyBook book = StudyBook.register(user, result.title(), result.author(), result.isbn13(),
-                result.coverUrl(), result.publisher(), result.purchaseLink());
+                result.coverUrl(), result.publisher(), result.purchaseLink(), linkUrl);
+        return studyBookRepository.save(book);
+    }
+
+    /**
+     * 내 공부 책의 <b>바로가기 링크</b>를 바꾸거나 해제한다(빈 값 = 해제). 소유권을 강제한다(IDOR 방지).
+     *
+     * <p>편집 문이 따로 있는 이유: 강의 URL은 개편·수강 만료로 죽는데, 「지우고 다시 담기」는 회독 수를
+     * 잃고 세션의 책 참조를 풀며 <b>필기가 있으면 409라 아예 불가능</b>하다({@link #delete}).
+     *
+     * @throws IllegalArgumentException 내 책이 아니거나 존재하지 않는 경우 / 링크 값이 규칙 밖인 경우
+     */
+    public StudyBook changeLinkUrl(User user, Long bookId, String raw) {
+        StudyBook book = ownedBook(user, bookId);
+        book.changeLinkUrl(raw);
         return studyBookRepository.save(book);
     }
 

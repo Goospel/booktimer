@@ -17,6 +17,7 @@ import {
     recallSubjectPrefill,
     readCountLabel,
     recallDateParam,
+    sameTitleExists,
     studyOwned,
     studyView,
     validatePlanForm,
@@ -409,5 +410,26 @@ describe('dayTitle', () => {
 
     it('0 채움을 벗긴다 — 09월이 아니라 9월, 06일이 아니라 6일', () => {
         expect(dayTitle('2026-09-06')).toBe('9월 6일 (일)');
+    });
+});
+
+/*
+ * 같은 제목 재등록 경고 — 서버는 막지 않는다(「isbn 없는 책은 여러 권 허용」이 기존 규약이고 테스트로
+ * 박혀 있다). 다만 몇 달 뒤 잊고 다시 담으면 누적 시간이 두 행으로 갈리고 <b>합칠 기능이 없어 영구 분열</b>
+ * 이라, 화면이 한 번 묻는다. 「뉴런 수학」/「수학 뉴런」은 못 잡는다 — 정확 일치가 의도한 단순화다.
+ */
+describe('sameTitleExists', () => {
+    it('빈 서재에는 같은 제목이 없다', () => {
+        expect(sameTitleExists([], '수학 뉴런')).toBe(false);
+    });
+
+    it('대소문자와 앞뒤 공백은 무시한다 — 같은 책을 다르게 적은 것뿐이다', () => {
+        const books = [{ title: 'Math Neuron' }];
+
+        expect(sameTitleExists(books, '  math neuron ')).toBe(true);
+    });
+
+    it('다른 제목은 경고하지 않는다', () => {
+        expect(sameTitleExists([{ title: '수학 뉴런' }], '영어 뉴런')).toBe(false);
     });
 });

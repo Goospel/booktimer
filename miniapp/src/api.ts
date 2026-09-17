@@ -768,6 +768,13 @@ export interface StudyBookRow {
    * 소비처는 `null`과 같게 읽는다.
    */
   sessionGoalSeconds?: number | null;
+  /**
+   * 바로가기 링크(인강 페이지 등) — <b>서버가 싣지만 이 화면은 아직 안 읽는다</b>(다음 단계).
+   *
+   * <p>{@code purchaseLink}와 <b>다른 필드</b>인 것이 핵심이다: 그쪽에 인강 URL이 실리면 관리 시트가
+   * 「알라딘에서 구매」 + 「제휴 링크예요」를 그려 <b>고지가 거짓</b>이 된다(설계 2026-09-16 D2).
+   */
+  linkUrl?: string | null;
 }
 
 export interface StudyShelfResponse {

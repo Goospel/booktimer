@@ -314,3 +314,15 @@ export function studyOwned(myIsbns: ReadonlySet<string>, isbn13: string | null):
 export function readCountLabel(readCount: number): string {
     return `${readCount}독`;
 }
+
+/**
+ * 같은 제목이 이미 서재에 있는가 — 「담기 전에 한 번 묻는다」의 판정.
+ *
+ * <p>서버는 막지 않는다(「isbn 없는 책은 여러 권 허용」이 기존 규약이다). 여기서 묻는 이유는 몇 달 뒤
+ * 잊고 다시 담으면 <b>누적 시간이 두 행으로 갈리고 합칠 기능이 없어 영구 분열</b>이기 때문이다.
+ * 정확 일치(공백·대소문자만 무시)라 「뉴런 수학」/「수학 뉴런」은 못 잡는다 — 의도한 단순화다.
+ */
+export function sameTitleExists(books: readonly { title: string }[], title: string): boolean {
+    const key = title.trim().toLowerCase();
+    return books.some((b) => b.title.trim().toLowerCase() === key);
+}
