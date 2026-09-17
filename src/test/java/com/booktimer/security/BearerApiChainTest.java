@@ -107,6 +107,27 @@ class BearerApiChainTest {
                 .andExpect(jsonPath("$.nickname").value("토스유저"));
     }
 
+    // ── 익명 공개 경로 /api/public/** ────────────────────────────────────────
+
+    @Test
+    @DisplayName("Bearer 없는 GET /api/public/news → 200 (세션 체인의 /login 302로 새지 않는다)")
+    void publicNews_noAuth_200() throws Exception {
+        mockMvc.perform(get("/api/public/news"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.newsEnabled").isBoolean());
+    }
+
+    @Test
+    @DisplayName("공개 접두는 끝 슬래시까지가 계약 — /api/publicX/news·/api/public은 기존대로 302")
+    void publicPrefixSibling_stillRedirects() throws Exception {
+        mockMvc.perform(get("/api/publicX/news"))
+                .andExpect(status().is3xxRedirection())
+                .andExpect(redirectedUrl("/login"));
+        mockMvc.perform(get("/api/public"))
+                .andExpect(status().is3xxRedirection())
+                .andExpect(redirectedUrl("/login"));
+    }
+
     // ── 기존(세션) 체인 회귀 가드 ────────────────────────────────────────────
 
     @Test

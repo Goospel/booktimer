@@ -106,7 +106,7 @@ public final class BookNewsMatcher {
     }
 
     /** 비교용 키 — {@link #clean} + 소문자 + 공백 제거(공백 유무 변형을 흡수). */
-    private static String key(String raw) {
+    static String key(String raw) {
         return clean(raw).toLowerCase(Locale.ROOT).replaceAll("\\s+", "");
     }
 
