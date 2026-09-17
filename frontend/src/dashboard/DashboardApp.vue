@@ -56,7 +56,7 @@ const study = ref<StudyState>(IDLE_STUDY)
 const storedMode = ref<TimerMode>(readMode())
 // 서버 진실이 저장값을 이긴다 — 진행 중 원장의 모드가 화면 모드다(미니앱 effectiveMode 1:1).
 const mode = computed(() => effectiveMode(hasActiveSession.value, study.value.hasActiveSession, storedMode.value))
-// 섬 밖 SSR 양옆 바의 흐림 상태를 같은 모드로 — 섬 밖 DOM 한 속성(HistoryApp의 body 클래스와 같은 관례).
+// 섬 밖 SSR 세로 바의 모드(한쪽 메뉴만 보임)를 같은 모드로 — 섬 밖 DOM 한 속성(HistoryApp의 body 클래스와 같은 관례).
 // 아래 독서등과 **같은 이유로 응답을 본 뒤에만** 쓴다: 응답 전엔 저장값이 진실이 아닐 수 있고(공부 측정 중에
 // 왼쪽 바를 들르면 저장값이 reading이 된다), 그때 덮으면 인라인 부트가 램프 힌트까지 보고 세운 값을 지워
 // 밤 배경에 독서 바가 선명한 구간이 응답까지 남는다(실측 271ms). 부트가 남긴 값이 응답 전 최선의 추정이다.
@@ -146,6 +146,8 @@ onMounted(async () => {
         if (!res.ok) throw new Error(res.statusText)
         data.value = await res.json() as DashboardResponse
         applyDashboard(data.value)
+        // 비홈 스위치는 측정 상태를 모른다 — 다른 화면에서 반대 모드를 눌러 왔는데 서버 진실이 되돌렸으면 이유를 말한다(설계 2026-09-17 D2).
+        if (toggleLocked.value && storedMode.value !== mode.value) onModeBlocked()
     } catch {
         fetchError.value = true
     } finally {

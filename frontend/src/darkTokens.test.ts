@@ -154,6 +154,14 @@ describe('공부 모드 토큰 짝 맞춤 (.is-study)', () => {
     it('라이트에 없는 공부 토큰을 다크가 만들지 않는다', () => {
         expect(dark.filter((t) => !light.includes(t))).toEqual([]);
     });
+
+    // 세로 바 공부 모드 셀렉터는 허용목록에 정확 일치로 들어가 있다 — 공유 블록과 **별개로** 라이트 전용 규칙을
+    // 새로 쓰면 목록 소속 단언만으론 안 잡힌다(리뷰 사소-3). 토큰 집합이 .is-study와 같은지 직접 잰다.
+    it('세로 바 공부 모드(#side-rails)의 토큰 집합이 .is-study와 같다 — 라이트·다크·독서등', () => {
+        expect(colorTokens('#side-rails[data-mode="study"]')).toEqual(light);
+        expect(colorTokens(`${DARK_SELECTOR} #side-rails[data-mode="study"]`)).toEqual(dark);
+        expect(colorTokens('body.study-lamp #side-rails[data-mode="study"]')).toEqual(dark);
+    });
 });
 
 /**
@@ -171,6 +179,10 @@ describe('독서등 — 토큰 복제 0', () => {
         expect(groupOf(DARK_SELECTOR)).toContain('body.study-lamp');
         expect(groupOf('.is-study')).toContain('body.study-lamp .lamp-page .is-study');
         expect(groupOf(`${DARK_SELECTOR} .is-study`)).toContain('body.study-lamp .is-study');
+        // 세로 바 공부 모드 — 라이트·다크·독서등 세 블록 모두 .is-study와 같은 목록에 있어야 짝 맞춤을 물려받는다
+        expect(groupOf('.is-study')).toContain('#side-rails[data-mode="study"]');
+        expect(groupOf(`${DARK_SELECTOR} .is-study`)).toContain(`${DARK_SELECTOR} #side-rails[data-mode="study"]`);
+        expect(groupOf(`${DARK_SELECTOR} .is-study`)).toContain('body.study-lamp #side-rails[data-mode="study"]');
     });
 
     it('덧씌움 블록이 새 토큰 이름을 만들지 않는다 — 밤은 다크의, 낮은 라이트의 부분집합', () => {
@@ -254,7 +266,9 @@ const ALLOWED = [
     { why: 'box-shadow', match: (sel: string, prop: string) => prop === 'box-shadow' },
     // 공부 잉크(파랑)의 라이트 원본. 다크판은 `:root[data-theme="dark"] .is-study` 블록이
     // 따로 그리고, 그 짝은 위 「공부 모드 토큰 짝 맞춤」이 지킨다.
-    { why: '.is-study 스코프', match: (sel: string) => /(^|[\s,])\.is-study\b/.test(sel) || /\.is-study(\.|\s|$)/.test(sel) },
+    // 세로 바의 공부 모드(#side-rails[data-mode="study"])는 `.is-study`와 같은 토큰 블록의 셀렉터 목록에 끼어 있다
+    // (설계 2026-09-17-single-rail-mode-switch) — 다크 짝은 아래 「밤·낮 범위」 케이스가 같은 블록에 있음을 지킨다.
+    { why: '.is-study 스코프', match: (sel: string) => /(^|[\s,])\.is-study\b/.test(sel) || /\.is-study(\.|\s|$)/.test(sel) || sel === '#side-rails[data-mode="study"]' },
     // 구글 브랜드 파랑 — 브랜드 자산이라 테마를 따르지 않는다(설계가 템플릿 인라인 로고를 뺀 것과 같은 이유).
     { why: '구글 브랜드', match: (sel: string) => sel.includes('.oauth-icon') },
     // 여백 글 배경 프리셋(종이·밤·숲…)은 사용자가 고르는 <b>콘텐츠 색</b>이다. 표지 팔레트를

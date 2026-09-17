@@ -2947,11 +2947,12 @@ body.dashboard-page #dashboard-app { gap: 20px; }
 
 .dash-card-link { font-size: 13.5px; color: var(--accent-hover); text-decoration: none; }
 .dash-card-link:hover { text-decoration: underline; }
-/* 모드 스위치 — 페이지 단위(타이머 카드·아래 카드·양옆 바)라 카드 밖 화면 아래 가운데에 띄운다(2026-09-17 D안).
+/* 모드 스위치 — 페이지 단위(타이머 카드·아래 카드·세로 바)라 카드 밖 화면 아래 가운데에 띄운다(2026-09-17 D안).
+   비홈 화면의 SSR 알약(fragments/side-rails)도 이 규칙들을 그대로 쓴다 — 공부 잉크는 #side-rails 토큰 상속(설계 2026-09-17-single-rail-mode-switch).
    z 94 = 결(body::before 90) 위 · 바(95) 아래 · 칩·스킵링크(100) 아래. 결 위에 뜨므로 표면에 결을 직접 얹는다(.rail과 같은 이유, T-192).
    PWA 설치 칩(pwa-install.js — bottom 72px+safe-area, 띠 72~109px)과는 세로 띠가 다르다(여긴 16~55px) — 가로 폭·바 유무와 무관하게 안 겹친다.
    좁은 창에서 펼친 바가 힌트 칩에 닿으면 바가 이긴다(힌트는 일시적). 공부 잉크는 .is-study 스코프 스왑을 그대로 탄다
-   (ModeToggle이 공부 모드에 is-study를 붙인다 — .rail-study와 같은 관용구라 다크·독서등판 0줄). 잠김은 버튼만 옅게 —
+   (ModeToggle이 공부 모드에 is-study를 붙인다 — 다크·독서등판 0줄). 잠김은 버튼만 옅게 —
    떠 있는 종이 자체를 반투명으로 두면 밑 콘텐츠가 비쳐 깨진 것처럼 보인다. 전역 button{width:100%; border-image}는 width:auto·border:0으로 상쇄. */
 .dash-mode-toggle-wrap {
     position: fixed; left: 0; right: 0; bottom: calc(16px + env(safe-area-inset-bottom, 0px));
@@ -2970,11 +2971,15 @@ body.dashboard-page #dashboard-app { gap: 20px; }
     width: auto; padding: 5px 18px; border: 0; border-radius: 999px;
     background: transparent; color: var(--muted); font: inherit; font-size: 13px; cursor: pointer;
 }
-.dash-mode-toggle button[aria-pressed="true"] { background: var(--sage-soft); color: var(--accent-hover); font-weight: 700; }
+/* 비홈 SSR 알약(fragments/side-rails)은 첫 페인트 전에 JS 없이 눌림이 맞아야 해서 속성 셀렉터로도 같은 선언을 받는다 */
+.dash-mode-toggle button[aria-pressed="true"],
+#side-rails[data-mode="study"] .dash-mode-toggle [data-pick="study"],
+#side-rails:not([data-mode="study"]) .dash-mode-toggle [data-pick="reading"] { background: var(--sage-soft); color: var(--accent-hover); font-weight: 700; }
 .dash-mode-toggle.is-locked button { opacity: .5; cursor: not-allowed; }
 .dash-mode-hint { padding: 4px 10px; border-radius: 8px; background: var(--card-bg); border: 1px solid var(--border); font-size: 12px; color: var(--muted); }
-/* 마지막 콘텐츠(명언·광고)가 스위치 밑에 깔리지 않게 — body 기본 32 + 스위치 띠 상단 55 + 숨 13. 홈 전용이라 다른 페이지 0줄. */
-body.dashboard-page { padding-bottom: calc(100px + env(safe-area-inset-bottom, 0px)); }
+/* 마지막 콘텐츠(명언·광고·폼 버튼·편집기 하단)가 스위치 밑에 깔리지 않게 — body 기본 32 + 스위치 띠 상단 55 + 숨 13.
+   스위치가 바 있는 화면 전부에 뜨므로(홈 Vue · 비홈 SSR) 여백도 바 있는 화면 전부. 스크롤 중 겹침은 고정 요소의 본성이라 범위 밖. */
+body.has-rails { padding-bottom: calc(100px + env(safe-area-inset-bottom, 0px)); }
 
 /* 공부 잉크 — 카드 스코프 토큰 스왑(미니앱 body.study-mode의 카드 한정판, 값은 그쪽과 같다).
    대시보드 카드(.dash-card)와 /study/history의 .card가 같은 클래스를 쓴다 — 규칙 하나가 두 화면을 덮는다.
@@ -2982,7 +2987,7 @@ body.dashboard-page { padding-bottom: calc(100px + env(safe-area-inset-bottom, 0
    --nav-hover-*·--ok까지 덮는 이유: :root에서 var()로 해석된 값이라 --sage-soft만 덮어선 hover·요약 강조가
    세이지로 남는다. --ok가 닿는 곳은 공부 카드 안에선 .grass-summary strong과 회당 시간 달성 줄
    (.dash-session-line.is-reached) 둘이다(.dash-*-ok는 독서 달성 전용) — 둘 다 초록이 아니라 이 공부 잉크로 칠해진다. */
-.is-study, body.study-lamp .lamp-page .is-study {
+.is-study, #side-rails[data-mode="study"], body.study-lamp .lamp-page .is-study {
     --accent: #5F7E96; --accent-hover: #47657C; --sage-soft: #E6ECF0;
     --nav-hover-bg: #E6ECF0; --nav-hover-border: #D6E0E7;
     --ok: #47657C;
@@ -3951,8 +3956,10 @@ body.study-lamp .lamp-page .is-study .btn-primary:hover:not(:disabled) { backgro
 .theme-toggle:focus-visible { outline: none; box-shadow: 0 0 0 3px var(--focus-ring); }
 .theme-toggle svg { width: 18px; height: 18px; }
 
-/* ── 양옆 세로 바(side rails) — 설계 claude-docs/plans/2026-09-15-web-side-rails.md ──
-   로그인 사용자 화면의 페이지 이동 단일 출처(fragments/side-rails). 왼쪽 = 독서, 오른쪽 = 공부(.is-study 잉크).
+/* ── 세로 바(side rail) — 설계 claude-docs/plans/2026-09-15-web-side-rails.md · 2026-09-17-single-rail-mode-switch.md ──
+   로그인 사용자 화면의 페이지 이동 단일 출처(fragments/side-rails). 왼쪽 바 하나 — 안의 독서·공부 nav 중
+   #side-rails[data-mode]가 가리키는 쪽만 보인다(공부면 .is-study 토큰을 #side-rails가 상속으로 준다).
+   오른쪽 여백 124는 바가 없어도 대칭으로 둔다 — 본문 중앙 정렬과 아래 2열 경계 1100(바 여백 248에서 유도)을 지킨다.
    평소 92px 접힘. 펼침(232px, 본문 위에 덮음)은 `.is-open`(rail.js — 데스크톱 머묾·태블릿 탭)과
    `:focus-within`(키보드) 한 벌뿐이다. `.rail:hover` 펼침 규칙은 두지 않는다 — hover로 펼치면 안의 가로 배치가
    즉시 뒤집혀 스치기만 해도 글자가 깨져 보인다(머묾 지연은 rail.js 타이머가 맡는다).
@@ -3998,6 +4005,7 @@ body.has-rails .container:not(.narrow-page) .study-plan-form { max-width: 620px;
     position: fixed;
     top: 16px;
     bottom: 16px;
+    left: 16px;
     width: 92px;
     z-index: 95;
     display: flex;
@@ -4013,10 +4021,10 @@ body.has-rails .container:not(.narrow-page) .study-plan-form { max-width: 620px;
     border: 1px solid var(--line-2);
     border-image: var(--pencil-frame) 8 / 8px stretch;
     box-shadow: 0 1px 2px rgba(44, 42, 36, .04);
-    transition: width .18s ease, box-shadow .18s ease, opacity .18s ease;
+    transition: width .18s ease, box-shadow .18s ease;
 }
-.rail-reading { left: 16px; }
-.rail-study { right: 16px; }   /* right 고정 → 펼치면 왼쪽으로 자란다 */
+/* 지금 모드의 메뉴만 — 속성 부재 = 독서(JS 꺼짐·저장소 예외에서도 독서 메뉴가 뜬다). 반대쪽은 display:none이라 접근성 트리에서도 빠진다 */
+#side-rails[data-mode="study"] .rail-nav-reading, #side-rails:not([data-mode="study"]) .rail-nav-study { display: none; }
 .rail nav { display: flex; flex-direction: column; gap: 6px; }
 .rail-pill { align-self: center; margin-bottom: 8px; padding: 5px 12px; border-radius: 999px; font-size: 12.5px; white-space: nowrap; background: var(--sage-soft); color: var(--accent-hover); }
 .rail-item { display: flex; flex-direction: column; align-items: center; gap: 5px; padding: 10px 4px; border-radius: 14px; border: 1px solid transparent; color: var(--text); font-size: 12.5px; line-height: 1.3; text-align: center; white-space: nowrap; text-decoration: none; }
@@ -4024,14 +4032,10 @@ body.has-rails .container:not(.narrow-page) .study-plan-form { max-width: 620px;
 .rail-item[aria-current="page"] { background: var(--sage-soft); border-color: var(--nav-hover-border); border-image: var(--pencil-frame) 8 / 8px stretch; color: var(--accent-hover); }
 @media (hover: hover) and (pointer: fine) { .rail-item:hover:not([aria-current]) { background: var(--nav-hover-bg); text-decoration: none; } }
 .rail-item:focus-visible { outline: none; box-shadow: 0 0 0 3px var(--focus-ring); }
-/* 흐림 — 지금 모드의 반대쪽. 펼치면(어느 경로로든) 진해진다.
-   .7이 하한이다: 라이트 12.5px 라벨 대비 5.40:1(AA 4.5) · 아이콘 3.07:1(비텍스트 3). .6이면 4.01 · 2.55로 미달 */
-#side-rails[data-mode="reading"] .rail-study, #side-rails[data-mode="study"] .rail-reading { opacity: .7; }
 /* 펼침 — 데스크톱 머묾·태블릿 탭(둘 다 rail.js의 is-open)·키보드(focus-within) 셋이 같은 모양 */
 #side-rails .rail.is-open, #side-rails .rail:focus-within {
     width: 232px;
     padding: 18px 12px;
-    opacity: 1;
     box-shadow: 0 2px 4px rgba(44, 42, 36, .05), 0 18px 44px rgba(44, 42, 36, .16);
 }
 .rail.is-open .rail-item, .rail:focus-within .rail-item { flex-direction: row; gap: 12px; padding: 10px 14px; font-size: 15px; line-height: 1.6; text-align: left; }
@@ -4039,9 +4043,6 @@ body.has-rails .container:not(.narrow-page) .study-plan-form { max-width: 620px;
 @media (prefers-reduced-motion: reduce) { .rail { transition: none; } }
 /* ponytail: <640px엔 이동 수단이 브랜드 홈 링크뿐 — 폰 웹을 지원하기로 바뀌면 하단 탭바를 여기 단다(웹=데스크톱·태블릿, 2026-09-07 방침) */
 @media (max-width: 639px) { .rail { display: none; } body.has-rails { padding-left: 16px; padding-right: 16px; } }
-/* PWA 설치 칩(pwa-install.js가 right:16px 인라인으로 꽂는다)이 오른쪽 바를 덮지 않게 바 안쪽으로 비킨다.
-   !important는 인라인 스타일을 이기기 위한 것이다(인라인은 어떤 셀렉터보다 세다). */
-@media (min-width: 640px) { body.has-rails #pwa-install-chip { right: 124px !important; } }
 
 /* ── 다크 테마 ────────────────────────────────────────────
    `:root`의 색 토큰만 덮는다. 토큰이 안 닿는 raw 리터럴 규칙(설정 배너·상태 배지·흰 채움 등)은
@@ -4202,7 +4203,8 @@ body.has-rails .container:not(.narrow-page) .study-plan-form { max-width: 620px;
 
 /* 공부 잉크 다크 — `.is-study`가 파랑 리터럴로 덮는 토큰들의 다크판.
    이게 없으면 공부 화면만 다크에서 세이지로 튄다(라이트에선 파랑인데 다크에선 초록이 되는 셈). */
-:root[data-theme="dark"] .is-study, body.study-lamp .is-study {
+:root[data-theme="dark"] .is-study, body.study-lamp .is-study,
+:root[data-theme="dark"] #side-rails[data-mode="study"], body.study-lamp #side-rails[data-mode="study"] {
     --accent: #8FA9BE;
     --accent-hover: #AFC4D2;
     --sage-soft: #27323B;

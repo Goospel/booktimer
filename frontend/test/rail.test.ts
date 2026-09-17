@@ -6,19 +6,19 @@ import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
 import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 
-import { bindRails, rememberMode, MODE_KEY, ENTER_DELAY_MS, LEAVE_DELAY_MS, HOVER_QUERY } from '../../src/main/resources/static/js/rail.js';
+import { bindRails, bindModeSwitch, rememberMode, MODE_KEY, ENTER_DELAY_MS, LEAVE_DELAY_MS, HOVER_QUERY } from '../../src/main/resources/static/js/rail.js';
 
 function fixture() {
     document.body.innerHTML = `
         <div id="side-rails" data-mode="reading">
-            <aside class="rail rail-reading"><nav><a id="a1" href="#r1">홈</a></nav></aside>
-            <aside class="rail rail-study"><nav><a id="a2" href="#r2">일정</a></nav></aside>
+            <aside class="rail">
+                <nav class="rail-nav-reading"><a id="a1" href="#r1">내 책장</a></nav>
+                <nav class="rail-nav-study"><a id="a2" href="#r2">일정</a></nav>
+            </aside>
         </div>
         <button id="outside">바깥</button>`;
-    const [reading, study] = Array.from(document.querySelectorAll<HTMLElement>('.rail'));
     return {
-        reading,
-        study,
+        rail: document.querySelector<HTMLElement>('.rail')!,
         a1: document.getElementById('a1') as HTMLAnchorElement,
         a2: document.getElementById('a2') as HTMLAnchorElement,
         outside: document.getElementById('outside') as HTMLButtonElement,
@@ -45,13 +45,12 @@ function click(el: Element): MouseEvent {
 const openCount = () => document.querySelectorAll('.rail.is-open').length;
 
 describe('bindRails — 터치(hover 없음): 탭으로 펼치고 바깥 탭으로 접는다', () => {
-    test('접힌 바 링크 탭 → 이동을 막고 그 바만 펼친다', () => {
+    test('접힌 바 링크 탭 → 이동을 막고 바를 펼친다', () => {
         const f = fixture();
         bindRails(document, fakeWin(false));
         const ev = click(f.a1);
         expect(ev.defaultPrevented).toBe(true);
-        expect(f.reading.classList.contains('is-open')).toBe(true);
-        expect(f.study.classList.contains('is-open')).toBe(false);
+        expect(f.rail.classList.contains('is-open')).toBe(true);
     });
 
     test('펼친 바 링크 탭 → 이동한다(막지 않음)', () => {
@@ -60,15 +59,6 @@ describe('bindRails — 터치(hover 없음): 탭으로 펼치고 바깥 탭으�
         click(f.a1);
         const ev = click(f.a1);
         expect(ev.defaultPrevented).toBe(false);
-    });
-
-    test('다른 바 탭 → 먼저 것은 접히고 새 것만 펼친다', () => {
-        const f = fixture();
-        bindRails(document, fakeWin(false));
-        click(f.a1);
-        click(f.a2);
-        expect(f.reading.classList.contains('is-open')).toBe(false);
-        expect(f.study.classList.contains('is-open')).toBe(true);
     });
 
     test('바깥 탭 → 전부 접히고 바 안 포커스를 푼다(:focus-within이 펼침을 붙잡지 않게)', () => {
@@ -108,25 +98,25 @@ describe('bindRails — 데스크톱(hover): 머물면 펼치고 벗어나면 �
         expect(LEAVE_DELAY_MS).toBe(100);
         const f = fixture();
         bindRails(document, fakeWin(true));
-        f.reading.dispatchEvent(new MouseEvent('mouseenter'));
+        f.rail.dispatchEvent(new MouseEvent('mouseenter'));
         vi.advanceTimersByTime(149);
-        expect(f.reading.classList.contains('is-open')).toBe(false);
+        expect(f.rail.classList.contains('is-open')).toBe(false);
         vi.advanceTimersByTime(1);
-        expect(f.reading.classList.contains('is-open')).toBe(true);
+        expect(f.rail.classList.contains('is-open')).toBe(true);
 
-        f.reading.dispatchEvent(new MouseEvent('mouseleave'));
+        f.rail.dispatchEvent(new MouseEvent('mouseleave'));
         vi.advanceTimersByTime(99);
-        expect(f.reading.classList.contains('is-open')).toBe(true);
+        expect(f.rail.classList.contains('is-open')).toBe(true);
         vi.advanceTimersByTime(1);
-        expect(f.reading.classList.contains('is-open')).toBe(false);
+        expect(f.rail.classList.contains('is-open')).toBe(false);
     });
 
     test('스침(진입 60ms 뒤 이탈) → 이후 1초 동안 한 번도 안 펼친다', () => {
         const f = fixture();
         bindRails(document, fakeWin(true));
-        f.reading.dispatchEvent(new MouseEvent('mouseenter'));
+        f.rail.dispatchEvent(new MouseEvent('mouseenter'));
         vi.advanceTimersByTime(60);
-        f.reading.dispatchEvent(new MouseEvent('mouseleave'));
+        f.rail.dispatchEvent(new MouseEvent('mouseleave'));
         for (let t = 0; t < 1000; t += 10) {
             vi.advanceTimersByTime(10);
             expect(openCount()).toBe(0);
@@ -136,10 +126,10 @@ describe('bindRails — 데스크톱(hover): 머물면 펼치고 벗어나면 �
     test('바 안 링크에 포커스가 남은 채 mouseleave → 접힐 때 포커스도 바 밖으로', () => {
         const f = fixture();
         bindRails(document, fakeWin(true));
-        f.reading.dispatchEvent(new MouseEvent('mouseenter'));
+        f.rail.dispatchEvent(new MouseEvent('mouseenter'));
         vi.advanceTimersByTime(150);
         f.a1.focus();
-        f.reading.dispatchEvent(new MouseEvent('mouseleave'));
+        f.rail.dispatchEvent(new MouseEvent('mouseleave'));
         vi.advanceTimersByTime(100);
         expect(document.getElementById('side-rails')!.contains(document.activeElement)).toBe(false);
     });
@@ -147,50 +137,16 @@ describe('bindRails — 데스크톱(hover): 머물면 펼치고 벗어나면 �
     test('터치 기기의 흉내 mouseenter는 무시한다', () => {
         const f = fixture();
         bindRails(document, fakeWin(false));
-        f.reading.dispatchEvent(new MouseEvent('mouseenter'));
+        f.rail.dispatchEvent(new MouseEvent('mouseenter'));
         vi.advanceTimersByTime(1000);
         expect(openCount()).toBe(0);
     });
 });
 
-describe('bindRails — 리뷰 반영(#1137): 포커스·동시 펼침·입력 장치 전환·옛 Safari', () => {
+// 두 바 전제였던 「다른 바 포커스 보존」·「반대쪽 동시 펼침」은 바가 하나가 되며 대상이 사라져 걷었다(설계 2026-09-17 T4).
+describe('bindRails — 리뷰 반영(#1137): 입력 장치 전환·옛 Safari', () => {
     beforeEach(() => vi.useFakeTimers());
     afterEach(() => vi.useRealTimers());
-
-    test('키보드 포커스가 한 바에 있는 채 마우스가 다른 바에 머물러도 포커스를 빼앗지 않는다', () => {
-        const f = fixture();
-        bindRails(document, fakeWin(true));
-        f.a1.focus();
-        f.study.dispatchEvent(new MouseEvent('mouseenter'));
-        vi.advanceTimersByTime(150);
-        expect(f.study.classList.contains('is-open')).toBe(true);
-        expect(document.activeElement).toBe(f.a1);
-    });
-
-    test('마우스가 다른 바를 떠날 때도 키보드 포커스는 그대로 — blur는 막 떠난 바 안의 포커스만', () => {
-        const f = fixture();
-        bindRails(document, fakeWin(true));
-        f.a1.focus();
-        f.study.dispatchEvent(new MouseEvent('mouseenter'));
-        vi.advanceTimersByTime(150);
-        f.study.dispatchEvent(new MouseEvent('mouseleave'));
-        vi.advanceTimersByTime(100);
-        expect(f.study.classList.contains('is-open')).toBe(false);
-        expect(document.activeElement).toBe(f.a1);
-    });
-
-    test('펼친 바를 떠나 100ms 안에 반대쪽 바에 머물면 먼저 것은 닫히고 새 것만 펼친다(동시 펼침 없음)', () => {
-        const f = fixture();
-        bindRails(document, fakeWin(true));
-        f.reading.dispatchEvent(new MouseEvent('mouseenter'));
-        vi.advanceTimersByTime(150);
-        f.reading.dispatchEvent(new MouseEvent('mouseleave'));
-        vi.advanceTimersByTime(50);
-        f.study.dispatchEvent(new MouseEvent('mouseenter'));
-        vi.advanceTimersByTime(150);
-        expect(f.reading.classList.contains('is-open')).toBe(false);
-        expect(f.study.classList.contains('is-open')).toBe(true);
-    });
 
     test('입력 장치가 바뀌면(matchMedia change) 열린 바를 접는다', () => {
         const f = fixture();
@@ -286,7 +242,7 @@ describe('rememberMode — 서버가 실은 값만 저장값에 적는다(지금
         const { m, s } = fakeStorage('reading');
         document.body.innerHTML = `
             <div id="side-rails" data-mode="study" data-remember="study">
-                <aside class="rail rail-study"><nav><a id="a2" href="#r2">일정</a></nav></aside>
+                <aside class="rail"><nav><a id="a2" href="#r2">일정</a></nav></aside>
             </div>`;
         const win = { ...fakeWin(false), localStorage: s } as unknown as Window;
         const api = bindRails(document, win);
@@ -299,13 +255,128 @@ describe('rememberMode — 서버가 실은 값만 저장값에 적는다(지금
     test('저장이 throw해도 bindRails는 정상 반환한다(펼침이 막히지 않는다)', () => {
         document.body.innerHTML = `
             <div id="side-rails" data-mode="study" data-remember="study">
-                <aside class="rail rail-study"><nav><a id="a2" href="#r2">일정</a></nav></aside>
+                <aside class="rail"><nav><a id="a2" href="#r2">일정</a></nav></aside>
             </div>`;
         const boom = { setItem: () => { throw new Error('QuotaExceeded'); } };
         const win = { ...fakeWin(false), localStorage: boom } as unknown as Window;
         expect(() => bindRails(document, win)).not.toThrow();
         click(document.getElementById('a2')!);
         expect(openCount()).toBe(1);
+    });
+});
+
+// 비홈 스위치(fragments/side-rails SSR 알약) — 누른 모드를 저장하고 홈으로. 지금 모드는 무동작(설계 2026-09-17 D1·D3).
+describe('bindModeSwitch — 비홈 「독서 | 공부」 알약', () => {
+    const PILL = `
+        <div class="dash-mode-toggle-wrap">
+            <div class="dash-mode-toggle" role="group" aria-label="독서·공부 모드">
+                <button type="button" data-pick="reading">독서</button>
+                <button type="button" data-pick="study">공부</button>
+            </div>
+        </div>`;
+    function page(mode?: string, withPill = true) {
+        const attr = mode === undefined ? '' : ` data-mode="${mode}"`;
+        document.body.innerHTML = `
+            <div id="side-rails"${attr}>
+                <aside class="rail"><nav class="rail-nav-reading"><a id="a1" href="#r1">내 책장</a></nav></aside>
+                ${withPill ? PILL : ''}
+            </div>`;
+        return document.getElementById('side-rails') as HTMLElement;
+    }
+    const pick = (m: string) => document.querySelector<HTMLButtonElement>(`button[data-pick="${m}"]`)!;
+    function fakeSwitchWin(storage?: Partial<Storage>) {
+        const writes: Array<[string, string]> = [];
+        const localStorage = storage ?? { setItem: (k: string, v: string) => { writes.push([k, v]); } };
+        const assign = vi.fn();
+        const win = { ...fakeWin(false), localStorage, location: { assign } } as unknown as Window;
+        return { win, writes, assign };
+    }
+
+    test('지금 reading에서 「공부」 → study 저장 + 홈 이동 1회', () => {
+        const root = page('reading');
+        const { win, writes, assign } = fakeSwitchWin();
+        bindModeSwitch(root, win);
+        click(pick('study'));
+        expect(writes).toEqual([[MODE_KEY, 'study']]);
+        expect(assign).toHaveBeenCalledTimes(1);
+        expect(assign).toHaveBeenCalledWith('/');
+    });
+
+    test('지금 모드(「독서」) 클릭 → 저장·이동 둘 다 0회', () => {
+        const root = page('reading');
+        const { win, writes, assign } = fakeSwitchWin();
+        bindModeSwitch(root, win);
+        click(pick('reading'));
+        expect(writes).toHaveLength(0);
+        expect(assign).not.toHaveBeenCalled();
+    });
+
+    test('속성 없음(부재 = 독서)에서 「공부」 → 이동, 「독서」 → 무동작', () => {
+        const root = page(undefined);
+        const { win, writes, assign } = fakeSwitchWin();
+        bindModeSwitch(root, win);
+        click(pick('reading'));
+        expect(assign).not.toHaveBeenCalled();
+        click(pick('study'));
+        expect(writes).toEqual([[MODE_KEY, 'study']]);
+        expect(assign).toHaveBeenCalledTimes(1);
+    });
+
+    test('study 페이지에서 「독서」 → reading 저장 + 이동', () => {
+        const root = page('study');
+        const { win, writes, assign } = fakeSwitchWin();
+        bindModeSwitch(root, win);
+        click(pick('reading'));
+        expect(writes).toEqual([[MODE_KEY, 'reading']]);
+        expect(assign).toHaveBeenCalledWith('/');
+    });
+
+    test('바인딩 직후 aria-pressed는 지금 모드 버튼만 "true"', () => {
+        const root = page('study');
+        bindModeSwitch(root, fakeSwitchWin().win);
+        expect(pick('study').getAttribute('aria-pressed')).toBe('true');
+        expect(pick('reading').getAttribute('aria-pressed')).toBe('false');
+    });
+
+    test('저장소가 throw해도 홈으로는 간다(홈이 서버 진실로 연다)', () => {
+        const root = page('reading');
+        const { win, assign } = fakeSwitchWin({ setItem: () => { throw new Error('QuotaExceeded'); } });
+        bindModeSwitch(root, win);
+        expect(() => click(pick('study'))).not.toThrow();
+        expect(assign).toHaveBeenCalledTimes(1);
+    });
+
+    test('알약이 없는 페이지(홈 — Vue가 그린다) → null, 예외 없음', () => {
+        const root = page(undefined, false);
+        expect(bindModeSwitch(root, fakeSwitchWin().win)).toBeNull();
+    });
+
+    test('bindRails가 배선한다 — 알약 클릭은 바 펼침을 건드리지 않고 이동한다', () => {
+        page('reading');
+        const { win, writes, assign } = fakeSwitchWin();
+        bindRails(document, win);
+        click(pick('study'));
+        expect(writes).toEqual([[MODE_KEY, 'study']]);
+        expect(assign).toHaveBeenCalledTimes(1);
+        expect(openCount()).toBe(0);
+    });
+
+    // 알약은 #side-rails 안에 있지만 바(.rail)는 아니다 — 닫기·바깥 판정이 root 기준이면 알약을 바 안으로 친다(리뷰 사소-2).
+    test('알약 버튼에 키보드 포커스를 둔 채 Esc → 포커스를 그대로 둔다(바 안 포커스만 푼다)', () => {
+        page('reading');
+        bindRails(document, fakeSwitchWin().win);
+        pick('study').focus();
+        document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+        expect(document.activeElement).toBe(pick('study'));
+    });
+
+    test('터치: 펼친 바가 있을 때 알약(지금 모드) 탭 → 바를 접는다(바깥 탭과 같다)', () => {
+        page('reading');
+        bindRails(document, fakeSwitchWin().win);
+        click(document.getElementById('a1')!);
+        expect(openCount()).toBe(1);
+        click(pick('reading'));
+        expect(openCount()).toBe(0);
     });
 });
 
@@ -328,11 +399,18 @@ describe('side-rails 인라인 부트 — 램프 힌트가 켜졌으면 모드�
     const boot = fragment.match(/<script th:if[^>]*>([\s\S]*?)<\/script>/)?.[1] ?? '';
     const LAMP_KEY = 'booktimer.studyLamp';
 
-    function runBoot(seed: Record<string, string>) {
+    const HOME = 'dashboard-page'; // dashboard.html의 body 클래스 — 독서등은 홈 전용이라 이걸로만 켠다
+
+    /**
+     * 서버가 속성을 비운(홈·중립) 또는 경로로 그린(mode) 바에 부트를 실행한다.
+     * 설계 2026-09-17 D4: 부트는 속성이 비었을 때만 채우고, 독서등 클래스는 홈에서만 붙인다.
+     */
+    function runBoot(seed: Record<string, string>, opts: { mode?: string; bodyClass?: string } = {}) {
         localStorage.clear();
-        document.body.className = '';
         for (const [k, v] of Object.entries(seed)) localStorage.setItem(k, v);
-        document.body.innerHTML = '<div id="side-rails" data-mode="reading"></div>'; // 서버가 경로로 그린 값
+        const attr = opts.mode === undefined ? '' : ` data-mode="${opts.mode}"`;
+        document.body.innerHTML = `<div id="side-rails"${attr}></div>`;
+        document.body.className = opts.bodyClass ?? '';
         new Function(boot)();
         return document.getElementById('side-rails') as HTMLElement;
     }
@@ -342,26 +420,52 @@ describe('side-rails 인라인 부트 — 램프 힌트가 켜졌으면 모드�
         expect(boot).toContain(LAMP_KEY);
     });
 
-    test('램프 힌트만 있고 모드 힌트가 없어도 study — 밤 배경에 독서 바가 선명한 구간 방지', () => {
-        const root = runBoot({ [LAMP_KEY]: '1' });
-        expect(root.dataset.mode).toBe('study');
-        expect(document.body.classList.contains('study-lamp')).toBe(true);
+    describe('홈(속성 없음 · body.dashboard-page)', () => {
+        test('램프 힌트만 있고 모드 힌트가 없어도 study — 밤 배경에 독서 바가 선명한 구간 방지', () => {
+            const root = runBoot({ [LAMP_KEY]: '1' }, { bodyClass: HOME });
+            expect(root.dataset.mode).toBe('study');
+            expect(document.body.classList.contains('study-lamp')).toBe(true);
+        });
+
+        test('모드 힌트가 reading이어도 램프가 켜져 있으면 study가 이긴다(공부 측정 중 내 책장을 들른 경우)', () => {
+            const root = runBoot({ [MODE_KEY]: 'reading', [LAMP_KEY]: '1' }, { bodyClass: HOME });
+            expect(root.dataset.mode).toBe('study');
+        });
+
+        test('모드 힌트만 study면 study이고 독서등은 안 켠다(기존 동작 회귀)', () => {
+            const root = runBoot({ [MODE_KEY]: 'study' }, { bodyClass: HOME });
+            expect(root.dataset.mode).toBe('study');
+            expect(document.body.classList.contains('study-lamp')).toBe(false);
+        });
+
+        test('힌트가 둘 다 없으면 속성을 안 쓴다 — 부재 = 독서(음성 대조군)', () => {
+            const root = runBoot({}, { bodyClass: HOME });
+            expect(root.hasAttribute('data-mode')).toBe(false);
+            expect(document.body.classList.contains('study-lamp')).toBe(false);
+        });
     });
 
-    test('모드 힌트가 reading이어도 램프가 켜져 있으면 study가 이긴다(공부 측정 중 내 책장을 들른 경우)', () => {
-        const root = runBoot({ [MODE_KEY]: 'reading', [LAMP_KEY]: '1' });
-        expect(root.dataset.mode).toBe('study');
-    });
+    describe('중립 화면(속성 없음 · 홈 클래스 없음)과 경로 페이지', () => {
+        test('중립 + 저장값 study → study, 독서등 없음', () => {
+            const root = runBoot({ [MODE_KEY]: 'study' });
+            expect(root.dataset.mode).toBe('study');
+            expect(document.body.classList.contains('study-lamp')).toBe(false);
+        });
 
-    test('모드 힌트만 study면 study이고 독서등은 안 켠다(기존 동작 회귀)', () => {
-        const root = runBoot({ [MODE_KEY]: 'study' });
-        expect(root.dataset.mode).toBe('study');
-        expect(document.body.classList.contains('study-lamp')).toBe(false);
-    });
+        test('중립 + 램프 힌트만 → 모드는 study지만 독서등은 안 켠다(독서등은 홈 전용)', () => {
+            const root = runBoot({ [LAMP_KEY]: '1' });
+            expect(root.dataset.mode).toBe('study');
+            expect(document.body.classList.contains('study-lamp')).toBe(false);
+        });
 
-    test('힌트가 둘 다 없으면 서버가 그린 reading 그대로(음성 대조군)', () => {
-        const root = runBoot({});
-        expect(root.dataset.mode).toBe('reading');
-        expect(document.body.classList.contains('study-lamp')).toBe(false);
+        test('중립 + 힌트 없음 → 속성 여전히 없음(reading을 명시하지 않는다)', () => {
+            const root = runBoot({});
+            expect(root.hasAttribute('data-mode')).toBe(false);
+        });
+
+        test('경로 페이지(서버가 data-mode="reading") + 저장값 study → reading 그대로(경로가 이긴다)', () => {
+            const root = runBoot({ [MODE_KEY]: 'study' }, { mode: 'reading' });
+            expect(root.dataset.mode).toBe('reading');
+        });
     });
 });

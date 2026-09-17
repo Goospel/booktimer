@@ -219,9 +219,9 @@ describe('DashboardApp — 모드가 쓰는 카드를 끌고 간다', () => {
     });
 });
 
-// 양옆 세로 바(SSR fragments/side-rails)의 흐림 상태는 #side-rails[data-mode] 한 속성이다 — 홈에선 이 섬이 쓴다.
+// 세로 바(SSR fragments/side-rails)의 모드(한쪽 메뉴만 보임)는 #side-rails[data-mode] 한 속성이다 — 홈에선 이 섬이 쓴다.
 // 설계 claude-docs/plans/2026-09-15-web-side-rails.md §3-5 · §7 T-6.
-describe('DashboardApp — 모드가 양옆 바 흐림(#side-rails[data-mode])을 끌고 간다', () => {
+describe('DashboardApp — 모드가 세로 바 모드(#side-rails[data-mode])를 끌고 간다', () => {
     const railMode = () => document.getElementById('side-rails')!.getAttribute('data-mode');
     beforeEach(() => { document.body.innerHTML = '<div id="side-rails" data-mode="reading"></div>'; });
 

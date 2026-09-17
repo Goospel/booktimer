@@ -5,7 +5,8 @@ import com.booktimer.user.Role;
 /**
  * 양옆 세로 바(side rails)의 경로 판정 — 순수 함수, Spring 무관.
  *
- * <p>설계: claude-docs/plans/2026-09-15-web-side-rails.md §4-①. 경로가 곧 모드다(홈만 저장값·Vue가 덮는다).
+ * <p>설계: claude-docs/plans/2026-09-15-web-side-rails.md §4-①. 활성 키 있는 페이지는 경로가 곧 모드다 —
+ * 홈·중립 화면은 바 인라인 부트가 저장값으로 채운다(설계 2026-09-17-single-rail-mode-switch D4).
  */
 public final class RailNav {
 
@@ -36,6 +37,13 @@ public final class RailNav {
     /** "/study" 정확 또는 "/study/" 접두면 "study", 아니면 "reading". */
     public static String mode(String path) {
         return path.equals("/study") || path.startsWith("/study/") ? "study" : "reading";
+    }
+
+    /** 경로가 정하는 바 모드. 홈·활성 키 없는 중립 화면은 null — 속성을 비워 두면 인라인 부트가 저장값(+독서등 힌트)으로 채운다. */
+    public static String pageMode(String path, String loginId) {
+        Key key = activeKey(path, loginId);
+        if (key == null || key == Key.HOME) return null;
+        return mode(path);
     }
 
     /**

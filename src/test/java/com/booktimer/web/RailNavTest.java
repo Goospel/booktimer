@@ -94,6 +94,28 @@ class RailNavTest {
         assertThat(RailNav.mode(path)).isEqualTo(expected);
     }
 
+    @ParameterizedTest(name = "{0} (loginId={1}) → pageMode {2}")
+    @CsvSource(nullValues = "NULL", value = {
+            "/,              alice, NULL",     // 홈 — 인라인 부트가 저장값으로 채운다
+            "/dashboard,     alice, NULL",
+            "/settings,      alice, NULL",     // 중립 — 경로상 reading이지만 속성을 비운다(공부 모드가 독서 메뉴로 뒤집히지 않게)
+            "/feedback,      alice, NULL",
+            "/me/blocks,     alice, NULL",
+            "/u/bob,         alice, NULL",     // 남의 책방 — 활성 없음
+            "/u/alice,       alice, reading",  // 내 책방 — 독서 바 페이지
+            "/u/alice,       NULL,  NULL",     // 온보딩 전 — 활성 없음
+            "/books,         alice, reading",
+            "/books/12,      alice, reading",
+            "/personality,   alice, reading",
+            "/study,         alice, study",
+            "/study/recall,  alice, study",
+            "/studyx,        alice, NULL",     // 접두 오탐 — 활성 없음
+    })
+    @DisplayName("경로 → 바 모드(경로가 정하는 페이지만, 홈·중립은 null — 설계 2026-09-17 D4)")
+    void pageMode(String path, String loginId, String expected) {
+        assertThat(RailNav.pageMode(path, loginId)).isEqualTo(expected);
+    }
+
     @Test
     @DisplayName("내 책방 href — 일반 사용자는 /u/{loginId}")
     void shopHref_user() {
