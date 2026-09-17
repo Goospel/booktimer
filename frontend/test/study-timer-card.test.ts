@@ -7,10 +7,9 @@ import StudyTimerCard from '../src/dashboard/StudyTimerCard.vue';
 
 afterEach(() => { vi.useRealTimers(); document.body.innerHTML = ''; });
 
-function mountCard(props: Record<string, unknown>, slots: Record<string, string> = {}) {
+function mountCard(props: Record<string, unknown>) {
     return mount(StudyTimerCard, {
         props: { todaySeconds: 0, hasActiveSession: false, activeStartedAt: null, ...props },
-        slots,
         attachTo: document.body,
     });
 }
@@ -59,32 +58,28 @@ describe('StudyTimerCard — 측정 중', () => {
 //
 // 계측기 메모
 //  · 통과가 확정하는 것: 측정 중 = 막대(패널 없음) · 대기 = 패널(막대 없음) · 전환 이름을 받는 숫자(.vt-clock)가
-//    두 상태 모두 **정확히 하나** · 모드 토글 슬롯은 대기에서만 그려진다.
-//  · 실패가 배제하는 것: 두 숫자를 다 그려 전환 이름이 중복(브라우저가 전환을 통째로 건너뛴다 — 에러 없음) ·
-//    막대에 토글이 새어 들어옴 · 막대 누락.
+//    두 상태 모두 **정확히 하나**.
+//  · 실패가 배제하는 것: 두 숫자를 다 그려 전환 이름이 중복(브라우저가 전환을 통째로 건너뛴다 — 에러 없음) · 막대 누락.
+//  · 모드 스위치는 2026-09-17에 카드 밖(DashboardApp)으로 나갔다 — 측정 중 미노출은 dashboard-mode (c)가 잠근다.
 describe('StudyTimerCard — 합쳐진 카드 머리 막대', () => {
-    const SLOT = { mode: '<span class="mode-probe">토글</span>' };
-
-    test('측정 중: 막대가 서고 우측 패널은 없다 · .vt-clock 하나 · 토글 슬롯은 안 그린다', () => {
+    test('측정 중: 막대가 서고 우측 패널은 없다 · .vt-clock 하나', () => {
         vi.useFakeTimers();
-        const w = mountCard({ hasActiveSession: true, activeStartedAt: new Date().toISOString() }, SLOT);
+        const w = mountCard({ hasActiveSession: true, activeStartedAt: new Date().toISOString() });
 
         expect(w.find('[data-testid="focus-bar"]').exists()).toBe(true);
         expect(w.find('.dash-state-panel').exists()).toBe(false);
         expect(w.findAll('.vt-clock')).toHaveLength(1);
         expect(w.find('[data-testid="focus-bar"] .vt-clock').exists()).toBe(true);
-        expect(w.find('.mode-probe').exists()).toBe(false);
         expect(w.find('.dash-timer-hero').classes()).toContain('focus-top');
     });
 
-    test('대기: 막대가 없고 패널이 선다 · .vt-clock 하나 · 토글 슬롯을 그린다 (양성 쌍)', () => {
+    test('대기: 막대가 없고 패널이 선다 · .vt-clock 하나 (양성 쌍)', () => {
         vi.useFakeTimers();
-        const w = mountCard({ books: [STUDY_BOOK(5, '헌법')], recentBookId: 5 }, SLOT);
+        const w = mountCard({ books: [STUDY_BOOK(5, '헌법')], recentBookId: 5 });
 
         expect(w.find('[data-testid="focus-bar"]').exists()).toBe(false);
         expect(w.find('.dash-state-panel').exists()).toBe(true);
         expect(w.findAll('.vt-clock')).toHaveLength(1);
-        expect(w.find('.mode-probe').exists()).toBe(true);
     });
 });
 

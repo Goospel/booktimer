@@ -125,8 +125,8 @@ describe('DashboardApp — 모드 토글', () => {
         await flushPromises();
     });
 
-    // 합쳐진 카드(2026-09-15 결정 6)에선 막대에 토글이 없다 — 잠긴 토글의 힌트가 하던 설명은 곁의 「측정 종료」가 한다.
-    // 독서 측정 중의 잠긴 토글·힌트는 그대로다(TimerCard는 안 바뀌었다).
+    // 공부 측정 중(독서등)엔 스위치를 그리지 않는다 — 밤 화면엔 합쳐진 카드만 남긴다(2026-09-15 결정 6).
+    // 독서 측정 중의 잠금·힌트는 (l).
     test('(c) 공부 측정 중이면 저장값과 무관하게 공부 모드이고 토글이 없다 — 종료하면 토글이 돌아온다', async () => {
         dashboardPayload = { ...DASHBOARD, study: STUDY_ACTIVE };
         const w = await mountDashboard();
@@ -177,5 +177,39 @@ describe('DashboardApp — 모드 토글', () => {
 
         expect(w.find('.dash-timer-hero').classes()).toContain('is-study');
         expect(btnWith(w, '측정 종료')).toBeTruthy();
+    });
+
+    // (j) 스위치는 카드 밖 — 히어로보다 DOM 앞이고 한 개뿐이다(Tab 순서 = 헤더 → 스위치 → 타이머). 두 모드 모두.
+    test('(j) 스위치는 카드 밖에 한 개 — 히어로보다 DOM 앞', async () => {
+        const w = await mountDashboard();
+        const before = () => {
+            expect(w.findAll('.dash-mode-toggle')).toHaveLength(1);
+            // FOLLOWING(4) 정확히 — CONTAINS(8)|PRECEDING(2)=10이면 아직 카드 안이다
+            expect(w.find('.dash-mode-toggle').element.compareDocumentPosition(w.find('.dash-timer-hero').element))
+                .toBe(Node.DOCUMENT_POSITION_FOLLOWING);
+        };
+        before();
+        await modeBtn(w, '공부').trigger('click');
+        before();
+    });
+
+    // (k) 카드 밖에서 공부 잉크를 받는 유일한 경로 — wrap의 is-study(.rail-study와 같은 관용구)
+    test('(k) 공부 모드면 스위치 wrap에 is-study, 독서면 없다', async () => {
+        const w = await mountDashboard();
+        expect(w.find('.dash-mode-toggle-wrap').classes()).not.toContain('is-study');
+        await modeBtn(w, '공부').trigger('click');
+        expect(w.find('.dash-mode-toggle-wrap').classes()).toContain('is-study');
+        await modeBtn(w, '독서').trigger('click');
+        expect(w.find('.dash-mode-toggle-wrap').classes()).not.toContain('is-study');
+    });
+
+    test('(l) 독서 측정 중: 스위치는 남고 잠기며, 누르면 힌트가 role=status로 뜬다 — 회귀 가드(옮기기 전에도 GREEN)', async () => {
+        dashboardPayload = { ...DASHBOARD, hasActiveSession: true, activeStartedAt: '2026-09-04T00:00:00Z' };
+        const w = await mountDashboard();
+        expect(modeBtn(w, '공부').attributes('aria-disabled')).toBe('true');
+        expect(w.find('.dash-mode-hint').exists()).toBe(false);          // 음성 대조 — 누르기 전엔 없다
+        await modeBtn(w, '공부').trigger('click');
+        expect(w.find('.dash-timer-hero').classes()).not.toContain('is-study');   // 모드 안 바뀜
+        expect(w.find('.dash-mode-hint[role="status"]').text()).toBe('측정을 끝내면 바꿀 수 있어요');
     });
 });
