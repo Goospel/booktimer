@@ -72,8 +72,7 @@ watch(bookId, load);
     <div class="page-stack">
         <header class="history-greeting">
             <h1>필기</h1>
-            <!-- 「홈에서 이어 쓸 수 있어요」는 홈이 ?note=를 읽는 PR-2에서 되돌린다(이 PR만으론 홈이 그 장을 안 연다). -->
-            <p>책마다 쓴 필기를 모아 봐요. 누르면 홈으로 가요.</p>
+            <p>책마다 쓴 필기를 모아 봐요. 누르면 홈에서 이어 쓸 수 있어요.</p>
         </header>
 
         <!-- 「다시 시도」는 공부 서재·내 책장과 같은 에러 박스(.shelf-load-error) 안에 둔다 — .link-btn 스타일이

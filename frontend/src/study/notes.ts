@@ -93,6 +93,15 @@ export function previewOf(body: string): string {
     return line.slice(0, PREVIEW_MAX);
 }
 
+/**
+ * 홈 주소의 `?note=<id>` — 필기 화면(/study/notes)의 행이 홈 편집기로 그 장을 넘기는 손잡이(설계 2026-09-17 D2).
+ * 양의 정수만 받는다 — `0`·음수·글자로 조회하면 404 왕복만 하나 는다.
+ */
+export function noteIdParam(search: string): number | null {
+    const raw = new URLSearchParams(search).get('note') ?? '';
+    return /^[1-9]\d*$/.test(raw) ? Number(raw) : null;
+}
+
 /** 서버 {@code StudyNote.PREVIEW_MAX}와 같은 값 — 라벨(40자)보다 넉넉하다(표식을 벗긴 뒤 자른다). */
 const PREVIEW_MAX = 80;
 

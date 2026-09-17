@@ -310,6 +310,9 @@ defineExpose({
         <div class="study-editor-body">
             <EditorContent :editor="editor" class="study-editor-content" />
             <p v-if="empty" class="study-editor-placeholder" aria-hidden="true">{{ placeholder }}</p>
+            <!-- 빈자리 슬롯 — 홈 필기의 「이어 쓰기」 칩. 안내문구와 같은 조건(empty)이고 절대 배치라 레이아웃에 끼지 않는다
+                 (칩이 들고 날 때 편집기 높이·아래 상태줄이 뛰지 않게 — 설계 2026-09-17 D9). 백지노트는 슬롯을 안 넘긴다. -->
+            <div v-if="empty && $slots.empty" class="study-editor-empty-slot" data-testid="editor-empty-slot"><slot name="empty" /></div>
 
             <ul
                 v-if="slash"

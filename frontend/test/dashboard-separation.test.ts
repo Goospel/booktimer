@@ -146,7 +146,7 @@ describe('DashboardApp — 모드가 쓰는 카드를 끌고 간다', () => {
         await flushPromises();
         await vi.waitFor(() => expect(w.find('[data-testid="notes-book"]').exists()).toBe(true));
 
-        expect((w.find('[data-testid="notes-book"]').element as HTMLSelectElement).value).toBe('11');
+        expect(w.find('[data-testid="notes-book"]').attributes('data-book-id')).toBe('11');
         expect(w.find('[data-testid="recall-body"]').exists()).toBe(true);
         expect(w.find('[data-testid="recall-book"]').exists()).toBe(false);
         expect(agendaCalls()).toBe(0);
@@ -164,7 +164,7 @@ describe('DashboardApp — 모드가 쓰는 카드를 끌고 간다', () => {
         await flushPromises();
         await vi.waitFor(() => expect(w.find('[data-testid="notes-book"]').exists()).toBe(true));
 
-        expect((w.find('[data-testid="notes-book"]').element as HTMLSelectElement).value).toBe('9');
+        expect(w.find('[data-testid="notes-book"]').attributes('data-book-id')).toBe('9');
         expect(agendaCalls()).toBe(0);
     });
 

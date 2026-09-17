@@ -3890,11 +3890,39 @@ body.study-lamp .lamp-page .is-study .btn-primary:hover:not(:disabled) { backgro
 /* 빠진 장 경고는 muted로 두지 않는다 — 조용한 누락을 막으려고 세운 줄이라 눈에 걸려야 한다. */
 .study-recall-reference-cut { color: var(--text); }
 
-/* 필기 — 좌우 배선(.study-recall-split/side/main)은 백지복습 것을 그대로 쓴다. 여기 있는 것은
-   좌측 목록과 상태줄뿐이다. 상태줄은 이 화면에서 저장 버튼을 대신하므로 비어 있어도 자리를
-   차지한다(min-height) — 글자가 들고 날 때마다 편집기가 위아래로 뛰면 쓰던 자리를 잃는다. */
+/* 필기 — 목록 열 없이 편집기가 카드 폭 전체를 쓴다(2026-09-17). 지난 필기는 제목 줄 「최근 필기」 팝오버와
+   빈 필기의 「이어 쓰기」 칩으로 간다. 상태줄은 이 화면에서 저장 버튼을 대신하므로 비어 있어도 자리를
+   차지한다(min-height) — 글자가 들고 날 때마다 편집기가 위아래로 뛰면 쓰던 자리를 잃는다.
+   ⚠️ .study-recall-split 규칙은 백지노트(/study/recall)가 쓴다 — 필기는 그 래퍼를 안 쓸 뿐 규칙은 그대로다. */
 .study-notes { display: flex; flex-direction: column; gap: 8px; }
-.study-notes input, .study-notes .study-recall-book { width: 100%; }
+.study-notes input { width: 100%; }
+/* 필기 책 이름 — 옛 숨김 라벨(.study-day-label)과 같은 값. 새 클래스라 홈의 display:none 규칙에 안 걸린다. */
+.study-notes-book { margin: 0; font-size: 12px; color: var(--muted); }
+.study-notes-titlerow { display: flex; gap: 8px; align-items: center; }
+.study-notes-titlerow input { flex: 1 1 auto; min-width: 0; }
+.study-notes-titlerow .btn { width: auto; flex: 0 0 auto; }
+.study-notes-recent { position: relative; }
+/* 편집기 툴바(sticky, z-index 2) 위에 뜬다. */
+.study-notes-recent-menu {
+    position: absolute; right: 0; top: calc(100% + 6px); z-index: 5;
+    min-width: 280px; max-width: 360px; padding: 8px;
+    display: flex; flex-direction: column; gap: 8px;
+    border: 1px solid var(--border); border-radius: 10px; background: var(--card-bg);
+    box-shadow: 0 8px 24px rgba(0, 0, 0, .12);
+}
+.study-notes-recent-menu .btn { align-self: flex-start; text-decoration: none; }
+/* 이어 쓰기 칩 — 안내문구(top 10px + 한 줄) 아래 빈자리에 겹쳐 그린다. 절대 배치라 편집기 높이가 안 변한다(설계 D9).
+   상자는 클릭을 통과시키고(빈 곳을 누르면 편집기에 캐럿) 칩만 받는다. */
+.study-editor-empty-slot { position: absolute; top: 48px; left: 12px; right: 12px; pointer-events: none; }
+.study-notes-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+/* 알약에는 연필테를 두르지 않는다 — 999px 둥근 알약에 border-image를 얹으면 각진 사각형으로 보인다. */
+.study-notes-chip {
+    pointer-events: auto; width: auto; padding: 6px 12px;
+    border: 1px solid var(--border); border-image: none; border-radius: 999px;
+    background: var(--card-bg); color: var(--muted);
+    font: inherit; font-size: 13px; font-weight: 400; text-decoration: none; cursor: pointer;
+}
+.study-notes-chip:hover { background: var(--sage-soft); }
 .study-notes-list { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 4px; }
 .study-notes-item {
     display: flex; flex-direction: column; gap: 2px; width: 100%; text-align: left;

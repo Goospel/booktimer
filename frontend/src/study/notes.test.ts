@@ -6,7 +6,7 @@
 // 컴포넌트에서 재면 셋 중 어느 갈래가 죽었는지 안 보인다.
 import { describe, test, expect } from 'vitest';
 
-import { noteLabel, noteDateLabel, previewOf, savedAtLabel, nextSaveState, type SaveState } from './notes';
+import { noteLabel, noteDateLabel, noteIdParam, previewOf, savedAtLabel, nextSaveState, type SaveState } from './notes';
 
 describe('noteLabel — 목록에 뜨는 이름', () => {
     test('제목이 있으면 제목이다', () => {
@@ -145,5 +145,20 @@ describe('previewOf — 목록에 실리는 본문 첫 줄', () => {
     test('본문이 공백뿐이면 빈 문자열 — 라벨 함수가 「제목 없음」으로 받는다', () => {
         expect(previewOf('   \n\n')).toBe('');
         expect(noteLabel(null, previewOf('   \n\n'))).toBe('제목 없음');
+    });
+});
+
+// 필기 화면(/study/notes)의 행이 `/?note=<id>`로 홈을 연다 — 홈은 이 값으로 그 장을 편집기에 싣는다.
+// 양의 정수가 아니면 null이다: `0`·음수·글자로 fetchNote를 두드리면 404 왕복만 하나 는다.
+describe('noteIdParam — 홈이 열 필기', () => {
+    test('?note=5 → 5', () => {
+        expect(noteIdParam('?note=5')).toBe(5);
+        expect(noteIdParam('?mode=study&note=12')).toBe(12);
+    });
+
+    test('없거나 양의 정수가 아니면 null', () => {
+        for (const search of ['', '?note=', '?note=abc', '?note=0', '?note=-1', '?note=1.5', '?bookId=5']) {
+            expect(noteIdParam(search)).toBeNull();
+        }
     });
 });

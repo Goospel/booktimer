@@ -291,3 +291,43 @@ describe('안내문구', () => {
         expect(placeholder(wrapper).exists()).toBe(true);
     });
 });
+
+// 빈자리 슬롯 — 홈 필기의 「이어 쓰기」 칩이 여기 그려진다(설계 2026-09-17 D9). 안내문구와 **같은 조건**(empty)이라
+// 한 글자·목록 버튼 하나에 걷히고, 슬롯을 안 넘기는 백지노트엔 상자 자체가 없다.
+describe('빈자리 슬롯', () => {
+    async function mountWithSlot(modelValue = ''): Promise<VueWrapper> {
+        const wrapper = mount(RecallEditor, {
+            attachTo: document.body,
+            props: { modelValue, placeholder: '적어 보세요.' },
+            slots: { empty: '<button data-testid="chip">이어 쓰기</button>' },
+        });
+        await vi.waitFor(() => expect(editorOf(wrapper)).toBeTruthy());
+        return wrapper;
+    }
+    const chip = (wrapper: VueWrapper) => wrapper.find('[data-testid="editor-empty-slot"] [data-testid="chip"]');
+
+    test('빈 편집기엔 슬롯 내용이 뜬다', async () => {
+        expect(chip(await mountWithSlot()).exists()).toBe(true);
+    });
+
+    test('한 글자 치면 사라진다', async () => {
+        const wrapper = await mountWithSlot();
+        editorOf(wrapper).commands.insertContent('ㄱ');
+        await wrapper.vm.$nextTick();
+        expect(chip(wrapper).exists()).toBe(false);
+    });
+
+    test('목록 버튼만 눌러도 사라진다 — 뼈대가 생겼다', async () => {
+        const wrapper = await mountWithSlot();
+        await wrapper.find('[data-testid="editor-btn-orderedList"]').trigger('click');
+        expect(chip(wrapper).exists()).toBe(false);
+    });
+
+    test('글이 있는 채로 열면 없다', async () => {
+        expect(chip(await mountWithSlot('이미 쓴 글')).exists()).toBe(false);
+    });
+
+    test('슬롯을 안 넘기면(백지노트) 상자 자체가 없다', async () => {
+        expect((await mountEditor()).find('.study-editor-empty-slot').exists()).toBe(false);
+    });
+});
