@@ -3900,6 +3900,7 @@ body.study-lamp .lamp-page .is-study .btn-primary:hover:not(:disabled) { backgro
     display: flex; flex-direction: column; gap: 2px; width: 100%; text-align: left;
     padding: 7px 10px; border: 1px solid var(--border); border-radius: 8px;
     background: transparent; color: inherit; font: inherit; cursor: pointer;
+    text-decoration: none;   /* 필기 화면(/study/notes)에선 이 행이 <a>다 */
 }
 .study-notes-item.is-active { border-color: var(--accent); background: var(--sage-soft); }
 .study-notes-label { overflow-wrap: anywhere; }

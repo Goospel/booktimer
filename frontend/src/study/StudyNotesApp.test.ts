@@ -27,12 +27,15 @@ function fail(status: number) {
 
 /**
  * URL별 응답 — 호출 순서가 아니라 주소로 답한다(순서에 기대면 「어느 책 목록을 불렀나」를 못 가른다).
- * `notes`는 bookId → 응답.
+ * `notes`는 bookId → 응답. `books`가 함수면 서재 응답 자체를 바꿔 끼운다(실패·예외 경로).
  */
-function stubFetch(books: unknown[], notes: Record<number, Response | (() => Response)>) {
+type Reply = Response | (() => Response | Promise<Response>);
+function stubFetch(books: unknown[] | (() => Response | Promise<Response>), notes: Record<number, Reply>) {
     vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL) => {
         const url = String(input);
-        if (url === '/api/study/books') return okJson({ books });
+        if (url === '/api/study/books') {
+            return typeof books === 'function' ? books() : okJson({ searchEnabled: true, books });
+        }
         const m = /\/api\/study\/notes\?bookId=(\d+)$/.exec(url);
         if (m) {
             const r = notes[Number(m[1])];
@@ -42,6 +45,8 @@ function stubFetch(books: unknown[], notes: Record<number, Response | (() => Res
         throw new Error(`예상 밖 요청: ${url}`);
     }));
 }
+
+const ERROR = '[data-testid="notes-page-error"]';
 
 const listCalls = () => vi.mocked(fetch).mock.calls
     .map((c) => String(c[0]))
@@ -107,7 +112,7 @@ describe('필기 화면', () => {
         });
         const w = await mountAt('');
 
-        expect(w.find('.study-error').exists()).toBe(true);
+        expect(w.find(ERROR).exists()).toBe(true);
         const retry = w.findAll('button').find((b) => b.text() === '다시 시도');
         expect(retry).toBeDefined();
 
@@ -115,7 +120,7 @@ describe('필기 화면', () => {
         await flushPromises();
 
         expect(listCalls()).toHaveLength(2);
-        expect(w.find('.study-error').exists()).toBe(false);
+        expect(w.find(ERROR).exists()).toBe(false);
         expect(w.findAll('[data-testid="notes-page-item"]')).toHaveLength(1);
     });
 
@@ -130,6 +135,53 @@ describe('필기 화면', () => {
 
         const labels = w.findAll('.study-notes-label').map((l) => l.text());
         expect(labels).toEqual(['3장 정리', '정규화 요약']);
+    });
+
+    test('책을 빨리 바꾸면 늦게 온 앞 책 응답이 지금 책 목록을 덮지 않는다', async () => {
+        let release7!: () => void;
+        const late7 = new Promise<Response>((resolve) => {
+            release7 = () => resolve(okJson({ notes: [{ id: 70, title: '책7 필기', chars: 1, preview: 'ㄱ', updatedAt: AT }] }));
+        });
+        stubFetch(BOOKS, {
+            7: () => late7,
+            9: okJson({ notes: [{ id: 90, title: '책9 필기', chars: 1, preview: 'ㄴ', updatedAt: AT }] }),
+        });
+        const w = await mountAt('');   // 첫 책 7 — 응답이 붙잡혀 있다
+
+        await w.find('[data-testid="notes-page-book"]').setValue('9');
+        await flushPromises();
+        release7();
+        await flushPromises();
+
+        const hrefs = w.findAll('[data-testid="notes-page-item"]').map((a) => a.attributes('href'));
+        expect(hrefs).toEqual(['/?note=90']);
+    });
+
+    test('서재 요청이 500이면 「비어 있어요」가 아니라 오류 + 「다시 시도」, 누르면 다시 받는다', async () => {
+        let first = true;
+        stubFetch(() => {
+            if (first) { first = false; return fail(500); }
+            return okJson({ searchEnabled: true, books: BOOKS });
+        }, {});
+        const w = await mountAt('');
+
+        expect(w.find(ERROR).exists()).toBe(true);
+        expect(w.text()).not.toContain('공부 서재가 비어 있어요');
+        expect(listCalls()).toHaveLength(0);
+
+        await w.findAll('button').find((b) => b.text() === '다시 시도')!.trigger('click');
+        await flushPromises();
+
+        expect(w.find(ERROR).exists()).toBe(false);
+        expect(listCalls()).toEqual(['/api/study/notes?bookId=7']);
+    });
+
+    test('서재 요청이 네트워크 예외여도 오류를 띄운다(로딩에 굳지 않는다)', async () => {
+        stubFetch(() => Promise.reject(new TypeError('Failed to fetch')), {});
+        const w = await mountAt('');
+
+        expect(w.find(ERROR).exists()).toBe(true);
+        expect(w.text()).not.toContain('공부 서재가 비어 있어요');
     });
 
     test('필기 0장 — 빈 안내', async () => {
