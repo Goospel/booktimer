@@ -93,7 +93,7 @@ class RailModelAdviceTest {
         Map<String, Boolean> links = railLinks(body);
         assertThat(links.keySet()).containsExactly(
                 "/books", "/u/alice", "/personality", "/history", "/search",
-                "/study", "/study/recall", "/study/books", "/study/history");
+                "/study", "/study/notes", "/study/recall", "/study/books", "/study/history");
         assertThat(links.get("/books")).isTrue();
         assertThat(links.get("/history")).isFalse();
         assertThat(links.values().stream().filter(b -> b)).hasSize(1);
@@ -122,6 +122,19 @@ class RailModelAdviceTest {
         assertThat(body).contains("data-mode=\"study\"").contains("data-remember=\"study\"");
         Map<String, Boolean> links = railLinks(body);
         assertThat(links.get("/study/recall")).isTrue();
+        assertThat(links.values().stream().filter(b -> b)).hasSize(1);
+    }
+
+    @Test
+    @DisplayName("/study/notes — 공부 모드, 필기만 활성(홈이 공부 모드로 열리게 기억)")
+    void studyNotes_studyModeAndActive() throws Exception {
+        registerUser("alice@booktimer.com", "alice", Role.USER);
+
+        String body = html("/study/notes", "alice@booktimer.com");
+
+        assertThat(body).contains("data-mode=\"study\"").contains("data-remember=\"study\"");
+        Map<String, Boolean> links = railLinks(body);
+        assertThat(links.get("/study/notes")).isTrue();
         assertThat(links.values().stream().filter(b -> b)).hasSize(1);
     }
 

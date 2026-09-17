@@ -130,6 +130,26 @@ class StudyControllerTest {
     }
 
     @Test
+    @DisplayName("GET /study/notes: 미인증 → 로그인으로 차단")
+    void studyNotes_unauthenticated_isBlocked() throws Exception {
+        mockMvc.perform(get("/study/notes"))
+                .andExpect(status().is3xxRedirection())
+                .andExpect(redirectedUrl("/login"));
+    }
+
+    /** 필기 화면도 <b>같은 셸</b>이다 — 바 「필기」 링크가 404가 아니어야 한다(섬이 경로로 화면을 고른다). */
+    @Test
+    @DisplayName("GET /study/notes: /study와 같은 셸을 낸다")
+    void studyNotes_rendersSameShell() throws Exception {
+        register("studynotesshell");
+
+        mockMvc.perform(get("/study/notes").with(user("studynotesshell")))
+                .andExpect(status().isOk())
+                .andExpect(view().name("study"))
+                .andExpect(content().string(containsString("id=\"study-app\"")));
+    }
+
+    @Test
     @DisplayName("GET /study/recall: 미인증 → 로그인으로 차단")
     void studyRecall_unauthenticated_isBlocked() throws Exception {
         mockMvc.perform(get("/study/recall"))

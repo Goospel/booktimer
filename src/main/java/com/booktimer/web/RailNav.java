@@ -10,7 +10,7 @@ import com.booktimer.user.Role;
  */
 public final class RailNav {
 
-    public enum Key { HOME, BOOKS, SHOP, PERSONALITY, HISTORY, SEARCH, PLAN, RECALL, SBOOKS, SHISTORY }
+    public enum Key { HOME, BOOKS, SHOP, PERSONALITY, HISTORY, SEARCH, PLAN, NOTES, RECALL, SBOOKS, SHISTORY }
 
     private RailNav() {
     }
@@ -24,6 +24,7 @@ public final class RailNav {
             case "/history": return Key.HISTORY;
             case "/search": return Key.SEARCH;
             case "/study": return Key.PLAN;
+            case "/study/notes": return Key.NOTES;
             case "/study/recall": return Key.RECALL;
             case "/study/books": return Key.SBOOKS;
             case "/study/history": return Key.SHISTORY;

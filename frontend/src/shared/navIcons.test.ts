@@ -9,7 +9,7 @@ import { NAV_ICONS } from './navIcons'
 const REQUIRED = [
     'home', 'back', 'books', 'history', 'search', 'user', 'personality',
     'block', 'report', 'follow', 'privacy', 'quote', 'feedback', 'users', 'lock',
-    'calendar', 'note',
+    'calendar', 'note', 'notes',
 ]
 
 describe('navIcons', () => {
