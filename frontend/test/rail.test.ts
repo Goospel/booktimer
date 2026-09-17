@@ -221,7 +221,7 @@ test('#side-rails가 없는 페이지 → null, 예외 없음', () => {
 });
 
 // 「로고가 홈이고, 홈은 내가 있던 바의 타이머로 열린다」 — 설계 2026-09-16-rail-home-entry.md §5 T-2.
-describe('rememberMode — 활성 키 있는 비홈 페이지만 홈이 열릴 모드를 기억한다', () => {
+describe('rememberMode — 서버가 실은 값만 저장값에 적는다(지금 서버는 공부 바 페이지에서만 내보낸다)', () => {
     // data-mode(서버가 경로로 그린 지금 모드)와 data-remember(기억할 모드)는 다른 값이다.
     // 음성 케이스에서 둘을 같게 두면 「안 썼다」와 「같은 값을 썼다」가 구분되지 않는다 —
     // `dataset.remember ?? dataset.mode` 폴백 돌연변이가 그대로 살아남는다(#1147 리뷰 I-1).
@@ -243,7 +243,9 @@ describe('rememberMode — 활성 키 있는 비홈 페이지만 홈이 열릴 �
         expect(m[MODE_KEY]).toBe('study');
     });
 
-    test('data-remember="reading" → 저장값이 reading이 된다(대칭)', () => {
+    // rail.js는 속성에 실린 값을 그대로 쓴다 — 지금 서버는 study만 내보내지만(RailNav.rememberMode,
+    // 2026-09-16 「공부 쪽만 기억」 개정) 이 계약은 값에 중립이다. 이 케이스가 그 중립성을 잠근다.
+    test('data-remember="reading" → 저장값이 reading이 된다(서버가 그 값을 내보낼 때만)', () => {
         const { m, s } = fakeStorage('study');
         rememberMode(root('reading'), s);
         expect(m[MODE_KEY]).toBe('reading');

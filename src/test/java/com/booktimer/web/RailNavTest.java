@@ -54,14 +54,14 @@ class RailNavTest {
     @CsvSource(nullValues = "NULL", value = {
             "/,               alice, NULL",       // 홈 — Vue 토글이 주인
             "/dashboard,      alice, NULL",
-            "/books,          alice, reading",
-            "/books/12,       alice, reading",    // 접두 = 내 책장 섹션
-            "/u/alice,        alice, reading",    // 내 책방
+            "/books,          alice, NULL",       // 독서 쪽은 안 건드린다(사용자 결정 2026-09-16)
+            "/books/12,       alice, NULL",       // 접두 = 내 책장 섹션
+            "/u/alice,        alice, NULL",       // 내 책방
             "/u/bob,          alice, NULL",       // 남의 책방 — 활성 없음 → 안 건드린다
             "/u/alice,        NULL,  NULL",       // 온보딩 전
-            "/personality,    alice, reading",
-            "/history,        alice, reading",
-            "/search,         alice, reading",
+            "/personality,    alice, NULL",
+            "/history,        alice, NULL",
+            "/search,         alice, NULL",
             "/study,          alice, study",
             "/study/recall,   alice, study",
             "/study/books,    alice, study",
@@ -72,7 +72,7 @@ class RailNavTest {
             "/sessions/manual, alice, NULL",
             "/studyx,         alice, NULL",       // 접두 오탐
     })
-    @DisplayName("경로 → 기억할 모드(활성 키 있는 비홈 페이지만)")
+    @DisplayName("경로 → 기억할 모드(공부 바 페이지만 — 독서 쪽은 안 건드린다)")
     void rememberMode(String path, String loginId, String expected) {
         assertThat(RailNav.rememberMode(path, loginId)).isEqualTo(expected);
     }

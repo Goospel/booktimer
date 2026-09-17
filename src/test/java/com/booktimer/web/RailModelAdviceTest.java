@@ -88,7 +88,8 @@ class RailModelAdviceTest {
         String body = html("/books", "alice@booktimer.com");
 
         assertThat(body).contains("id=\"side-rails\"").contains("data-mode=\"reading\"");
-        assertThat(body).as("독서 페이지를 들렀으면 홈은 독서 타이머로 열린다").contains("data-remember=\"reading\"");
+        assertThat(body).as("독서 쪽은 저장값을 안 건드린다 — 공부 중에 책장을 들러도 홈은 공부 타이머로 돌아온다")
+                .doesNotContain("data-remember");
         Map<String, Boolean> links = railLinks(body);
         assertThat(links.keySet()).containsExactly(
                 "/books", "/u/alice", "/personality", "/history", "/search",
