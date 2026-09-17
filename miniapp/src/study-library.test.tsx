@@ -135,6 +135,17 @@ describe('StudyShelf — 표지 아래 「N독」 칩', () => {
     expect(markup).not.toContain('회독 +1');
   });
 
+  // 웹에서 등록된 인강 행 — ISBN·표지·저자가 전부 없고 낯선 필드(linkUrl)가 하나 더 실려 온다.
+  it('인강 행(표지·저자·ISBN 없음 + linkUrl)도 제목·0독·「저자 미상」으로 선다', () => {
+    const markup = shelf(1, [studyBook(1, '수학 뉴런', 0, {
+      author: null, coverUrl: null, isbn13: null, linkUrl: 'https://lec.example/c/1',
+    })]);
+
+    expect(markup).toContain('수학 뉴런');
+    expect(markup).toMatch(/0<\/span>독/);
+    expect(markup).toContain('저자 미상');
+  });
+
   it('상태 탭이 없다 — 공부 책의 분류 축은 상태가 아니라 회독 수다', () => {
     const markup = shelf(1);
 
@@ -175,6 +186,32 @@ describe('StudyActionSheet — 관리 시트', () => {
   it('구매 링크가 없으면 구매 행도 고지도 없다 — 살 곳 없이 수수료 고지만 남는 것도 사고다', () => {
     const markup = sheet(studyBook(1, '기본서', 1));
 
+    expect(markup).not.toContain('알라딘에서 구매');
+    expect(markup).not.toContain('제휴 링크예요');
+  });
+
+  /**
+   * <b>인강 행(웹에서 등록된 {@code linkUrl})이 이 화면을 깨뜨리지 않는가</b> — 회귀 계측기다.
+   *
+   * <p>⚠️ 통과가 「이 화면이 인강을 잘 그린다」의 증명은 아니다: 이 화면은 {@code linkUrl}을 아직 읽지
+   * 않으므로 렌더는 원래 통과한다. 이 테스트가 실제로 잠그는 것은 <b>「미니앱 화면이 linkUrl을 구매 줄로 흘리지
+   * 않는다」</b> 하나다 — 예컨대 시트가 {@code purchaseLink ?? linkUrl}로 바뀌면 「알라딘에서 구매」 + 수수료 고지가
+   * 서고 그 순간 고지가 거짓이 된다(설계 2026-09-16 D2. 리뷰 돌연변이 M1에서 사망 확인).
+   *
+   * <p>⚠️ <b>서버</b>가 인강 URL을 {@code purchaseLink}에 싣는 누수는 여기서 못 잡는다 — 픽스처가 {@code purchaseLink:
+   * null}로 고정이라 서버 동작이 닿지 않는다. 그쪽은 {@code StudyBookApiControllerTest}의 {@code $.purchaseLink}
+   * null 단언이 잡는다(리뷰 돌연변이 S6).
+   *
+   * <p>양성 대조군은 바로 위 테스트다: 같은 픽스처에 {@code purchaseLink}를 넣으면 그 두 문구가 <b>나타난다</b>.
+   * 대조군이 없으면 이 not.toContain은 「화면이 통째로 비어도」 초록이다.
+   */
+  it('인강 행(linkUrl)은 구매 줄로 새지 않는다 — 제휴 고지가 거짓이 되면 안 된다', () => {
+    const markup = sheet(studyBook(1, '수학 뉴런', 0, {
+      author: null, coverUrl: null, isbn13: null, purchaseLink: null,
+      totalSeconds: 0, sessionGoalSeconds: null, linkUrl: 'https://lec.example/c/1',
+    }));
+
+    expect(markup).toContain('수학 뉴런');
     expect(markup).not.toContain('알라딘에서 구매');
     expect(markup).not.toContain('제휴 링크예요');
   });

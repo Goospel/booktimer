@@ -231,6 +231,12 @@ export interface StudyBookRow {
     totalSeconds: number;
     /** 이 책 회당 시간(초, 60~21600). null = 안 정함 = 스톱워치. 옛 픽스처엔 없어 optional이다. */
     sessionGoalSeconds?: number | null;
+    /**
+     * 바로가기 링크(인강 페이지 등) — <b>{@code purchaseLink}와 다른 필드</b>다. 그쪽은 제휴 구매 링크라
+     * 미니앱이 「알라딘에서 구매」 + 수수료 고지를 그린다(인강 URL을 실으면 고지가 거짓이 된다).
+     * 옛 픽스처엔 없어 optional이다.
+     */
+    linkUrl?: string | null;
 }
 
 export interface StudyShelf {
@@ -267,8 +273,20 @@ export async function searchBooks(q: string): Promise<SearchRow[]> {
 export async function addStudyBook(input: {
     title: string; author: string | null; isbn13: string | null;
     coverUrl: string | null; publisher: string | null; purchaseLink: string | null;
+    /** 강의 링크(인강). 검색 경로는 언제나 null — 「직접 추가」만 채운다. */
+    linkUrl: string | null;
 }): Promise<StudyBookRow> {
     return json(await post('/api/study/books', input), '책을 담지 못했어요.');
+}
+
+/**
+ * 바로가기 링크를 바꾸거나 해제한다(null = 해제).
+ *
+ * <p>편집 문이 따로 있는 이유: 강의 URL은 개편·수강 만료로 죽는데 「지우고 다시 담기」는 회독 수를 잃고
+ * 필기가 붙은 책은 삭제 자체가 409다.
+ */
+export async function setStudyLink(id: number, linkUrl: string | null): Promise<StudyBookRow> {
+    return json(await post(`/api/study/books/${id}/link`, { linkUrl }), '링크를 바꾸지 못했어요.');
 }
 
 /** 회독 수를 <b>절대값으로</b> 설정한다(클라가 현재값 ±1을 보낸다) — 멱등이라 연타·재시도에 안전하다. */

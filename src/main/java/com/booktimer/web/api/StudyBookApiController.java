@@ -79,10 +79,44 @@ public class StudyBookApiController {
         User user = currentUserService.resolve(principal);
         BookSearchResult result = new BookSearchResult(req.title(), req.author(), req.isbn13(),
                 req.coverUrl(), req.publisher(), req.purchaseLink());
+        // 링크 검사를 먼저 — 사유를 그대로 돌려줘야 사용자가 무엇을 고칠지 안다(아래 generic 400은 사유가 없다).
+        String link = validLink(req.linkUrl());
         try {
-            return ResponseEntity.ok(row(user, studyBookService.add(user, result)));
+            return ResponseEntity.ok(row(user, studyBookService.add(user, result, link)));
         } catch (IllegalArgumentException e) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "책을 추가할 수 없습니다");
+        }
+    }
+
+    /**
+     * 공부 책의 <b>바로가기 링크</b>(인강 페이지 등)를 바꾸거나 해제한다(빈 값 = 해제).
+     *
+     * <p>강의 URL은 개편·수강 만료로 죽는데 「지우고 다시 담기」는 회독 수를 잃고 필기가 있으면 409라
+     * 아예 불가능하다 — 그래서 편집 문이 따로 있다.
+     *
+     * <p><b>값 검사를 소유권 조회보다 먼저</b> 한다: 잘못된 값은 어느 책이든 400이라, 남의 책 id로
+     * 400/404를 갈라 존재 여부를 캐낼 창이 열리지 않는다({@code session-goal}·{@code read-count}와 같은 규약).
+     *
+     * @return 200 갱신된 행 / 400 http·https가 아닌 링크·길이 초과(사유 평문) / 404 남의 책·없는 책
+     */
+    @PostMapping("/api/study/books/{id}/link")
+    public ResponseEntity<StudyBookRow> setLink(@PathVariable Long id,
+                                                @RequestBody LinkRequest req,
+                                                Principal principal) {
+        User user = currentUserService.resolve(principal);
+        String link = validLink(req.linkUrl());
+        return ResponseEntity.ok(row(user, mutate(() -> studyBookService.changeLinkUrl(user, id, link))));
+    }
+
+    /**
+     * 링크 규칙 위반을 <b>사유가 실린 400</b>으로 바꾼다 — {@code handleStatus}가 평문 본문으로 내보내
+     * 화면이 그대로 띄운다(generic 「책을 추가할 수 없습니다」로 뭉개면 무엇이 틀렸는지 영영 안 보인다).
+     */
+    private static String validLink(String raw) {
+        try {
+            return StudyBook.normalizeLinkUrl(raw);
+        } catch (IllegalArgumentException e) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, e.getMessage());
         }
     }
 
@@ -149,23 +183,35 @@ public class StudyBookApiController {
      *                     0은 「아직 그 책으로 안 쟀다」는 <b>부재</b>라 화면이 칩을 그리지 않는다
      *                     (0독이 「상태」인 {@code readCount}와 반대다).
      * @param sessionGoalSeconds 회당 시간(초, null = 안 정함) — 역시 <b>맨 뒤</b>(옛 미니앱 번들은 무시한다).
+     * @param linkUrl 바로가기 링크(인강 페이지 등, null 가능) — <b>{@code purchaseLink}와 다른 필드</b>다.
+     *                그쪽은 제휴 구매 링크라 미니앱이 「알라딘에서 구매」 + 수수료 고지를 그린다(§D2).
+     *                역시 <b>맨 뒤</b>에 붙였다(하위호환).
      */
     public record StudyBookRow(Long id, String title, String author, String coverUrl, String isbn13,
-                               int readCount, String purchaseLink, long totalSeconds, Integer sessionGoalSeconds) {
+                               int readCount, String purchaseLink, long totalSeconds, Integer sessionGoalSeconds,
+                               String linkUrl) {
         /** @param secondsByBook 책 id → 누적 초({@code StudySessionService.totalSecondsByBook}) */
         static StudyBookRow from(StudyBook b, Map<Long, Long> secondsByBook) {
             return new StudyBookRow(b.getId(), b.getTitle(), b.getAuthor(), b.getCoverUrl(), b.getIsbn13(),
                     b.getReadCount(), b.getPurchaseLink(),
-                    secondsByBook.getOrDefault(b.getId(), 0L), b.getSessionGoalSeconds());
+                    secondsByBook.getOrDefault(b.getId(), 0L), b.getSessionGoalSeconds(), b.getLinkUrl());
         }
     }
 
     /** @param searchEnabled 검색 제공자 가동 여부 — 꺼져 있으면 화면이 「책 추가」 진입을 그리지 않는다 */
     public record StudyShelfResponse(boolean searchEnabled, List<StudyBookRow> books) {}
 
-    /** 검색 결과 행을 그대로 되돌려받는 모양 — status·category·pubDate가 없는 것이 독서와의 차이다. */
+    /**
+     * 검색 결과 행을 그대로 되돌려받는 모양 — status·category·pubDate가 없는 것이 독서와의 차이다.
+     *
+     * @param linkUrl 바로가기 링크(인강 페이지 등, 선택) — 웹 「직접 추가」만 채운다. <b>라이브 미니앱
+     *                번들은 이 키를 안 보내고</b>, 그때 null이 되는 것이 정상 경로다(400이 되면 배포된 앱이 죽는다).
+     */
     public record AddRequest(String title, String author, String isbn13, String coverUrl,
-                             String publisher, String purchaseLink) {}
+                             String publisher, String purchaseLink, String linkUrl) {}
+
+    /** @param linkUrl 새 링크. 빈 값·null이면 <b>해제</b>다(죽은 링크를 지우는 길). */
+    public record LinkRequest(String linkUrl) {}
 
     /** @param readCount 설정할 회독 수(0 이상 — 0은 「아직 안 돌았다」) */
     public record ReadCountRequest(int readCount) {}

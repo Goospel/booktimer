@@ -5,6 +5,10 @@
 //
 // 구매 링크는 일부러 없다 — 공부 책엔 /books/{id}/buy 같은 클릭 추적 라우트가 없어서, 직링크로 열면
 // 수익 경로가 무추적으로 열린다. 추적 라우트가 생기는 날 붙인다.
+//
+// linkUrl(강의 링크)은 반대다 — 제휴가 아니라 사용자가 직접 적은 바로가기라 직링크로 연다(추적할 수익이
+// 없다). 그래서 purchaseLink 자리에 섞지 않는다: 섞으면 미니앱이 「알라딘에서 구매」 + 수수료 고지를 그려
+// 인강 링크가 제휴 구매로 둔갑한다.
 import { computed, onMounted, ref } from 'vue';
 
 import { byline, coverColor, initialOf } from '../books/pure';
@@ -13,11 +17,12 @@ import {
     deleteStudyBook,
     fetchStudyShelf,
     searchBooks,
+    setStudyLink,
     setStudyReadCount,
     type SearchRow,
     type StudyBookRow,
 } from './api';
-import { readCountLabel, studyOwned } from './pure';
+import { readCountLabel, sameTitleExists, studyOwned } from './pure';
 
 const books = ref<StudyBookRow[] | null>(null);   // null = 아직 못 받음(로딩 또는 실패)
 const searchEnabled = ref(false);
@@ -29,6 +34,7 @@ const rows = ref<SearchRow[]>([]);
 const searched = ref(false);
 const manualTitle = ref('');
 const manualAuthor = ref('');
+const manualLink = ref('');
 
 /** 내 공부 서재 isbn 집합 — 검색 행의 owned(독서 책장 기준)를 대신할 판정 재료. */
 const myIsbns = computed(() => new Set(
@@ -82,19 +88,40 @@ function addRow(r: SearchRow) {
     return run(addStudyBook({
         title: r.title, author: r.author, isbn13: r.isbn13,
         coverUrl: r.coverUrl, publisher: r.publisher, purchaseLink: r.purchaseLink,
+        linkUrl: null,   // 검색 결과엔 강의 링크가 없다 — 「직접 추가」만 채운다.
     }));
 }
 
+/**
+ * 직접 추가 — 인강이 들어오는 문이다(제목 + 저자·강사 + 강의 링크, 전부 ISBN·표지 없이).
+ *
+ * <p>같은 제목이면 한 번 묻는다: 서버는 「isbn 없는 책 여러 권」을 허용하므로 몇 달 뒤 잊고 다시 담으면
+ * 누적 시간이 두 행으로 갈리고 <b>합칠 기능이 없다</b>.
+ */
 function addManual() {
     const title = manualTitle.value.trim();
     if (!title) return;
+    if (sameTitleExists(books.value ?? [], title)
+        && !confirm('같은 제목이 이미 서재에 있어요. 그래도 추가할까요?')) return;
     return run(addStudyBook({
         title, author: manualAuthor.value.trim() || null,
         isbn13: null, coverUrl: null, publisher: null, purchaseLink: null,
+        linkUrl: manualLink.value.trim() || null,
     }).then(() => {
         manualTitle.value = '';
         manualAuthor.value = '';
+        manualLink.value = '';
     }));
+}
+
+/**
+ * 강의 링크를 갈아끼우거나 지운다 — 네이티브 {@code prompt}다(인라인 편집기는 YAGNI).
+ * 취소(null)와 빈 문자열(해제)은 <b>다르다</b> — 취소가 해제로 둔갑하면 실수로 링크를 잃는다.
+ */
+function editLink(b: StudyBookRow) {
+    const next = prompt('강의 링크 (비우면 해제)', b.linkUrl ?? '');
+    if (next === null) return;
+    run(setStudyLink(b.id, next.trim() || null));
 }
 
 function setCount(b: StudyBookRow, next: number) {
@@ -162,10 +189,12 @@ onMounted(load);
             <p v-if="searched && rows.length === 0" class="status-line muted">검색 결과가 없어요.</p>
 
             <details class="manual-add" :open="!searchEnabled">
-                <summary>찾는 책이 없나요? <span class="manual-add-cta">직접 추가</span></summary>
+                <summary>찾는 책이 없거나 인강인가요? <span class="manual-add-cta">직접 추가</span></summary>
                 <form class="book-manual-form" @submit.prevent="addManual">
-                    <input type="text" v-model="manualTitle" placeholder="제목" required>
-                    <input type="text" v-model="manualAuthor" placeholder="저자 (선택)">
+                    <input type="text" v-model="manualTitle" placeholder="제목" required maxlength="300">
+                    <input type="text" v-model="manualAuthor" placeholder="저자·강사 (선택)">
+                    <!-- type=url은 오타를 걸러 줄 뿐이다 — javascript: 는 통과시키므로 서버 검사가 유일한 벨트다. -->
+                    <input type="url" v-model="manualLink" placeholder="강의 링크 (선택, https://…)" maxlength="1000">
                     <button type="submit" class="btn-primary" :disabled="busy">추가</button>
                 </form>
             </details>
@@ -187,6 +216,10 @@ onMounted(load);
                         <span v-if="b.totalSeconds > 0" class="book-time mono">{{ formatTime(b.totalSeconds) }} 공부</span>
                     </div>
                     <div class="book-actions study-count-actions">
+                        <!-- 제휴가 아니라 사용자 바로가기라 직링크로 연다. rel은 새 탭에 opener를 안 넘기려는 것. -->
+                        <a v-if="b.linkUrl" class="btn-ghost" :href="b.linkUrl"
+                           target="_blank" rel="noopener noreferrer">강의 열기</a>
+                        <button type="button" class="btn-ghost" :disabled="busy" @click="editLink(b)">링크</button>
                         <!-- 「−」는 U+2212 — ASCII 하이픈은 좁은 폭에서 점처럼 보인다. -->
                         <button type="button" class="btn-ghost study-count-minus" :disabled="busy || b.readCount === 0"
                                 aria-label="회독 하나 빼기" @click="setCount(b, b.readCount - 1)">−</button>

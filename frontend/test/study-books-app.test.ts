@@ -40,6 +40,9 @@ function fetchImpl(url: string, init?: RequestInit) {
     if (/\/api\/study\/books\/\d+\/read-count$/.test(url)) {
         return Promise.resolve({ ok: true, status: 200, json: async () => SHELF.books[0] });
     }
+    if (/\/api\/study\/books\/\d+\/link$/.test(url)) {
+        return Promise.resolve({ ok: true, status: 200, json: async () => SHELF.books[0] });
+    }
     if (/\/api\/study\/books\/\d+\/delete$/.test(url)) {
         return Promise.resolve({ ok: true, status: 200, json: async () => ({ deleted: true }) });
     }
@@ -178,7 +181,9 @@ describe('공부 서재 — 담기', () => {
         await w.find('.book-manual-form').trigger('submit');
         await new Promise((r) => setTimeout(r, 0));
         expect(calls.find((c) => c.url.endsWith('/api/study/books') && c.body)?.body)
-            .toEqual({ title: '형법', author: null, isbn13: null, coverUrl: null, publisher: null, purchaseLink: null });
+            // linkUrl은 「강의 링크」 칸의 값 — 비우면 null이다(인강 등록, 2026-09-16).
+            .toEqual({ title: '형법', author: null, isbn13: null, coverUrl: null, publisher: null,
+                purchaseLink: null, linkUrl: null });
     });
 });
 
@@ -187,5 +192,33 @@ describe('공부 서재 — 셸', () => {
         const w = await mountApp();
         expect(w.findAll('.card.is-study')).toHaveLength(2);
         expect(w.text()).not.toMatch(/[\u{1F300}-\u{1FAFF}]/u);
+    });
+});
+
+/*
+ * 링크 편집의 <b>실제 요청</b> — URL과 본문 키. `src/study/StudyBooksApp.test.ts`는 api 모듈을 통째로 mock해서
+ * 「setStudyLink를 불렀다」까지만 잰다. 그 함수가 어느 문을 어떤 키로 두드리는지는 거기서 원리상 안 보여
+ * (URL을 `/links`로, 키를 `link`로 바꿔도 초록이었다 — 리뷰 R1 돌연변이), 이 fetch 스텁 파일이 그 몫이다.
+ */
+describe('공부 서재 — 강의 링크 편집 요청', () => {
+    const linkPred = (u: string) => /\/api\/study\/books\/1\/link$/.test(u);
+    const clickLink = async (w: Awaited<ReturnType<typeof mountApp>>) => {
+        await w.findAll('.shelf-list button').find((b) => b.text() === '링크')!.trigger('click');
+        await new Promise((r) => setTimeout(r, 0));
+    };
+
+    test('(j) 비우면 그 책의 /link 문에 {linkUrl: null}을 보낸다 — 해제', async () => {
+        vi.stubGlobal('prompt', vi.fn(() => ''));
+        await clickLink(await mountApp());
+
+        expect(countOf(linkPred)).toBe(1);
+        expect(bodyOf(linkPred)).toEqual({ linkUrl: null });
+    });
+
+    test('(k) 새 주소는 앞뒤 공백을 떼고 {linkUrl: 주소}로 보낸다', async () => {
+        vi.stubGlobal('prompt', vi.fn(() => '  https://lec.example/c/2 '));
+        await clickLink(await mountApp());
+
+        expect(bodyOf(linkPred)).toEqual({ linkUrl: 'https://lec.example/c/2' });
     });
 });

@@ -25,6 +25,7 @@ import java.time.ZoneId;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.hamcrest.Matchers.hasSize;
+import static org.hamcrest.Matchers.nullValue;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.csrf;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.user;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
@@ -409,7 +410,157 @@ class StudyBookApiControllerTest {
         assertThat(studyBookRepository.findById(id)).isEmpty();
     }
 
+    // ── ⑦ 바로가기 링크(인강) ───────────────────────────────────────────────
+
+    /**
+     * 인강은 「ISBN·표지 없는 StudyBook + 바로가기 링크」다 — 새 테이블도 종류 컬럼도 없이
+     * {@code linkUrl} 하나로 표현된다(설계 2026-09-16 D1·D2).
+     */
+    @Test
+    @DisplayName("POST /api/study/books: linkUrl을 실어 담으면 응답과 목록에 그대로 실린다")
+    void add_withLinkUrl_carriesItIntoShelf() throws Exception {
+        register("sb-link@a.com", "sblink");
+
+        mockMvc.perform(post("/api/study/books").with(user("sblink")).with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"title":"수학 뉴런","author":"강사","isbn13":null,"coverUrl":null,
+                                 "publisher":null,"purchaseLink":null,"linkUrl":"https://lec.example/c/1"}
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.linkUrl").value("https://lec.example/c/1"))
+                // 인강 URL이 제휴 구매 자리로 새면 미니앱이 「알라딘에서 구매」 + 수수료 고지를 그린다.
+                .andExpect(jsonPath("$.purchaseLink").value(nullValue()));
+
+        mockMvc.perform(get("/api/study/books").with(user("sblink")))
+                .andExpect(jsonPath("$.books[0].linkUrl").value("https://lec.example/c/1"));
+    }
+
+    /**
+     * <b>라이브 미니앱 번들 호환</b> — 지금 돌고 있는 번들은 {@code linkUrl} 키를 아예 안 보낸다.
+     * 그 본문이 400이 되면 배포된 앱의 「책 담기」가 그날로 죽는다.
+     */
+    @Test
+    @DisplayName("POST /api/study/books: linkUrl 키가 없는 옛 본문도 200 — 링크는 null이다")
+    void add_withoutLinkUrlKey_stillWorks() throws Exception {
+        register("sb-oldclient@a.com", "sboldclient");
+
+        mockMvc.perform(post("/api/study/books").with(user("sboldclient")).with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(addBody("옛 클라가 담은 책", "9791100000040")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.linkUrl").value(nullValue()));
+    }
+
+    /**
+     * 웹이 {@code :href}에 그대로 싣고 {@code <input type="url">}도 {@code javascript:}를 통과시키므로
+     * <b>서버가 유일한 벨트</b>다. 사유가 <b>평문</b>으로 와야 화면이 그대로 띄운다(HTML이면 폴백 문구가 뜬다).
+     */
+    @Test
+    @DisplayName("POST /api/study/books: javascript: 링크는 400 평문 사유 + 아무것도 저장되지 않는다")
+    void add_withJavascriptLink_is400AndSavesNothing() throws Exception {
+        register("sb-xss@a.com", "sbxss");
+
+        String body = mockMvc.perform(post("/api/study/books").with(user("sbxss")).with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"title":"나쁜 링크","author":null,"isbn13":null,"coverUrl":null,
+                                 "publisher":null,"purchaseLink":null,"linkUrl":"javascript:alert(1)"}
+                                """))
+                .andExpect(status().isBadRequest())
+                .andReturn().getResponse().getContentAsString();
+
+        assertThat(body).isEqualTo("링크는 http:// 또는 https://로 시작하는 주소여야 해요");
+        assertThat(body).as("HTML 문서가 오면 화면이 이 문구를 못 읽는다").doesNotStartWith("<");
+        assertThat(studyBookRepository.count()).as("거부된 요청은 행을 남기지 않는다").isZero();
+    }
+
+    @Test
+    @DisplayName("POST /api/study/books: 제목 301자는 400 — DB가 터뜨리는 500이 아니다")
+    void add_withTooLongTitle_is400() throws Exception {
+        register("sb-longtitle@a.com", "sblongtitle");
+
+        mockMvc.perform(post("/api/study/books").with(user("sblongtitle")).with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(addBody("가".repeat(301), null)))
+                .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    @DisplayName("POST /{id}/link: 링크를 바꾸고, 빈 값이면 해제한다 — 죽은 링크를 지울 길이 늘 있다")
+    void setLink_changesAndClears() throws Exception {
+        User u = register("sb-setlink@a.com", "sbsetlink");
+        addStudyBook("sbsetlink", "링크 갈아끼울 책", "9791100000041");
+        Long id = onlyBookId(u);
+
+        setLink("sbsetlink", id, "\"https://new.example/c/2\"")
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.linkUrl").value("https://new.example/c/2"));
+
+        setLink("sbsetlink", id, "\"\"")
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.linkUrl").value(nullValue()));
+
+        assertThat(studyBookRepository.findById(id).orElseThrow().getLinkUrl()).isNull();
+    }
+
+    @Test
+    @DisplayName("POST /{id}/link: javascript: 는 400이고 저장된 값은 흔들리지 않는다")
+    void setLink_withJavascript_is400AndKeepsValue() throws Exception {
+        User u = register("sb-setxss@a.com", "sbsetxss");
+        addStudyBook("sbsetxss", "멀쩡한 링크를 가진 책", "9791100000042");
+        Long id = onlyBookId(u);
+        setLink("sbsetxss", id, "\"https://ok.example/c\"").andExpect(status().isOk());
+
+        mockMvc.perform(post("/api/study/books/" + id + "/link").with(user("sbsetxss")).with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"linkUrl\":\"javascript:alert(1)\"}"))
+                .andExpect(status().isBadRequest());
+        // host가 있는 javascript: — host 검사를 통과해 스킴 분기만 막는다(리뷰 R2). 위 줄만으론 그 분기가 무계측이다.
+        mockMvc.perform(post("/api/study/books/" + id + "/link").with(user("sbsetxss")).with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"linkUrl\":\"javascript://evil.example/%0aalert(1)\"}"))
+                .andExpect(status().isBadRequest());
+
+        assertThat(studyBookRepository.findById(id).orElseThrow().getLinkUrl())
+                .isEqualTo("https://ok.example/c");
+    }
+
+    /**
+     * 값 검사가 <b>소유권 조회보다 먼저</b>다 — 잘못된 값은 어느 책이든 400이라, 남의 책 id로 400/404를
+     * 갈라 존재 여부를 캐낼 창이 열리지 않는다({@code session-goal}·{@code read-count}와 같은 규약).
+     */
+    @Test
+    @DisplayName("POST /{id}/link: 남의 책은 404, 값이 잘못됐으면 소유권보다 먼저 400(존재 비노출)")
+    void setLink_otherUsersBook_hidesExistence() throws Exception {
+        User owner = register("sb-linkowner@a.com", "sblinkowner");
+        register("sb-linkthief@a.com", "sblinkthief");
+        addStudyBook("sblinkowner", "남의 인강", "9791100000043");
+        Long id = onlyBookId(owner);
+
+        mockMvc.perform(post("/api/study/books/" + id + "/link").with(user("sblinkthief")).with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"linkUrl\":\"https://evil.example/c\"}"))
+                .andExpect(status().isNotFound());
+
+        mockMvc.perform(post("/api/study/books/" + id + "/link").with(user("sblinkthief")).with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"linkUrl\":\"javascript:alert(1)\"}"))
+                .andExpect(status().isBadRequest());
+
+        assertThat(studyBookRepository.findById(id).orElseThrow().getLinkUrl()).isNull();
+    }
+
     // ── 헬퍼 ────────────────────────────────────────────────────────────────
+
+    /** @param rawJson linkUrl 자리에 들어갈 JSON 값(문자열이면 따옴표째) */
+    private org.springframework.test.web.servlet.ResultActions setLink(String loginId, Long id, String rawJson)
+            throws Exception {
+        return mockMvc.perform(post("/api/study/books/" + id + "/link").with(user(loginId)).with(csrf())
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"linkUrl\":" + rawJson + "}"));
+    }
+
 
     /** 그 책으로 잰 완료 세션 한 건을 심는다. */
     private void studied(User user, Long bookId, long seconds) {
