@@ -578,7 +578,7 @@ export function currentScreen(s: {
 }): ScreenName | null {
   switch (s.view) {
     case 'auth':
-      // 로그인 진행(checking·choice·failed)은 종전 이름 그대로 — 전후 비교가 끊기지 않게.
+      // 로그인 진행(checking·failed)은 종전 이름 그대로 — 전후 비교가 끊기지 않게.
       if (s.loginSource !== null) return 'login';
       // `as` 대신 명시 분기다 — 게스트 탭이 늘면 여기 한 줄을 지나야 한다(`never` 검사와 같은 취지).
       switch (s.guestTab) {

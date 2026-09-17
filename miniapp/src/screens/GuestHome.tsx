@@ -72,7 +72,9 @@ export type LoginSource =
   | 'trial'
   | 'locked_library'
   | 'locked_bookshop'
-  | 'locked_history';
+  | 'locked_history'
+  /** 「이미 booktimer.app 계정이 있나요?」 — 조회만 하고 미등록이면 연결 화면으로 간다(계정을 만들지 않는다). */
+  | 'web_link';
 
 /** 인트로 소개문 — "무엇을 하는 앱인지"를 로그인 전에 읽힌다(심사 필수 항목). */
 const PITCH = '책 읽는 시간을 타이머로 기록하고, 매일의 독서를 잔디로 쌓아요.';
@@ -550,6 +552,17 @@ export function GuestHome({
         onOpenMargin={() => {}}
         locked={<LockedFeedBody />}
       />
+
+      {/* 웹 계정 보유자의 문 — 다른 손잡이는 누르는 즉시 토스 계정을 만들어(once-set) 웹 계정에 다시 못
+          붙는다. 그래서 인가 <b>전</b>에 따로 둔다. 첫 화면이 계정 얘기로 시작하지 않게 맨 아래 조용히 선다. */}
+      <div style={{ marginTop: 32, textAlign: 'center' }}>
+        <Text typography="st12" color="grey600" style={{ display: 'block', wordBreak: 'keep-all' }}>
+          이미 booktimer.app 계정이 있나요?
+        </Text>
+        <Button size="small" variant="weak" style={{ marginTop: 8 }} onClick={() => onLogin('web_link')}>
+          기존 계정 연결
+        </Button>
+      </div>
     </Screen>
   );
 }

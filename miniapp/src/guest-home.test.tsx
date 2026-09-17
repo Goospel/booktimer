@@ -275,6 +275,43 @@ describe('상한을 넘겨 돌아온 체험', () => {
 });
 
 /**
+ * 「이미 booktimer.app 계정이 있나요?」 — 선택 화면을 없앤 뒤(2026-09-17) 웹 계정 보유자가 남은 유일한 문이다.
+ * 다른 손잡이는 누르는 즉시 토스 계정을 만들고, 만들어진 토스 신원은 웹 계정에 다시 못 붙는다(once-set).
+ * 그래서 이 문은 <b>인가 전</b>, 게스트 홈 맨 아래에 선다.
+ */
+describe('게스트 홈 — 기존 계정 연결', () => {
+  it('게스트 홈 맨 아래에 연결 손잡이가 선다 — 피드 박스 뒤다', () => {
+    const markup = shell(null);
+
+    expect(markup).toContain('이미 booktimer.app 계정이 있나요?');
+    expect(markup).toContain('기존 계정 연결');
+    // 맨 아래 — 피드 박스(잠긴 피드 문구) 뒤에 온다. 위로 올라오면 첫 화면이 계정 얘기로 시작한다.
+    expect(markup.indexOf('이미 booktimer.app 계정이 있나요?')).toBeGreaterThan(
+      markup.indexOf('소식·여백·책 뉴스는 계정이 있어야 보여요'),
+    );
+  });
+
+  it('덮는 것이 아니다 — 연결 손잡이가 서도 떠 있는 것은 탭바 하나뿐이다', () => {
+    expect(shell(null).match(/position:fixed/g) ?? []).toHaveLength(1);
+  });
+
+  it('재는 중에도 같은 문을 지난다 — 체험을 접고 web_link가 그대로 흘러간다', () => {
+    const seen: LoginSource[] = [];
+
+    const folded = startLogin(beginTrial(Date.now() - 90_000), (source) => seen.push(source), 'web_link');
+
+    expect(seen).toEqual(['web_link']);
+    expect(folded?.endedAt).toEqual(expect.any(String)); // undefined(안 접음)도 null도 아니어야 한다
+  });
+
+  // 정적 하니스는 클릭을 못 돌린다(T-149) — 버튼이 어느 source를 싣는지는 소스로 잠근다(book_card와 같은 방식).
+  it('그 문은 web_link를 싣는다 — 다른 값이면 register로 가서 계정이 먼저 생긴다', () => {
+    const src = readFileSync(new URL('./screens/GuestHome.tsx', import.meta.url), 'utf8').replace(/\s+/g, ' ');
+    expect(src).toContain("onClick={() => onLogin('web_link')}");
+  });
+});
+
+/**
  * 재는 중 <b>히어로가 아닌</b> 손잡이로 로그인한다 — 헤더 사람 아이콘(로그아웃한 기존 사용자의 길)과
  * 잠긴 탭의 「토스로 시작하기」 둘이다. 둘 다 「그만 읽기」를 안 거치므로 `endedAt:null`인 채 넘어간다.
  *
