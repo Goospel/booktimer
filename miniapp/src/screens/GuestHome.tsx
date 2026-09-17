@@ -11,8 +11,10 @@ import {
   TAB_LOCK_HINT_MS,
 } from '../App';
 import type { TabKey } from '../App';
+import type { PublicNewsResponse } from '../api';
+import { fetchPublicNews } from '../api';
 import { elapsedSeconds, formatClock, formatDuration, hasFinalConsonant } from '../format';
-import { trackEvent } from '../toss';
+import { openExternal, trackEvent } from '../toss';
 import type { Trial, TrialPhase, TrialSource } from '../trial';
 import {
   TRIAL_CAP_SECONDS,
@@ -44,7 +46,8 @@ import {
   SAGE,
   heroOverline,
 } from './Home';
-import { FeedBox } from './HomeFeed';
+import type { FeedTab } from './HomeFeed';
+import { FeedBox, guestFeedOpen, guestFeedTab } from './HomeFeed';
 
 /**
  * 게스트 홈 — <b>로그인 전에도 홈을 보여 주고</b> 서재·책방·기록만 잠근다(2026-09-11).
@@ -53,7 +56,8 @@ import { FeedBox } from './HomeFeed';
  * <b>이 앱이 무엇인지</b>는 여전히 안 보여 줬다 — 탭바도 없어 「나중에 무엇이 열리는가」가 화면 어디에도
  * 없었다. 여기서는 홈의 모양(헤더 · 히어로 · 탭바)을 그대로 세우고, 계정이 있어야 여는 칸만 잠근다.
  *
- * <p><b>서버를 한 번도 부르지 않는다.</b> 로그인 홈(`Home`)을 재사용하지 않은 첫째 이유가 이것이다 —
+ * <p><b>인증이 필요한 서버 경로는 한 번도 부르지 않는다</b>(예외는 익명 공개 뉴스 하나 — 실패하면 옛 잠금으로
+ * 조용히 남는다). 로그인 홈(`Home`)을 재사용하지 않은 첫째 이유가 이것이다 —
  * 그 화면은 마운트 즉시 `/api/home-feed`를 받고 401이면 `toLogin()`으로 떨어져, 게스트에 두면 진입
  * 즉시 재렌더 루프가 된다. 잠긴 탭 셋도 같은 사정이라 화면을 마운트하지 않고 {@link LockedScreen}이
  * 그 자리에 선다(각 화면 무변경).
@@ -334,12 +338,22 @@ function GuestBookCard({ onLogin }: { onLogin: (source: LoginSource) => void }) 
 }
 
 /**
+ * 게스트가 기사를 연다 — 로그인 홈과 같은 문(`openExternal`)으로 나가고, 그 전에 한 줄 남긴다.
+ * `guest_news_opened / guest_entered`가 「구경하러 온 사람을 뉴스가 붙잡는가」의 답이다.
+ */
+export function openGuestNews(link: string): void {
+  trackEvent('guest_news_opened');
+  openExternal(link);
+}
+
+/**
  * 잠긴 피드 본문 — 머리(소식·여백·책 뉴스)는 {@link FeedBox}가 그대로 그리고 이 자리만 받는다.
  *
- * <p>뼈대 두 줄은 <b>「여기에 남의 글이 들어온다」</b>는 말이다. 실데이터 미리보기는 공개 API가
- * 필요해 비목표라(사용자 결정) 회색 상자로 둔다 — 가짜 글을 채우는 쪽이 훨씬 나쁘다.
+ * <p>뼈대 두 줄은 <b>「여기에 남의 글이 들어온다」</b>는 말이다. 소식·여백의 실데이터 미리보기는 비목표라
+ * 회색 상자로 둔다 — 가짜 글을 채우는 쪽이 훨씬 나쁘다. 책 뉴스가 열렸으면(`newsOpen`) 잠긴 목록에서 뺀다 —
+ * 열린 것을 잠겼다고 말하지 않는다.
  */
-function LockedFeedBody() {
+export function LockedFeedBody({ newsOpen }: { newsOpen: boolean }) {
   return (
     <div style={{ textAlign: 'center' }}>
       <svg
@@ -356,7 +370,7 @@ function LockedFeedBody() {
         <path d={LOCK_ICON} />
       </svg>
       <Text typography="st10" fontWeight="bold" style={{ display: 'block', marginTop: 10, wordBreak: 'keep-all' }}>
-        소식·여백·책 뉴스는 계정이 있어야 보여요
+        {newsOpen ? '소식·여백은 계정이 있어야 보여요' : '소식·여백·책 뉴스는 계정이 있어야 보여요'}
       </Text>
       <Text typography="st11" color="grey600" style={{ display: 'block', marginTop: 6, wordBreak: 'keep-all' }}>
         다른 독서가들이 무엇을 읽고 무슨 글을 남겼는지
@@ -393,6 +407,7 @@ export function GuestHome({
   onStop,
   onDiscard,
   onLogin,
+  news,
 }: {
   trial: Trial | null;
   phase: TrialPhase;
@@ -402,7 +417,13 @@ export function GuestHome({
   onStop: () => void;
   onDiscard: () => void;
   onLogin: (source: LoginSource) => void;
+  /** 공개 뉴스 — `null`이면 못 받았거나 아직이다(옛 잠금). 데이터는 셸이 들어 탭을 오가도 다시 안 받는다. */
+  news: PublicNewsResponse | null;
 }) {
+  /** 게스트가 고른 피드 탭 — 안 골랐으면 {@link guestFeedTab}이 정한다(탭 홈↔잠긴 탭 오가면 리마운트로 초기화, 수용). */
+  const [feedTab, setFeedTab] = useState<FeedTab | null>(null);
+  const [feedExpanded, setFeedExpanded] = useState(false);
+  const newsOpen = guestFeedOpen(news);
   const duration = trial === null ? 0 : trialDurationSeconds(trial);
   const seconds =
     phase === 'running' && trial !== null
@@ -538,19 +559,19 @@ export function GuestHome({
 
       <GuestBookCard onLogin={onLogin} />
 
-      {/* 로그인 홈의 피드 박스가 같은 자리에 같은 머리로 선다 — 본문만 잠금 안내다. `feed={null}`과
-          no-op 핸들러라 <b>서버를 부르지 않는다</b>(로그인 홈의 `HomeFeedBox`는 마운트 즉시 받는다). */}
+      {/* 로그인 홈의 피드 박스가 같은 자리에 같은 머리로 선다. 공개 뉴스를 받았으면 「책 뉴스」 탭만 열리고
+          (기본 탭), 소식·여백·사람은 흐린 알약으로 남아 누르면 잠금 안내가 선다. 못 받았으면 옛 전체 잠금이다. */}
       <FeedBox
-        feed={null}
-        tab="social"
-        expanded={false}
+        feed={news === null ? null : { social: [], readers: [], discover: [], newsEnabled: news.newsEnabled, news: news.news }}
+        tab={guestFeedTab(feedTab, newsOpen)}
+        expanded={feedExpanded}
         error={null}
         now={0}
-        onTab={() => {}}
-        onToggle={() => {}}
-        onOpenNews={() => {}}
+        onTab={setFeedTab}
+        onToggle={() => setFeedExpanded((e) => !e)}
+        onOpenNews={openGuestNews}
         onOpenMargin={() => {}}
-        locked={<LockedFeedBody />}
+        locked={<LockedFeedBody newsOpen={newsOpen} />}
       />
 
       {/* 웹 계정 보유자의 문 — 다른 손잡이는 누르는 즉시 토스 계정을 만들어(once-set) 웹 계정에 다시 못
@@ -580,17 +601,21 @@ export function GuestShell({
   onTabChange,
   onLogin,
   trial: injected,
+  news: injectedNews,
 }: {
   tab: TabKey;
   onTabChange: (tab: TabKey) => void;
   onLogin: (source: LoginSource) => void;
   /** 테스트 주입 — 정적 렌더가 세 상태를 다 그려 보는 유일한 길(관례: `Home`의 `celebrate`). */
   trial?: Trial | null;
+  /** 테스트 주입 — 공개 뉴스 응답. 주면 받지 않는다(effect는 정적 하니스에서 어차피 안 돈다). */
+  news?: PublicNewsResponse | null;
 }) {
   const [trial, setTrial] = useState<Trial | null>(() =>
     restoreTrial(injected !== undefined ? injected : readTrial()),
   );
   const [now, setNow] = useState(() => Date.now());
+  const [news, setNews] = useState<PublicNewsResponse | null>(injectedNews ?? null);
   /** 끝난 체험에서 ▶를 눌렀다는 안내 — 잠깐 떴다 스스로 사라진다(`MainTabs`의 잠금 안내와 같은 자리). */
   const [hint, setHint] = useState(false);
   const hintTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -604,7 +629,15 @@ export function GuestShell({
    * 여러 건으로 부푼다. 마운트 1회짜리 이벤트가 따로 있어야 비율이 뜻을 가진다.
    */
   useEffect(() => {
-    trackEvent('guest_entered');
+    // `variant` — 게스트 뉴스가 있는 번들(2026-09-17~)을 옛 번들과 날짜 대신 파라미터로 가른다.
+    trackEvent('guest_entered', { variant: 'news' });
+  }, []);
+
+  // 공개 뉴스 — 마운트 1회. 실패는 삼킨다: 게스트 홈은 에러 화면·로그인 화면으로 떨어지지 않고 옛 잠금으로 남는다.
+  useEffect(() => {
+    if (injectedNews !== undefined) return;
+    fetchPublicNews().then(setNews).catch(() => {});
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // 초 자리가 움직여야 재는 중으로 보인다(홈 히어로와 같은 간격).
@@ -670,6 +703,7 @@ export function GuestShell({
               setTrial(null);
             }}
             onLogin={login}
+            news={news}
           />
         )}
       </div>

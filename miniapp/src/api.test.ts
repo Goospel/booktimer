@@ -19,6 +19,7 @@ import {
   fetchBlocks,
   fetchBookMargin,
   fetchDashboard,
+  fetchPublicNews,
   fetchFollowList,
   fetchPersonalityTagBooks,
   fetchProfile,
@@ -222,6 +223,20 @@ describe('Bearer 호출·에러 계약', () => {
 
     await expect(fetchDashboard()).rejects.toBeInstanceOf(UnauthorizedError);
     expect(token.get()).toBeNull();
+  });
+
+  /**
+   * 게스트 공개 뉴스는 익명 요청이다 — 토큰을 싣지도, 401 처리(토큰 폐기)를 타지도 않는다. 게스트 요청이 도는 사이
+   * 사용자가 로그인해 토큰이 생기고 그 요청이 401로 돌아오면, 공용 규칙대로면 방금 받은 토큰이 지워진다.
+   * (양성 대조군: 바로 위 「401이면 토큰을 폐기」)
+   */
+  it('공개 뉴스 요청은 토큰을 안 싣고, 401에도 토큰을 안 지운다', async () => {
+    token.set('방금-받은-토큰');
+    vi.mocked(globalThis.fetch).mockResolvedValue(response(401) as never);
+
+    await expect(fetchPublicNews()).rejects.toBeInstanceOf(ApiError);
+    expect(headerOf('Authorization')).toBeUndefined();
+    expect(token.get()).toBe('방금-받은-토큰');
   });
 
   it('409면 서버 메시지를 담은 ApiError를 던진다 — 이미 연결된 계정을 사용자에게 알린다', async () => {

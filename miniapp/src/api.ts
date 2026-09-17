@@ -81,17 +81,19 @@ export interface RequestOptions {
   method?: 'GET' | 'POST' | 'DELETE';
   body?: unknown;
   query?: Record<string, string | number | undefined>;
+  /** 익명 공개 경로 — 토큰을 안 싣고 401도 토큰 폐기를 안 탄다(게스트 요청이 방금 로그인한 토큰을 지우지 않게). */
+  anonymous?: boolean;
 }
 
 export async function request<T>(path: string, options: RequestOptions = {}): Promise<T> {
   // 목 모드에서는 서버에 나가지 않는다 — dynamic import라 프로드 번들엔 이 모듈이 들어가지 않는다.
   if (DEV_MOCK) return (await import('./dev-mock')).mockRequest<T>(path, options);
 
-  const { body, query } = options;
+  const { body, query, anonymous } = options;
   const saved = token.get();
   const headers: Record<string, string> = {};
   if (body !== undefined) headers['Content-Type'] = 'application/json';
-  if (saved !== null) headers.Authorization = `Bearer ${saved}`;
+  if (saved !== null && !anonymous) headers.Authorization = `Bearer ${saved}`;
 
   // undefined는 "안 보냄"이다 — 빈 문자열로 흘려보내면 서버가 빈 필터로 오해한다.
   const params = new URLSearchParams();
@@ -112,7 +114,7 @@ export async function request<T>(path: string, options: RequestOptions = {}): Pr
     throw new NetworkError();
   }
 
-  if (response.status === 401) {
+  if (response.status === 401 && !anonymous) {
     token.clear();
     throw new UnauthorizedError();
   }
@@ -488,6 +490,18 @@ export interface HomeFeedResponse {
 }
 
 export const fetchHomeFeed = (): Promise<HomeFeedResponse> => request('/api/home-feed');
+
+/**
+ * 게스트 공개 뉴스 — `PublicNewsApiController`. 사용자 입력과 무관한 일반 책 뉴스(운영자 고정 주제)라 `bookTitle`에
+ * 책 제목이 아니라 주제 라벨(`신간`·`출판계`·`베스트셀러`)이 온다.
+ * 토큰이 없으면 `request`가 `Authorization`을 아예 안 붙인다 — 서버는 `/api/public/**`를 익명으로 연다.
+ */
+export interface PublicNewsResponse {
+  newsEnabled: boolean;
+  news: NewsItem[];
+}
+
+export const fetchPublicNews = (): Promise<PublicNewsResponse> => request('/api/public/news', { anonymous: true });
 
 /** bookId를 안 주면 책 미지정 세션으로 시작한다(종료 후 태깅). */
 export const startSession = (bookId: number | null): Promise<TimerState> =>
