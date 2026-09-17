@@ -7,7 +7,15 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { TabKey } from './App';
 import type { NewsItem, PublicNewsResponse } from './api';
 import type { LoginSource } from './screens/GuestHome';
-import { GuestShell, LockedFeedBody, guestAction, lockedCopy, openGuestNews, startLogin } from './screens/GuestHome';
+import {
+  GuestShell,
+  LockedFeedBody,
+  guestAction,
+  lockedCopy,
+  openGuestNews,
+  startLogin,
+  whenPageLoaded,
+} from './screens/GuestHome';
 import { stubLocalStorage, userAgent } from './test-fixtures';
 import { openExternal, trackEvent } from './toss';
 import type { Trial } from './trial';
@@ -253,6 +261,57 @@ describe('게스트 홈 — 책 뉴스', () => {
 
     expect(src).toContain('fetchPublicNews().then(setNews).catch(() => {})');
     expect(src).toContain("trackEvent('guest_entered', { variant: 'news' })");
+  });
+
+  // 2026-09-17 심사 반려(「최초 접속 20초 초과」) 대응 — 뉴스 요청이 첫 페이지 로드에 섞이지 않게 load 뒤로 미룬다.
+  it('공개 뉴스 요청은 페이지 로드가 끝난 뒤에 나간다', () => {
+    const src = readFileSync(new URL('./screens/GuestHome.tsx', import.meta.url), 'utf8').replace(/\s+/g, ' ');
+
+    expect(src).toContain('whenPageLoaded(document, window, () => { fetchPublicNews().then(setNews).catch(() => {}); })');
+  });
+});
+
+describe('whenPageLoaded — 페이지 로드 뒤에 한 번', () => {
+  const fakeWindow = () => {
+    const listeners = new Map<string, () => void>();
+    return {
+      listeners,
+      addEventListener: (type: string, fn: () => void) => void listeners.set(type, fn),
+      removeEventListener: (type: string, fn: () => void) => {
+        if (listeners.get(type) === fn) listeners.delete(type);
+      },
+    };
+  };
+
+  it('이미 로드가 끝났으면 바로 부른다', () => {
+    const win = fakeWindow();
+    const fn = vi.fn();
+
+    whenPageLoaded({ readyState: 'complete' }, win, fn);
+
+    expect(fn).toHaveBeenCalledTimes(1);
+    expect(win.listeners.size).toBe(0);
+  });
+
+  it('로드 중이면 load가 올 때까지 기다린다', () => {
+    const win = fakeWindow();
+    const fn = vi.fn();
+
+    whenPageLoaded({ readyState: 'interactive' }, win, fn);
+    expect(fn).toHaveBeenCalledTimes(0);
+
+    win.listeners.get('load')?.();
+    expect(fn).toHaveBeenCalledTimes(1);
+  });
+
+  it('load 전에 정리하면 부르지 않는다 — 언마운트한 셸이 요청을 내보내지 않게', () => {
+    const win = fakeWindow();
+    const fn = vi.fn();
+
+    const cleanup = whenPageLoaded({ readyState: 'loading' }, win, fn);
+    cleanup();
+
+    expect(win.listeners.size).toBe(0);
   });
 });
 

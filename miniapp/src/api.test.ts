@@ -4,6 +4,7 @@ import type { SearchRow } from './api';
 import {
   ApiError,
   NICKNAME_MAX_LENGTH,
+  NetworkError,
   REPORT_REASONS,
   STORY_BG_CODES,
   UnauthorizedError,
@@ -237,6 +238,36 @@ describe('Bearer 호출·에러 계약', () => {
     await expect(fetchPublicNews()).rejects.toBeInstanceOf(ApiError);
     expect(headerOf('Authorization')).toBeUndefined();
     expect(token.get()).toBe('방금-받은-토큰');
+  });
+
+  /**
+   * 공개 뉴스는 5초 안에 답이 없으면 끊는다 — 2026-09-17 심사가 「최초 접속 20초 초과」로 반려했다. 게스트 홈의 첫 화면에서
+   * 나가는 유일한 요청인데 `fetch`엔 타임아웃이 없어, 막힌 네트워크에선 요청이 끝나지 않는다.
+   * (대조군: 4999ms에는 아직 안 끊겼다 — 「즉시 실패」 구현을 배제한다)
+   */
+  it('공개 뉴스 요청은 5초 안에 응답이 없으면 NetworkError로 끊는다', async () => {
+    vi.useFakeTimers();
+    try {
+      vi.mocked(globalThis.fetch).mockImplementation(
+        (_url, init) =>
+          new Promise((_, reject) => {
+            init?.signal?.addEventListener('abort', () => reject(new DOMException('aborted', 'AbortError')));
+          }) as never,
+      );
+      let settled: unknown = 'pending';
+      const pending = fetchPublicNews().catch((e: unknown) => {
+        settled = e;
+      });
+
+      await vi.advanceTimersByTimeAsync(4_999);
+      expect(settled).toBe('pending');
+
+      await vi.advanceTimersByTimeAsync(1);
+      await pending;
+      expect(settled).toBeInstanceOf(NetworkError);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it('409면 서버 메시지를 담은 ApiError를 던진다 — 이미 연결된 계정을 사용자에게 알린다', async () => {
