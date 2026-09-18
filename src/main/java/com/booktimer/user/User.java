@@ -208,6 +208,14 @@ public class User extends BaseTimeEntity {
     @Column(name = "study_ai_access_at")
     private java.time.Instant studyAiAccessAt;
 
+    /** 맞팔 DM 일시 정지 만료 시각(V94). {@code null}이거나 지났으면 정지 아님 — 열람은 정지 중에도 된다. */
+    @Column(name = "chat_restricted_until")
+    private java.time.Instant chatRestrictedUntil;
+
+    /** 맞팔 DM 영구 정지 시각(V94). {@code null}이면 정지 아님. */
+    @Column(name = "chat_banned_at")
+    private java.time.Instant chatBannedAt;
+
     protected User() {
         // JPA
     }
@@ -409,6 +417,29 @@ public class User extends BaseTimeEntity {
     /** 목표 달성 푸시를 마지막으로 보낸 날(유저 TZ). 한 번도 안 보냈으면 {@code null}. */
     public java.time.LocalDate getGoalMetPushedOn() {
         return goalMetPushedOn;
+    }
+
+    /** 맞팔 DM을 {@code until}까지 정지한다(새 방·발송 불가, 열람 가능). {@code null}이면 해제. */
+    public void restrictChatUntil(java.time.Instant until) {
+        this.chatRestrictedUntil = until;
+    }
+
+    /** 맞팔 DM을 영구 정지한다. {@code null}이면 해제. */
+    public void banChat(java.time.Instant at) {
+        this.chatBannedAt = at;
+    }
+
+    /** 지금 DM 제재 중인가 — 영구 정지이거나 일시 정지가 아직 안 끝났다. */
+    public boolean isChatRestricted(java.time.Instant now) {
+        return chatBannedAt != null || (chatRestrictedUntil != null && now.isBefore(chatRestrictedUntil));
+    }
+
+    public java.time.Instant getChatRestrictedUntil() {
+        return chatRestrictedUntil;
+    }
+
+    public java.time.Instant getChatBannedAt() {
+        return chatBannedAt;
     }
 
     /** 공부 AI 기능의 현재 승인 상태. 기본값은 {@link StudyAiAccess#NONE}이다. */

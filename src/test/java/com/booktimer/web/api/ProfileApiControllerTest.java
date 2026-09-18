@@ -893,6 +893,42 @@ class ProfileApiControllerTest {
     }
 
     @Test
+    @DisplayName("맞팔 ∧ 주인이 토스 연결이면 dmAvailable=true — 미니앱 「메시지」 버튼의 양성 대조군")
+    void profile_dmAvailable_trueForMutualTossOwner() throws Exception {
+        User viewer = register("dm-true-v@booktimer.com", "dmtruev", "열람자");
+        User owner = register("dm-true-o@booktimer.com", "dmtrueo", "주인");
+        owner.linkTossUserKey("uk-dm-true-o");
+        userRepository.save(owner);
+        followRepository.save(Follow.of(viewer, owner));
+        followRepository.save(Follow.of(owner, viewer));
+
+        mockMvc.perform(get("/api/profile").param("loginId", "dmtrueo")
+                        .with(user("dm-true-v@booktimer.com")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.dmAvailable").value(true));
+    }
+
+    @Test
+    @DisplayName("한 방향 팔로우거나 주인이 웹 전용이면 dmAvailable=false")
+    void profile_dmAvailable_falseWhenNotMutualOrWebOnly() throws Exception {
+        User viewer = register("dm-false-v@booktimer.com", "dmfalsev", "열람자");
+        User oneWay = register("dm-false-o@booktimer.com", "dmfalseo", "한방향");
+        oneWay.linkTossUserKey("uk-dm-false-o");
+        userRepository.save(oneWay);
+        followRepository.save(Follow.of(viewer, oneWay)); // 나 → 주인만
+        User webOnly = register("dm-web-o@booktimer.com", "dmwebo", "웹주인");
+        followRepository.save(Follow.of(viewer, webOnly));
+        followRepository.save(Follow.of(webOnly, viewer)); // 맞팔이지만 토스 미연결
+
+        mockMvc.perform(get("/api/profile").param("loginId", "dmfalseo")
+                        .with(user("dm-false-v@booktimer.com")))
+                .andExpect(jsonPath("$.dmAvailable").value(false));
+        mockMvc.perform(get("/api/profile").param("loginId", "dmwebo")
+                        .with(user("dm-false-v@booktimer.com")))
+                .andExpect(jsonPath("$.dmAvailable").value(false));
+    }
+
+    @Test
     @DisplayName("내가 주인을 팔로우할 뿐이면 followsMe=false — following과 방향이 다르다")
     void profile_followsMe_falseWhenOnlyIFollow() throws Exception {
         User viewer = register("fm-false-v@booktimer.com", "fmfalsev", "열람자");

@@ -36,6 +36,18 @@ public enum RateLimitAction {
      */
     STORY_LIKE(60, Duration.ofMinutes(1)),
 
+    /** 맞팔 DM 발송. 사람이 치는 속도로는 분당 60을 못 넘는다 — 스크립트 도배만 걸린다. */
+    CHAT_MESSAGE(60, Duration.ofMinutes(1)),
+
+    /** 맞팔 DM 방 <b>새로 만들기</b>(기존 방 열기는 세지 않는다). 맞팔 수가 이미 자연 상한이라 한 겹 더일 뿐이다. */
+    CHAT_ROOM_OPEN(10, Duration.ofHours(1)),
+
+    /**
+     * 대화 폴링(방 3초·대화함 10초·미읽음 카운트)을 한 키로 센다. 정상 탭 하나는 분당 약 27회라 60이면
+     * 탭 둘까지 넉넉하다. 초과분 429는 클라가 조용히 다음 틱으로 넘긴다(설계 §7-4).
+     */
+    CHAT_POLL(60, Duration.ofMinutes(1)),
+
     /**
      * 미니앱 토스 로그인·신규가입({@code /api/toss/login·register}). 정상 사용은 앱 진입당 1~2회라
      * 분당 20이면 넉넉하고, 자동화된 인가코드 대량 시도는 걸린다.

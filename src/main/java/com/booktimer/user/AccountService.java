@@ -2,6 +2,8 @@ package com.booktimer.user;
 
 import com.booktimer.auth.ApiTokenRepository;
 import com.booktimer.block.BlockRepository;
+import com.booktimer.chat.ChatMessageRepository;
+import com.booktimer.chat.ChatRoomRepository;
 import com.booktimer.book.BookRepository;
 import com.booktimer.book.StudyBookRepository;
 import com.booktimer.email.EmailTokenRepository;
@@ -62,6 +64,8 @@ public class AccountService {
     private final StoryLikeRepository storyLikeRepository;
     private final ApiTokenRepository apiTokenRepository;
     private final TossLinkCodeRepository tossLinkCodeRepository;
+    private final ChatMessageRepository chatMessageRepository;
+    private final ChatRoomRepository chatRoomRepository;
     private final SessionInvalidator sessionInvalidator;
     private final PasswordEncoder passwordEncoder;
 
@@ -88,6 +92,8 @@ public class AccountService {
                           StoryLikeRepository storyLikeRepository,
                           ApiTokenRepository apiTokenRepository,
                           TossLinkCodeRepository tossLinkCodeRepository,
+                          ChatMessageRepository chatMessageRepository,
+                          ChatRoomRepository chatRoomRepository,
                           SessionInvalidator sessionInvalidator,
                           PasswordEncoder passwordEncoder) {
         this.userRepository = userRepository;
@@ -113,6 +119,8 @@ public class AccountService {
         this.storyLikeRepository = storyLikeRepository;
         this.apiTokenRepository = apiTokenRepository;
         this.tossLinkCodeRepository = tossLinkCodeRepository;
+        this.chatMessageRepository = chatMessageRepository;
+        this.chatRoomRepository = chatRoomRepository;
         this.sessionInvalidator = sessionInvalidator;
         this.passwordEncoder = passwordEncoder;
     }
@@ -275,6 +283,10 @@ public class AccountService {
         blockRepository.deleteByBlocked(user);
         reportRepository.deleteByReporter(user);
         reportRepository.deleteByReported(user);
+        // 맞팔 DM(V95): 메시지 → 방 순서. 상대가 보낸 메시지도 방 FK로 방 삭제를 막으므로 방 기준으로 지운다.
+        // 상대 쪽에서도 방이 통째로 사라진다(반쪽 방을 남기지 않는다).
+        chatMessageRepository.deleteByRoomMember(user);
+        chatRoomRepository.deleteByMember(user);
         storyLikeRepository.deleteByUser(user);         // 내가 남에게 누른 좋아요 (story_like.user_id FK)
         storyLikeRepository.deleteByStoryUser(user);    // 내 글에 달린 남의 좋아요 — 내 글보다 앞
         storyRepository.deleteByUser(user);            // 내가 여백에 남긴 글 — story.book_id 때문에 책보다 앞

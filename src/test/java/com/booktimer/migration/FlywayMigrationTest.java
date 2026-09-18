@@ -336,6 +336,35 @@ class FlywayMigrationTest {
                 .contains(com.booktimer.user.TossLinkCode.Purpose.WEB_LOGIN);
     }
 
+    /**
+     * V94·V95 — 대화 테이블과 제재 컬럼이 엔티티 매핑과 맞고(validate), 암호문이 varbinary에 실제로 담겨
+     * 복호화돼 돌아오는지 본다. 메인 스위트는 Hibernate 생성 스키마라 마이그레이션 SQL 자체는 여기서만 검증된다.
+     */
+    @Test
+    void chat_tables_persist_encrypted_body_under_flyway_schema() {
+        User a = userWithHandle("chat-a@example.com", "chatflywaya");
+        a.restrictChatUntil(Instant.parse("2026-09-25T00:00:00Z"));
+        a = userRepository.saveAndFlush(a);
+        User b = userRepository.saveAndFlush(userWithHandle("chat-b@example.com", "chatflywayb"));
+
+        com.booktimer.chat.ChatRoom room = chatRoomRepository.saveAndFlush(com.booktimer.chat.ChatRoom.of(b, a));
+        var msg = chatMessageRepository.saveAndFlush(com.booktimer.chat.ChatMessage.of(
+                room, a, "플라이웨이 평문", false, Instant.parse("2026-09-18T00:00:00Z")));
+
+        byte[] raw = jdbcTemplate.queryForObject("select body from chat_message where id = ?", byte[].class, msg.getId());
+        assertThat(new String(raw, java.nio.charset.StandardCharsets.UTF_8)).doesNotContain("플라이웨이");
+        assertThat(chatMessageRepository.findById(msg.getId()).orElseThrow().getBody()).isEqualTo("플라이웨이 평문");
+        assertThat(jdbcTemplate.queryForObject(
+                "select chat_restricted_until from users where id = ?", java.sql.Timestamp.class, a.getId()))
+                .isNotNull();
+    }
+
+    @Autowired
+    com.booktimer.chat.ChatRoomRepository chatRoomRepository;
+
+    @Autowired
+    com.booktimer.chat.ChatMessageRepository chatMessageRepository;
+
     private static User userWithHandle(String email, String handle) {
         User u = User.of(email, "hash", "닉", "Asia/Seoul", Role.USER);
         u.assignLoginId(handle);
@@ -366,7 +395,7 @@ class FlywayMigrationTest {
             "READING_GOAL_CHANGE", "READING_GOAL_WAIVER", "READING_PERSONALITY", "READING_SESSION",
             "READING_TIMER", "REPORT", "STORY", "STORY_LIKE", "STUDY_AI_USAGE", "STUDY_BOOK",
             "STUDY_DAILY_CHECK", "STUDY_NOTE", "STUDY_PLAN_ITEM", "STUDY_RECALL", "STUDY_SESSION",
-            "TOSS_LINK_CODE");
+            "TOSS_LINK_CODE", "CHAT_ROOM", "CHAT_MESSAGE");
 
     /**
      * <b>users를 FK 참조하는 테이블 집합 == purge()가 지우는 집합</b>을 못 박는다.
