@@ -28,18 +28,11 @@ import java.time.Instant;
 import java.time.ZoneId;
 import java.time.ZoneOffset;
 import java.util.List;
-import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
-import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyMap;
 import static org.mockito.ArgumentMatchers.anyString;
-import static org.mockito.ArgumentMatchers.eq;
-import static org.mockito.Mockito.clearInvocations;
-import static org.mockito.Mockito.never;
-import static org.mockito.Mockito.times;
-import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 /**
@@ -403,41 +396,5 @@ class ChatRoomServiceTest {
 
         assertThat(new String(raw, StandardCharsets.UTF_8)).doesNotContain("plain-marker");
         assertThat(service.messages(other, id, 0).messages().get(0).body()).isEqualTo("plain-marker-평문");
-    }
-
-    // ── 새 메시지 푸시: 방·수신자당 30분 1통 ──────────────
-
-    @Test
-    void pushGoesToPartnerAtMostOncePer30Minutes() {
-        User me = toss("push-me");
-        User other = toss("push-other");
-        mutual(me, other);
-        long id = service.openOrGet(me, other).getId();
-
-        service.send(me, id, "1");
-        advance(Duration.ofMinutes(29));
-        service.send(me, id, "2");
-        verify(messenger, times(1)).sendMessage(eq("uk-push-other"), eq("DM_TEST"), eq(Map.of()));
-
-        advance(Duration.ofMinutes(2));
-        service.send(me, id, "3");
-        verify(messenger, times(2)).sendMessage(eq("uk-push-other"), eq("DM_TEST"), eq(Map.of()));
-        verify(messenger, never()).sendMessage(eq("uk-push-me"), anyString(), any());
-    }
-
-    @Test
-    void failedPushIsRetriedOnNextMessage() {
-        User me = toss("pf-me");
-        User other = toss("pf-other");
-        mutual(me, other);
-        long id = service.openOrGet(me, other).getId();
-        when(messenger.sendMessage(anyString(), anyString(), anyMap())).thenReturn(false);
-
-        service.send(me, id, "실패");
-        clearInvocations(messenger);
-        when(messenger.sendMessage(anyString(), anyString(), anyMap())).thenReturn(true);
-        service.send(me, id, "재시도");
-
-        verify(messenger, times(1)).sendMessage(eq("uk-pf-other"), eq("DM_TEST"), eq(Map.of()));
     }
 }

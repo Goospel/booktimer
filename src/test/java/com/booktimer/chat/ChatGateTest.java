@@ -37,6 +37,28 @@ class ChatGateTest {
         assertThatCode(() -> gate(true, EncryptedTextConverterTest.KEY).requireEnabled()).doesNotThrowAnyException();
     }
 
+    /** 켜진 채 키가 깨졌으면 기동에서 바로 죽는다 — 안 그러면 모든 대화 경로가 첫 암호화에서 500이다. */
+    @Test
+    void failsFastWhenSwitchedOnWithMalformedKey() {
+        assertThatThrownBy(() -> gate(true, "not-base64-!!!")).isInstanceOf(IllegalStateException.class);
+        String aes128 = java.util.Base64.getEncoder().encodeToString(new byte[16]);
+        assertThatThrownBy(() -> gate(true, aes128)).isInstanceOf(IllegalStateException.class);
+    }
+
+    /** 꺼져 있으면 키 형식과 무관하게 뜬다 — 운영 SSM엔 아직 키가 없다. */
+    @Test
+    void switchedOffIgnoresKeyShape() {
+        assertThatCode(() -> gate(false, "not-base64-!!!")).doesNotThrowAnyException();
+        assertNotFound(gate(false, "not-base64-!!!"));
+    }
+
+    @Test
+    void openReflectsSwitchAndKey() {
+        assertThat(gate(true, EncryptedTextConverterTest.KEY).isOpen()).isTrue();
+        assertThat(gate(false, EncryptedTextConverterTest.KEY).isOpen()).isFalse();
+        assertThat(gate(true, null).isOpen()).isFalse();
+    }
+
     private static void assertNotFound(ChatGate gate) {
         assertThatThrownBy(gate::requireEnabled)
                 .isInstanceOfSatisfying(ResponseStatusException.class,

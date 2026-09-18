@@ -93,7 +93,11 @@ public class EncryptedTextConverter implements AttributeConverter<String, byte[]
 
     private SecretKeySpec key() {
         ChatProperties props = properties.get();
-        String encoded = props == null ? null : props.getMessageKey();
+        return decodeKey(props == null ? null : props.getMessageKey());
+    }
+
+    /** base64 → AES-256 키. {@link ChatGate}가 기동 때 같은 규칙으로 한 번 검증한다. */
+    static SecretKeySpec decodeKey(String encoded) {
         if (encoded == null || encoded.isBlank()) {
             throw new IllegalStateException("booktimer.chat.message-key가 없다");
         }

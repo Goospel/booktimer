@@ -6,6 +6,7 @@ import com.booktimer.book.CoupangLinkBuilder;
 import com.booktimer.book.KyoboLinkBuilder;
 import com.booktimer.book.Yes24LinkBuilder;
 import com.booktimer.chat.ChatEligibility;
+import com.booktimer.chat.ChatGate;
 import com.booktimer.follow.FollowRepository;
 import com.booktimer.profile.ProfileService;
 import com.booktimer.profile.ProfileTag;
@@ -53,6 +54,7 @@ public class ProfileApiController {
     private final FollowRepository followRepository;
     private final UserRepository userRepository;
     private final ChatEligibility chatEligibility;
+    private final ChatGate chatGate;
 
     public ProfileApiController(ProfileService profileService,
                                 CurrentUserService currentUserService,
@@ -62,9 +64,11 @@ public class ProfileApiController {
                                 StoryRepository storyRepository,
                                 FollowRepository followRepository,
                                 UserRepository userRepository,
-                                ChatEligibility chatEligibility) {
+                                ChatEligibility chatEligibility,
+                                ChatGate chatGate) {
         this.userRepository = userRepository;
         this.chatEligibility = chatEligibility;
+        this.chatGate = chatGate;
         this.profileService = profileService;
         this.currentUserService = currentUserService;
         this.coupangLinkBuilder = coupangLinkBuilder;
@@ -90,9 +94,12 @@ public class ProfileApiController {
     /**
      * 미니앱 「메시지」 버튼 — 맞팔 ∧ 차단 없음 ∧ 주인 토스 연결 ∧ 제재 없음({@link ChatEligibility}).
      * 버튼용 신호일 뿐이고 서버는 방 열기·발송에서 같은 판정을 다시 한다. 웹은 이 값을 무시한다.
+     *
+     * <p>킬스위치가 꺼져 있으면 자격 쿼리를 아예 돌지 않고 false다 — 안 그러면 다크 머지 중에도 버튼이 켜지고
+     * 누르면 404가 나며, 프로필 조회마다 쿼리가 4개 는다.
      */
     private boolean dmAvailable(ProfileView v, User viewer) {
-        if (v.self()) {
+        if (v.self() || !chatGate.isOpen()) {
             return false;
         }
         return userRepository.findByLoginId(v.loginId())

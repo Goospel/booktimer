@@ -14,6 +14,7 @@ import jakarta.persistence.JoinColumn;
 import jakarta.persistence.ManyToOne;
 import jakarta.persistence.Table;
 import jakarta.persistence.UniqueConstraint;
+import org.hibernate.annotations.DynamicUpdate;
 
 import java.time.Instant;
 
@@ -22,9 +23,14 @@ import java.time.Instant;
  *
  * <p>저장되는 상태는 {@link Status#CLOSED}(차단)뿐이다. 언팔·제재로 인한 「잠김」은 {@link ChatEligibility}가
  * 요청마다 파생한다. 참여자별 몫(숨김·마지막 읽음·마지막 푸시)은 a/b 컬럼 쌍이고, 어느 쪽인지는
- * {@link #isA(User)}가 id로 가른다.
+ * {@link #isUserA(User)}가 id로 가른다.
+ *
+ * <p><b>{@code @DynamicUpdate}</b>: 기본 UPDATE는 바뀐 필드와 무관하게 전 컬럼을 쓴다. 그러면 발송 트랜잭션이
+ * 숨김 해제 하나만 바꿔도, 그 사이 다른 트랜잭션이 커밋한 차단(CLOSED)을 옛 스냅샷의 OPEN으로 덮는다(리뷰 #1167
+ * 재현). 바뀐 컬럼만 쓰게 해 참여자별 몫끼리·상태끼리 서로 덮지 않게 한다.
  */
 @Entity
+@DynamicUpdate
 @Table(name = "chat_room", uniqueConstraints = {
         @UniqueConstraint(name = "uk_chat_room_pair", columnNames = {"user_a_id", "user_b_id"})
 })
@@ -127,18 +133,6 @@ public class ChatRoom extends BaseTimeEntity {
         return isA(u) ? lastReadIdA : lastReadIdB;
     }
 
-    public Instant lastPushAtOf(User u) {
-        return isA(u) ? lastPushAtA : lastPushAtB;
-    }
-
-    public void markPushed(User recipient, Instant at) {
-        if (isA(recipient)) {
-            lastPushAtA = at;
-        } else {
-            lastPushAtB = at;
-        }
-    }
-
     public void close(Instant now) {
         status = Status.CLOSED;
         closedAt = now;
@@ -151,6 +145,11 @@ public class ChatRoom extends BaseTimeEntity {
 
     public boolean isOpen() {
         return status == Status.OPEN;
+    }
+
+    /** 이 사용자가 a 쪽(id가 작은 쪽)인가 — a/b 컬럼 쌍 중 어느 것이 그의 몫인지 가른다. */
+    public boolean isUserA(User u) {
+        return isA(u);
     }
 
     private boolean isA(User u) {

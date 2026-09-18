@@ -175,6 +175,35 @@ class ChatApiControllerTest {
         postJson(token, "/api/chat/rooms/" + room + "/messages", "{\"body\":\"  \"}").andExpect(status().isBadRequest());
     }
 
+    // ── 프로필 dmAvailable — 스위치가 켜진 이 컨텍스트에서만 자격이 판정을 가른다 ──
+    // (꺼진 쪽 음성 대조군은 ProfileApiControllerTest.profile_dmAvailable_falseWhileChatSwitchedOff)
+
+    @Test
+    void profileDmAvailableForMutualTossOwner() throws Exception {
+        User viewer = toss("apidmv");
+        User owner = toss("apidmo");
+        mutual(viewer, owner);
+
+        getAs(apiTokenService.issue(viewer), "/api/profile?loginId=apidmo")
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.dmAvailable").value(true));
+    }
+
+    @Test
+    void profileDmUnavailableForOneWayOrWebOnlyOwner() throws Exception {
+        User viewer = toss("apidmv2");
+        User oneWay = toss("apidmone");
+        followRepository.save(Follow.of(viewer, oneWay)); // 나 → 주인만
+        User webOnly = User.of("apidmweb@chatapi.test", "$2a$10$abcdefghijklmnopqrstuv", "웹", "Asia/Seoul", Role.USER);
+        webOnly.assignLoginId("apidmweb");
+        webOnly = userRepository.save(webOnly);
+        mutual(viewer, webOnly); // 맞팔이지만 토스 미연결
+        String token = apiTokenService.issue(viewer);
+
+        getAs(token, "/api/profile?loginId=apidmone").andExpect(jsonPath("$.dmAvailable").value(false));
+        getAs(token, "/api/profile?loginId=apidmweb").andExpect(jsonPath("$.dmAvailable").value(false));
+    }
+
     @Test
     void invalidBearerIsUnauthorized() throws Exception {
         getAs("지어낸토큰", "/api/chat/me").andExpect(status().isUnauthorized());

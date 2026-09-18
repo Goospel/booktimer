@@ -2,7 +2,6 @@ package com.booktimer.chat;
 
 import com.booktimer.config.TossProperties;
 import com.booktimer.toss.TossMessengerClient;
-import com.booktimer.user.User;
 import org.springframework.stereotype.Service;
 
 import java.util.Map;
@@ -27,14 +26,22 @@ public class ChatPushService {
         this.properties = properties;
     }
 
-    /** @return 토스가 발송 성공을 준 경우에만 true. 절대 던지지 않는다(클라이언트 계약). */
-    public boolean push(User recipient) {
+    /** 이 캠페인을 지금 보낼 수 있는가 — 아니면 30분 창을 차지하지도 않는다. */
+    public boolean isReady() {
         TossProperties.Messenger m = properties.getMessenger();
         String code = m.getDmMessageTemplateCode();
-        if (!m.isDmMessageEnabled() || code == null || code.isBlank() || client.isEmpty()
-                || recipient.getTossUserKey() == null) {
+        return m.isDmMessageEnabled() && code != null && !code.isBlank() && client.isPresent();
+    }
+
+    /**
+     * 커밋 뒤에 불린다 — 영속성 컨텍스트가 닫혀 있으니 엔티티가 아니라 userKey 문자열을 받는다.
+     *
+     * @return 토스가 발송 성공을 준 경우에만 true. 절대 던지지 않는다(클라이언트 계약).
+     */
+    public boolean push(String tossUserKey) {
+        if (!isReady() || tossUserKey == null) {
             return false;
         }
-        return client.get().sendMessage(recipient.getTossUserKey(), code.strip(), Map.of());
+        return client.get().sendMessage(tossUserKey, properties.getMessenger().getDmMessageTemplateCode().strip(), Map.of());
     }
 }

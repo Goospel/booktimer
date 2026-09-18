@@ -6,6 +6,7 @@ import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
+import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
 
@@ -20,6 +21,34 @@ public interface ChatRoomRepository extends JpaRepository<ChatRoom, Long> {
             where (r.userA = :u or r.userB = :u) and r.status = com.booktimer.chat.ChatRoom.Status.OPEN
             """)
     List<ChatRoom> findOpenByMember(@Param("u") User user);
+
+    /**
+     * 새 메시지 푸시 30분 창을 <b>원자적으로</b> 차지한다 — 마지막 푸시가 없거나 {@code cutoff} 이전일 때만
+     * {@code now}로 바꾸고 1을 돌려준다. 동시 발송 둘이 같은 창을 물으면 행 잠금 뒤의 둘째가 갱신된 값을 보고 0을
+     * 받는다(판정 → 저장 사이 창이 없다). 컬럼 하나만 바꾸는 UPDATE라 방의 다른 상태(차단 CLOSED 등)를 건드리지 않는다.
+     */
+    @Modifying
+    @Query("""
+            update ChatRoom r set r.lastPushAtA = :now
+            where r.id = :id and (r.lastPushAtA is null or r.lastPushAtA <= :cutoff)
+            """)
+    int claimPushA(@Param("id") long id, @Param("now") Instant now, @Param("cutoff") Instant cutoff);
+
+    @Modifying
+    @Query("""
+            update ChatRoom r set r.lastPushAtB = :now
+            where r.id = :id and (r.lastPushAtB is null or r.lastPushAtB <= :cutoff)
+            """)
+    int claimPushB(@Param("id") long id, @Param("now") Instant now, @Param("cutoff") Instant cutoff);
+
+    /** 발송이 실패하면 차지한 창을 돌려준다 — 그 사이 다른 발송이 새로 차지했으면({@code at} 불일치) 건드리지 않는다. */
+    @Modifying
+    @Query("update ChatRoom r set r.lastPushAtA = null where r.id = :id and r.lastPushAtA = :at")
+    int releasePushA(@Param("id") long id, @Param("at") Instant at);
+
+    @Modifying
+    @Query("update ChatRoom r set r.lastPushAtB = null where r.id = :id and r.lastPushAtB = :at")
+    int releasePushB(@Param("id") long id, @Param("at") Instant at);
 
     /**
      * 회원 탈퇴 정리 — 메시지를 먼저 지운 뒤 부른다({@link ChatMessageRepository#deleteByRoomMember}).

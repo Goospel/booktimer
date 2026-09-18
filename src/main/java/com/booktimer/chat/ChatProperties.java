@@ -39,6 +39,30 @@ public class ChatProperties {
         this.messageKey = messageKey;
     }
 
+    /** {@code booktimer.chat.moderation.*} — 자리만 있다. */
+    private final Moderation moderation = new Moderation();
+
+    public Moderation getModeration() {
+        return moderation;
+    }
+
+    /**
+     * LLM 메시지 검사 스위치 — <b>미구현, 아무것도 읽지 않는다</b>(설계 §11 Q2 (a) 확정: 스위치 자리만).
+     * 착수 트리거는 월 신고 5건 이상 또는 토스 요구다. 켜려면 처리방침 국외이전 절 개정이 먼저다.
+     */
+    public static class Moderation {
+
+        private boolean enabled;
+
+        public boolean isEnabled() {
+            return enabled;
+        }
+
+        public void setEnabled(boolean enabled) {
+            this.enabled = enabled;
+        }
+    }
+
     public int getPushIntervalMinutes() {
         return pushIntervalMinutes;
     }

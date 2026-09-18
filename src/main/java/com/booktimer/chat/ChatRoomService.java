@@ -5,11 +5,17 @@ import com.booktimer.security.RateLimitAction;
 import com.booktimer.security.RateLimitService;
 import com.booktimer.user.User;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.TransactionDefinition;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
+import org.springframework.transaction.support.TransactionTemplate;
 
 import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
+import java.time.temporal.ChronoUnit;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Objects;
@@ -18,8 +24,10 @@ import java.util.Objects;
  * 맞팔 DM 방·메시지 유스케이스(설계 §5-2).
  *
  * <p><b>자격은 매 경로에서 다시 본다</b>: 방 열기·발송은 {@link ChatEligibility}가 OK가 아니면 거부하고,
- * 목록·조회는 같은 판정으로 {@code writable}·{@code lockReason}을 파생한다. 발송의 재검증은 저장과 <b>같은
- * 트랜잭션 안</b>이다 — 언팔 직후의 발송이 판정과 저장 사이로 새지 않게.
+ * 목록·조회는 같은 판정으로 {@code writable}·{@code lockReason}을 파생한다. 발송의 재검증은 저장과 같은
+ * 트랜잭션에서 저장 <b>직전</b>에 한다 — 캐시된 자격으로 보내는 일은 없다. 다만 잠금 없는 MVCC 읽기라, 판정과
+ * 커밋 사이 수 ms 안에 커밋된 언팔·차단은 그 메시지 한 건을 막지 못한다(다음 발송부터 막힌다). 차단이 닫은 방
+ * 상태는 {@code @DynamicUpdate}와 조건부 UPDATE로 발송이 덮어쓰지 않는다({@link ChatRoom}).
  *
  * <p>멤버가 아닌 사용자의 방 경로는 전부 404다({@link ChatException#notFound()}) — 403이면 그 id의 방이
  * 있다는 사실이 샌다. 자기 방에서 자격이 없는 것은 403이다(존재가 이미 자기에게 알려져 있다).
@@ -35,6 +43,8 @@ public class ChatRoomService {
     private final ChatPushService pushService;
     private final ChatProperties properties;
     private final Clock clock;
+    /** 커밋 뒤(afterCommit)엔 원 트랜잭션이 끝났으니 반납 UPDATE는 새 트랜잭션이어야 한다. */
+    private final TransactionTemplate releaseTx;
 
     public ChatRoomService(ChatRoomRepository roomRepository,
                            ChatMessageRepository messageRepository,
@@ -42,7 +52,10 @@ public class ChatRoomService {
                            RateLimitService rateLimitService,
                            ChatPushService pushService,
                            ChatProperties properties,
-                           Clock clock) {
+                           Clock clock,
+                           PlatformTransactionManager transactionManager) {
+        this.releaseTx = new TransactionTemplate(transactionManager);
+        this.releaseTx.setPropagationBehavior(TransactionDefinition.PROPAGATION_REQUIRES_NEW);
         this.roomRepository = roomRepository;
         this.messageRepository = messageRepository;
         this.eligibility = eligibility;
@@ -188,20 +201,45 @@ public class ChatRoomService {
     }
 
     /**
-     * 방·수신자당 N분에 1통. 성공했을 때만 시각을 남겨, 실패하면 다음 메시지가 다시 시도한다.
+     * 방·수신자당 N분에 1통.
      *
-     * <p>ponytail: 토스 호출(타임아웃 3초)이 발송 트랜잭션 안에서 돈다 — 실패해도 던지지 않아 메시지 저장은
-     * 안전하지만, 느린 토스가 응답을 붙잡는다. 발송량이 늘면 커밋 후 비동기로 뺀다.
+     * <ol>
+     *   <li><b>창 차지</b> — 조건부 UPDATE 한 번({@code claimPushA/B}). 1행이 바뀐 발송만 보낸다 — 동시 발송
+     *       둘이 같은 창을 물어도 한쪽만 1을 받는다. 그 컬럼 하나만 쓰므로 방 상태를 덮지 않는다.</li>
+     *   <li><b>커밋 뒤 발송</b> — 토스 호출(최대 3초)이 트랜잭션 밖이라 방 행 잠금을 붙잡지 않고, 발송이
+     *       롤백되면 푸시도 없다.</li>
+     *   <li><b>실패하면 창 반납</b> — 새 트랜잭션에서 차지한 시각 그대로일 때만 비운다. 다음 메시지가 다시 시도한다.</li>
+     * </ol>
+     *
+     * <p>ponytail: 커밋 뒤라도 요청 스레드에서 동기로 부른다 — 응답이 토스만큼 늦을 수 있다. 발송량이 늘면 비동기로 뺀다.
      */
     private void pushIfDue(ChatRoom room, User recipient, Instant now) {
-        Instant last = room.lastPushAtOf(recipient);
-        Duration interval = Duration.ofMinutes(properties.getPushIntervalMinutes());
-        if (last != null && now.isBefore(last.plus(interval))) {
+        String userKey = recipient.getTossUserKey();
+        if (userKey == null || !pushService.isReady()) {
+            return; // 창을 차지하지도 않는다 — 점등 직후 첫 메시지가 30분 막히지 않게
+        }
+        long roomId = room.getId();
+        boolean a = room.isUserA(recipient);
+        Instant at = now.truncatedTo(ChronoUnit.MICROS); // datetime(6) — 반납 때 값 비교가 맞아야 한다
+        Instant cutoff = at.minus(Duration.ofMinutes(properties.getPushIntervalMinutes()));
+        int claimed = a ? roomRepository.claimPushA(roomId, at, cutoff) : roomRepository.claimPushB(roomId, at, cutoff);
+        if (claimed == 0) {
             return;
         }
-        if (pushService.push(recipient)) {
-            room.markPushed(recipient, now);
-        }
+        TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+            @Override
+            public void afterCommit() {
+                if (!pushService.push(userKey)) {
+                    releaseTx.executeWithoutResult(s -> {
+                        if (a) {
+                            roomRepository.releasePushA(roomId, at);
+                        } else {
+                            roomRepository.releasePushB(roomId, at);
+                        }
+                    });
+                }
+            }
+        });
     }
 
     // ── 응답 모양 ────────────────────────────────────────
