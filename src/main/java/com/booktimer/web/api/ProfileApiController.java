@@ -5,6 +5,8 @@ import com.booktimer.book.BookStatus;
 import com.booktimer.book.CoupangLinkBuilder;
 import com.booktimer.book.KyoboLinkBuilder;
 import com.booktimer.book.Yes24LinkBuilder;
+import com.booktimer.chat.ChatEligibility;
+import com.booktimer.chat.ChatGate;
 import com.booktimer.follow.FollowRepository;
 import com.booktimer.profile.ProfileService;
 import com.booktimer.profile.ProfileTag;
@@ -12,6 +14,7 @@ import com.booktimer.profile.ProfileView;
 import com.booktimer.security.CurrentUserService;
 import com.booktimer.story.StoryRepository;
 import com.booktimer.user.User;
+import com.booktimer.user.UserRepository;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -49,6 +52,9 @@ public class ProfileApiController {
     private final KyoboLinkBuilder kyoboLinkBuilder;
     private final StoryRepository storyRepository;
     private final FollowRepository followRepository;
+    private final UserRepository userRepository;
+    private final ChatEligibility chatEligibility;
+    private final ChatGate chatGate;
 
     public ProfileApiController(ProfileService profileService,
                                 CurrentUserService currentUserService,
@@ -56,7 +62,13 @@ public class ProfileApiController {
                                 Yes24LinkBuilder yes24LinkBuilder,
                                 KyoboLinkBuilder kyoboLinkBuilder,
                                 StoryRepository storyRepository,
-                                FollowRepository followRepository) {
+                                FollowRepository followRepository,
+                                UserRepository userRepository,
+                                ChatEligibility chatEligibility,
+                                ChatGate chatGate) {
+        this.userRepository = userRepository;
+        this.chatEligibility = chatEligibility;
+        this.chatGate = chatGate;
         this.profileService = profileService;
         this.currentUserService = currentUserService;
         this.coupangLinkBuilder = coupangLinkBuilder;
@@ -75,7 +87,24 @@ public class ProfileApiController {
         boolean coupangEnabled = coupangLinkBuilder.isEnabled();
         boolean yes24Enabled = yes24LinkBuilder.isEnabled();
         boolean kyoboEnabled = kyoboLinkBuilder.isEnabled();
-        return ProfileResponse.from(v, recencyOf(v), coupangEnabled, yes24Enabled, kyoboEnabled, mutualOf(v, viewer));
+        return ProfileResponse.from(v, recencyOf(v), coupangEnabled, yes24Enabled, kyoboEnabled, mutualOf(v, viewer),
+                dmAvailable(v, viewer));
+    }
+
+    /**
+     * 미니앱 「메시지」 버튼 — 맞팔 ∧ 차단 없음 ∧ 주인 토스 연결 ∧ 제재 없음({@link ChatEligibility}).
+     * 버튼용 신호일 뿐이고 서버는 방 열기·발송에서 같은 판정을 다시 한다. 웹은 이 값을 무시한다.
+     *
+     * <p>킬스위치가 꺼져 있으면 자격 쿼리를 아예 돌지 않고 false다 — 안 그러면 다크 머지 중에도 버튼이 켜지고
+     * 누르면 404가 나며, 프로필 조회마다 쿼리가 4개 는다.
+     */
+    private boolean dmAvailable(ProfileView v, User viewer) {
+        if (v.self() || !chatGate.isOpen()) {
+            return false;
+        }
+        return userRepository.findByLoginId(v.loginId())
+                .map(owner -> chatEligibility.check(viewer, owner) == ChatEligibility.Verdict.OK)
+                .orElse(false);
     }
 
     /**
@@ -233,12 +262,13 @@ public class ProfileApiController {
             boolean following, boolean self,
             String personality, List<TagChip> personalityTags,
             List<BookSummary> books, boolean coupangEnabled, boolean yes24Enabled, boolean kyoboEnabled,
-            List<UserBrief> mutualFollowers, long mutualFollowerCount, boolean followsMe) {
+            List<UserBrief> mutualFollowers, long mutualFollowerCount, boolean followsMe,
+            boolean dmAvailable) {
 
         /** ⚠️ coupangEnabled·yes24Enabled·kyoboEnabled는 각 빌더의 isEnabled()로 계산해 전달 — 여기서 false 하드코딩 금지. */
         static ProfileResponse from(ProfileView v, Map<Long, Instant> recency,
                                     boolean coupangEnabled, boolean yes24Enabled, boolean kyoboEnabled,
-                                    MutualInfo mutual) {
+                                    MutualInfo mutual, boolean dmAvailable) {
             List<BookSummary> books = v.books().stream()
                     .map(b -> BookSummary.from(b, v.bookTimes(), recency))
                     .toList();
@@ -249,7 +279,7 @@ public class ProfileApiController {
                     v.followerCount(), v.followingCount(),
                     v.following(), v.self(),
                     v.personality(), tags, books, coupangEnabled, yes24Enabled, kyoboEnabled,
-                    mutual.mutualFollowers(), mutual.mutualFollowerCount(), mutual.followsMe());
+                    mutual.mutualFollowers(), mutual.mutualFollowerCount(), mutual.followsMe(), dmAvailable);
         }
     }
 }

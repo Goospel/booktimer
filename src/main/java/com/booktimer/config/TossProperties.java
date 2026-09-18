@@ -74,6 +74,31 @@ public class TossProperties {
         /** 회당 시간 도달 템플릿의 templateSetCode(콘솔 발급). 비어 있으면 발송하지 않는다. */
         private String studyGoalTemplateCode;
 
+        /**
+         * 맞팔 DM 새 메시지 푸시 점등. 스케줄러가 없는 캠페인이라(발송 요청 경로에서 보낸다) 빈 게이트가 아니라
+         * 발송 직전 검사다. 실발송엔 {@link #enabled}와 템플릿 코드도 있어야 한다.
+         */
+        private boolean dmMessageEnabled;
+
+        /** 새 메시지 템플릿의 templateSetCode(콘솔 발급). 비어 있으면 발송하지 않는다. */
+        private String dmMessageTemplateCode;
+
+        public boolean isDmMessageEnabled() {
+            return dmMessageEnabled;
+        }
+
+        public void setDmMessageEnabled(boolean dmMessageEnabled) {
+            this.dmMessageEnabled = dmMessageEnabled;
+        }
+
+        public String getDmMessageTemplateCode() {
+            return dmMessageTemplateCode;
+        }
+
+        public void setDmMessageTemplateCode(String dmMessageTemplateCode) {
+            this.dmMessageTemplateCode = dmMessageTemplateCode;
+        }
+
         public boolean isStudyGoalEnabled() {
             return studyGoalEnabled;
         }

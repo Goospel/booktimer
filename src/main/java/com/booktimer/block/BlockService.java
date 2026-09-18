@@ -1,5 +1,6 @@
 package com.booktimer.block;
 
+import com.booktimer.chat.ChatRoomService;
 import com.booktimer.follow.FollowRepository;
 import com.booktimer.search.UserRowAssembler;
 import com.booktimer.search.UserSearchResult;
@@ -23,13 +24,16 @@ public class BlockService {
     private final BlockRepository blockRepository;
     private final FollowRepository followRepository;
     private final UserRowAssembler rowAssembler;
+    private final ChatRoomService chatRoomService;
 
     public BlockService(BlockRepository blockRepository,
                         FollowRepository followRepository,
-                        UserRowAssembler rowAssembler) {
+                        UserRowAssembler rowAssembler,
+                        ChatRoomService chatRoomService) {
         this.blockRepository = blockRepository;
         this.followRepository = followRepository;
         this.rowAssembler = rowAssembler;
+        this.chatRoomService = chatRoomService;
     }
 
     /**
@@ -46,6 +50,7 @@ public class BlockService {
         followRepository.deleteByFollowerAndFollowee(blocker, blocked);
         followRepository.deleteByFollowerAndFollowee(blocked, blocker);
         blockRepository.save(block);
+        chatRoomService.closeByBlock(blocker, blocked); // 둘의 DM 방을 닫는다(같은 트랜잭션, 설계 §4-1)
     }
 
     /** blocker가 blocked 차단을 해제한다. 관계가 없어도 무방(멱등). */

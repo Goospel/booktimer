@@ -893,6 +893,22 @@ class ProfileApiControllerTest {
     }
 
     @Test
+    @DisplayName("킬스위치 OFF(기본)면 맞팔·토스 연결이어도 dmAvailable=false — 켜진 쪽 양성 대조군은 ChatApiControllerTest")
+    void profile_dmAvailable_falseWhileChatSwitchedOff() throws Exception {
+        User viewer = register("dm-true-v@booktimer.com", "dmtruev", "열람자");
+        User owner = register("dm-true-o@booktimer.com", "dmtrueo", "주인");
+        owner.linkTossUserKey("uk-dm-true-o");
+        userRepository.save(owner);
+        followRepository.save(Follow.of(viewer, owner));
+        followRepository.save(Follow.of(owner, viewer));
+
+        mockMvc.perform(get("/api/profile").param("loginId", "dmtrueo")
+                        .with(user("dm-true-v@booktimer.com")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.dmAvailable").value(false));
+    }
+
+    @Test
     @DisplayName("내가 주인을 팔로우할 뿐이면 followsMe=false — following과 방향이 다르다")
     void profile_followsMe_falseWhenOnlyIFollow() throws Exception {
         User viewer = register("fm-false-v@booktimer.com", "fmfalsev", "열람자");
