@@ -19,6 +19,14 @@ import {
   deleteStory,
   fetchBlocks,
   fetchBookMargin,
+  fetchChatMe,
+  fetchChatMessages,
+  fetchChatRooms,
+  hideChatRoom,
+  markChatRead,
+  openChatRoom,
+  reportChatRoom,
+  sendChatMessage,
   fetchDashboard,
   fetchPublicNews,
   fetchFollowList,
@@ -1041,5 +1049,75 @@ describe('웹 로그인 코드 발급', () => {
 
     expect(error.status).toBe(409);
     expect(error.message).toBe('토스 앱에 연결되지 않은 계정입니다');
+  });
+});
+
+describe('맞팔 DM API (ChatApiController)', () => {
+  it('각 경로·메서드·본문이 서버 계약과 같다', async () => {
+    token.set('tok');
+    vi.mocked(globalThis.fetch).mockResolvedValue(response(200, '{}') as never);
+
+    await fetchChatRooms();
+    expect(lastRequest()[0]).toMatch(/\/api\/chat\/rooms$/);
+    expect(lastRequest()[1].method).toBe('GET');
+
+    await fetchChatMessages(7, 0);
+    expect(lastRequest()[0]).toMatch(/\/api\/chat\/rooms\/7\/messages\?after=0$/);
+
+    await openChatRoom('nabi');
+    expect(lastRequest()[0]).toMatch(/\/api\/chat\/rooms$/);
+    expect(lastRequest()[1].method).toBe('POST');
+    expect(JSON.parse(lastRequest()[1].body as string)).toEqual({ loginId: 'nabi' });
+
+    await sendChatMessage(7, '안녕');
+    expect(lastRequest()[0]).toMatch(/\/api\/chat\/rooms\/7\/messages$/);
+    expect(JSON.parse(lastRequest()[1].body as string)).toEqual({ body: '안녕' });
+
+    await markChatRead(7, 42);
+    expect(lastRequest()[0]).toMatch(/\/api\/chat\/rooms\/7\/read$/);
+    expect(JSON.parse(lastRequest()[1].body as string)).toEqual({ lastMessageId: 42 });
+
+    // 본문이 없으면 request()가 GET으로 보낸다 — 숨김은 반드시 POST여야 한다(서버 @PostMapping).
+    await hideChatRoom(7);
+    expect(lastRequest()[0]).toMatch(/\/api\/chat\/rooms\/7\/hide$/);
+    expect(lastRequest()[1].method).toBe('POST');
+
+    await reportChatRoom(7, 'SPAM', '광고');
+    expect(lastRequest()[0]).toMatch(/\/api\/chat\/rooms\/7\/report$/);
+    expect(JSON.parse(lastRequest()[1].body as string)).toEqual({ reason: 'SPAM', detail: '광고' });
+  });
+
+  it('킬스위치 OFF(404)는 ApiError로 던진다 — 화면은 이걸 「대화 없음」으로 접는다', async () => {
+    token.set('tok');
+    vi.mocked(globalThis.fetch).mockResolvedValue(response(404, '') as never);
+
+    await expect(fetchChatMe()).rejects.toMatchObject({ status: 404 });
+  });
+
+  /** 홈 첫 화면에서 나가는 요청이라 상한을 둔다(T-252). 대조군: 4999ms엔 아직 안 끊겼다. */
+  it('미읽음 조회는 5초 안에 답이 없으면 NetworkError로 끊는다', async () => {
+    vi.useFakeTimers();
+    try {
+      token.set('tok');
+      vi.mocked(globalThis.fetch).mockImplementation(
+        (_url, init) =>
+          new Promise((_, reject) => {
+            init?.signal?.addEventListener('abort', () => reject(new DOMException('aborted', 'AbortError')));
+          }) as never,
+      );
+      let settled: unknown = 'pending';
+      const pending = fetchChatMe().catch((e: unknown) => {
+        settled = e;
+      });
+
+      await vi.advanceTimersByTimeAsync(4_999);
+      expect(settled).toBe('pending');
+
+      await vi.advanceTimersByTimeAsync(1);
+      await pending;
+      expect(settled).toBeInstanceOf(NetworkError);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });

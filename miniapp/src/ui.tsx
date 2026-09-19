@@ -680,6 +680,28 @@ function SearchGlass({ dim }: { dim: boolean }) {
   );
 }
 
+/** 미읽음 수 알약 — 대화함 진입(책방 헤더)과 대화함 행이 같은 모양을 쓴다. 0이면 아무것도 안 그린다. */
+export function UnreadBadge({ count }: { count: number }) {
+  if (count <= 0) return null;
+  return (
+    <span
+      aria-label={`읽지 않은 메시지 ${count}개`}
+      style={{
+        minWidth: 18,
+        padding: '1px 6px',
+        borderRadius: 999,
+        background: 'var(--adaptiveBlue500, #6E8A6A)',
+        color: '#FFFDF8',
+        fontSize: 12,
+        lineHeight: '16px',
+        textAlign: 'center',
+      }}
+    >
+      {count}
+    </span>
+  );
+}
+
 export function Loading({ message = '불러오는 중…' }: { message?: string }) {
   return (
     <main style={{ padding: 40, textAlign: 'center' }}>

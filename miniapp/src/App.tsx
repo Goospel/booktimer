@@ -2,8 +2,8 @@ import { Button } from '@toss/tds-mobile';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
 
-import type { BookOption, DashboardResponse, MarginBook, StudyState, TimerState } from './api';
-import { IDLE_STUDY, changeActiveBook, changeActiveStudyBook, fetchDashboard, setStudySessionGoal, startSession, startStudy, stopSession, stopStudy, tagBook, tagStudyBook, token } from './api';
+import type { BookOption, ChatMe, ChatPartner, DashboardResponse, MarginBook, StudyState, TimerState } from './api';
+import { IDLE_STUDY, changeActiveBook, changeActiveStudyBook, fetchChatMe, fetchDashboard, setStudySessionGoal, startSession, startStudy, stopSession, stopStudy, tagBook, tagStudyBook, token } from './api';
 import { nativeBack, useBackClose } from './back';
 import {
   CoachmarkBubble,
@@ -14,8 +14,10 @@ import {
 } from './coachmark';
 import { elapsedSeconds } from './format';
 import { Bookshop } from './screens/Bookshop';
+import type { ChatEntry } from './screens/Bookshop';
+import { ChatInbox, ChatRoomScreen, initialChat } from './screens/Chat';
 import { Goal } from './screens/Goal';
-import { GuestShell } from './screens/GuestHome';
+import { GuestShell, whenPageLoaded } from './screens/GuestHome';
 import type { LoginSource } from './screens/GuestHome';
 import { History } from './screens/History';
 import { BookSheet, Home, defaultBookId } from './screens/Home';
@@ -455,7 +457,18 @@ type View =
   /** 독서 목표 화면. (공부 하루 목표 화면은 2026-09-13 책별 「회당 시간」 시트로 대체돼 걷었다.) */
   | 'goal'
   | 'settings'
+  /** 맞팔 DM — 대화함(방이 열리면 그 위에 방). `GET /api/chat/me`가 성공했을 때만 들어올 수 있다. */
+  | 'chat'
   | 'error';
+
+/**
+ * 열린 대화방 — `direct`면 대화함을 거치지 않고(남의 책방 「메시지」) 열린 것이라, 닫으면 출발한 화면으로 곧장 돌아간다.
+ */
+export interface ChatRoomState {
+  roomId: number;
+  partner: ChatPartner;
+  direct: boolean;
+}
 
 /**
  * 열린 여백 — 「누구의 + 어느 책」 두 축이 곧 서버 계약이고, `composeBook`이 있으면 그 책의 **작성
@@ -540,6 +553,7 @@ export type ScreenName =
   | 'error'
   | 'goal'
   | 'settings'
+  | 'chat'
   | 'margin'
   | 'book_margin'
   | 'profile'
@@ -602,6 +616,8 @@ export function currentScreen(s: {
       return s.loaded ? 'goal' : null;
     case 'settings':
       return s.loaded ? 'settings' : null;
+    case 'chat':
+      return s.loaded ? 'chat' : null;
     case 'main':
       break; // 아래 탭 판정으로 내려간다
     default: {
@@ -720,6 +736,14 @@ export function App() {
    * 먼저 서야 하므로 게스트는 홈 고정이다. 로그인 뒤 착지 탭은 종전대로 `tab`(=`initialTab`)이 든다.
    */
   const [guestTab, setGuestTab] = useState<TabKey>('home');
+  /**
+   * 대화 기능 상태 — `null`이면 <b>대화가 없다</b>(킬스위치 OFF 404·실패·아직 안 받음). 이 한 칸이 진입점 셋
+   * (책방 대화함·홈 미읽음 카드·남의 책방 「메시지」)을 한꺼번에 켜고 끈다.
+   */
+  const [chatMe, setChatMe] = useState<ChatMe | null>(null);
+  const [chatRoom, setChatRoom] = useState<ChatRoomState | null>(null);
+  /** 푸시 딥링크(`?chat=inbox`) — `chatMe`가 성공해야 착지한다. 실패하면 조용히 버린다(기본 화면 그대로). */
+  const chatLink = useRef(initialChat(typeof window === 'undefined' ? '' : window.location.search));
 
   const toLogin = useCallback(() => {
     token.clear();
@@ -808,6 +832,40 @@ export function App() {
     return () => document.removeEventListener('visibilitychange', onVisible);
   }, [silentRefresh]);
 
+  /**
+   * 대화 가용·미읽음 — 실패는 전부 「대화 없음」으로 접는다(404 킬스위치·타임아웃·서버 오류). 401만 로그인으로.
+   * 첫 화면 요청이라 상한 5초(`CHAT_ME_TIMEOUT_MS`)에 페이지 로드 뒤로 민다(T-252, 게스트 뉴스와 같은 이유).
+   */
+  const loadChatMe = useCallback(() => {
+    fetchChatMe()
+      .then((me) => {
+        setChatMe(me);
+        if (chatLink.current === 'inbox') setView('chat');
+      })
+      .catch((e: Error) => {
+        if (e.name === 'UnauthorizedError') toLogin();
+        else setChatMe(null);
+      })
+      .finally(() => {
+        chatLink.current = null; // 딥링크는 진입 시점의 사실 — 한 번만 착지한다
+      });
+  }, [toLogin]);
+
+  const loaded = dashboard !== null;
+  useEffect(() => {
+    if (!loaded) return;
+    // 앱으로 돌아올 때도 다시 받는다 — 밖에 있는 동안 온 메시지가 홈 카드·책방 배지에 서야 한다.
+    const onVisible = () => {
+      if (document.visibilityState === 'visible') loadChatMe();
+    };
+    document.addEventListener('visibilitychange', onVisible);
+    const cancel = whenPageLoaded(document, window, loadChatMe);
+    return () => {
+      cancel();
+      document.removeEventListener('visibilitychange', onVisible);
+    };
+  }, [loaded, loadChatMe]);
+
   /*
    * 토스 「<」를 앱이 받는다 — 구독하면 기본 동작(어느 화면에서든 미니앱 종료)이 차단되고 `nativeBack`이
    * 「서브뷰 하나 닫기 / 첫 화면이면 앱 닫기」를 정한다. **앱에 하나뿐이어야 한다**: 리스너가 여럿이면
@@ -829,6 +887,17 @@ export function App() {
     setView('main');
   });
   useBackClose(view === 'settings', () => setView('main'));
+  // 대화 — 방이 위면 방만 닫고 대화함으로. 책방 「메시지」로 곧장 연 방은 출발한 화면으로 돌아간다.
+  // 나올 때 미읽음을 다시 받는다(홈 카드·책방 배지가 방금 읽은 것을 계속 세지 않게).
+  const closeChat = () => {
+    setChatRoom(null);
+    setView('main');
+    loadChatMe();
+  };
+  useBackClose(view === 'chat' && chatRoom !== null, () =>
+    chatRoom?.direct === true ? closeChat() : setChatRoom(null),
+  );
+  useBackClose(view === 'chat' && chatRoom === null, closeChat);
   // 작성 화면이 위면 그것만 닫는다 — 단 밑에 깔린 여백 화면이 없으면 통째로 닫아 출발한 탭으로 돌아간다.
   useBackClose(margin?.composeBook != null, () => setMargin((m) => (m === null ? null : closeCompose(m))));
   useBackClose(margin !== null && margin.composeBook === null, () => setMargin(null));
@@ -977,6 +1046,42 @@ export function App() {
       />
     );
   }
+
+  if (view === 'chat') {
+    return chatRoom === null ? (
+      <ChatInbox
+        me={chatMe}
+        onOpenRoom={(roomId, partner) => setChatRoom({ roomId, partner, direct: false })}
+        onError={handleError}
+      />
+    ) : (
+      <ChatRoomScreen
+        // 방을 바꾸면 새로 마운트한다 — 커서·메시지가 다른 방으로 새지 않게.
+        key={chatRoom.roomId}
+        roomId={chatRoom.roomId}
+        partner={chatRoom.partner}
+        // 나가기·차단 뒤엔 이 방이 대화함에서 사라진다 — 대화함으로(곧장 연 방이면 출발한 화면으로).
+        onLeft={() => (chatRoom.direct ? closeChat() : setChatRoom(null))}
+        onError={handleError}
+      />
+    );
+  }
+
+  /**
+   * 대화 진입 — 대화가 켜져 있을 때만 값이 있다(`chatMe`). `undefined`면 진입점이 통째로 사라진다.
+   * 방은 남의 책방 「메시지」로 곧장 열리고(`direct`), 대화함은 책방 헤더·홈 카드로 열린다.
+   */
+  const chatEntry =
+    chatMe === null
+      ? undefined
+      : {
+          unread: chatMe.unreadRooms,
+          onOpenInbox: () => setView('chat'),
+          onOpenRoom: (roomId: number, partner: ChatPartner) => {
+            setChatRoom({ roomId, partner, direct: true });
+            setView('chat');
+          },
+        };
 
   /**
    * 측정 시작 — 문이 둘이라(탭바 원 · 여백 탭바) 구현을 여기 한 자리에 둔다.
@@ -1201,6 +1306,7 @@ export function App() {
         onBack={() => setShop(null)}
         onOpenMargin={(bookId) => openMargin({ loginId: shop, bookId, isbn13: null, composeBook: null })}
         onError={handleError}
+        onOpenChat={chatEntry?.onOpenRoom}
       />
     );
   }
@@ -1243,6 +1349,7 @@ export function App() {
       onError={handleError}
       onShelfChanged={() => silentRefresh(true)}
       onHandleCreated={() => silentRefresh(true)}
+      chat={chatEntry}
     />,
   );
 }
@@ -1314,6 +1421,7 @@ export function MainTabs({
   onError,
   onShelfChanged,
   onHandleCreated,
+  chat,
 }: {
   tab: TabKey;
   onTabChange: (tab: TabKey) => void;
@@ -1358,6 +1466,8 @@ export function MainTabs({
   onShelfChanged: () => void;
   /** 책방에서 핸들(@아이디)을 만들면 대시보드의 loginId가 바뀐다 — 다시 받아야 다른 화면도 같은 값을 본다. */
   onHandleCreated: () => void;
+  /** 대화 진입점 — 대화가 꺼져 있으면 없다(홈 카드·책방 대화함·남의 책방 「메시지」가 함께 사라진다). */
+  chat?: ChatEntry;
 }) {
   /** 액션 처리 중 — 연타로 세션이 두 번 시작·종료되지 않게 원을 흐리고 핸들러를 잠근다. */
   const [busy, setBusy] = useState(false);
@@ -1741,6 +1851,8 @@ export function MainTabs({
                 setActionError(null);
               })
             }
+            chatUnread={chat?.unread}
+            onOpenChat={chat?.onOpenInbox}
           />
         )}
         {/* 서재 탭은 두 모드 공통이지만 화면은 갈린다 — 공부 책과 독서 책이 섞이지 않는 것이 요구 그 자체다. */}
@@ -1762,6 +1874,7 @@ export function MainTabs({
             myLoginId={dashboard.loginId}
             onHandleCreated={onHandleCreated}
             onError={onError}
+            chat={chat}
           />
         )}
         {/* 달력은 공부 탭바로만 도달한다 — 도달 경로가 곧 게이트라 여기서 모드를 다시 안 따진다. */}

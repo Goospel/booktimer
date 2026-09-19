@@ -1,6 +1,9 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import type {
+  ChatMe,
+  ChatMessages,
+  ChatRoomSummary,
   DashboardResponse,
   HomeFeedResponse,
   MarginEntry,
@@ -10,6 +13,7 @@ import type {
   PersonalityMutation,
   PersonalityStatus,
   ProfileBook,
+  ProfileResponse,
   PublicNewsResponse,
   ShelfResponse,
   StopResponse,
@@ -425,5 +429,67 @@ describe('dev-mock 웹 로그인 코드', () => {
 
     expect(data.code).toMatch(/^[23456789ABCDEFGHJKMNPQRSTUVWXYZ]{8}$/);
     expect(data.expiresInSeconds).toBe(300);
+  });
+});
+
+/**
+ * 맞팔 DM 목 — 브라우저로 대화함·방·잠김·「메시지」 버튼 세 갈래를 다 밟을 수 있어야 한다.
+ */
+describe('dev-mock 맞팔 DM', () => {
+  it('책방 dmAvailable은 사람마다 갈린다 — 맞팔 아님 / 맞팔+가능 / 맞팔+웹 전용', async () => {
+    const nabi = await mockRequest<ProfileResponse>('/api/profile', { query: { loginId: 'nabi' } });
+    const jieun = await mockRequest<ProfileResponse>('/api/profile', { query: { loginId: 'jieun' } });
+    const underline = await mockRequest<ProfileResponse>('/api/profile', { query: { loginId: 'underline' } });
+
+    expect([nabi.following, nabi.followsMe, nabi.dmAvailable]).toEqual([true, true, true]);
+    expect([jieun.following, jieun.followsMe, jieun.dmAvailable]).toEqual([true, true, false]);
+    expect(underline.following && underline.followsMe).toBe(false);
+    expect(underline.dmAvailable).toBe(false);
+  });
+
+  it('대화함은 열림·잠김 두 방으로 시작하고, 숨긴 방은 세 번째 조회에 상대 메시지로 돌아온다', async () => {
+    const first = await mockRequest<ChatRoomSummary[]>('/api/chat/rooms', {});
+    expect(first).toHaveLength(2);
+    expect(first.some((r) => r.writable)).toBe(true);
+    expect(first.some((r) => !r.writable && r.lockReason === 'NOT_MUTUAL')).toBe(true);
+
+    await mockRequest('/api/chat/rooms', {});
+    const third = await mockRequest<ChatRoomSummary[]>('/api/chat/rooms', {});
+    expect(third).toHaveLength(3);
+  });
+
+  it('미읽음 방 수를 주고, 읽으면 줄어든다', async () => {
+    const before = await mockRequest<ChatMe>('/api/chat/me', {});
+    expect(before.unreadRooms).toBeGreaterThan(0);
+
+    const rooms = await mockRequest<ChatRoomSummary[]>('/api/chat/rooms', {});
+    for (const r of rooms) await mockRequest(`/api/chat/rooms/${r.roomId}/read`, { body: { lastMessageId: r.lastMessageId } });
+
+    const after = await mockRequest<ChatMe>('/api/chat/me', {});
+    expect(after.unreadRooms).toBe(0);
+  });
+
+  it('messages?after는 그 뒤만 주고, 세 번째 폴링마다 상대 답장이 하나 붙는다', async () => {
+    const all = await mockRequest<ChatMessages>('/api/chat/rooms/1/messages', { query: { after: 0 } });
+    expect(all.messages.length).toBeGreaterThan(0);
+    const last = all.messages.at(-1)!.id;
+
+    const second = await mockRequest<ChatMessages>('/api/chat/rooms/1/messages', { query: { after: last } });
+    expect(second.messages).toEqual([]);
+    const third = await mockRequest<ChatMessages>('/api/chat/rooms/1/messages', { query: { after: last } });
+    expect(third.messages).toHaveLength(1);
+    expect(third.messages[0].mine).toBe(false);
+  });
+
+  it('보낸 메시지는 다음 조회에 내 것으로 온다', async () => {
+    const { id } = await mockRequest<{ id: number }>('/api/chat/rooms/1/messages', { body: { body: '반가워요' } });
+    const page = await mockRequest<ChatMessages>('/api/chat/rooms/1/messages', { query: { after: id - 1 } });
+    expect(page.messages.find((m) => m.id === id)).toMatchObject({ mine: true, body: '반가워요' });
+  });
+
+  it('잠긴 방에 보내면 서버처럼 403이다', async () => {
+    await expect(mockRequest('/api/chat/rooms/2/messages', { body: { body: '안녕' } })).rejects.toMatchObject({
+      status: 403,
+    });
   });
 });

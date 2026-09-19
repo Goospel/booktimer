@@ -100,6 +100,12 @@ export const GOAL_MET_TEMPLATE_CODE = 'booktimer-daily-goal-met';
  */
 export const STUDY_GOAL_TEMPLATE_CODE = 'booktimer-study-goal-met';
 
+/**
+ * 맞팔 DM 새 메시지 푸시의 발송 코드 — 세 번째 동의문(「대화 알림 동의문」)에 묶인다. 독서·공부 동의문과 맥락이 달라
+ * 따로 묻는다(콘솔 AI 검수가 맥락 불일치를 거부한 선례, 위 공부 코드). 콘솔 등록 문구는 `claude-docs/chat-dm-policy.md`.
+ */
+export const DM_TEMPLATE_CODE = 'booktimer-dm-message';
+
 /** 동의 화면의 세 가지 결말 — 동의 상태의 정본은 토스이고, 우리는 이 값만 캐시해 카드 노출을 끈다. */
 export type AgreementResult = 'newAgreement' | 'alreadyAgreed' | 'agreementRejected';
 

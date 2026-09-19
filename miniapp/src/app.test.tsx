@@ -1583,3 +1583,25 @@ describe('탭바 위계 (시안 4c)', () => {
     expect(cell).not.toContain('110,138,106');
   });
 });
+
+describe('대화 화면 이름', () => {
+  const base = {
+    view: 'chat' as const,
+    loaded: true,
+    margin: null,
+    shop: null,
+    tab: 'home' as const,
+    mode: 'reading' as const,
+    loginSource: null,
+    guestTab: 'home' as const,
+  };
+
+  it('대화 뷰는 chat — 남의 책방이 뒤에 깔려 있어도 위에 선 것은 대화다', () => {
+    expect(currentScreen(base)).toBe('chat');
+    expect(currentScreen({ ...base, shop: 'nabi' })).toBe('chat');
+  });
+
+  it('대시보드 전엔 과도 상태(null)', () => {
+    expect(currentScreen({ ...base, loaded: false })).toBeNull();
+  });
+});

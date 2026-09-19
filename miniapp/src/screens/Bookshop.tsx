@@ -1,7 +1,7 @@
 import { Button, TextField } from '@toss/tds-mobile';
 import { useCallback, useEffect, useState } from 'react';
 
-import type { FollowListType, MarginBook, UserRow } from '../api';
+import type { ChatPartner, FollowListType, MarginBook, UserRow } from '../api';
 import {
   changeHandle,
   createHandle,
@@ -11,10 +11,17 @@ import {
   validateHandleFormat,
 } from '../api';
 import { useBackClose } from '../back';
-import { ErrorMessage, Loading, PENCIL_FRAME, Screen, Sheet, Text, UserList } from '../ui';
+import { ErrorMessage, Loading, PENCIL_FRAME, Screen, Sheet, Text, UnreadBadge, UserList } from '../ui';
 import { Explore } from './Explore';
 import { Profile } from './Profile';
 import { BookMargin, StoryComposer } from './Story';
+
+/** 대화 진입점 묶음 — App이 `GET /api/chat/me` 성공일 때만 만든다(없으면 진입점이 전부 없다). */
+export interface ChatEntry {
+  unread: number;
+  onOpenInbox: () => void;
+  onOpenRoom: (roomId: number, partner: ChatPartner) => void;
+}
 
 /** 열린 여백 — 「누구의 + 어느 책」 두 축이 곧 서버 계약이다(홈 소식 점프도 이 모양으로 온다). */
 export interface MarginTarget {
@@ -41,11 +48,17 @@ export function Bookshop({
   myLoginId,
   onHandleCreated,
   onError,
+  chat,
 }: {
   myLoginId: string | null;
   /** 핸들을 만들면 대시보드를 다시 받아야 한다 — 서버가 준 값이 진실이고, 다른 탭도 그 값을 본다. */
   onHandleCreated: () => void;
   onError: (error: Error) => void;
+  /**
+   * 대화 — <b>켜져 있을 때만</b> 온다(App이 `GET /api/chat/me` 성공으로 판정). 없으면 헤더의 대화함도, 남의 책방의
+   * 「메시지」도 없다. 화면 전이는 App이 든다(대화는 탭 밖 전체 화면이다).
+   */
+  chat?: ChatEntry;
 }) {
   // 서버가 준 정규화 핸들을 즉시 반영해 이 탭을 그 자리에서 내 책방으로 바꾼다(대시보드 재조회를 안 기다린다).
   const [handle, setHandle] = useState(myLoginId);
@@ -153,6 +166,7 @@ export function Bookshop({
         onBack={() => setOpen(null)}
         onError={onError}
         onOpenMargin={(bookId) => setMargin({ loginId: open, bookId })}
+        onOpenChat={chat?.onOpenRoom}
       />
     );
   }
@@ -191,7 +205,12 @@ export function Bookshop({
   }
 
   // 검색은 화면 제목보다 위에 얹힌다 — 책방을 그리는 건 Profile이라 `above` 슬롯으로 건넨다.
-  const header = <BookshopHeader onSearch={() => setSearchOpen(true)} />;
+  const header = (
+    <BookshopHeader
+      onSearch={() => setSearchOpen(true)}
+      inbox={chat === undefined ? undefined : { unread: chat.unread, onOpen: chat.onOpenInbox }}
+    />
+  );
 
   return (
     <>
@@ -276,8 +295,15 @@ const SEARCH_BAR_HEIGHT = 44;
  * <p>셸의 지역 변수가 아니라 컴포넌트로 남긴 것은 계측 때문이다 — 상단 도구의 유무·모양을 셸의 네 분기
  * (핸들 유무 × 로딩)와 무관하게 한 곳에서 잰다. 남의 책방은 이걸 아예 안 받는다(셸이 안 넘긴다).
  */
-export function BookshopHeader({ onSearch }: { onSearch: () => void }) {
-  return (
+export function BookshopHeader({
+  onSearch,
+  inbox,
+}: {
+  onSearch: () => void;
+  /** 대화함 진입 — 대화가 꺼져 있으면 없다(그 자리엔 검색바만 전폭으로 선다). */
+  inbox?: { unread: number; onOpen: () => void };
+}) {
+  const search = (
     <button
       type="button"
       aria-label="아이디로 친구 찾기"
@@ -302,6 +328,37 @@ export function BookshopHeader({ onSearch }: { onSearch: () => void }) {
     >
       아이디로 친구 찾기
     </button>
+  );
+  if (inbox === undefined) return search;
+  // 대화함은 검색바 옆 글자 버튼이다 — 아이콘 세트를 따로 그리지 않는다(이모지 금지 규칙과 같은 이유).
+  return (
+    <div style={{ display: 'flex', gap: 8 }}>
+      {search}
+      <button
+        type="button"
+        aria-label="대화함"
+        onClick={inbox.onOpen}
+        style={{
+          flex: '0 0 auto',
+          display: 'flex',
+          alignItems: 'center',
+          gap: 6,
+          height: SEARCH_BAR_HEIGHT,
+          marginBottom: 16,
+          padding: '0 14px',
+          borderRadius: 10,
+          background: 'var(--adaptiveGrey100, #FCFAF5)',
+          border: '1px solid transparent',
+          borderImage: PENCIL_FRAME,
+          color: 'var(--adaptiveGrey700, #57534A)',
+          fontSize: 15,
+          cursor: 'pointer',
+        }}
+      >
+        대화
+        <UnreadBadge count={inbox.unread} />
+      </button>
+    </div>
   );
 }
 
