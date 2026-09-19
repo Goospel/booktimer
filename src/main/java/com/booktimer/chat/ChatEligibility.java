@@ -45,8 +45,10 @@ public class ChatEligibility {
                 || !followRepository.existsByFollowerAndFollowee(other, me)) {
             return Verdict.NOT_MUTUAL;
         }
-        if (other.getTossUserKey() == null) {
-            return Verdict.UNREACHABLE; // 웹 전용 상대 — 웹 UI가 없어 읽을 수 없는 편지함이 된다(§11 Q1)
+        if (other.getTossUserKey() == null || me.getTossUserKey() == null) {
+            // 웹 전용 계정 — 대화 UI가 미니앱에만 있어, 어느 쪽이든 읽을 수 없는 편지함이 생긴다(§11 Q1).
+            // 보내는 쪽까지 보는 대칭은 PR-1 리뷰 사소 2(같은 원칙의 반대 방향).
+            return Verdict.UNREACHABLE;
         }
         if (me.isChatRestricted(clock.instant()) || other.isChatRestricted(clock.instant())) {
             return Verdict.RESTRICTED;

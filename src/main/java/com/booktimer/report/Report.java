@@ -49,6 +49,20 @@ public class Report extends BaseTimeEntity {
     @Column(length = 500)
     private String detail;
 
+    /** 대화방 신고의 방(V96, FK chat_room). 방 엔티티가 아니라 id로 둔다 — 신고 목록이 방을 로딩할 이유가 없다. */
+    @Column(name = "chat_room_id")
+    private Long chatRoomId;
+
+    @Enumerated(EnumType.STRING)
+    @Column(nullable = false, length = 12)
+    private ReportStatus status = ReportStatus.OPEN;
+
+    @Column(length = 16)
+    private String resolution;
+
+    @Column(name = "legal_hold", nullable = false)
+    private boolean legalHold;
+
     protected Report() {
         // JPA
     }
@@ -100,5 +114,51 @@ public class Report extends BaseTimeEntity {
 
     public String getDetail() {
         return detail;
+    }
+
+    /** 대화방에서 한 신고면 그 방 id(V96). 운영자 대본 열람의 유일한 열쇠다 — 없으면 대본을 못 연다. */
+    public Long getChatRoomId() {
+        return chatRoomId;
+    }
+
+    public ReportStatus getStatus() {
+        return status;
+    }
+
+    public boolean isLegalHold() {
+        return legalHold;
+    }
+
+    /** 처리 때 고른 조치(NONE·WARN·SUSPEND_7D·BAN). 미처리면 {@code null}. */
+    public String getResolution() {
+        return resolution;
+    }
+
+    /**
+     * 대화방을 붙인다. 쌍당 1건이라 같은 두 사람의 신고는 늘 같은 방을 가리킨다(방도 쌍당 1개).
+     * 처리 끝난 신고를 다시 하면 미처리로 되돌린다 — 새 행을 만들 수 없는 구조라 재신고는 재개로 표현한다.
+     */
+    public void attachChatRoom(Long roomId) {
+        this.chatRoomId = roomId;
+    }
+
+    /** 처리 완료로 닫고 조치를 기록한다. */
+    public void resolve(String resolution) {
+        this.status = ReportStatus.RESOLVED;
+        this.resolution = resolution;
+    }
+
+    /** 같은 신고자가 다시 신고했다 — 미처리로 되돌린다(이전 조치 기록은 새 처리 때 덮인다). */
+    public void reopen() {
+        this.status = ReportStatus.OPEN;
+    }
+
+    public void setLegalHold(boolean hold) {
+        this.legalHold = hold;
+    }
+
+    /** 보존 삭제로 방이 사라질 때 — 처리 끝난 신고는 기록으로 남고 가리키던 방만 풀린다. */
+    public void detachChatRoom() {
+        this.chatRoomId = null;
     }
 }

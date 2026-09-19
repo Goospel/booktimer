@@ -24,7 +24,8 @@ public class AdminReportController {
     }
 
     @GetMapping("/admin/reports")
-    public String list(Model model) {
+    public String list(jakarta.servlet.http.HttpServletRequest request, Model model) {
+        CsrfTokenUtil.precommit(request); // 신고마다 폼이 있어 목록이 길면 응답이 먼저 커밋된다(T-033·T-049)
         model.addAttribute("reportList", reportService.reportRows());
         return "admin-reports";
     }

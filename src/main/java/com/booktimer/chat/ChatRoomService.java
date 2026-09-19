@@ -36,6 +36,8 @@ import java.util.Objects;
 @Transactional
 public class ChatRoomService {
 
+    private static final org.slf4j.Logger log = org.slf4j.LoggerFactory.getLogger(ChatRoomService.class);
+
     private final ChatRoomRepository roomRepository;
     private final ChatMessageRepository messageRepository;
     private final ChatEligibility eligibility;
@@ -83,7 +85,9 @@ public class ChatRoomService {
             return roomRepository.saveAndFlush(probe);
         }
         if (!room.isOpen()) {
-            room.reopen();
+            // 열기만으로 옛 대화가 양쪽 대화함에 되살아나지 않게 숨긴 채 연다 — 첫 새 메시지의 unhide가 보이게 한다
+            // (설계 §4-1 「첫 메시지가 같은 행을 되살린다」, 리뷰 사소 5).
+            room.reopenHidden();
         }
         return room;
     }
@@ -191,6 +195,11 @@ public class ChatRoomService {
         ChatMessage last = messageRepository.findTopByRoomOrderByIdDesc(room).orElse(null);
         if (last == null) {
             return null; // 빈 방은 목록에 없다
+        }
+        if (last.getBody() == null) {
+            // 컨버터가 이 행을 복호화하지 못했다(변조·키 불일치). 이 방만 빼고 나머지 대화함은 살린다(리뷰 사소 4).
+            log.error("대화방 {}의 마지막 메시지 {}를 복호화하지 못해 대화함에서 뺐다", room.getId(), last.getId());
+            return null;
         }
         User partner = room.partnerOf(me);
         String lock = lockReason(me, room);

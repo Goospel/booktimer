@@ -83,6 +83,31 @@ public class TossProperties {
         /** 새 메시지 템플릿의 templateSetCode(콘솔 발급). 비어 있으면 발송하지 않는다. */
         private String dmMessageTemplateCode;
 
+        /**
+         * 대화방 신고 → 운영자(토스 연결된 ADMIN) 푸시 점등. DM 푸시처럼 발송 직전 검사이고, 실발송엔
+         * {@link #enabled}와 템플릿 코드도 있어야 한다. 템플릿이 없으면 조용히 no-op — 배너는 이와 무관하게 뜬다.
+         */
+        private boolean opsAlertEnabled;
+
+        /** 운영자 알림 템플릿의 templateSetCode(콘솔 발급). 비어 있으면 발송하지 않는다. */
+        private String opsAlertTemplateCode;
+
+        public boolean isOpsAlertEnabled() {
+            return opsAlertEnabled;
+        }
+
+        public void setOpsAlertEnabled(boolean opsAlertEnabled) {
+            this.opsAlertEnabled = opsAlertEnabled;
+        }
+
+        public String getOpsAlertTemplateCode() {
+            return opsAlertTemplateCode;
+        }
+
+        public void setOpsAlertTemplateCode(String opsAlertTemplateCode) {
+            this.opsAlertTemplateCode = opsAlertTemplateCode;
+        }
+
         public boolean isDmMessageEnabled() {
             return dmMessageEnabled;
         }

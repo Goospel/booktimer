@@ -15,6 +15,9 @@ public interface ChatRoomRepository extends JpaRepository<ChatRoom, Long> {
     /** 정규화된 쌍(a.id &lt; b.id)으로 찾는다 — 호출자는 {@link ChatRoom#of}와 같은 순서로 넘긴다. */
     Optional<ChatRoom> findByUserAAndUserB(User userA, User userB);
 
+    /** 보존 삭제 후보 — 이 시각 전에 닫힌 방. */
+    List<ChatRoom> findByStatusAndClosedAtBefore(ChatRoom.Status status, Instant closedBefore);
+
     /** 내가 참여한 열린 방 전부(숨김 여부는 호출자가 거른다). 상대를 같이 읽어 목록 조립의 lazy ×N을 없앤다. */
     @Query("""
             select r from ChatRoom r join fetch r.userA join fetch r.userB

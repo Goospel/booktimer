@@ -138,9 +138,12 @@ public class ChatRoom extends BaseTimeEntity {
         closedAt = now;
     }
 
-    public void reopen() {
+    /** 차단 해제·재맞팔 뒤 다시 연다 — 양쪽 다 숨긴 채. 새 메시지가 오면 {@link #unhideAll()}로 보인다. */
+    public void reopenHidden() {
         status = Status.OPEN;
         closedAt = null;
+        hiddenA = true;
+        hiddenB = true;
     }
 
     public boolean isOpen() {

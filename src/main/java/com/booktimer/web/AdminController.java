@@ -1,6 +1,9 @@
 package com.booktimer.web;
 
 import com.booktimer.admin.AdminStatsService;
+import com.booktimer.chat.ChatSanctionService;
+import com.booktimer.report.ReportRepository;
+import com.booktimer.report.ReportStatus;
 import com.booktimer.security.CurrentUserService;
 import com.booktimer.study.StudyAiAccessService;
 import com.booktimer.user.User;
@@ -26,18 +29,28 @@ public class AdminController {
     private final CurrentUserService currentUserService;
     private final AdminStatsService adminStatsService;
     private final StudyAiAccessService studyAiAccessService;
+    private final ReportRepository reportRepository;
+    private final ChatSanctionService chatSanctionService;
 
     public AdminController(CurrentUserService currentUserService,
                           AdminStatsService adminStatsService,
-                          StudyAiAccessService studyAiAccessService) {
+                          StudyAiAccessService studyAiAccessService,
+                          ReportRepository reportRepository,
+                          ChatSanctionService chatSanctionService) {
+        this.reportRepository = reportRepository;
+        this.chatSanctionService = chatSanctionService;
         this.currentUserService = currentUserService;
         this.adminStatsService = adminStatsService;
         this.studyAiAccessService = studyAiAccessService;
     }
 
     @GetMapping("/admin")
-    public String dashboard(Principal principal, Model model) {
+    public String dashboard(Principal principal, jakarta.servlet.http.HttpServletRequest request, Model model) {
+        CsrfTokenUtil.precommit(request); // 승인·백필 폼이 많은 큰 페이지(T-033·T-049)
         User admin = currentUserService.resolve(principal);
+        // 신고 대응 배너(정책 문서 §2 「알림」) — 토스 푸시가 꺼져 있어도 운영자는 여기서 본다.
+        model.addAttribute("openReportCount", reportRepository.countByStatus(ReportStatus.OPEN));
+        model.addAttribute("chatSanctionedCount", chatSanctionService.sanctionedCount());
         model.addAttribute("nickname", admin.getNickname());
         // 운영 통계 요약(읽기 전용 집계) — 매번 RDS에 붙지 않고 웹에서 지표 확인(N-037).
         model.addAttribute("stats", adminStatsService.summary());

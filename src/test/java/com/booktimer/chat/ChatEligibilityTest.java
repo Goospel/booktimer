@@ -87,6 +87,17 @@ class ChatEligibilityTest {
         assertThat(eligibility.check(me, webOnly)).isEqualTo(Verdict.UNREACHABLE);
     }
 
+    /** 대칭(PR-1 리뷰 사소 2) — 웹 전용인 내가 보내면 상대 답장이 읽을 수 없는 편지함에 쌓인다. */
+    @Test
+    void webOnlySenderIsUnreachableToo() {
+        User webMe = userRepository.save(
+                User.of("webme@elig.test", "$2a$10$abcdefghijklmnopqrstuv", "웹나", "Asia/Seoul", Role.USER));
+        User other = toss("webme-other");
+        mutual(webMe, other);
+
+        assertThat(eligibility.check(webMe, other)).isEqualTo(Verdict.UNREACHABLE);
+    }
+
     @Test
     void sanctionOnEitherSideRestricts() {
         User me = toss("sanc-me");

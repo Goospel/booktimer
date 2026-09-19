@@ -23,6 +23,17 @@ public class ChatProperties {
     /** 새 메시지 푸시 간격 — 방·수신자당 이 시간에 1통. */
     private int pushIntervalMinutes = 30;
 
+    /** 차단으로 닫힌 방의 보존 일수(정책 문서 §5·처리방침과 같은 값이어야 한다 — 바꾸면 문서도 같이). */
+    private int retentionDays = 30;
+
+    public int getRetentionDays() {
+        return retentionDays;
+    }
+
+    public void setRetentionDays(int retentionDays) {
+        this.retentionDays = retentionDays;
+    }
+
     public boolean isEnabled() {
         return enabled;
     }

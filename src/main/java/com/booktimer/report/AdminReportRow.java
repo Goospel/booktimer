@@ -19,7 +19,11 @@ public record AdminReportRow(
         String reportedNickname,
         ReportReason reason,
         String detail,
-        Instant createdAt) {
+        Instant createdAt,
+        Long chatRoomId,
+        ReportStatus status,
+        String resolution,
+        boolean legalHold) {
 
     static AdminReportRow from(Report report) {
         User reporter = report.getReporter();
@@ -32,6 +36,10 @@ public record AdminReportRow(
                 reported.getNickname(),
                 report.getReason(),
                 report.getDetail(),
-                report.getCreatedAt());
+                report.getCreatedAt(),
+                report.getChatRoomId(),
+                report.getStatus(),
+                report.getResolution(),
+                report.isLegalHold());
     }
 }

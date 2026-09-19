@@ -16,6 +16,14 @@ public interface ChatMessageRepository extends JpaRepository<ChatMessage, Long> 
 
     Optional<ChatMessage> findTopByRoomOrderByIdDesc(ChatRoom room);
 
+    /** 관리자 대본 — 방 전체(신고된 방만 여기 온다). */
+    List<ChatMessage> findByRoomOrderByIdAsc(ChatRoom room);
+
+    /** 보존 삭제 — 지울 방들의 메시지. 방보다 먼저 지운다(FK). */
+    @Modifying(flushAutomatically = true)
+    @Query("delete from ChatMessage m where m.room.id in :roomIds")
+    void deleteByRoomIdIn(@Param("roomIds") java.util.Collection<Long> roomIds);
+
     /** 미읽음 = 상대가 보낸, 내 마지막 읽음 이후의 메시지. */
     long countByRoomAndSenderNotAndIdGreaterThan(ChatRoom room, User me, long lastReadId);
 

@@ -33,6 +33,8 @@ class ChatFkIntegrationTest {
     @Autowired ChatRoomRepository chatRoomRepository;
     @Autowired ChatMessageRepository chatMessageRepository;
     @Autowired EntityManager em;
+    @Autowired ChatSafetyService chatSafetyService;
+    @Autowired com.booktimer.report.ReportRepository reportRepository;
 
     private User toss(String name) {
         User u = User.of(name + "@fk.test", "$2a$10$abcdefghijklmnopqrstuv", name, "Asia/Seoul", Role.USER);
@@ -71,5 +73,32 @@ class ChatFkIntegrationTest {
                 .extracting(ChatRoomService.RoomSummary::roomId)
                 .containsExactly(keep); // 남의 방은 건드리지 않는다
         assertThat(chatMessageRepository.count()).isEqualTo(1);
+    }
+
+    /**
+     * V96 — 신고가 방을 FK로 가리킨다. 법적 보존이 걸린 신고여도 탈퇴는 즉시 삭제다(정책 문서 §5 — 보존 표시는
+     * <b>자동</b> 삭제에서만 뺀다). 신고 → 메시지 → 방 순서가 어긋나면 이 사용자는 탈퇴 자체가 실패한다.
+     */
+    @Test
+    void userWithRoomReferencingReportsCanLeave() {
+        User quitter = toss("fk-rep-quit");
+        User partner = toss("fk-rep-partner");
+        followRepository.save(Follow.of(quitter, partner));
+        followRepository.save(Follow.of(partner, quitter));
+        long room = chatRoomService.openOrGet(quitter, partner).getId();
+        chatRoomService.send(quitter, room, "신고당할 말");
+        var byPartner = chatSafetyService.reportRoom(partner, room, "SPAM", null);
+        chatSafetyService.setLegalHold(byPartner.getId(), true);
+        chatSafetyService.reportRoom(quitter, room, "OTHER", "맞신고");
+        em.flush();
+
+        assertThatCode(() -> {
+            accountService.deleteTossVerifiedAccount(quitter, "uk-fk-rep-quit");
+            em.flush();
+        }).doesNotThrowAnyException();
+
+        em.clear();
+        assertThat(chatRoomRepository.findById(room)).isEmpty();
+        assertThat(reportRepository.findAll()).noneMatch(r -> Long.valueOf(room).equals(r.getChatRoomId()));
     }
 }

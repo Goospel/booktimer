@@ -365,6 +365,42 @@ class FlywayMigrationTest {
     @Autowired
     com.booktimer.chat.ChatMessageRepository chatMessageRepository;
 
+    @Autowired
+    com.booktimer.report.ReportRepository reportRepository;
+
+    /**
+     * V96 — 신고의 방 참조·상태·법적 보존이 엔티티 매핑과 맞고(validate), 방 쌍 정규화가 <b>DB에서도</b> 막힌다.
+     * CHECK는 마이그레이션에만 있어 메인 스위트(Hibernate 스키마)엔 존재하지 않는다 — 여기서만 판정된다.
+     */
+    @Test
+    void v96_report_columns_and_room_pair_order_check() {
+        User a = userRepository.saveAndFlush(userWithHandle("v96-a@example.com", "vninesixa"));
+        User b = userRepository.saveAndFlush(userWithHandle("v96-b@example.com", "vninesixb"));
+        com.booktimer.chat.ChatRoom room = chatRoomRepository.saveAndFlush(com.booktimer.chat.ChatRoom.of(a, b));
+
+        com.booktimer.report.Report r = com.booktimer.report.Report.of(a, b, com.booktimer.report.ReportReason.SPAM, null);
+        r.attachChatRoom(room.getId());
+        r.resolve("WARN");
+        r.setLegalHold(true);
+        long id = reportRepository.saveAndFlush(r).getId();
+        var back = reportRepository.findById(id).orElseThrow();
+        assertThat(back.getChatRoomId()).isEqualTo(room.getId());
+        assertThat(back.getStatus()).isEqualTo(com.booktimer.report.ReportStatus.RESOLVED);
+        assertThat(back.isLegalHold()).isTrue();
+
+        // 기존 신고 행은 OPEN으로 시작한다(컬럼 기본값) — 배너가 옛 신고를 미처리로 센다.
+        assertThat(jdbcTemplate.queryForObject(
+                "select column_default from information_schema.columns where upper(table_name)='REPORT' and upper(column_name)='STATUS'",
+                String.class)).contains("OPEN");
+
+        assertThatThrownBy(() -> jdbcTemplate.update("""
+                insert into chat_room (user_a_id, user_b_id, status, created_at, updated_at)
+                values (?, ?, 'OPEN', current_timestamp, current_timestamp)
+                """, b.getId(), a.getId()))
+                .as("a < b 정규화가 깨진 행은 DB가 거부한다")
+                .isInstanceOf(DataIntegrityViolationException.class);
+    }
+
     private static User userWithHandle(String email, String handle) {
         User u = User.of(email, "hash", "닉", "Asia/Seoul", Role.USER);
         u.assignLoginId(handle);

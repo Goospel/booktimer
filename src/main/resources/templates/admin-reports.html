@@ -14,13 +14,17 @@
     <header class="brand">
         <h1>신고함</h1>
     </header>
-    <p class="status-line muted">사용자가 보낸 신고를 읽고 후속 처리합니다. 처리를 마친 신고는 삭제하세요.</p>
+    <p class="status-line muted">사용자가 보낸 신고를 읽고 후속 처리합니다. 대화방 신고는 「대화 기록 보기」에서
+        조치(무혐의·경고·7일·영구)를 고르고 처리 완료로 닫습니다 — 처리 완료 신고는 조치 기록으로 남기세요.</p>
 
     <p class="status-line muted" th:if="${reportList.isEmpty()}">접수된 신고가 없습니다.</p>
 
     <section class="card fb-admin-item" th:each="row : ${reportList}">
         <div class="fb-head">
             <span class="fb-type" th:text="${row.reason.label}">사유</span>
+            <span class="fb-type" th:text="${row.status.name() == 'OPEN' ? '미처리' : '처리 완료'}">상태</span>
+            <span class="fb-type" th:if="${row.chatRoomId != null}">대화방</span>
+            <span class="fb-type" th:if="${row.legalHold}">법적 보존</span>
             <span class="fb-author muted" th:text="${#temporals.format(row.createdAt, 'yyyy-MM-dd HH:mm')}">시각</span>
         </div>
         <p class="fb-title">
@@ -31,6 +35,13 @@
         <p class="fb-content" th:if="${row.detail != null and !row.detail.isBlank()}" th:text="${row.detail}">상세 설명</p>
         <p class="fb-content muted" th:unless="${row.detail != null and !row.detail.isBlank()}">상세 설명 없음</p>
         <div class="fb-actions">
+            <a class="btn-ghost btn-small" th:if="${row.chatRoomId != null}"
+               th:href="@{/admin/reports/{id}/chat(id=${row.id})}">대화 기록 보기</a>
+            <form th:if="${row.chatRoomId == null and row.status.name() == 'OPEN'}"
+                  th:action="@{/admin/reports/{id}/resolve(id=${row.id})}" method="post">
+                <input type="hidden" name="action" value="NONE">
+                <button type="submit" class="btn-ghost btn-small">처리 완료</button>
+            </form>
             <a class="btn-ghost btn-small" th:if="${row.reportedLoginId != null}"
                th:href="@{/u/{loginId}(loginId=${row.reportedLoginId})}" target="_blank" rel="noopener">대상 책방 보기</a>
             <form th:action="@{/admin/reports/{id}/delete(id=${row.id})}" method="post"
