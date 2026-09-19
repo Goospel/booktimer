@@ -1107,11 +1107,8 @@ export function App() {
         // 나가기·사라진 방(404) 뒤엔 대화함으로 — 곧장 연 방이면 출발한 화면(그 사람 책방)으로.
         onLeft={() => (chatRoom.direct ? closeChat() : setChatRoom(null))}
         onGone={() => (chatRoom.direct ? closeChat() : setChatRoom(null))}
-        // 차단은 뒤에 깔린 그 사람 책방까지 걷는다 — 차단 순간 그 책방은 404라 돌아갈 자리가 아니다.
-        onBlocked={() => {
-          closeChat();
-          setShop(null);
-        }}
+        // 차단: 곧장 연 방은 뒤에 깔린 그 사람 책방까지 걷는다(차단 순간 404라 돌아갈 자리가 아니다). 대화함에서 연 방은 대화함으로.
+        onBlocked={() => (chatRoom.direct ? (closeChat(), setShop(null)) : setChatRoom(null))}
         onError={handleError}
       />
     );

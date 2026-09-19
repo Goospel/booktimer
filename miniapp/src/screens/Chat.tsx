@@ -351,7 +351,7 @@ export function ChatRoomScreen({
     const text = draft.trim();
     if (text === '') return;
     act(sendChatMessage(roomId, text), () => {
-      setDraft('');
+      setDraft((d) => (d.trim() === text ? '' : d)); // 보내는 동안 친 글자는 남긴다
       poll(); // 보낸 것은 다음 조회로 받는다 — 로컬에 끼우면 커서가 상대 메시지를 건너뛸 수 있다
     });
   };

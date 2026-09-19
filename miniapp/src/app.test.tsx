@@ -1200,6 +1200,20 @@ describe('정적 하니스가 못 보는 배선 — 소스로 잠근다', () => 
     expect(flat).toContain('if (loading.current) return; loading.current = true;');
   });
 
+  it('책방 뒤로가기 훅이 대화 훅보다 먼저다 — 뒤집히면 「메시지」로 연 방이 책방 아래 깔린다(T-166)', () => {
+    const shopHook = flat.indexOf('useBackClose(shop !== null');
+    const chatHook = flat.indexOf("useBackClose(view === 'chat'");
+
+    expect(shopHook).toBeGreaterThan(-1);
+    expect(chatHook).toBeGreaterThan(shopHook);
+  });
+
+  it('차단은 대화함에서 연 방이면 대화함으로 — 곧장 연 방만 뒤에 깔린 그 사람 책방까지 걷는다', () => {
+    expect(flat).toContain(
+      'onBlocked={() => (chatRoom.direct ? (closeChat(), setShop(null)) : setChatRoom(null))}',
+    );
+  });
+
   it('끝나면 반드시 푼다 — 이 줄이 빠지면 첫 로드 뒤 빗장이 잠긴 채 남아 「다시 시도」가 죽는다', () => {
     expect(flat).toContain('.finally(() => { loading.current = false; });');
   });

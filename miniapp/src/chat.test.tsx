@@ -1,3 +1,5 @@
+import { readFileSync } from 'node:fs';
+
 import { TDSMobileProvider } from '@toss/tds-mobile';
 import type { ReactNode } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
@@ -415,5 +417,14 @@ describe('남의 책방 「메시지」 버튼 (canMessage)', () => {
     const html = card(profile({ self: true, following: false, followsMe: false }));
     expect(html).not.toMatch(MESSAGE_BUTTON);
     expect(html).not.toContain(HINT);
+  });
+});
+
+/** 보내는 동안 입력창이 열려 있다 — 그 사이 친 글자를 성공 콜백이 통째로 지우면 안 된다(effect라 소스로 잠근다). */
+describe('보내기 성공 뒤 입력창 비우기', () => {
+  const flat = readFileSync(new URL('./screens/Chat.tsx', import.meta.url), 'utf8').replace(/\s+/g, ' ');
+
+  it('보낸 글과 같을 때만 비운다', () => {
+    expect(flat).toContain("setDraft((d) => (d.trim() === text ? '' : d));");
   });
 });
