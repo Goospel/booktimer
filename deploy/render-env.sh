@@ -45,9 +45,12 @@ declare -A SECRET_MAP=(
   [SPRING_MAIL_USERNAME]=SPRING_MAIL_USERNAME
   [SPRING_MAIL_PASSWORD]=SPRING_MAIL_PASSWORD
   [MYSQL_ROOT_PASSWORD]=MYSQL_ROOT_PASSWORD
-  # 맞팔 DM 메시지 본문 AES-256-GCM 키(SecureString, 2026-09-19 생성). 스위치(CHAT_ENABLED)·DM 푸시 키는
-  # SSM에 아직 없어 넣지 않는다 — 여기 있는 키는 전부 필수라 없으면 배포가 멈춘다.
+  # 맞팔 DM 메시지 본문 AES-256-GCM 키(SecureString, 2026-09-19 생성). DM 푸시 키는 SSM에 아직 없어
+  # 넣지 않는다 — 여기 있는 키는 전부 필수라 없으면 배포가 멈춘다.
   [CHAT_MESSAGE_KEY]=BOOKTIMER_CHAT_MESSAGE_KEY
+  # 맞팔 DM 킬스위치(2026-09-19 true). false로 바꾸고 재배포(workflow_dispatch)하면 /api/chat/** 가 404 —
+  # 미니앱의 대화 진입점이 통째로 사라진다.
+  [CHAT_ENABLED]=BOOKTIMER_CHAT_ENABLED
 )
 
 # ── 평문 설정 (구 task-definition의 environment 블록) ──
