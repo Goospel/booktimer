@@ -356,7 +356,7 @@ export function BookshopHeader({
         }}
       >
         대화
-        <UnreadBadge count={inbox.unread} />
+        <UnreadBadge count={inbox.unread} unit="대화" />
       </button>
     </div>
   );

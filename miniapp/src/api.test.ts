@@ -1121,3 +1121,14 @@ describe('맞팔 DM API (ChatApiController)', () => {
     }
   });
 });
+
+describe('미읽음 조회 경로', () => {
+  it('GET /api/chat/me — 진입점 판정의 유일한 입력', async () => {
+    token.set('tok');
+    vi.mocked(globalThis.fetch).mockResolvedValue(response(200, '{"unreadRooms":0,"restrictedUntil":null,"banned":false}') as never);
+
+    await fetchChatMe();
+    expect(lastRequest()[0]).toMatch(/\/api\/chat\/me$/);
+    expect(lastRequest()[1].method).toBe('GET');
+  });
+});

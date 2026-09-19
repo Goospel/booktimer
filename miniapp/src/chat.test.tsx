@@ -4,7 +4,9 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { ChatMessage, ChatRoomSummary, ProfileResponse } from './api';
+import { ApiError, NetworkError } from './api';
 import {
+  CHAT_PAGE_LIMIT,
   INBOX_POLL_MS,
   InboxView,
   ROOM_POLL_MS,
@@ -12,7 +14,9 @@ import {
   initialChat,
   lockText,
   mergeMessages,
+  needsCatchUp,
   pollIntervalMs,
+  roomGone,
   sanctionText,
 } from './screens/Chat';
 import { BookshopHeader } from './screens/Bookshop';
@@ -216,6 +220,35 @@ describe('대화방 (RoomView)', () => {
   it('메시지가 없으면 첫 인사를 권한다', () => {
     expect(roomView({ messages: [] })).toContain('첫 메시지를 보내 보세요');
   });
+
+  /** 보내는 중(busy)에 입력창을 disabled로 만들면 포커스가 빠져 모바일 키보드가 내려간다 — 연타 방지는 버튼만. */
+  it('보내는 중엔 보내기만 막고 입력창은 살려 둔다', () => {
+    const html = roomView({ busy: true, draft: '안녕' });
+    expect(html).not.toMatch(/<textarea[^>]*disabled/);
+    expect(html).toMatch(/<button[^>]*disabled[^>]*>(?:(?!<\/button>).)*보내기/s);
+  });
+
+  it('첫 응답 전(loading)엔 입력창을 막고 빈 방 안내도 띄우지 않는다', () => {
+    const html = roomView({ messages: [], loading: true });
+    expect(html).toMatch(/<textarea[^>]*disabled/);
+    expect(html).not.toContain('첫 메시지를 보내 보세요');
+  });
+});
+
+describe('방 조회 판정', () => {
+  it('서버 상한(200건)을 꽉 채워 받으면 곧바로 한 번 더 받는다', () => {
+    expect(CHAT_PAGE_LIMIT).toBe(200);
+    expect(needsCatchUp(200)).toBe(true);
+    expect(needsCatchUp(199)).toBe(false);
+    expect(needsCatchUp(0)).toBe(false);
+  });
+
+  it('404면 방이 사라진 것이다 — 폴링을 멈추고 대화함으로', () => {
+    expect(roomGone(new ApiError(404, '대화를 찾을 수 없어요.'))).toBe(true);
+    expect(roomGone(new ApiError(403, '서로 팔로우해야 메시지를 보낼 수 있어요.'))).toBe(false);
+    expect(roomGone(new ApiError(429, ''))).toBe(false);
+    expect(roomGone(new NetworkError())).toBe(false);
+  });
 });
 
 function inbox(extra: Partial<Parameters<typeof InboxView>[0]> = {}) {
@@ -251,6 +284,10 @@ describe('대화함 (InboxView)', () => {
     expect(html).toContain('잠김');
   });
 
+  it('열린 방에는 잠김 표시가 없다(대조군)', () => {
+    expect(inbox({ rooms: [room(1)] })).not.toContain('잠김');
+  });
+
   it('빈 대화함은 여는 법을 말한다', () => {
     expect(inbox()).toContain('서로 팔로우한 친구의 책방에서 메시지를 보낼 수 있어요');
   });
@@ -270,6 +307,8 @@ describe('책방 헤더의 대화함 진입', () => {
     const html = render(<BookshopHeader onSearch={() => {}} inbox={{ unread: 4, onOpen: () => {} }} />);
     expect(html).toContain('aria-label="대화함"');
     expect(html).toContain('>4<');
+    // 헤더의 수는 미읽음 **방** 수(`unreadRooms`)다 — 메시지 수로 읽히지 않게.
+    expect(html).toContain('aria-label="읽지 않은 대화 4개"');
   });
 
   it('미읽음이 없으면 배지 없이 버튼만', () => {

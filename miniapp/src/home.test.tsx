@@ -1870,14 +1870,15 @@ describe('홈 히어로 위계 (시안 2a)', () => {
  */
 describe('홈 대화 미읽음 카드', () => {
   it('미읽음 방이 있으면 카드가 선다(양성 대조군)', () => {
-    expect(renderHome({}, { chatUnread: 2 })).toContain('새 메시지 2');
+    // N은 메시지 수가 아니라 미읽음 **방** 수(`unreadRooms`)다 — 문구도 「대화」를 센다.
+    expect(renderHome({}, { chatUnread: 2 })).toContain('읽지 않은 대화 2');
   });
 
   it('미읽음이 0이면 없다', () => {
-    expect(renderHome({}, { chatUnread: 0 })).not.toContain('새 메시지');
+    expect(renderHome({}, { chatUnread: 0 })).not.toContain('읽지 않은 대화');
   });
 
   it('대화가 꺼져 있으면(값 없음) 없다', () => {
-    expect(renderHome()).not.toContain('새 메시지');
+    expect(renderHome()).not.toContain('읽지 않은 대화');
   });
 });

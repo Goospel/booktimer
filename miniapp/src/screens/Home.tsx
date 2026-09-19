@@ -1627,7 +1627,7 @@ export function Home({
             }}
           >
             <Text typography="st11" fontWeight="bold">
-              새 메시지 {chatUnread}
+              읽지 않은 대화 {chatUnread}
             </Text>
             <Text typography="st12" color="grey600">
               대화함 열기 ›

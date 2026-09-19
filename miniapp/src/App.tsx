@@ -650,6 +650,47 @@ export function shouldRefresh(lastAt: number, now: number, force = false): boole
 }
 
 /**
+ * 대화 가용 판정 — 성공이면 그 값, **어떤 실패든 `null`(대화 없음)**이다(킬스위치 404·타임아웃·서버 오류).
+ * 401만 삼키지 않고 넘긴다 — 로그인으로 보내야 하니까. App 배선은 effect라 판정만 여기로 꺼내 계측한다.
+ */
+export function resolveChatMe(fetch: () => Promise<ChatMe>): Promise<ChatMe | null> {
+  return fetch().catch((e: Error) => {
+    if (e.name === 'UnauthorizedError') throw e;
+    return null;
+  });
+}
+
+/**
+ * 대화 진입점 묶음 — `chatMe`가 없으면 `undefined`라 책방 대화함·홈 카드·남의 책방 「메시지」가 한꺼번에 사라진다.
+ *
+ * <p>대화함은 옛 방을 비우고 연다(401로 로그인에 갔다 오면 옛 방이 남아 있을 수 있다). 「메시지」로 연 방은
+ * 그 사람 책방을 App 책방으로 깔고 연다 — 책방 탭 안에서 연 책방은 탭 화면과 함께 언마운트되므로, 안 깔면 뒤로가기가
+ * 내 책방으로 떨어지고 다음 뒤로가기에 앱이 닫혔다. 이미 App 책방이 있으면 그대로 둔다.
+ */
+export function chatEntryOf(
+  chatMe: ChatMe | null,
+  act: {
+    setView: (view: 'chat') => void;
+    setChatRoom: (room: ChatRoomState | null) => void;
+    setShop: (update: (current: string | null) => string | null) => void;
+  },
+): ChatEntry | undefined {
+  if (chatMe === null) return undefined;
+  return {
+    unread: chatMe.unreadRooms,
+    onOpenInbox: () => {
+      act.setChatRoom(null);
+      act.setView('chat');
+    },
+    onOpenRoom: (roomId: number, partner: ChatPartner) => {
+      act.setShop((current) => current ?? partner.loginId);
+      act.setChatRoom({ roomId, partner, direct: true });
+      act.setView('chat');
+    },
+  };
+}
+
+/**
  * 딥링크로 착지할 탭 — 푸시 알림의 이동 URL(`intoss://<앱이름>/?tab=history`)이 화면을 지목한다.
  *
  * <p><b>모르는 값은 전부 홈이다.</b> 이 문자열은 우리 코드 밖(콘솔에 손으로 적은 캠페인 URL)에서
@@ -837,15 +878,12 @@ export function App() {
    * 첫 화면 요청이라 상한 5초(`CHAT_ME_TIMEOUT_MS`)에 페이지 로드 뒤로 민다(T-252, 게스트 뉴스와 같은 이유).
    */
   const loadChatMe = useCallback(() => {
-    fetchChatMe()
+    resolveChatMe(fetchChatMe)
       .then((me) => {
         setChatMe(me);
-        if (chatLink.current === 'inbox') setView('chat');
+        if (me !== null && chatLink.current === 'inbox') setView('chat');
       })
-      .catch((e: Error) => {
-        if (e.name === 'UnauthorizedError') toLogin();
-        else setChatMe(null);
-      })
+      .catch(() => toLogin()) // resolveChatMe가 넘기는 것은 401뿐이다
       .finally(() => {
         chatLink.current = null; // 딥링크는 진입 시점의 사실 — 한 번만 착지한다
       });
@@ -887,8 +925,18 @@ export function App() {
     setView('main');
   });
   useBackClose(view === 'settings', () => setView('main'));
-  // 대화 — 방이 위면 방만 닫고 대화함으로. 책방 「메시지」로 곧장 연 방은 출발한 화면으로 돌아간다.
-  // 나올 때 미읽음을 다시 받는다(홈 카드·책방 배지가 방금 읽은 것을 계속 세지 않게).
+  // 작성 화면이 위면 그것만 닫는다 — 단 밑에 깔린 여백 화면이 없으면 통째로 닫아 출발한 탭으로 돌아간다.
+  useBackClose(margin?.composeBook != null, () => setMargin((m) => (m === null ? null : closeCompose(m))));
+  useBackClose(margin !== null && margin.composeBook === null, () => setMargin(null));
+  useBackClose(shop !== null, () => setShop(null));
+  /*
+   * 대화 — 방이 위면 방만 닫고 대화함으로. 책방 「메시지」로 곧장 연 방은 출발한 화면(그 사람 책방)으로 돌아간다.
+   * 나올 때 미읽음을 다시 받는다(홈 카드·책방 배지가 방금 읽은 것을 계속 세지 않게).
+   *
+   * ⚠️ **책방(`shop`) 훅보다 뒤에 둔다.** 책방 탭 안에서 연 남의 책방 → 「메시지」는 한 커밋에서 「탭 안 책방 엔트리
+   * 반납 + App 책방 열기 + 방 열기」가 일어난다. effect는 선언 순서로 도니 책방이 반납 엔트리를 물려받고(T-166 handoff)
+   * 방이 그 위에 쌓인다 — 순서가 뒤집히면 방이 아래에 깔려 뒤로가기가 방보다 책방을 먼저 닫는다.
+   */
   const closeChat = () => {
     setChatRoom(null);
     setView('main');
@@ -898,10 +946,6 @@ export function App() {
     chatRoom?.direct === true ? closeChat() : setChatRoom(null),
   );
   useBackClose(view === 'chat' && chatRoom === null, closeChat);
-  // 작성 화면이 위면 그것만 닫는다 — 단 밑에 깔린 여백 화면이 없으면 통째로 닫아 출발한 탭으로 돌아간다.
-  useBackClose(margin?.composeBook != null, () => setMargin((m) => (m === null ? null : closeCompose(m))));
-  useBackClose(margin !== null && margin.composeBook === null, () => setMargin(null));
-  useBackClose(shop !== null, () => setShop(null));
 
   /**
    * 지금 보여 줄 모드 — 진행 중 측정이 저장값을 이긴다(재진입·다른 기기 시작을 한 줄이 함께 처리한다).
@@ -1060,28 +1104,21 @@ export function App() {
         key={chatRoom.roomId}
         roomId={chatRoom.roomId}
         partner={chatRoom.partner}
-        // 나가기·차단 뒤엔 이 방이 대화함에서 사라진다 — 대화함으로(곧장 연 방이면 출발한 화면으로).
+        // 나가기·사라진 방(404) 뒤엔 대화함으로 — 곧장 연 방이면 출발한 화면(그 사람 책방)으로.
         onLeft={() => (chatRoom.direct ? closeChat() : setChatRoom(null))}
+        onGone={() => (chatRoom.direct ? closeChat() : setChatRoom(null))}
+        // 차단은 뒤에 깔린 그 사람 책방까지 걷는다 — 차단 순간 그 책방은 404라 돌아갈 자리가 아니다.
+        onBlocked={() => {
+          closeChat();
+          setShop(null);
+        }}
         onError={handleError}
       />
     );
   }
 
-  /**
-   * 대화 진입 — 대화가 켜져 있을 때만 값이 있다(`chatMe`). `undefined`면 진입점이 통째로 사라진다.
-   * 방은 남의 책방 「메시지」로 곧장 열리고(`direct`), 대화함은 책방 헤더·홈 카드로 열린다.
-   */
-  const chatEntry =
-    chatMe === null
-      ? undefined
-      : {
-          unread: chatMe.unreadRooms,
-          onOpenInbox: () => setView('chat'),
-          onOpenRoom: (roomId: number, partner: ChatPartner) => {
-            setChatRoom({ roomId, partner, direct: true });
-            setView('chat');
-          },
-        };
+  /** 대화 진입 — 대화가 켜져 있을 때만 값이 있다(`chatMe`). `undefined`면 진입점이 통째로 사라진다. */
+  const chatEntry = chatEntryOf(chatMe, { setView, setChatRoom, setShop });
 
   /**
    * 측정 시작 — 문이 둘이라(탭바 원 · 여백 탭바) 구현을 여기 한 자리에 둔다.

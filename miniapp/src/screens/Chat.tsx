@@ -39,6 +39,22 @@ export function pollIntervalMs(visible: boolean, writable: boolean): number | nu
   return writable ? ROOM_POLL_MS : INBOX_POLL_MS;
 }
 
+/** 서버가 한 번에 주는 최대 건수(`findTop200ByRoomAndIdGreaterThan`). */
+export const CHAT_PAGE_LIMIT = 200;
+
+/** 상한을 꽉 채워 받았으면 뒤가 더 있을 수 있다 — 다음 틱(3초)을 기다리지 않고 곧바로 한 번 더 받는다. */
+export function needsCatchUp(received: number): boolean {
+  return received >= CHAT_PAGE_LIMIT;
+}
+
+/**
+ * 방을 더 볼 수 없다(킬스위치가 꺼졌거나 내가 멤버가 아님 — 서버는 둘을 404로 통일) — 폴링을 멈추고 대화함으로 간다.
+ * 차단으로 닫힌 방은 404가 아니라 `lockReason: CLOSED`로 온다.
+ */
+export function roomGone(error: Error): boolean {
+  return error instanceof ApiError && error.status === 404;
+}
+
 /** 폴링 결과를 합친다 — id로 중복을 걷고(겹친 폴링) 오름차순. 같은 id면 새로 받은 것이 이긴다. */
 export function mergeMessages(prev: ChatMessage[], incoming: ChatMessage[]): ChatMessage[] {
   const byId = new Map(prev.map((m) => [m.id, m]));
@@ -243,7 +259,7 @@ export function InboxView({
                 {room.lastMessage.body}
               </Text>
             </span>
-            <UnreadBadge count={room.unread} />
+            <UnreadBadge count={room.unread} unit="메시지" />
           </button>
         ))
       )}
@@ -257,15 +273,26 @@ export function ChatRoomScreen({
   roomId,
   partner,
   onLeft,
+  onBlocked,
+  onGone,
   onError,
 }: {
   roomId: number;
   partner: ChatPartner;
-  /** 나가기·차단 뒤 — 이 방은 대화함에서 사라지므로 머무를 자리가 없다. */
+  /** 「나가기」 뒤 — 이 방은 대화함에서 사라지므로 머무를 자리가 없다. */
   onLeft: () => void;
+  /** 「차단」 뒤 — 나가기와 따로다: 뒤에 깔린 그 사람 책방도 차단 순간 404라 돌아갈 자리가 아니다. */
+  onBlocked: () => void;
+  /** 방 조회가 404 — 폴링을 멈추고 나간다(3초마다 404를 되풀이하지 않게). */
+  onGone: () => void;
   onError: (error: Error) => void;
 }) {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
+  /** 첫 응답을 받았는가 — 그 전엔 입력을 막고 빈 방 안내도 안 띄운다(잠긴 방이 한순간 열려 보이지 않게). */
+  const [ready, setReady] = useState(false);
+  // App이 매 렌더 새 화살표를 넘겨도 폴링 콜백이 다시 만들어지지 않게 최신값만 든다(back.ts의 useBackClose와 같은 관례).
+  const gone = useRef(onGone);
+  gone.current = onGone;
   const [writable, setWritable] = useState(true);
   const [lockReason, setLockReason] = useState<ChatLockReason | null>(null);
   const [draft, setDraft] = useState('');
@@ -281,7 +308,10 @@ export function ChatRoomScreen({
   const poll = useCallback(() => {
     fetchChatMessages(roomId, cursor.current)
       .then((page) => {
+        // 첫 로드 실패 문구는 첫 성공이 지운다 — 매번 지우면 보내기 실패 문구가 다음 폴링(3초)에 사라진다.
+        if (!loaded.current) setError(null);
         loaded.current = true;
+        setReady(true);
         setWritable(page.writable);
         setLockReason(page.lockReason);
         if (page.messages.length === 0) return;
@@ -289,8 +319,9 @@ export function ChatRoomScreen({
         setMessages((prev) => mergeMessages(prev, page.messages));
         // 보고 있는 동안 받은 것은 읽은 것이다 — 서버가 방의 마지막 메시지 이상은 자른다.
         markChatRead(roomId, cursor.current).catch(() => {});
+        if (needsCatchUp(page.messages.length)) poll(); // 200건 넘는 방 따라잡기
       })
-      .catch((e: Error) => pollFailure(e, loaded.current, onError, setError));
+      .catch((e: Error) => (roomGone(e) ? gone.current() : pollFailure(e, loaded.current, onError, setError)));
   }, [roomId, onError]);
 
   const interval = pollIntervalMs(visible, writable);
@@ -335,6 +366,7 @@ export function ChatRoomScreen({
     <RoomView
       partner={partner}
       messages={messages}
+      loading={!ready}
       writable={writable}
       lockReason={lockReason}
       draft={draft}
@@ -347,7 +379,7 @@ export function ChatRoomScreen({
             busy={busy}
             confirmBlock={more.confirmBlock}
             onConfirmBlock={(confirmBlock) => setMore({ confirmBlock })}
-            onBlock={() => act(blockUser(partner.loginId), onLeft)}
+            onBlock={() => act(blockUser(partner.loginId), onBlocked)}
             onReport={report}
           />
         )
@@ -367,6 +399,7 @@ export function ChatRoomScreen({
 export function RoomView({
   partner,
   messages,
+  loading = false,
   writable,
   lockReason,
   draft,
@@ -383,6 +416,8 @@ export function RoomView({
 }: {
   partner: ChatPartner;
   messages: ChatMessage[];
+  /** 첫 응답 전 — 입력을 막고 빈 방 안내를 띄우지 않는다. */
+  loading?: boolean;
   writable: boolean;
   lockReason: ChatLockReason | null;
   draft: string;
@@ -436,9 +471,11 @@ export function RoomView({
 
       <div style={{ marginTop: 16 }}>
         {messages.length === 0 ? (
-          <Text typography="st12" color="grey600" style={{ display: 'block' }}>
-            첫 메시지를 보내 보세요.
-          </Text>
+          !loading && (
+            <Text typography="st12" color="grey600" style={{ display: 'block' }}>
+              첫 메시지를 보내 보세요.
+            </Text>
+          )
         ) : (
           messages.map((m) => (
             <div key={m.id} style={{ display: 'flex', justifyContent: m.mine ? 'flex-end' : 'flex-start', marginBottom: 8 }}>
@@ -471,7 +508,8 @@ export function RoomView({
       <div style={{ display: 'flex', gap: 8, marginTop: 12, alignItems: 'flex-end' }}>
         <textarea
           value={draft}
-          disabled={!writable || busy}
+          // busy는 넣지 않는다 — 보낼 때마다 disabled가 되면 포커스가 빠져 모바일 키보드가 내려간다(연타 방지는 버튼 몫).
+          disabled={!writable || loading}
           maxLength={1000}
           rows={2}
           placeholder={writable ? '메시지 입력' : undefined}
@@ -487,7 +525,7 @@ export function RoomView({
             resize: 'none',
           }}
         />
-        <Button size="medium" disabled={!writable || busy || draft.trim() === ''} onClick={onSend}>
+        <Button size="medium" disabled={!writable || loading || busy || draft.trim() === ''} onClick={onSend}>
           보내기
         </Button>
       </div>

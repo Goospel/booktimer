@@ -917,7 +917,8 @@ const recommendRows: SearchRow[] = [
 //
 // 세 갈래를 브라우저로 다 밟게 둔다: 열린 방(nabi — 표시된 메시지 포함) · 잠긴 방(underline — 내가 팔로우 안 함,
 // 책방에서 팔로우하면 저절로 풀린다) · 숨긴 방(doyun — 대화함 세 번째 조회에 상대 메시지와 함께 돌아온다).
-// 스위치: `?dm=off` 킬스위치 OFF(전부 404) · `?dm=read` 전부 읽은 상태로 시작(홈 카드 없는 상태 확인용).
+// 스위치: `?dm=off` 킬스위치 OFF(전부 404) · `?dm=read` 전부 읽은 상태로 시작(홈 카드 없는 상태 확인용)
+// · `?dm=gone` 방 조회만 404(사라진 방 처리 확인용).
 
 const DM_PARAM = typeof window === 'undefined' ? null : new URLSearchParams(window.location.search).get('dm');
 const DM_OFF = DM_PARAM === 'off';
@@ -1037,6 +1038,8 @@ function chatRoutes(): [Method, RegExp, (ctx: Ctx) => unknown][] {
       return { roomId: room.roomId };
     }],
     ['GET', /^\/api\/chat\/rooms\/(\d+)\/messages$/, ({ id, query }) => {
+      // `?dm=gone` — 방 조회만 404(멤버 아님·킬스위치). 방이 폴링을 멈추고 대화함으로 나가는지 본다.
+      if (DM_PARAM === 'gone') throw new ApiError(404, '대화를 찾을 수 없어요.');
       const room = mustFindRoom(id);
       const lock = lockOf(room);
       room.polls += 1;
