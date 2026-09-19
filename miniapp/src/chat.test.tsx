@@ -371,52 +371,67 @@ function card(p: ProfileResponse, onMessage: (() => void) | null = () => {}) {
   );
 }
 
-/** TDS Button은 글자를 `<span class="tds-mobile-button__content">`에 싣는다 — 안내 문장 속 「메시지를」과 갈리게 닫는 태그까지 본다. */
-const MESSAGE_BUTTON = />메시지<\/span>/;
 const HINT = '서로 팔로우하면 메시지를 보낼 수 있어요';
+/** 맞팔인데 잠긴 경우(주로 웹 전용 상대) — 사람에 대한 단정이 아니라 규칙 문장이라 제재·기타 사유에도 거짓이 아니다. */
+const TOSS_HINT = '대화는 두 사람 모두 토스에서 북타이머를 쓸 때 열려요';
 
-describe('남의 책방 「메시지」 버튼 (canMessage)', () => {
-  it('맞팔 + dmAvailable이면 버튼이 선다(양성 대조군)', () => {
+/** 종이비행기 버튼의 여는 태그 — 없으면 null. 눌리는지는 이 태그의 `disabled`로 가른다(정적 렌더라 클릭은 못 돈다). */
+function planeButton(html: string): string | null {
+  return html.match(/<button[^>]*aria-label="메시지 보내기"[^>]*>/)?.[0] ?? null;
+}
+
+describe('남의 책방 종이비행기 버튼 (canMessage)', () => {
+  it('맞팔 + dmAvailable이면 눌리는 종이비행기가 선다(양성 대조군)', () => {
     expect(canMessage(profile())).toBe(true);
-    expect(card(profile())).toMatch(MESSAGE_BUTTON);
+    const html = card(profile());
+    expect(planeButton(html)).not.toBeNull();
+    expect(planeButton(html)).not.toContain('disabled');
+    // 이모지가 아니라 선 아이콘이다(기본 이모지 금지) — 버튼 바로 안에 svg.
+    expect(html).toMatch(/aria-label="메시지 보내기"[^>]*><svg/);
+    expect(html).not.toContain(HINT);
+    expect(html).not.toContain(TOSS_HINT);
   });
 
-  it('내가 팔로우만 하면(상대가 안 함) 버튼이 없고 안내 한 줄', () => {
+  it('내가 팔로우만 하면(상대가 안 함) 버튼은 보이되 잠기고, 안내 한 줄', () => {
     const p = profile({ followsMe: false });
     expect(canMessage(p)).toBe(false);
-    expect(card(p)).not.toMatch(MESSAGE_BUTTON);
+    expect(planeButton(card(p))).toContain('disabled');
     expect(card(p)).toContain(HINT);
+    expect(card(p)).not.toContain(TOSS_HINT);
   });
 
-  it('상대만 나를 팔로우해도 버튼이 없다', () => {
+  it('상대만 나를 팔로우해도 잠긴다', () => {
     const p = profile({ following: false });
     expect(canMessage(p)).toBe(false);
-    expect(card(p)).not.toMatch(MESSAGE_BUTTON);
+    expect(planeButton(card(p))).toContain('disabled');
     expect(card(p)).toContain(HINT);
   });
 
-  it('맞팔이어도 dmAvailable이 아니면(웹 전용 상대) 버튼이 없다 — 맞팔 안내도 거짓이라 안 띄운다', () => {
+  it('맞팔이어도 dmAvailable이 아니면(웹 전용 상대) 잠기고, 맞팔 안내 대신 토스 안내를 띄운다', () => {
     const p = profile({ dmAvailable: false });
     expect(canMessage(p)).toBe(false);
-    expect(card(p)).not.toMatch(MESSAGE_BUTTON);
-    expect(card(p)).not.toContain(HINT);
+    expect(planeButton(card(p))).toContain('disabled');
+    expect(card(p)).not.toContain(HINT); // 이미 맞팔이라 「서로 팔로우하면」은 거짓이다
+    expect(card(p)).toContain(TOSS_HINT);
   });
 
-  it('옛 서버(dmAvailable 없음)도 버튼이 없다', () => {
+  it('옛 서버(dmAvailable 없음)도 잠긴다', () => {
     expect(canMessage(profile({ dmAvailable: undefined }))).toBe(false);
   });
 
   it('대화가 꺼져 있으면(onMessage 없음) 버튼도 안내도 없다', () => {
     const html = card(profile({ followsMe: false }), null);
-    expect(html).not.toMatch(MESSAGE_BUTTON);
+    expect(planeButton(html)).toBeNull();
     expect(html).not.toContain(HINT);
-    expect(card(profile(), null)).not.toMatch(MESSAGE_BUTTON);
+    expect(planeButton(card(profile(), null))).toBeNull();
+    expect(card(profile({ dmAvailable: false }), null)).not.toContain(TOSS_HINT);
   });
 
   it('내 책방엔 둘 다 없다', () => {
     const html = card(profile({ self: true, following: false, followsMe: false }));
-    expect(html).not.toMatch(MESSAGE_BUTTON);
+    expect(planeButton(html)).toBeNull();
     expect(html).not.toContain(HINT);
+    expect(card(profile({ self: true, dmAvailable: false }))).not.toContain(TOSS_HINT);
   });
 });
 
