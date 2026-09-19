@@ -18,7 +18,9 @@ import {
   TABS,
   TIMER_ACTION_SLOT,
   TabBarCoachmark,
+  chatEntryOf,
   closeCompose,
+  resolveChatMe,
   currentScreen,
   flowStepsOnAbandon,
   initialTab,
@@ -41,7 +43,7 @@ import {
 } from './App';
 import type { TabKey, TimerMode } from './App';
 import type { BookOption, DashboardResponse, StudyHistoryResponse } from './api';
-import { IDLE_STUDY } from './api';
+import { ApiError, IDLE_STUDY, NetworkError, UnauthorizedError } from './api';
 import { CACHE_STUDY_HISTORY, cacheClear, cachePut } from './cache';
 import { coachmarkSeen, dismissCoachmark, resetCoachmarks } from './coachmark';
 import { graph, stubLocalStorage, userAgent } from './test-fixtures';
@@ -1198,6 +1200,20 @@ describe('정적 하니스가 못 보는 배선 — 소스로 잠근다', () => 
     expect(flat).toContain('if (loading.current) return; loading.current = true;');
   });
 
+  it('책방 뒤로가기 훅이 대화 훅보다 먼저다 — 뒤집히면 「메시지」로 연 방이 책방 아래 깔린다(T-166)', () => {
+    const shopHook = flat.indexOf('useBackClose(shop !== null');
+    const chatHook = flat.indexOf("useBackClose(view === 'chat'");
+
+    expect(shopHook).toBeGreaterThan(-1);
+    expect(chatHook).toBeGreaterThan(shopHook);
+  });
+
+  it('차단은 대화함에서 연 방이면 대화함으로 — 곧장 연 방만 뒤에 깔린 그 사람 책방까지 걷는다', () => {
+    expect(flat).toContain(
+      'onBlocked={() => (chatRoom.direct ? (closeChat(), setShop(null)) : setChatRoom(null))}',
+    );
+  });
+
   it('끝나면 반드시 푼다 — 이 줄이 빠지면 첫 로드 뒤 빗장이 잠긴 채 남아 「다시 시도」가 죽는다', () => {
     expect(flat).toContain('.finally(() => { loading.current = false; });');
   });
@@ -1581,5 +1597,80 @@ describe('탭바 위계 (시안 4c)', () => {
     const cell = markup.slice(at, markup.indexOf('</button>', at));
     expect(cell).toContain('box-shadow:0 0 0 3px rgba(240,68,82,.2)');
     expect(cell).not.toContain('110,138,106');
+  });
+});
+
+describe('대화 화면 이름', () => {
+  const base = {
+    view: 'chat' as const,
+    loaded: true,
+    margin: null,
+    shop: null,
+    tab: 'home' as const,
+    mode: 'reading' as const,
+    loginSource: null,
+    guestTab: 'home' as const,
+  };
+
+  it('대화 뷰는 chat — 남의 책방이 뒤에 깔려 있어도 위에 선 것은 대화다', () => {
+    expect(currentScreen(base)).toBe('chat');
+    expect(currentScreen({ ...base, shop: 'nabi' })).toBe('chat');
+  });
+
+  it('대시보드 전엔 과도 상태(null)', () => {
+    expect(currentScreen({ ...base, loaded: false })).toBeNull();
+  });
+});
+
+/**
+ * 이 PR의 핵심 불변식 — `GET /api/chat/me`가 실패하면(킬스위치 404·타임아웃·서버 오류) 대화 진입점이 **0**이다.
+ * App 배선은 effect라 하니스 밖이므로(T-149) 판정 두 조각을 순수 함수로 꺼내 양성·음성을 함께 잠근다.
+ */
+describe('대화 진입점 판정 (resolveChatMe · chatEntryOf)', () => {
+  const me = { unreadRooms: 2, restrictedUntil: null, banned: false };
+
+  it('성공하면 그 값 그대로(양성 대조군)', async () => {
+    await expect(resolveChatMe(() => Promise.resolve(me))).resolves.toEqual(me);
+  });
+
+  it('404(킬스위치)·네트워크 실패·서버 오류는 전부 null — 대화가 없는 것으로 접는다', async () => {
+    await expect(resolveChatMe(() => Promise.reject(new ApiError(404, '')))).resolves.toBeNull();
+    await expect(resolveChatMe(() => Promise.reject(new NetworkError()))).resolves.toBeNull();
+    await expect(resolveChatMe(() => Promise.reject(new ApiError(500, '')))).resolves.toBeNull();
+  });
+
+  it('401은 삼키지 않는다 — 로그인으로 보내야 한다', async () => {
+    await expect(resolveChatMe(() => Promise.reject(new UnauthorizedError()))).rejects.toBeInstanceOf(UnauthorizedError);
+  });
+
+  function actions() {
+    return { setView: vi.fn(), setChatRoom: vi.fn(), setShop: vi.fn() };
+  }
+
+  it('chatMe가 없으면 진입점 묶음 자체가 없다(음성)', () => {
+    expect(chatEntryOf(null, actions())).toBeUndefined();
+  });
+
+  it('chatMe가 있으면 진입점이 서고 수는 미읽음 방 수다(양성)', () => {
+    expect(chatEntryOf(me, actions())?.unread).toBe(2);
+  });
+
+  it('대화함 열기는 옛 방을 비우고 연다 — 401 뒤 재로그인에 옛 방이 남지 않게', () => {
+    const act = actions();
+    chatEntryOf(me, act)!.onOpenInbox();
+    expect(act.setChatRoom).toHaveBeenCalledWith(null);
+    expect(act.setView).toHaveBeenCalledWith('chat');
+  });
+
+  it('「메시지」로 연 방은 곧장 열리고, 그 사람 책방을 뒤에 깐다(이미 깔린 책방은 그대로)', () => {
+    const act = actions();
+    const partner = { loginId: 'nabi', nickname: '나비독서' };
+    chatEntryOf(me, act)!.onOpenRoom(7, partner);
+    expect(act.setChatRoom).toHaveBeenCalledWith({ roomId: 7, partner, direct: true });
+    expect(act.setView).toHaveBeenCalledWith('chat');
+
+    const updater = act.setShop.mock.calls[0][0] as (cur: string | null) => string | null;
+    expect(updater(null)).toBe('nabi'); // 책방 탭 안에서 연 남의 책방 → App 책방으로 올린다
+    expect(updater('jieun')).toBe('jieun'); // App 책방이 이미 있으면 건드리지 않는다
   });
 });

@@ -680,6 +680,31 @@ function SearchGlass({ dim }: { dim: boolean }) {
   );
 }
 
+/**
+ * 미읽음 수 알약 — 대화함 진입(책방 헤더)과 대화함 행이 같은 모양을 쓴다. 0이면 아무것도 안 그린다.
+ * `unit`이 세는 것을 말한다: 헤더는 미읽음 **방** 수(`unreadRooms`)라 「대화」, 대화함 행은 그 방의 메시지 수라 「메시지」.
+ */
+export function UnreadBadge({ count, unit }: { count: number; unit: '대화' | '메시지' }) {
+  if (count <= 0) return null;
+  return (
+    <span
+      aria-label={`읽지 않은 ${unit} ${count}개`}
+      style={{
+        minWidth: 18,
+        padding: '1px 6px',
+        borderRadius: 999,
+        background: 'var(--adaptiveBlue500, #6E8A6A)',
+        color: '#FFFDF8',
+        fontSize: 12,
+        lineHeight: '16px',
+        textAlign: 'center',
+      }}
+    >
+      {count}
+    </span>
+  );
+}
+
 export function Loading({ message = '불러오는 중…' }: { message?: string }) {
   return (
     <main style={{ padding: 40, textAlign: 'center' }}>

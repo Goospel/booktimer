@@ -1032,6 +1032,11 @@ export interface ProfileResponse {
   mutualFollowerCount?: number;
   /** 이 사람이 <b>나를</b> 팔로우하는가 — {@link ProfileResponse.following}과 방향이 반대다. */
   followsMe?: boolean;
+  /**
+   * 지금 이 사람에게 DM을 열 수 있는가 — 서버 `ChatEligibility`가 OK일 때만 true(맞팔 ∧ 차단 없음 ∧ 둘 다 토스
+   * 연결 ∧ 제재 아님). 킬스위치 OFF·옛 서버면 false/없음이라 「메시지」 버튼이 서지 않는다.
+   */
+  dmAvailable?: boolean;
 }
 
 /** 차단·ADMIN·없는 아이디는 모두 404 — 존재를 누설하지 않는 서버 계약을 그대로 받는다. */
@@ -1123,6 +1128,83 @@ export type ReportReason = (typeof REPORT_REASONS)[number]['value'];
 
 export const reportUser = (loginId: string, reason: ReportReason, detail: string): Promise<{ reported: boolean }> =>
   request('/api/report', { body: { loginId, reason, detail } });
+
+// ── 맞팔 DM (`web/api/ChatApiController` + `chat/ChatRoomService`의 record가 타입 단일 출처) ──
+//
+// 킬스위치 OFF면 `/api/chat/**`가 전부 404다 — 화면은 `fetchChatMe` 실패를 「대화 기능 없음」으로 접는다.
+// 에러 본문은 서버 `ChatException`의 한국어 평문이라 `ApiError.message`를 그대로 띄운다.
+
+/** 잠김 사유 — `ChatRoomService.lockReason`(`CLOSED`) + `ChatEligibility.Verdict`(OK 제외). */
+export type ChatLockReason = 'CLOSED' | 'NOT_MUTUAL' | 'BLOCKED' | 'UNREACHABLE' | 'RESTRICTED';
+
+/** `ChatApiController.MeResponse` — 미읽음 방 수와 내 제재 상태. */
+export interface ChatMe {
+  unreadRooms: number;
+  /** 일시 정지 끝 시각(ISO). 지났을 수도 있다 — 판정은 지금 시각과 비교해서 한다. */
+  restrictedUntil: string | null;
+  banned: boolean;
+}
+
+/** `ChatRoomService.Partner` — 방 제목에 선다(맞팔이라 닉네임·아이디는 서로 이미 공개). */
+export interface ChatPartner {
+  loginId: string;
+  nickname: string;
+}
+
+/** `ChatRoomService.RoomSummary` — 빈 방(메시지 0)은 서버가 목록에 안 싣는다. */
+export interface ChatRoomSummary {
+  roomId: number;
+  partner: ChatPartner;
+  writable: boolean;
+  lockReason: ChatLockReason | null;
+  lastMessage: { body: string; mine: boolean; createdAt: string };
+  unread: number;
+  lastMessageId: number;
+}
+
+/** `ChatRoomService.MessageView` — `body`는 복호화 실패 행이면 null이다(컨버터가 null을 준다). */
+export interface ChatMessage {
+  id: number;
+  mine: boolean;
+  body: string | null;
+  flagged: boolean;
+  createdAt: string;
+}
+
+/** `ChatRoomService.RoomMessages` — `after` 이후 오래된 순 최대 200건 + 지금 보낼 수 있는지. */
+export interface ChatMessages {
+  messages: ChatMessage[];
+  writable: boolean;
+  lockReason: ChatLockReason | null;
+}
+
+/** 홈 첫 화면에서 나가는 요청이라 상한을 둔다(T-252 — 공개 뉴스와 같은 5초). */
+export const CHAT_ME_TIMEOUT_MS = 5_000;
+
+export const fetchChatMe = (): Promise<ChatMe> => request('/api/chat/me', { timeoutMs: CHAT_ME_TIMEOUT_MS });
+
+export const fetchChatRooms = (): Promise<ChatRoomSummary[]> => request('/api/chat/rooms');
+
+/** `after=0`이 첫 로드다(서버 `@RequestParam(defaultValue = "0")`). */
+export const fetchChatMessages = (roomId: number, after: number): Promise<ChatMessages> =>
+  request(`/api/chat/rooms/${roomId}/messages`, { query: { after } });
+
+/** 방을 열거나 기존 방을 돌려준다 — 403 자격·409 웹 전용 상대·429는 서버 평문이 곧 안내다. */
+export const openChatRoom = (loginId: string): Promise<{ roomId: number }> =>
+  request('/api/chat/rooms', { body: { loginId } });
+
+export const sendChatMessage = (roomId: number, body: string): Promise<{ id: number; createdAt: string }> =>
+  request(`/api/chat/rooms/${roomId}/messages`, { body: { body } });
+
+export const markChatRead = (roomId: number, lastMessageId: number): Promise<void> =>
+  request(`/api/chat/rooms/${roomId}/read`, { body: { lastMessageId } });
+
+/** 「나가기」 — 내 쪽만 숨긴다. 상대가 새 메시지를 보내면 다시 뜬다. */
+export const hideChatRoom = (roomId: number): Promise<void> =>
+  request(`/api/chat/rooms/${roomId}/hide`, { method: 'POST' });
+
+export const reportChatRoom = (roomId: number, reason: ReportReason, detail: string): Promise<void> =>
+  request(`/api/chat/rooms/${roomId}/report`, { body: { reason, detail } });
 
 // ── 여백 (`web/api/StoryApiController` + `story` record가 타입 단일 출처) ──
 //

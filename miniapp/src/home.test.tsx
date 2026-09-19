@@ -148,6 +148,7 @@ function renderHome(
     celebrate?: boolean;
     guide?: ReactNode;
     mode?: TimerMode;
+    chatUnread?: number;
   } = {},
 ) {
   return renderToStaticMarkup(
@@ -169,6 +170,8 @@ function renderHome(
         onError={() => {}}
         onOpenMargin={() => {}}
         onComposeMargin={() => {}}
+        chatUnread={props.chatUnread}
+        onOpenChat={() => {}}
       />
     </TDSMobileProvider>,
   );
@@ -1858,5 +1861,24 @@ describe('홈 히어로 위계 (시안 2a)', () => {
 
     expect(tagBefore(markup, '남은 시간')).toContain('font-size:11px');
     expect(tagBefore(markup, '하루 목표')).toContain('font-size:11px');
+  });
+});
+
+/**
+ * 홈 미읽음 카드 — <b>미읽음이 있을 때만</b> 선다(설계 §4-3·§7-1). 맞팔은 드물어 대화함은 비어 있는 것이
+ * 기본 상태라, 빈 기능이 홈을 차지하지 않게 한다. 대화가 꺼져 있으면(`chatUnread` 없음) 당연히 없다.
+ */
+describe('홈 대화 미읽음 카드', () => {
+  it('미읽음 방이 있으면 카드가 선다(양성 대조군)', () => {
+    // N은 메시지 수가 아니라 미읽음 **방** 수(`unreadRooms`)다 — 문구도 「대화」를 센다.
+    expect(renderHome({}, { chatUnread: 2 })).toContain('읽지 않은 대화 2');
+  });
+
+  it('미읽음이 0이면 없다', () => {
+    expect(renderHome({}, { chatUnread: 0 })).not.toContain('읽지 않은 대화');
+  });
+
+  it('대화가 꺼져 있으면(값 없음) 없다', () => {
+    expect(renderHome()).not.toContain('읽지 않은 대화');
   });
 });

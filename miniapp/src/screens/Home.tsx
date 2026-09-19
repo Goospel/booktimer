@@ -1167,6 +1167,8 @@ export function Home({
   onComposeMargin,
   // 독서 렌더를 재는 기존 하니스는 이 문을 안 넘긴다 — 공부 갈래에서만 쓰여 기본값이면 족하다.
   onSetSessionGoal = () => Promise.resolve(),
+  chatUnread,
+  onOpenChat,
 }: {
   dashboard: DashboardResponse;
   /** 지금 재는 것 — 히어로 한 장이 이 값으로 두 얼굴을 갖는다(파생은 App이 한다). */
@@ -1213,6 +1215,12 @@ export function Home({
    * 홈이 시트를 연 채 그 안에서 실패를 말한다(액션 스트립은 시트 패널에 가린다).
    */
   onSetSessionGoal?: (bookId: number, seconds: number | null) => Promise<void>;
+  /**
+   * 미읽음이 있는 대화방 수 — App이 `GET /api/chat/me`로 받는다. 대화가 꺼져 있으면(404·실패) `undefined`다.
+   * 카드는 <b>1 이상일 때만</b> 선다 — 대화함이 비어 있는 것이 기본 상태라 빈 기능이 홈을 차지하지 않게(설계 §7-1).
+   */
+  chatUnread?: number;
+  onOpenChat?: () => void;
 }) {
   /** 측정할 책 — 아직 안 골랐으면 기본값(이어 읽기)으로 떨어진다. 고른 값은 App이 들어 화면을 나갔다 와도 남는다. */
   const selectedBookId = picked === undefined ? defaultBookId(dashboard.readingBooks, dashboard.recentBookId) : picked;
@@ -1598,6 +1606,35 @@ export function Home({
       {/* 축하는 <b>독서</b> 기록에 대한 말이다(「기록 탭에 첫 칸이 생겼어요」 — 공부는 그 탭에 안 남는다).
           `celebrate`는 `MainTabs`가 들어 탭 전환에 살아남으므로, 켜진 채 토글만 넘기면 공부 화면에 떴다. */}
       {mode === 'reading' && <FirstSessionBanner show={celebrate} />}
+
+      {/* 새 메시지 — 화면 안 카드다(진입 직후 덮는 것 금지, T-183). 눌러야 대화함이 열린다. */}
+      {chatUnread !== undefined && chatUnread > 0 && onOpenChat !== undefined && (
+        <section style={sectionStyle}>
+          <button
+            type="button"
+            onClick={onOpenChat}
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              width: '100%',
+              padding: 0,
+              border: 'none',
+              background: 'none',
+              color: 'inherit',
+              font: 'inherit',
+              cursor: 'pointer',
+            }}
+          >
+            <Text typography="st11" fontWeight="bold">
+              읽지 않은 대화 {chatUnread}
+            </Text>
+            <Text typography="st12" color="grey600">
+              대화함 열기 ›
+            </Text>
+          </button>
+        </section>
+      )}
 
       {/* 알림 동의 — 발송은 동의한 유저에게만 가능하고, 동의를 받는 주체는 미니앱이다(콘솔 심사 조건). */}
       {shouldShowNotificationCard(agreements[mode], agreementSupported) && (

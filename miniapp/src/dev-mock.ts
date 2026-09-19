@@ -4,6 +4,9 @@ import type {
   BookOption,
   BookStatus,
   BookVisibility,
+  ChatMessage,
+  ChatMessages,
+  ChatRoomSummary,
   ContributionDay,
   ContributionGraph,
   DailyRecord,
@@ -910,6 +913,163 @@ const recommendRows: SearchRow[] = [
   })),
 ];
 
+// ── 맞팔 DM ─────────────────────────────────────────────────────────────────
+//
+// 세 갈래를 브라우저로 다 밟게 둔다: 열린 방(nabi — 표시된 메시지 포함) · 잠긴 방(underline — 내가 팔로우 안 함,
+// 책방에서 팔로우하면 저절로 풀린다) · 숨긴 방(doyun — 대화함 세 번째 조회에 상대 메시지와 함께 돌아온다).
+// 스위치: `?dm=off` 킬스위치 OFF(전부 404) · `?dm=read` 전부 읽은 상태로 시작(홈 카드 없는 상태 확인용)
+// · `?dm=gone` 방 조회만 404(사라진 방 처리 확인용).
+
+const DM_PARAM = typeof window === 'undefined' ? null : new URLSearchParams(window.location.search).get('dm');
+const DM_OFF = DM_PARAM === 'off';
+
+/** 웹 전용(토스 미연결) 상대 — 맞팔이어도 서버가 `dmAvailable=false`·`UNREACHABLE`을 준다. */
+const WEB_ONLY = new Set(['jieun']);
+
+interface MockRoom {
+  roomId: number;
+  partner: { loginId: string; nickname: string };
+  hidden: boolean;
+  lastRead: number;
+  /** 이 방의 messages 조회 횟수 — 세 번째마다 상대 답장이 하나 붙는다. */
+  polls: number;
+}
+
+const chatRooms: MockRoom[] = [
+  { roomId: 1, partner: { loginId: 'nabi', nickname: '나비독서' }, hidden: false, lastRead: 1, polls: 0 },
+  { roomId: 2, partner: { loginId: 'underline', nickname: '밑줄러' }, hidden: false, lastRead: 5, polls: 0 },
+  { roomId: 3, partner: { loginId: 'doyun', nickname: '도윤' }, hidden: true, lastRead: 6, polls: 0 },
+];
+
+const chatAt = (minutesAgo: number) => new Date(Date.now() - minutesAgo * 60_000).toISOString();
+
+const chatLog: (ChatMessage & { roomId: number })[] = [
+  { roomId: 1, id: 1, mine: false, body: '책방 잘 봤어요! 불편한 편의점 저도 좋아해요', flagged: false, createdAt: chatAt(90) },
+  { roomId: 1, id: 2, mine: true, body: '반가워요. 요즘은 뭐 읽으세요?', flagged: false, createdAt: chatAt(80) },
+  { roomId: 1, id: 3, mine: false, body: '카톡 아이디 알려드릴게요 book_nabi 로 연락 주세요', flagged: true, createdAt: chatAt(5) },
+  { roomId: 2, id: 4, mine: false, body: '완독 축하해요', flagged: false, createdAt: chatAt(2000) },
+  { roomId: 2, id: 5, mine: true, body: '고마워요!', flagged: false, createdAt: chatAt(1990) },
+  { roomId: 3, id: 6, mine: true, body: '다음에 또 얘기해요', flagged: false, createdAt: chatAt(3000) },
+];
+
+let chatNextId = 100;
+let roomsPolls = 0;
+
+if (DM_PARAM === 'read') for (const r of chatRooms) r.lastRead = Number.MAX_SAFE_INTEGER;
+
+/** 서버 `ChatEligibility`의 목 — 픽스처 사용자는 전부 나를 팔로우하므로(`followsMe`) 갈림은 내 팔로우·웹 전용이다. */
+function dmAvailable(user: UserRow): boolean {
+  return !DM_OFF && !user.self && user.following && !WEB_ONLY.has(user.loginId) && !isBlocked(user.loginId);
+}
+
+function isBlocked(loginId: string): boolean {
+  return blocked.some((b) => b.loginId === loginId);
+}
+
+function lockOf(room: MockRoom): ChatMessages['lockReason'] {
+  if (isBlocked(room.partner.loginId)) return 'CLOSED';
+  const user = users.find((u) => u.loginId === room.partner.loginId);
+  if (user === undefined) return null; // 목록 밖 상대(doyun)는 늘 맞팔로 친다
+  if (!user.following) return 'NOT_MUTUAL';
+  return WEB_ONLY.has(user.loginId) ? 'UNREACHABLE' : null;
+}
+
+function mustFindRoom(id: number): MockRoom {
+  const room = chatRooms.find((r) => r.roomId === id);
+  if (room === undefined) throw new ApiError(404, '대화를 찾을 수 없어요.');
+  return room;
+}
+
+function roomLog(room: MockRoom): ChatMessage[] {
+  return chatLog.filter((m) => m.roomId === room.roomId).map(({ roomId: _, ...m }) => m);
+}
+
+function pushChat(room: MockRoom, mine: boolean, body: string): ChatMessage {
+  const m = { roomId: room.roomId, id: chatNextId++, mine, body, flagged: false, createdAt: new Date().toISOString() };
+  chatLog.push(m);
+  room.hidden = false; // 새 메시지는 「나가기」를 푼다(서버 `unhideAll`)
+  return m;
+}
+
+/** 대화함에 보이는 방 — 숨김·차단·빈 방 제외, 최근 메시지 순. */
+function visibleRooms(): ChatRoomSummary[] {
+  return chatRooms
+    .filter((r) => !r.hidden && !isBlocked(r.partner.loginId))
+    .flatMap((r) => {
+      const log = roomLog(r);
+      const last = log.at(-1);
+      if (last === undefined) return [];
+      const lock = lockOf(r);
+      return [{
+        roomId: r.roomId,
+        partner: r.partner,
+        writable: lock === null,
+        lockReason: lock,
+        lastMessage: { body: last.body ?? '', mine: last.mine, createdAt: last.createdAt },
+        unread: log.filter((m) => !m.mine && m.id > r.lastRead).length,
+        lastMessageId: last.id,
+      }];
+    })
+    .sort((a, b) => b.lastMessageId - a.lastMessageId);
+}
+
+function chatRoutes(): [Method, RegExp, (ctx: Ctx) => unknown][] {
+  return [
+    ['GET', /^\/api\/chat\/me$/, () => ({
+      unreadRooms: visibleRooms().filter((r) => r.unread > 0).length,
+      restrictedUntil: null,
+      banned: false,
+    })],
+    ['GET', /^\/api\/chat\/rooms$/, () => {
+      roomsPolls += 1;
+      if (roomsPolls % 3 === 0) {
+        for (const r of chatRooms.filter((room) => room.hidden)) pushChat(r, false, '잘 지내요? 요즘 읽는 책 궁금해요');
+      }
+      return visibleRooms();
+    }],
+    ['POST', /^\/api\/chat\/rooms$/, ({ body }) => {
+      const user = mustFindUser(body.loginId as string);
+      if (!dmAvailable(user)) throw new ApiError(403, '서로 팔로우해야 메시지를 보낼 수 있어요.');
+      let room = chatRooms.find((r) => r.partner.loginId === user.loginId);
+      if (room === undefined) {
+        room = { roomId: chatRooms.length + 1, partner: { loginId: user.loginId, nickname: user.nickname }, hidden: false, lastRead: 0, polls: 0 };
+        chatRooms.push(room);
+      }
+      return { roomId: room.roomId };
+    }],
+    ['GET', /^\/api\/chat\/rooms\/(\d+)\/messages$/, ({ id, query }) => {
+      // `?dm=gone` — 방 조회만 404(멤버 아님·킬스위치). 방이 폴링을 멈추고 대화함으로 나가는지 본다.
+      if (DM_PARAM === 'gone') throw new ApiError(404, '대화를 찾을 수 없어요.');
+      const room = mustFindRoom(id);
+      const lock = lockOf(room);
+      room.polls += 1;
+      if (room.polls % 3 === 0 && lock === null) pushChat(room, false, `(목) ${room.polls / 3}번째 답장이에요`);
+      const after = Number(query.after ?? 0);
+      return { messages: roomLog(room).filter((m) => m.id > after), writable: lock === null, lockReason: lock };
+    }],
+    ['POST', /^\/api\/chat\/rooms\/(\d+)\/messages$/, ({ id, body }) => {
+      const room = mustFindRoom(id);
+      if (lockOf(room) !== null) throw new ApiError(403, '서로 팔로우해야 메시지를 보낼 수 있어요.');
+      const sent = pushChat(room, true, String(body.body ?? ''));
+      return { id: sent.id, createdAt: sent.createdAt };
+    }],
+    ['POST', /^\/api\/chat\/rooms\/(\d+)\/read$/, ({ id, body }) => {
+      const room = mustFindRoom(id);
+      const latest = roomLog(room).at(-1)?.id ?? 0;
+      room.lastRead = Math.max(room.lastRead, Math.min(Number(body.lastMessageId), latest));
+      return {};
+    }],
+    ['POST', /^\/api\/chat\/rooms\/(\d+)\/hide$/, ({ id }) => {
+      mustFindRoom(id).hidden = true;
+      return {};
+    }],
+    ['POST', /^\/api\/chat\/rooms\/(\d+)\/report$/, ({ id }) => {
+      mustFindRoom(id);
+      return {};
+    }],
+  ];
+}
+
 // ── 라우팅 ──────────────────────────────────────────────────────────────────
 
 interface Ctx {
@@ -1333,6 +1493,7 @@ const routes: [Method, RegExp, (ctx: Ctx) => unknown][] = [
           ],
       mutualFollowerCount: user.self ? 0 : 5,
       followsMe: !user.self,
+      dmAvailable: dmAvailable(user),
     };
   }],
   ['GET', /^\/api\/profile\/books$/, ({ query }) => {
@@ -1396,6 +1557,9 @@ const routes: [Method, RegExp, (ctx: Ctx) => unknown][] = [
     return { blocked: false };
   }],
   ['POST', /^\/api\/report$/, () => ({ reported: true })],
+
+  // ── 맞팔 DM ── (`?dm=off`면 킬스위치 OFF처럼 전부 404 — 진입점이 사라지는지 브라우저로 본다)
+  ...(DM_OFF ? [] : chatRoutes()),
 
   // ── 여백 ──
   // 「누구의 + 어느 책」 두 축. 응답은 자기완결이라(책 라벨 동봉) 홈 소식에서 곧장 점프해도 화면이 그려진다.

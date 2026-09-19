@@ -99,13 +99,13 @@
 | 발송 제한 60/분·방 10/시간 | `RateLimitAction.CHAT_MESSAGE`·`CHAT_ROOM_OPEN` | ✅ PR-1 |
 | AES-256-GCM 저장 | `EncryptedTextConverter` | ✅ PR-1 |
 | 탈퇴 즉시 삭제 | `AccountService.purge` + `ChatFkIntegrationTest` | ✅ PR-1 |
-| 연락처·링크 감지 | `ContactExchangeDetector`(서버) | ✅ PR-1 / 표시·안내 UI는 ⬜ PR-3 |
+| 연락처·링크 감지 | `ContactExchangeDetector`(서버) · 미니앱 수신자 배너(`Chat.tsx`) | ✅ PR-1 / ✅ PR-3 |
 | 신고(대화방 식별자 포함)·관리자 대본 열람·처리 완료 | `ChatSafetyService`·`AdminChatController`(V96) | ✅ PR-2 |
 | 제재 3단계·신고자 2명 자동 7일 | `ChatSanctionService` | ✅ PR-2 |
 | 차단 종료 방 30일 삭제·신고 건 보존·법적 보존 | `ChatRetentionService`(매일 04:10 KST)·`report.legal_hold` | ✅ PR-2 |
 | 운영자 알림(배너·푸시) | `/admin` 배너 ✅ PR-2 · 운영자 푸시 코드 ✅ PR-2(`booktimer.toss.messenger.ops-alert-*`) / 콘솔 템플릿 등록·SSM 점등은 ⬜ PR-3 | ✅ PR-2(배너) |
 | 약관 제10조 「대화」·제11조 「문의」·처리방침 반영 | `terms.html`·`privacy.html` | ✅ PR-2 |
-| 원탭 신고·차단 UI·나가기 | 미니앱 `Chat.tsx` | ⬜ PR-3 |
+| 원탭 신고·차단 UI·나가기 | 미니앱 `Chat.tsx` | ✅ PR-3 |
 
 ## 새 메시지 푸시 — 콘솔 등록 문구 (PR-3에서 등록)
 

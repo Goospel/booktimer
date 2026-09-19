@@ -4,6 +4,7 @@ import type { ReactNode } from 'react';
 
 import type {
   BookStatus,
+  ChatPartner,
   FollowListType,
   PersonalityEntry,
   PersonalityMutation,
@@ -23,6 +24,7 @@ import {
   fetchProfile,
   fetchProfileBooks,
   follow,
+  openChatRoom,
   reportUser,
   selectPersonality,
   unfollow,
@@ -155,6 +157,16 @@ export function followCountsOpenable(self: boolean, hasHandler: boolean): boolea
   return self && hasHandler;
 }
 
+/**
+ * 「메시지」 버튼을 세울지 — 맞팔(서로 팔로우) ∧ 서버 `dmAvailable`. 셋 다 참이어야 한다.
+ *
+ * <p>맞팔은 두 플래그로도 알지만 `dmAvailable`까지 보는 이유: 웹 전용(토스 미연결) 상대·차단·제재는 서버만 안다.
+ * 회색 버튼 대신 <b>부재</b>다(설계 §4-3) — 눌러 봐야 403인 버튼을 세우지 않는다.
+ */
+export function canMessage(profile: ProfileResponse): boolean {
+  return profile.following && profile.followsMe === true && profile.dmAvailable === true;
+}
+
 /** 성향 관문 손잡이 — 한 줄에 나란히 설 것들. 순서가 곧 화면의 왼→오른쪽이다. */
 export type PersonalityAction = 'ad' | 'archive';
 
@@ -278,6 +290,7 @@ export function Profile({
   header,
   onOpenFollowList,
   onOpenMargin,
+  onOpenChat,
 }: {
   loginId: string;
   /**
@@ -292,6 +305,11 @@ export function Profile({
   onOpenFollowList?: (type: FollowListType) => void;
   /** 격자에서 책을 눌렀을 때 — 그 책의 여백 화면으로 간다(전체 화면 전이는 셸이 든다). */
   onOpenMargin?: (bookId: number) => void;
+  /**
+   * 방을 열었다 — 대화방 화면은 App이 든다. <b>대화 기능이 켜져 있을 때만</b> 온다(`GET /api/chat/me` 성공):
+   * 없으면 「메시지」 버튼도 맞팔 안내도 서지 않는다(킬스위치 OFF에 거짓 안내를 띄우지 않는다).
+   */
+  onOpenChat?: (roomId: number, partner: ChatPartner) => void;
 }) {
   // 지난 성공 응답이 첫 렌더의 출발점이다 — 헤더·격자가 두 왕복을 기다리며 통째로 로딩이던 자리.
   // 키에 loginId가 박혀 있어 남의 책방 캐시가 내 화면에 설 수 없다(재검증은 그대로 매번 나간다).
@@ -390,6 +408,13 @@ export function Profile({
   // 차단 진입은 남의 책방에만 있고 남의 책방엔 늘 onBack이 있다 — 없으면 그 자리에 머무는 게 최선이다.
   const block = () => run(blockUser(loginId), () => onBack?.());
 
+  /** 「메시지」 — 방을 먼저 연다(403·409·429 평문은 이 화면 에러 줄에 선다). 열리면 대화방으로 간다. */
+  const message = () => {
+    if (profile === null || onOpenChat === undefined) return;
+    const partner = { loginId: profile.loginId, nickname: profile.nickname };
+    run(openChatRoom(loginId).then(({ roomId }) => onOpenChat(roomId, partner)), () => {});
+  };
+
   /**
    * 성향 분석 실행 — 광고 경로와 무광고 재시도가 공유한다. 중간 이탈(`null`)이면 아무 일도 없었던 것처럼 둔다.
    * 성공해도 응답 view를 손수 매핑하지 않고 `/api/profile`을 다시 받는다 — 태그 칩 모양이 달라 매핑이 낭비다.
@@ -465,6 +490,7 @@ export function Profile({
         onClaimPersonality={() => runPersonality(() => claimPersonality(PERSONALITY_AD_GROUP_ID))}
         onRetryPersonality={() => runPersonality(runPersonalityRefresh)}
         onFollowToggle={toggleFollow}
+        onMessage={onOpenChat === undefined ? undefined : message}
         onSelectTag={selectTag}
         statusFilter={statusFilter}
         onSelectStatus={selectStatus}
@@ -513,6 +539,7 @@ export function ProfileCard({
   onClaimPersonality,
   onRetryPersonality,
   onFollowToggle,
+  onMessage,
   onSelectTag,
   statusFilter,
   onSelectStatus,
@@ -539,6 +566,8 @@ export function ProfileCard({
   onClaimPersonality: () => void;
   onRetryPersonality: () => void;
   onFollowToggle: () => void;
+  /** 「메시지」 — 대화 기능이 켜져 있을 때만 온다. 없으면 버튼도 맞팔 안내도 없다. */
+  onMessage?: () => void;
   onSelectTag: (tag: string | null) => void;
   /** 걸린 상태 필터 — `null`이 「전체」. */
   statusFilter: BookStatus | null;
@@ -615,6 +644,13 @@ export function ProfileCard({
       <Text typography="st12" color="grey600" style={{ display: 'block', marginTop: 1 }}>
         @{profile.loginId}
       </Text>
+      {/* 「메시지」가 왜 없는지 묻는 사람을 위한 한 줄(설계 §4-3) — 맞팔이 아닐 때만. 맞팔인데 웹 전용 상대면
+          이 문장이 거짓이 되므로 안 띄운다. 대화가 꺼져 있으면(onMessage 없음) 역시 거짓이라 없다. */}
+      {onMessage !== undefined && !profile.self && !(profile.following && profile.followsMe === true) && (
+        <Text typography="st12" color="grey600" style={{ display: 'block', marginTop: 4 }}>
+          서로 팔로우하면 메시지를 보낼 수 있어요
+        </Text>
+      )}
 
       {/* 태그가 서술보다 <b>먼저</b>다. 서술은 서버가 써 준 다섯 줄짜리 문단이고 태그는 그 요약인데,
           문단이 앞에 있으면 「이 사람이 어떤 독자인가」를 스크롤해야 알 수 있었다(요약이 원문 뒤에 있는 꼴).
@@ -711,6 +747,12 @@ export function ProfileCard({
           <Button style={{ flex: 1 }} variant={profile.following ? 'weak' : 'fill'} disabled={busy} onClick={onFollowToggle}>
             {profile.following ? '팔로우 취소' : '팔로우'}
           </Button>
+          {/* 인스타 「메시지」 자리 — 맞팔 ∧ dmAvailable일 때만 선다({@link canMessage}). */}
+          {onMessage !== undefined && canMessage(profile) && (
+            <Button style={{ flex: 1 }} variant="weak" disabled={busy} onClick={onMessage}>
+              메시지
+            </Button>
+          )}
           {/*
             드문 안전장치다 — 글자 버튼으로 팔로우와 나란히 서 있으면 남의 책방 첫인상이 방어적이었다.
             여백 카드의 ⋯ 문법으로 강등하고 이름은 `aria-label`이 진다(⋯ 는 스크린리더에 아무 말도 안 한다).
