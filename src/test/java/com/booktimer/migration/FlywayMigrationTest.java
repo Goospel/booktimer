@@ -379,7 +379,7 @@ class FlywayMigrationTest {
         com.booktimer.chat.ChatRoom room = chatRoomRepository.saveAndFlush(com.booktimer.chat.ChatRoom.of(a, b));
 
         com.booktimer.report.Report r = com.booktimer.report.Report.of(a, b, com.booktimer.report.ReportReason.SPAM, null);
-        r.attachChatRoom(room.getId());
+        r.attachChatRoom(room.getId(), 0L);
         r.resolve("WARN");
         r.setLegalHold(true);
         long id = reportRepository.saveAndFlush(r).getId();
@@ -387,6 +387,7 @@ class FlywayMigrationTest {
         assertThat(back.getChatRoomId()).isEqualTo(room.getId());
         assertThat(back.getStatus()).isEqualTo(com.booktimer.report.ReportStatus.RESOLVED);
         assertThat(back.isLegalHold()).isTrue();
+        assertThat(back.getChatLastMessageId()).isZero(); // 대본을 자르는 신고 시점(V96 chat_last_message_id)
 
         // 기존 신고 행은 OPEN으로 시작한다(컬럼 기본값) — 배너가 옛 신고를 미처리로 센다.
         assertThat(jdbcTemplate.queryForObject(
@@ -399,6 +400,38 @@ class FlywayMigrationTest {
                 """, b.getId(), a.getId()))
                 .as("a < b 정규화가 깨진 행은 DB가 거부한다")
                 .isInstanceOf(DataIntegrityViolationException.class);
+    }
+
+    @Autowired
+    com.booktimer.chat.ChatRetentionService chatRetentionService;
+
+    /**
+     * 보존 삭제의 순서(신고 참조 해제 → 메시지 → 방)는 <b>V96 FK({@code report → chat_room})가 실제로 있는 스키마</b>에서만
+     * 판정된다. 메인 스위트는 Hibernate가 {@code Report.chatRoomId}(평범한 Long)로 스키마를 만들어 그 FK가 없다 —
+     * 거기선 참조 해제가 방 삭제보다 늦게 flush돼도 초록이다(리뷰 #1169 중요 1: 메시지 삭제의
+     * {@code flushAutomatically}를 지워도 메인 스위트는 통과했다).
+     */
+    @Test
+    void chat_retention_deletes_room_referenced_by_resolved_report_under_v96_fk() {
+        User a = userRepository.saveAndFlush(userWithHandle("keep-a@example.com", "keepfkaa"));
+        User b = userRepository.saveAndFlush(userWithHandle("keep-b@example.com", "keepfkbb"));
+        com.booktimer.chat.ChatRoom room = com.booktimer.chat.ChatRoom.of(a, b);
+        Instant closedAt = Instant.parse("2026-01-01T00:00:00Z");
+        room.close(closedAt);
+        room = chatRoomRepository.saveAndFlush(room);
+        var msg = chatMessageRepository.saveAndFlush(
+                com.booktimer.chat.ChatMessage.of(room, a, "보존 끝난 대화", false, closedAt.minusSeconds(60)));
+        com.booktimer.report.Report r = com.booktimer.report.Report.of(b, a, com.booktimer.report.ReportReason.SPAM, null);
+        r.attachChatRoom(room.getId(), msg.getId());
+        r.resolve("WARN");
+        long reportId = reportRepository.saveAndFlush(r).getId();
+        long roomId = room.getId();
+
+        int deleted = chatRetentionService.purgeExpiredClosedRooms(closedAt.plus(java.time.Duration.ofDays(31)));
+
+        assertThat(deleted).isEqualTo(1);
+        assertThat(chatRoomRepository.findById(roomId)).isEmpty();
+        assertThat(reportRepository.findById(reportId).orElseThrow().getChatRoomId()).isNull();
     }
 
     private static User userWithHandle(String email, String handle) {

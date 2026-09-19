@@ -10,6 +10,7 @@ import com.booktimer.user.User;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.Clock;
 import java.time.Instant;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
@@ -23,8 +24,9 @@ import java.util.Optional;
  * 신고해도 방은 그대로다(끝내려면 신고자가 차단한다). 신고가 새로 생기거나 처리 끝난 신고가 다시 열리면
  * 자동 제재 판정({@link ChatSanctionService#onChatReport})과 운영자 알림({@link ChatOpsAlertService})을 부른다.
  *
- * <p>운영자는 <b>방을 가리키는 신고로만</b> 대본을 연다(URL이 {@code /admin/reports/{id}/chat}인 이유) —
- * 신고가 없는 대화방은 열람 경로 자체가 없다.
+ * <p>운영자는 <b>방을 가리키는 신고로만</b>, 그리고 <b>신고 시점까지만</b> 대본을 연다(URL이
+ * {@code /admin/reports/{id}/chat}인 이유, V96 {@code chat_last_message_id}) — 신고가 없는 대화방은 열람 경로 자체가
+ * 없고, 신고 뒤 오간 대화는 처리가 끝나도 보이지 않는다.
  */
 @Service
 @Transactional
@@ -40,13 +42,16 @@ public class ChatSafetyService {
     private final ChatSanctionService sanctions;
     private final ChatOpsAlertService opsAlert;
     private final RateLimitService rateLimitService;
+    private final Clock clock;
 
     public ChatSafetyService(ChatRoomRepository roomRepository,
                              ChatMessageRepository messageRepository,
                              ReportRepository reportRepository,
                              ChatSanctionService sanctions,
                              ChatOpsAlertService opsAlert,
-                             RateLimitService rateLimitService) {
+                             RateLimitService rateLimitService,
+                             Clock clock) {
+        this.clock = clock;
         this.roomRepository = roomRepository;
         this.messageRepository = messageRepository;
         this.reportRepository = reportRepository;
@@ -57,7 +62,13 @@ public class ChatSafetyService {
 
     /**
      * 방 안에서 상대를 신고한다. 멤버가 아니면 404(남의 방 존재 비누설), 신고 한도(시간당 10, 프로필 신고와 공유)를
-     * 넘으면 429. 같은 상대를 이미 신고했으면 새 행을 만들지 않고 방만 붙이며, 처리 끝난 신고면 미처리로 다시 연다.
+     * 넘으면 429. 같은 상대를 이미 신고했으면 새 행을 만들지 않는다:
+     * <ul>
+     *   <li>처리 끝난 신고 → 새 사유·상세·접수 시각으로 미처리 재접수</li>
+     *   <li>방 없던 프로필 신고 → 사유는 그대로 두고 방만 붙인다</li>
+     *   <li>미처리 대화방 신고 → 멱등(아무것도 안 바뀐다 — 대본의 끝도 안 민다)</li>
+     * </ul>
+     * 새로 접수된 경우에만 대본의 끝(지금 그 방의 마지막 메시지 id)을 새로 찍고 자동 제재·운영자 알림을 부른다.
      */
     public Report reportRoom(User me, long roomId, String reason, String detail) {
         ChatRoom room = roomRepository.findById(roomId).filter(r -> r.has(me)).orElseThrow(ChatException::notFound);
@@ -65,17 +76,25 @@ public class ChatSafetyService {
             throw ChatException.rateLimited();
         }
         User partner = room.partnerOf(me);
+        Instant now = clock.instant();
         Report report = reportRepository.findByReporterAndReported(me, partner).orElse(null);
         boolean fresh;
         if (report == null) {
             report = reportRepository.save(Report.of(me, partner, ReportReason.from(reason), clip(detail)));
+            report.markReportedAt(now);
+            fresh = true;
+        } else if (report.getStatus() == ReportStatus.RESOLVED) {
+            report.resubmit(ReportReason.from(reason), clip(detail), now);
+            fresh = true;
+        } else if (report.getChatRoomId() == null) {
+            report.markReportedAt(now);
             fresh = true;
         } else {
-            fresh = report.getChatRoomId() == null || report.getStatus() == ReportStatus.RESOLVED;
-            report.reopen();
+            fresh = false;
         }
-        report.attachChatRoom(room.getId());
         if (fresh) {
+            Long last = messageRepository.maxIdInRoom(room);
+            report.attachChatRoom(room.getId(), last == null ? 0L : last);
             sanctions.onChatReport(partner);
             opsAlert.notifyNewChatReport();
         }
@@ -120,13 +139,15 @@ public class ChatSafetyService {
         reportRepository.findById(reportId).orElseThrow(ChatException::notFound).setLegalHold(hold);
     }
 
+    /** 대본은 신고 시점까지다(리뷰 #1169 중요 2) — 신고 뒤 오간 대화는 신고의 근거가 아니다. 끝이 없으면 아무것도 안 보인다. */
     private Transcript toTranscript(Report r, ChatRoom room) {
-        List<Line> lines = messageRepository.findByRoomOrderByIdAsc(room).stream()
+        long end = r.getChatLastMessageId() == null ? 0L : r.getChatLastMessageId();
+        List<Line> lines = messageRepository.findByRoomAndIdLessThanEqualOrderByIdAsc(room, end).stream()
                 .map(m -> new Line(m.getId(), handle(m.getSender()), m.getBody(), m.isFlagged(), m.getCreatedAt()))
                 .toList();
         return new Transcript(r.getId(), room.getId(), handle(r.getReporter()), handle(r.getReported()),
                 r.getReported().getLoginId(), r.getReason().getLabel(), r.getDetail(), r.getStatus(),
-                r.getResolution(), r.isLegalHold(), r.getCreatedAt(), lines);
+                r.getResolution(), r.isLegalHold(), r.getReportedAt(), lines);
     }
 
     private static String handle(User u) {
@@ -143,10 +164,17 @@ public class ChatSafetyService {
 
     /** @param body 복호화할 수 없으면 {@code null} */
     public record Line(long id, String sender, String body, boolean flagged, Instant createdAt) {
+        /** 화면·내보내기가 같은 기준(KST)으로 찍게 — 서버 기본 시간대에 기대지 않는다. */
+        public String kst() {
+            return KST.format(createdAt);
+        }
     }
 
     public record Transcript(long reportId, long roomId, String reporter, String reported, String reportedLoginId,
                              String reason, String detail, ReportStatus status, String resolution,
                              boolean legalHold, Instant reportedAt, List<Line> lines) {
+        public String reportedAtKst() {
+            return KST.format(reportedAt);
+        }
     }
 }

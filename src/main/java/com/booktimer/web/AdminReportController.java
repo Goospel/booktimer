@@ -31,8 +31,11 @@ public class AdminReportController {
     }
 
     @PostMapping("/admin/reports/{id}/delete")
-    public String delete(@PathVariable("id") Long id) {
-        reportService.deleteByAdmin(id);
+    public String delete(@PathVariable("id") Long id,
+                         org.springframework.web.servlet.mvc.support.RedirectAttributes redirect) {
+        if (!reportService.deleteByAdmin(id)) {
+            redirect.addFlashAttribute("error", "법적 보존 중인 신고는 삭제할 수 없습니다. 대화 기록 화면에서 보존을 먼저 해제하세요.");
+        }
         return "redirect:/admin/reports";
     }
 }

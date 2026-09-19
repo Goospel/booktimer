@@ -8,7 +8,13 @@
 --   「다음 위반 시 정지」를 운영자가 판단할 근거).
 -- report.legal_hold: 수사기관 요청 등 법적 보존. 보존 스케줄러(자동 삭제)만 이 방을 건너뛴다 — 회원 탈퇴는
 --   정책 §5대로 즉시 삭제한다.
+-- report.chat_last_message_id: 신고(또는 처리 뒤 재신고) 시점에 그 방의 마지막 메시지 id. 운영자 대본·내보내기는
+--   이 id까지만 보인다 — 신고 뒤에 오간 대화는 신고의 근거가 아니다(리뷰 #1169 중요 2).
+-- report.reported_at: 마지막 접수 시각. 쌍당 1건이라 재신고는 새 행이 아니라 이 값·사유·상세를 갈아 끼운다
+--   (created_at은 첫 신고 시각으로 남는다). 프로필 신고 경로는 이 값을 안 채워 null이면 created_at을 쓴다.
 alter table report add column chat_room_id bigint null;
+alter table report add column chat_last_message_id bigint null;
+alter table report add column reported_at datetime(6) null;
 alter table report add column status varchar(12) not null default 'OPEN';
 alter table report add column resolution varchar(16) null;
 alter table report add column legal_hold boolean not null default false;

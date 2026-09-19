@@ -17,6 +17,8 @@ import static org.assertj.core.api.Assertions.assertThatCode;
 
 /**
  * 대화가 있는 사용자의 탈퇴 — 실 H2 스키마로 FK 순서를 본다(mock은 FK를 모른다, T-023·T-029).
+ * 단 이 스키마는 엔티티 매핑에서 만들어져, 엔티티 연관으로 선언된 FK(메시지 → 방·유저, 방 → 유저)만 있다.
+ * V96의 신고 → 방 FK는 없다(아래 두 번째 테스트 주석).
  *
  * <p>{@code chat_message}는 {@code chat_room}과 {@code users}를 둘 다 참조하고 {@code chat_room}은 {@code users}를
  * 두 번 참조한다. purge가 메시지 → 방 순서를 어기거나 한쪽을 빼먹으면, 대화를 한 번이라도 한 사람은
@@ -77,7 +79,11 @@ class ChatFkIntegrationTest {
 
     /**
      * V96 — 신고가 방을 FK로 가리킨다. 법적 보존이 걸린 신고여도 탈퇴는 즉시 삭제다(정책 문서 §5 — 보존 표시는
-     * <b>자동</b> 삭제에서만 뺀다). 신고 → 메시지 → 방 순서가 어긋나면 이 사용자는 탈퇴 자체가 실패한다.
+     * <b>자동</b> 삭제에서만 뺀다).
+     *
+     * <p>⚠️ 이 테스트가 판정하는 것은 「탈퇴가 끝까지 가고 방 참조 신고가 남지 않는다」까지다. <b>신고 → 방 FK 순서</b>는
+     * 여기서 판정되지 않는다 — 메인 스위트는 Hibernate 스키마라 {@code Report.chatRoomId}(평범한 Long)에 대한
+     * V96 FK가 없다. 그 순서는 V96 스키마 위의 {@code FlywayMigrationTest}가 본다(리뷰 #1169 중요 1).
      */
     @Test
     void userWithRoomReferencingReportsCanLeave() {

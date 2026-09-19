@@ -53,6 +53,12 @@ public class Report extends BaseTimeEntity {
     @Column(name = "chat_room_id")
     private Long chatRoomId;
 
+    @Column(name = "chat_last_message_id")
+    private Long chatLastMessageId;
+
+    @Column(name = "reported_at")
+    private java.time.Instant reportedAt;
+
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 12)
     private ReportStatus status = ReportStatus.OPEN;
@@ -135,22 +141,40 @@ public class Report extends BaseTimeEntity {
     }
 
     /**
-     * 대화방을 붙인다. 쌍당 1건이라 같은 두 사람의 신고는 늘 같은 방을 가리킨다(방도 쌍당 1개).
-     * 처리 끝난 신고를 다시 하면 미처리로 되돌린다 — 새 행을 만들 수 없는 구조라 재신고는 재개로 표현한다.
+     * 대화방과 대본의 끝(신고 시점 그 방의 마지막 메시지 id)을 붙인다. 쌍당 1건이라 같은 두 사람의 신고는 늘 같은
+     * 방을 가리킨다(방도 쌍당 1개). 새로 접수될 때(첫 신고·처리 뒤 재신고)만 부른다 — 미처리 중복 신고는 끝을 안 민다.
      */
-    public void attachChatRoom(Long roomId) {
+    public void attachChatRoom(Long roomId, Long lastMessageId) {
         this.chatRoomId = roomId;
+        this.chatLastMessageId = lastMessageId;
+    }
+
+    /** 운영자 대본의 끝 — 신고 시점 그 방의 마지막 메시지 id. 이 id 뒤의 대화는 보이지 않는다. */
+    public Long getChatLastMessageId() {
+        return chatLastMessageId;
+    }
+
+    /** 마지막 접수 시각. 재신고면 그 시각이고, 대화방 신고가 아니었으면(null) 첫 신고 시각이다. */
+    public java.time.Instant getReportedAt() {
+        return reportedAt != null ? reportedAt : getCreatedAt();
+    }
+
+    /** 처리 끝난 신고를 다시 접수한다 — 사유·상세·접수 시각을 새 값으로(쌍당 1건이라 새 행이 없다). */
+    public void resubmit(ReportReason reason, String detail, java.time.Instant at) {
+        this.reason = reason;
+        this.detail = detail;
+        this.reportedAt = at;
+        this.status = ReportStatus.OPEN;
+    }
+
+    public void markReportedAt(java.time.Instant at) {
+        this.reportedAt = at;
     }
 
     /** 처리 완료로 닫고 조치를 기록한다. */
     public void resolve(String resolution) {
         this.status = ReportStatus.RESOLVED;
         this.resolution = resolution;
-    }
-
-    /** 같은 신고자가 다시 신고했다 — 미처리로 되돌린다(이전 조치 기록은 새 처리 때 덮인다). */
-    public void reopen() {
-        this.status = ReportStatus.OPEN;
     }
 
     public void setLegalHold(boolean hold) {

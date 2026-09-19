@@ -47,8 +47,23 @@ public class ReportService {
                 .toList();
     }
 
-    /** 관리자 삭제 — 처리 끝난 신고를 id로 지운다(없는 id면 무시). */
-    public void deleteByAdmin(Long id) {
-        reportRepository.findById(id).ifPresent(reportRepository::delete);
+    /**
+     * 관리자 삭제 — 처리 끝난 신고를 id로 지운다(없는 id면 무시).
+     *
+     * <p><b>법적 보존 신고는 지우지 않는다</b>(리뷰 #1169 사소 8) — 지우면 보존 표시가 조용히 사라져 다음 04:10 보존
+     * 배치가 그 대화방을 지운다. 보존을 먼저 풀어야 지울 수 있다.
+     *
+     * @return 법적 보존이라 거부했으면 false
+     */
+    public boolean deleteByAdmin(Long id) {
+        Report report = reportRepository.findById(id).orElse(null);
+        if (report == null) {
+            return true;
+        }
+        if (report.isLegalHold()) {
+            return false;
+        }
+        reportRepository.delete(report);
+        return true;
     }
 }

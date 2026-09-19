@@ -60,7 +60,9 @@ public class ChatRetentionService {
             return 0;
         }
         refs.stream().filter(r -> doomed.contains(r.getChatRoomId())).forEach(Report::detachChatRoom);
-        messageRepository.deleteByRoomIdIn(doomed); // flushAutomatically — 신고 참조 해제가 먼저 반영된다
+        // flushAutomatically — 신고 참조 해제가 방 삭제보다 먼저 DB에 닿아야 V96 FK(report → chat_room)를 안 건드린다.
+        // 이 순서는 메인 스위트(Hibernate 스키마, 그 FK 없음)로는 판정되지 않고 FlywayMigrationTest가 본다.
+        messageRepository.deleteByRoomIdIn(doomed);
         roomRepository.deleteAllByIdInBatch(doomed);
         return doomed.size();
     }

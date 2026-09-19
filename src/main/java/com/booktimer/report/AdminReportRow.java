@@ -36,7 +36,7 @@ public record AdminReportRow(
                 reported.getNickname(),
                 report.getReason(),
                 report.getDetail(),
-                report.getCreatedAt(),
+                report.getReportedAt(), // 재신고면 그 접수 시각(첫 신고 시각은 created_at에 남는다)
                 report.getChatRoomId(),
                 report.getStatus(),
                 report.getResolution(),

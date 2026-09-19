@@ -196,6 +196,91 @@ class ChatSafetyServiceTest {
         assertThat(target.getChatRestrictedUntil()).isEqualTo(longer);
     }
 
+    /** 방어선 ① — 자동 정지의 조기 반환. 영구 정지 중이면 정지 기간을 새로 찍지 않는다(`later()`로는 못 막는 경우). */
+    @Test
+    void autoRestrictionLeavesABannedUserUntouched() {
+        User target = toss("ban-target");
+        User r1 = toss("ban-r1");
+        User r2 = toss("ban-r2");
+        long room1 = roomOf(r1, target);
+        long room2 = roomOf(r2, target);
+        target.banChat(clock.instant());
+
+        safety.reportRoom(r1, room1, "SPAM", null);
+        safety.reportRoom(r2, room2, "SPAM", null);
+
+        assertThat(target.getChatRestrictedUntil()).isNull();
+    }
+
+    /** 방어선 ② — {@code apply(SUSPEND_7D)} 자체가 더 긴 정지를 줄이지 않는다(운영자가 직접 7일을 골라도). */
+    @Test
+    void suspendNeverShortensALongerRestriction() {
+        User u = toss("later-u");
+        Instant longer = clock.instant().plus(Duration.ofDays(30));
+        u.restrictChatUntil(longer);
+
+        sanctions.apply(u, Action.SUSPEND_7D);
+
+        assertThat(u.getChatRestrictedUntil()).isEqualTo(longer);
+    }
+
+    /** 리뷰 #1169 사소 4 — 처리 끝난 신고의 재신고(RESOLVED → OPEN)도 자동 정지 판정을 다시 부른다. */
+    @Test
+    void reReportingAResolvedReportCountsAgain() {
+        User target = toss("again-target");
+        User r1 = toss("again-r1");
+        User r2 = toss("again-r2");
+        long room1 = roomOf(r1, target);
+        long room2 = roomOf(r2, target);
+        Report first = safety.reportRoom(r1, room1, "SPAM", null);
+        safety.resolve(first.getId(), Action.NONE);
+        safety.reportRoom(r2, room2, "SPAM", null);
+        assertThat(target.isChatRestricted(clock.instant())).isFalse(); // 미처리는 r2 하나뿐
+
+        safety.reportRoom(r1, room1, "HARASSMENT", "또 그래요");
+
+        assertThat(target.isChatRestricted(clock.instant())).isTrue();
+    }
+
+    /** 리뷰 #1169 사소 3 — 재신고로 되살릴 때 새 사유·상세·접수 시각을 쓴다. */
+    @Test
+    void reReportTakesTheNewReasonDetailAndTime() {
+        User me = toss("new-me");
+        User other = toss("new-other");
+        long room = roomOf(me, other);
+        Report r = safety.reportRoom(me, room, "SPAM", "처음 사유");
+        safety.resolve(r.getId(), Action.WARN);
+
+        safety.reportRoom(me, room, "HARASSMENT", "다시 괴롭혀요");
+
+        assertThat(r.getReason()).isEqualTo(ReportReason.HARASSMENT);
+        assertThat(r.getDetail()).isEqualTo("다시 괴롭혀요");
+        assertThat(r.getReportedAt()).isNotNull();
+    }
+
+    /**
+     * 리뷰 #1169 중요 2 — 운영자는 <b>신고 시점까지의</b> 대화만 본다. 신고 뒤 오간 메시지는 처리가 끝나도 방이 열려
+     * 있는 한 기한 없이 보이던 구멍이다. 같은 신고자가 다시 신고하면 그 시점까지로 넓어진다.
+     */
+    @Test
+    void transcriptStopsAtTheMomentOfReport() {
+        User me = toss("cut-me");
+        User other = toss("cut-other");
+        long room = roomOf(me, other);
+        Report r = safety.reportRoom(me, room, "SPAM", null);
+        rooms.send(other, room, "신고 뒤의 사적인 말");
+
+        assertThat(safety.transcript(r.getId()).orElseThrow().lines())
+                .extracting(ChatSafetyService.Line::body).containsExactly("신고당할 메시지");
+        assertThat(safety.exportText(r.getId()).orElseThrow()).doesNotContain("신고 뒤의 사적인 말");
+
+        safety.resolve(r.getId(), Action.NONE);
+        safety.reportRoom(me, room, "SPAM", "또");
+
+        assertThat(safety.transcript(r.getId()).orElseThrow().lines())
+                .extracting(ChatSafetyService.Line::body).containsExactly("신고당할 메시지", "신고 뒤의 사적인 말");
+    }
+
     // ── 운영자 조치 ─────────────────────────────────────
 
     @Test

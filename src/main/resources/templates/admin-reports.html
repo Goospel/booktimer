@@ -17,6 +17,7 @@
     <p class="status-line muted">사용자가 보낸 신고를 읽고 후속 처리합니다. 대화방 신고는 「대화 기록 보기」에서
         조치(무혐의·경고·7일·영구)를 고르고 처리 완료로 닫습니다 — 처리 완료 신고는 조치 기록으로 남기세요.</p>
 
+    <p class="alert" th:if="${error}" th:text="${error}">오류</p>
     <p class="status-line muted" th:if="${reportList.isEmpty()}">접수된 신고가 없습니다.</p>
 
     <section class="card fb-admin-item" th:each="row : ${reportList}">
@@ -44,7 +45,8 @@
             </form>
             <a class="btn-ghost btn-small" th:if="${row.reportedLoginId != null}"
                th:href="@{/u/{loginId}(loginId=${row.reportedLoginId})}" target="_blank" rel="noopener">대상 책방 보기</a>
-            <form th:action="@{/admin/reports/{id}/delete(id=${row.id})}" method="post"
+            <span class="muted" th:if="${row.legalHold}">법적 보존 중 — 삭제하려면 보존을 먼저 해제</span>
+            <form th:unless="${row.legalHold}" th:action="@{/admin/reports/{id}/delete(id=${row.id})}" method="post"
                   data-confirm="이 신고를 삭제할까요?">
                 <button type="submit" class="btn-danger btn-small">삭제</button>
             </form>

@@ -74,6 +74,10 @@ class PrivacyControllerTest {
                 .andExpect(content().string(containsString("대화 기능을 제공하는 경우")))
                 .andExpect(content().string(containsString("AES-256-GCM")))
                 .andExpect(content().string(containsString("차단으로 종료된 대화방은 <strong>30일 뒤 삭제</strong>")))
-                .andExpect(content().string(containsString("신고 처리가 끝날 때까지 삭제하지 않습니다")));
+                .andExpect(content().string(containsString("신고 처리가 끝날 때까지 삭제하지 않습니다")))
+                // 리뷰 #1169 — 운영자 열람은 신고 시점까지(ChatSafetyService가 chat_last_message_id로 자른다)
+                .andExpect(content().string(containsString("신고 시점까지의 대화 기록")))
+                // 키는 render-env가 EC2 .env에도 쓰므로 「SSM에만」은 사실보다 강하다
+                .andExpect(content().string(containsString("데이터베이스·백업과 분리해")));
     }
 }

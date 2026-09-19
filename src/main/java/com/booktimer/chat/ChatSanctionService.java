@@ -73,6 +73,9 @@ public class ChatSanctionService {
      *
      * @return 이번에 자동 정지를 걸었으면 true
      */
+    // ponytail: 판정은 잠금 없는 카운트다. REPEATABLE READ에서 서로 다른 신고자의 신고 2건이 동시에 커밋되면 두
+    // 트랜잭션이 서로의 행을 못 봐 둘 다 「1명」으로 세고 자동 정지를 놓칠 수 있다. 1인 운영·DAU 한 자릿수에선 드물고
+    // 운영자 배너가 남는다. 업그레이드 경로: 판정 전에 대상 users 행을 {@code select … for update}로 잠가 직렬화한다.
     public boolean onChatReport(User reported) {
         if (reported.isChatRestricted(clock.instant())) {
             return false;

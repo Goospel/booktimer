@@ -34,10 +34,12 @@
 
     <section class="card">
         <h2>대화 기록</h2>
+        <p class="status-line muted">신고 시점(<span th:text="${t.reportedAtKst()}">접수 시각</span> KST)까지의 대화만 보입니다.
+            시각은 모두 KST입니다.</p>
         <p class="status-line muted" th:if="${t.lines.isEmpty()}">메시지가 없습니다.</p>
         <div th:each="l : ${t.lines}" th:class="${l.flagged ? 'chat-line flagged' : 'chat-line'}">
             <span class="who" th:text="${l.sender}">@누구</span>
-            <span class="when" th:text="${#temporals.format(l.createdAt, 'yyyy-MM-dd HH:mm:ss')}">시각</span>
+            <span class="when" th:text="${l.kst()}">시각</span>
             <span class="flag" th:if="${l.flagged}">연락처·링크 감지</span>
             <div th:text="${l.body != null ? l.body : '(복호화할 수 없는 메시지)'}">본문</div>
         </div>
@@ -45,6 +47,7 @@
 
     <section class="card chat-actions">
         <h2>조치</h2>
+        <p class="status-line muted">무혐의로 닫아도 자동 정지는 풀리지 않는다 — 풀려면 아래 「대상 제재 조정」에서 제재 해제.</p>
         <form method="post" th:action="@{/admin/reports/{id}/resolve(id=${t.reportId})}"
               data-confirm="이 조치로 신고를 처리 완료할까요?">
             <select name="action" aria-label="조치">

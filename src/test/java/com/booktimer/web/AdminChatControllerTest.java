@@ -129,6 +129,31 @@ class AdminChatControllerTest {
         assertThat(after.getReported().isChatRestricted(clock.instant())).isTrue();
     }
 
+    /** 리뷰 #1169 사소 8 — 법적 보존 신고를 지우면 보존이 조용히 풀려 다음 04:10 배치에 방이 지워진다. */
+    @Test
+    void legallyHeldReportCannotBeDeleted() throws Exception {
+        Report r = reported("acdel");
+        safety.setLegalHold(r.getId(), true);
+
+        mockMvc.perform(post("/admin/reports/{id}/delete", r.getId())
+                        .with(user("boss").roles("ADMIN")).with(csrf()))
+                .andExpect(status().is3xxRedirection());
+        mockMvc.perform(get("/admin/reports").with(user("boss").roles("ADMIN")))
+                .andExpect(content().string(not(containsString("/admin/reports/" + r.getId() + "/delete"))));
+
+        assertThat(reportRepository.findById(r.getId())).isPresent();
+    }
+
+    /** 사소 5·10 — 무혐의로 닫아도 자동 정지는 남는다는 안내, 시각 기준(KST) 명시. */
+    @Test
+    void transcriptPageStatesKstAndThatDismissalKeepsAutoSuspension() throws Exception {
+        Report r = reported("acnote");
+
+        mockMvc.perform(get("/admin/reports/{id}/chat", r.getId()).with(user("boss").roles("ADMIN")))
+                .andExpect(content().string(containsString("무혐의로 닫아도 자동 정지는 풀리지 않는다")))
+                .andExpect(content().string(containsString("KST")));
+    }
+
     @Test
     void operatorCanLiftASanction() throws Exception {
         User u = toss("aclift");

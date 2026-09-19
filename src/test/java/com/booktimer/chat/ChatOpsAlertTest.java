@@ -102,6 +102,22 @@ class ChatOpsAlertTest {
         verify(messenger, never()).sendMessage(eq("uk-ops-other"), eq("OPS_TEST"), anyMap());
     }
 
+    /** 리뷰 #1169 사소 4 — 처리 끝난 신고를 다시 신고하면 운영자가 다시 알아야 한다. 미처리 중복 신고는 알리지 않는다. */
+    @Test
+    void reReportingAResolvedReportAlertsAgain() {
+        user("ops-admin3", Role.ADMIN, true);
+        User me = user("ops-again-me", Role.USER, true);
+        User other = user("ops-again-other", Role.USER, true);
+        long id = room(me, other);
+        long reportId = safety.reportRoom(me, id, "SPAM", null).getId();
+        safety.reportRoom(me, id, "SPAM", "미처리 중복 — 알림 없음");
+        safety.resolve(reportId, com.booktimer.chat.ChatSanctionService.Action.NONE);
+
+        safety.reportRoom(me, id, "SPAM", "처리 뒤 재신고");
+
+        verify(messenger, times(2)).sendMessage(eq("uk-ops-admin3"), eq("OPS_TEST"), eq(Map.of()));
+    }
+
     @Test
     void rolledBackReportAlertsNobody() {
         user("ops-admin2", Role.ADMIN, true);

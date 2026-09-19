@@ -16,8 +16,12 @@ public interface ChatMessageRepository extends JpaRepository<ChatMessage, Long> 
 
     Optional<ChatMessage> findTopByRoomOrderByIdDesc(ChatRoom room);
 
-    /** 관리자 대본 — 방 전체(신고된 방만 여기 온다). */
-    List<ChatMessage> findByRoomOrderByIdAsc(ChatRoom room);
+    /** 관리자 대본 — 신고된 방의 신고 시점({@code endId})까지. */
+    List<ChatMessage> findByRoomAndIdLessThanEqualOrderByIdAsc(ChatRoom room, long endId);
+
+    /** 신고 시점의 끝 — 메시지를 읽지(복호화하지) 않고 id만. 메시지가 없으면 {@code null}. */
+    @Query("select max(m.id) from ChatMessage m where m.room = :room")
+    Long maxIdInRoom(@Param("room") ChatRoom room);
 
     /** 보존 삭제 — 지울 방들의 메시지. 방보다 먼저 지운다(FK). */
     @Modifying(flushAutomatically = true)
