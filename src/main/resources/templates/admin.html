@@ -56,6 +56,14 @@
     <!-- 실패한 액션(예: 이미 처리된 신청) — 500으로 튀지 않고 여기서 말한다 -->
     <p class="alert" th:if="${error}" th:text="${error}">오류</p>
 
+    <!-- 신고 대응 배너 — 운영자 토스 푸시가 없어도 여기서 미처리 신고를 본다(맞팔 DM 정책 문서 §2 「알림」). -->
+    <p class="alert" th:attr="data-open-reports=${openReportCount},data-chat-sanctioned=${chatSanctionedCount}"
+       th:classappend="${openReportCount == 0} ? 'muted'">
+        미처리 신고 <strong th:text="${openReportCount}">0</strong>건 ·
+        대화 제재 중 <strong th:text="${chatSanctionedCount}">0</strong>명 —
+        <a th:href="@{/admin/reports}">신고함 열기</a>
+    </p>
+
     <section class="card">
         <h2>통계 요약</h2>
         <p class="status-line muted">읽기 전용 집계 — 가입자(운영자 제외)·활성·독서 기록 현황.</p>

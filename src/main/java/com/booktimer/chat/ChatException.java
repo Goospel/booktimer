@@ -22,7 +22,7 @@ public class ChatException extends RuntimeException {
 
     static ChatException denied(ChatEligibility.Verdict verdict) {
         return switch (verdict) {
-            case UNREACHABLE -> new ChatException(HttpStatus.CONFLICT, "상대는 아직 앱에서 대화를 쓸 수 없어요.");
+            case UNREACHABLE -> new ChatException(HttpStatus.CONFLICT, "대화는 토스 앱에 연결된 계정끼리만 할 수 있어요.");
             case BLOCKED -> new ChatException(HttpStatus.FORBIDDEN, "대화할 수 없는 상대예요.");
             case RESTRICTED -> new ChatException(HttpStatus.FORBIDDEN, "지금은 대화를 보낼 수 없어요.");
             default -> new ChatException(HttpStatus.FORBIDDEN, "서로 팔로우해야 메시지를 보낼 수 있어요.");

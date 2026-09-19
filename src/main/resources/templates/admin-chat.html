@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html lang="ko" xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8">
+    <th:block th:replace="~{fragments/theme-head :: boot}"></th:block>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="robots" content="noindex">
+    <title>신고된 대화 — BookTimer 관리자</title>
+    <link rel="stylesheet" th:href="@{/css/app.css}">
+    <style>
+        .chat-line { padding: 0.4rem 0; border-bottom: 1px solid rgba(0,0,0,0.06); }
+        .chat-line .who { font-weight: 600; margin-right: 0.4rem; }
+        .chat-line .when { font-size: 0.75rem; opacity: 0.6; }
+        .chat-line.flagged { background: rgba(220, 120, 0, 0.12); }
+        .chat-line.flagged .flag { font-size: 0.75rem; color: #b35c00; margin-left: 0.4rem; }
+        .chat-actions form { display: inline-block; margin: 0.2rem 0.4rem 0.2rem 0; }
+        .chat-actions button, .chat-actions select { width: auto; }
+    </style>
+</head>
+<body>
+<div class="container">
+    <header class="brand">
+        <h1>신고된 대화</h1>
+    </header>
+    <p class="status-line muted">
+        신고 #<span th:text="${t.reportId}">1</span> · 대화방 #<span th:text="${t.roomId}">1</span> ·
+        <span th:text="${t.reporter}">신고자</span> → <span th:text="${t.reported}">대상</span> ·
+        <span th:text="${t.reason}">사유</span> ·
+        <span th:text="${t.status.name() == 'OPEN' ? '미처리' : '처리 완료'}">상태</span>
+        <span th:if="${t.resolution != null}" th:text="'(' + ${t.resolution} + ')'"></span>
+        <strong th:if="${t.legalHold}">· 법적 보존</strong>
+    </p>
+    <p class="fb-content" th:if="${t.detail != null}" th:text="${t.detail}">상세</p>
+
+    <section class="card">
+        <h2>대화 기록</h2>
+        <p class="status-line muted">신고 시점(<span th:text="${t.reportedAtKst()}">접수 시각</span> KST)까지의 대화만 보입니다.
+            시각은 모두 KST입니다.</p>
+        <p class="status-line muted" th:if="${t.lines.isEmpty()}">메시지가 없습니다.</p>
+        <div th:each="l : ${t.lines}" th:class="${l.flagged ? 'chat-line flagged' : 'chat-line'}">
+            <span class="who" th:text="${l.sender}">@누구</span>
+            <span class="when" th:text="${l.kst()}">시각</span>
+            <span class="flag" th:if="${l.flagged}">연락처·링크 감지</span>
+            <div th:text="${l.body != null ? l.body : '(복호화할 수 없는 메시지)'}">본문</div>
+        </div>
+    </section>
+
+    <section class="card chat-actions">
+        <h2>조치</h2>
+        <p class="status-line muted">무혐의로 닫아도 자동 정지는 풀리지 않는다 — 풀려면 아래 「대상 제재 조정」에서 제재 해제.</p>
+        <form method="post" th:action="@{/admin/reports/{id}/resolve(id=${t.reportId})}"
+              data-confirm="이 조치로 신고를 처리 완료할까요?">
+            <select name="action" aria-label="조치">
+                <option value="NONE">무혐의</option>
+                <option value="WARN">경고</option>
+                <option value="SUSPEND_7D">7일 정지</option>
+                <option value="BAN">영구 정지</option>
+            </select>
+            <button type="submit" class="btn-small">처리 완료</button>
+        </form>
+        <form method="post" th:action="@{/admin/reports/{id}/legal-hold(id=${t.reportId})}">
+            <input type="hidden" name="hold" th:value="${!t.legalHold}">
+            <button type="submit" class="btn-ghost btn-small"
+                    th:text="${t.legalHold ? '법적 보존 해제' : '법적 보존 표시'}">법적 보존</button>
+        </form>
+        <a class="btn-ghost btn-small" th:href="@{/admin/reports/{id}/chat.txt(id=${t.reportId})}">텍스트로 내보내기</a>
+        <form method="post" th:if="${t.reportedLoginId != null}"
+              th:action="@{/admin/users/{loginId}/chat-sanction(loginId=${t.reportedLoginId})}"
+              data-confirm="대상의 대화 제재를 조정할까요?">
+            <select name="action" aria-label="제재 조정">
+                <option value="EXTEND_7D">7일 연장</option>
+                <option value="LIFT">제재 해제</option>
+            </select>
+            <button type="submit" class="btn-ghost btn-small">대상 제재 조정</button>
+        </form>
+    </section>
+
+    <nav class="link-row" aria-label="페이지 이동">
+        <th:block th:replace="~{fragments/nav-links :: navLink(@{/admin/reports}, 'back', '신고함')}"></th:block>
+    </nav>
+</div>
+<script th:attr="nonce=${cspNonce}" th:src="@{/js/confirm-submit.js}"></script>
+</body>
+</html>

@@ -205,6 +205,21 @@ class ChatApiControllerTest {
     }
 
     @Test
+    void reportFromInsideTheRoom() throws Exception {
+        User me = toss("apirep");
+        User other = toss("apirepother");
+        User x = toss("apirepx");
+        mutual(me, other);
+        String token = apiTokenService.issue(me);
+        long room = openRoom(token, "apirepother");
+
+        postJson(token, "/api/chat/rooms/" + room + "/report", "{\"reason\":\"SPAM\",\"detail\":\"광고\"}")
+                .andExpect(status().isOk());
+        postJson(apiTokenService.issue(x), "/api/chat/rooms/" + room + "/report", "{\"reason\":\"SPAM\"}")
+                .andExpect(status().isNotFound());
+    }
+
+    @Test
     void invalidBearerIsUnauthorized() throws Exception {
         getAs("지어낸토큰", "/api/chat/me").andExpect(status().isUnauthorized());
     }

@@ -4,6 +4,7 @@ import com.booktimer.chat.ChatException;
 import com.booktimer.chat.ChatGate;
 import com.booktimer.chat.ChatMessage;
 import com.booktimer.chat.ChatRoomService;
+import com.booktimer.chat.ChatSafetyService;
 import com.booktimer.security.CurrentUserService;
 import com.booktimer.security.RateLimitAction;
 import com.booktimer.security.RateLimitService;
@@ -43,12 +44,15 @@ public class ChatApiController {
     private final CurrentUserService currentUserService;
     private final UserRepository userRepository;
     private final RateLimitService rateLimitService;
+    private final ChatSafetyService chatSafetyService;
 
     public ChatApiController(ChatGate gate,
                              ChatRoomService chatRoomService,
                              CurrentUserService currentUserService,
                              UserRepository userRepository,
-                             RateLimitService rateLimitService) {
+                             RateLimitService rateLimitService,
+                             ChatSafetyService chatSafetyService) {
+        this.chatSafetyService = chatSafetyService;
         this.gate = gate;
         this.chatRoomService = chatRoomService;
         this.currentUserService = currentUserService;
@@ -106,6 +110,13 @@ public class ChatApiController {
         return Map.of();
     }
 
+    /** 방 안 「신고」 — 사유는 기존 신고 선택지(잘못된 값은 기타). 방은 그대로 두고 신고만 남긴다. */
+    @PostMapping("/api/chat/rooms/{roomId}/report")
+    public Map<String, Object> report(@PathVariable long roomId, @RequestBody ReportRequest request, Principal principal) {
+        chatSafetyService.reportRoom(user(principal), roomId, request.reason(), request.detail());
+        return Map.of();
+    }
+
     /** 문구는 미니앱이 그대로 띄운다. text/plain + UTF-8 고정(반사 XSS·한글 깨짐 방지 — 계정 API와 같은 계약). */
     @ExceptionHandler(ChatException.class)
     public ResponseEntity<String> handle(ChatException e) {
@@ -139,6 +150,9 @@ public class ChatApiController {
     }
 
     public record SendRequest(String body) {
+    }
+
+    public record ReportRequest(String reason, String detail) {
     }
 
     public record ReadRequest(long lastMessageId) {

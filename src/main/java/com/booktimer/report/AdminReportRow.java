@@ -19,7 +19,11 @@ public record AdminReportRow(
         String reportedNickname,
         ReportReason reason,
         String detail,
-        Instant createdAt) {
+        Instant createdAt,
+        Long chatRoomId,
+        ReportStatus status,
+        String resolution,
+        boolean legalHold) {
 
     static AdminReportRow from(Report report) {
         User reporter = report.getReporter();
@@ -32,6 +36,10 @@ public record AdminReportRow(
                 reported.getNickname(),
                 report.getReason(),
                 report.getDetail(),
-                report.getCreatedAt());
+                report.getReportedAt(), // 재신고면 그 접수 시각(첫 신고 시각은 created_at에 남는다)
+                report.getChatRoomId(),
+                report.getStatus(),
+                report.getResolution(),
+                report.isLegalHold());
     }
 }

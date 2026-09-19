@@ -37,7 +37,7 @@ class SideRailsTemplateTest {
     private static final Set<String> NAV_LINK_PAGES = Set.of(
             "error", "privacy", "terms", "password-forgot",
             "admin", "admin-users", "admin-user-detail", "admin-user-debt",
-            "admin-quotes", "admin-feedback", "admin-reports");
+            "admin-quotes", "admin-feedback", "admin-reports", "admin-chat");
 
     private static Stream<Path> pages() throws IOException {
         return Files.list(TEMPLATES).filter(p -> p.toString().endsWith(".html"));

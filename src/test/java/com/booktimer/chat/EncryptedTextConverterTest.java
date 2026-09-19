@@ -49,21 +49,34 @@ class EncryptedTextConverterTest {
         assertThat(first.length).isEqualTo(12 + text.getBytes(StandardCharsets.UTF_8).length + 16);
     }
 
+    /**
+     * 변조·다른 키로 만든 한 행은 평문 대신 {@code null}이다(PR-1 리뷰 사소 4) — 던지면 그 행 하나가 대화함·미읽음
+     * 조회 전체를 500으로 만든다. 평문을 흉내 낸 쓰레기 글자는 절대 돌려주지 않는다.
+     */
     @Test
-    void rejectsTamperedCiphertext() {
+    void tamperedRowReadsAsNullInsteadOfFailingTheWholeQuery() {
         EncryptedTextConverter c = converter(KEY);
         byte[] stored = c.convertToDatabaseColumn("변조 금지");
         byte[] tampered = Arrays.copyOf(stored, stored.length);
         tampered[tampered.length - 1] ^= 0x01;
 
-        assertThatThrownBy(() -> c.convertToEntityAttribute(tampered)).isInstanceOf(IllegalStateException.class);
+        assertThat(c.convertToEntityAttribute(tampered)).isNull();
+        assertThat(c.convertToEntityAttribute(new byte[5])).isNull(); // nonce보다 짧은 쓰레기
     }
 
     @Test
     void anotherKeyCannotRead() {
         byte[] stored = converter(KEY).convertToDatabaseColumn("우리끼리");
 
-        assertThatThrownBy(() -> converter(OTHER_KEY).convertToEntityAttribute(stored))
+        assertThat(converter(OTHER_KEY).convertToEntityAttribute(stored)).isNull();
+    }
+
+    /** 키 자체가 없는 것은 행 하나의 문제가 아니라 설정 결함이라 읽기에서도 던진다. */
+    @Test
+    void readingWithoutKeyStillFails() {
+        byte[] stored = converter(KEY).convertToDatabaseColumn("x");
+
+        assertThatThrownBy(() -> converter(null).convertToEntityAttribute(stored))
                 .isInstanceOf(IllegalStateException.class);
     }
 

@@ -104,6 +104,13 @@ public interface UserRepository extends JpaRepository<User, Long> {
     /** 역할별 사용자 수 — 운영 통계에서 "가입자 수"는 {@code Role.USER}만 세어 ADMIN이 지표를 부풀리지 않게 한다. */
     long countByRole(Role role);
 
+    /** 대화 제재 중인 사용자 수(영구 정지 + 아직 안 끝난 7일 정지) — 관리자 배너. */
+    @Query("select count(u) from User u where u.chatBannedAt is not null or u.chatRestrictedUntil > :now")
+    long countChatSanctioned(@Param("now") java.time.Instant now);
+
+    /** 운영자 알림 수신 대상 — 토스에 연결된 운영자(ADMIN). */
+    List<User> findByRoleAndTossUserKeyIsNotNull(Role role);
+
     /**
      * 공부 AI 승인 상태로 사용자를 모은다 — 관리자 화면의 「대기 목록」·「승인자 목록」이 이 한 줄로 끝난다.
      * 정렬 키는 마지막 전이 시각이라 <b>대기 큐는 오래 기다린 사람이 위</b>다(먼저 신청한 사람이 먼저).

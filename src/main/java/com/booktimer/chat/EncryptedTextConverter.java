@@ -6,7 +6,6 @@ import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
-import javax.crypto.AEADBadTagException;
 import javax.crypto.Cipher;
 import javax.crypto.spec.GCMParameterSpec;
 import javax.crypto.spec.SecretKeySpec;
@@ -21,8 +20,8 @@ import java.util.function.Supplier;
 /**
  * 메시지 본문 컬럼 암호화 — AES-256-GCM, 저장 형식 {@code nonce(12) ‖ 암호문 ‖ tag(16)}(설계 §3 요건 3).
  *
- * <p>nonce는 매번 새로 뽑는다(같은 평문 → 다른 암호문). GCM 태그가 변조·다른 키를 잡아 {@link IllegalStateException}
- * 으로 끝낸다 — 조용히 쓰레기 글자를 돌려주지 않는다.
+ * <p>nonce는 매번 새로 뽑는다(같은 평문 → 다른 암호문). GCM 태그가 변조·다른 키를 잡으면 그 행은 {@code null}로
+ * 읽힌다(오류 로그) — 쓰레기 글자를 돌려주지도, 조회 전체를 죽이지도 않는다. 키 자체가 없으면 던진다.
  *
  * <p>Spring 빈이다 — Hibernate가 Spring 빈 컨테이너로 이 컨버터를 받아 {@link ChatProperties}가 주입된다.
  * 키는 호출 때마다 읽어, 키 없이 기동해도(다크 머지) 앱은 뜨고 <b>실제로 암·복호화할 때만</b> 실패한다.
@@ -30,6 +29,8 @@ import java.util.function.Supplier;
 @Component
 @Converter
 public class EncryptedTextConverter implements AttributeConverter<String, byte[]> {
+
+    private static final org.slf4j.Logger log = org.slf4j.LoggerFactory.getLogger(EncryptedTextConverter.class);
 
     private static final String ALGORITHM = "AES/GCM/NoPadding";
     private static final int NONCE_BYTES = 12;
@@ -76,18 +77,21 @@ public class EncryptedTextConverter implements AttributeConverter<String, byte[]
             return null;
         }
         if (stored.length < NONCE_BYTES) {
-            throw new IllegalStateException("암호문이 너무 짧다");
+            log.error("메시지 복호화 불가 — 암호문이 nonce보다 짧다({}바이트)", stored.length);
+            return null;
         }
+        SecretKeySpec key = key(); // 키 없음·깨짐은 행이 아니라 설정 결함 — 여기서는 던진다
         try {
             Cipher cipher = Cipher.getInstance(ALGORITHM);
-            cipher.init(Cipher.DECRYPT_MODE, key(),
+            cipher.init(Cipher.DECRYPT_MODE, key,
                     new GCMParameterSpec(TAG_BITS, Arrays.copyOfRange(stored, 0, NONCE_BYTES)));
             byte[] plain = cipher.doFinal(stored, NONCE_BYTES, stored.length - NONCE_BYTES);
             return new String(plain, StandardCharsets.UTF_8);
-        } catch (AEADBadTagException e) {
-            throw new IllegalStateException("메시지 복호화 실패 — 변조됐거나 키가 다르다", e);
         } catch (GeneralSecurityException e) {
-            throw new IllegalStateException("메시지 복호화 실패", e);
+            // 한 행의 결함(변조·다른 키로 쓴 행)이다. 던지면 그 행을 읽는 조회 전체(대화함·미읽음)가 500이 된다 —
+            // null로 돌려주고 호출자가 그 방·그 줄만 뺀다(리뷰 사소 4). 평문 흉내는 절대 돌려주지 않는다.
+            log.error("메시지 복호화 실패 — 변조됐거나 키가 다르다: {}", e.toString());
+            return null;
         }
     }
 

@@ -52,4 +52,32 @@ class PrivacyControllerTest {
                 // 뷰 이름만 보면 템플릿이 깨져도(fragment 참조 오류 등) 통과할 수 있어, 실제 렌더 결과까지 본다.
                 .andExpect(content().string(containsString("제1조 (목적)")));
     }
+
+    /** 정책 문서 §1 — 「대화」 조를 제10조로 넣고 문의를 제11조로 민다. 채널톡 제출물과 문구가 같아야 한다. */
+    @Test
+    @DisplayName("GET /terms: 제10조 대화(맞팔·제재 사다리·자동 7일)와 제11조 문의")
+    void getTerms_hasChatArticleBeforeContact() throws Exception {
+        mockMvc.perform(get("/terms"))
+                .andExpect(content().string(containsString("제10조 (대화)")))
+                .andExpect(content().string(containsString("제11조 (문의)")))
+                .andExpect(content().string(containsString("서로 팔로우한 이용자 사이")))
+                .andExpect(content().string(containsString("경고 → 7일 정지 → 영구 정지")))
+                .andExpect(content().string(containsString("대화 기능이 7일간 자동으로 정지")))
+                .andExpect(content().string(org.hamcrest.Matchers.not(containsString("제10조 (문의)"))));
+    }
+
+    /** 정책 문서 §5 — 처리방침은 사실을 주장하므로 코드의 30일·암호화 방식과 같아야 한다. */
+    @Test
+    @DisplayName("GET /privacy: 대화 항목·AES-256-GCM·탈퇴 즉시 삭제·차단 종료 30일·신고 건 보존")
+    void getPrivacy_disclosesChatData() throws Exception {
+        mockMvc.perform(get("/privacy"))
+                .andExpect(content().string(containsString("대화 기능을 제공하는 경우")))
+                .andExpect(content().string(containsString("AES-256-GCM")))
+                .andExpect(content().string(containsString("차단으로 종료된 대화방은 <strong>30일 뒤 삭제</strong>")))
+                .andExpect(content().string(containsString("신고 처리가 끝날 때까지 삭제하지 않습니다")))
+                // 리뷰 #1169 — 운영자 열람은 신고 시점까지(ChatSafetyService가 chat_last_message_id로 자른다)
+                .andExpect(content().string(containsString("신고 시점까지의 대화 기록")))
+                // 키는 render-env가 EC2 .env에도 쓰므로 「SSM에만」은 사실보다 강하다
+                .andExpect(content().string(containsString("데이터베이스·백업과 분리해")));
+    }
 }

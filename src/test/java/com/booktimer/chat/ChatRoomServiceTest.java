@@ -272,8 +272,13 @@ class ChatRoomServiceTest {
         mutual(me2, other2);
 
         ChatRoom reopened = service.openOrGet(me2, other2);
+        // 여는 것만으로는 옛 대화가 양쪽 대화함에 되살아나지 않는다(리뷰 사소 5 — §4-1 「첫 메시지가 되살린다」).
+        assertThat(summaryOf(me2, room.getId())).isNull();
+        assertThat(summaryOf(other2, room.getId())).isNull();
         service.send(me2, reopened.getId(), "다시 시작");
 
+        assertThat(summaryOf(me2, room.getId())).isNotNull();
+        assertThat(summaryOf(other2, room.getId())).isNotNull();
         assertThat(reopened.getId()).isEqualTo(room.getId());
         assertThat(service.messages(other2, room.getId(), 0).messages())
                 .extracting(ChatRoomService.MessageView::body)
@@ -380,6 +385,26 @@ class ChatRoomServiceTest {
         assertThat(service.messages(other, id, 0).messages())
                 .extracting(ChatRoomService.MessageView::flagged)
                 .containsExactly(true, false);
+    }
+
+    /** 리뷰 사소 4 — 복호화 안 되는 행 하나가 대화함·미읽음 전체를 500으로 만들지 않는다. 그 방만 빠진다. */
+    @Test
+    void undecryptableRoomIsSkippedNotFatal() {
+        User me = toss("bad-me");
+        User broken = toss("bad-broken");
+        User fine = toss("bad-fine");
+        mutual(me, broken);
+        mutual(me, fine);
+        long brokenRoom = service.openOrGet(me, broken).getId();
+        long fineRoom = service.openOrGet(me, fine).getId();
+        service.send(broken, brokenRoom, "곧 깨질 메시지");
+        service.send(fine, fineRoom, "멀쩡한 메시지");
+        em.flush();
+        jdbc.update("update chat_message set body = ? where room_id = ?", new byte[40], brokenRoom); // 태그가 안 맞는 쓰레기
+        em.clear();
+
+        assertThat(service.rooms(me)).extracting(ChatRoomService.RoomSummary::roomId).containsExactly(fineRoom);
+        assertThat(service.unreadRooms(me)).isEqualTo(1);
     }
 
     @Test

@@ -46,7 +46,8 @@ case "\$*" in
                  TOSS_MESSENGER_ENABLED TOSS_FINISH_TEMPLATE_CODE \\
                  TOSS_GOAL_MET_ENABLED TOSS_GOAL_MET_TEMPLATE_CODE \\
                  TOSS_RETENTION_ENABLED TOSS_RETENTION_TEMPLATE_CODE \\
-                 TOSS_STUDY_GOAL_ENABLED TOSS_STUDY_GOAL_TEMPLATE_CODE; do
+                 TOSS_STUDY_GOAL_ENABLED TOSS_STUDY_GOAL_TEMPLATE_CODE \\
+                 CHAT_MESSAGE_KEY; do
             printf '/booktimer/%s\tvalue-of-%s\n' "\$n" "\$n"
         done
         # 여러 줄 SecureString(PEM)도 같은 /booktimer 경로에 살아 이 목록에 함께 나온다.
@@ -128,6 +129,8 @@ assert_has "  .env 에 공부 회당 시간 템플릿 코드" "$env_out" "BOOKTI
 # (BOOKTIMER_CLAUDE_API_KEY)이 달라 매핑이 필요하다. 빠지면 .env에 안 실려 앱이 not-configured 기본값으로
 # 뜨고, 승인된 사용자에게도 「AI 기능이 꺼져 있어요」만 나오는 무성 장애가 된다(LLM_API_KEY와 같은 부류).
 assert_has "  .env 에 Claude API 키" "$env_out" "BOOKTIMER_CLAUDE_API_KEY=value-of-CLAUDE_API_KEY"
+# 맞팔 DM 메시지 암호화 키 — 빠지면 스위치를 켜도 ChatGate가 「키 없음」으로 /api/chat/**를 404로 닫는다.
+assert_has "  .env 에 대화 암호화 키" "$env_out" "BOOKTIMER_CHAT_MESSAGE_KEY=value-of-CHAT_MESSAGE_KEY"
 
 # ── Case 2: 인증서 누락 → 배포 실패, 파일도 안 남는다 ──
 r="$(run TOSS_MTLS_CERT)"; rc="${r%%$'\n'*}"; out="${r#*$'\n'}"
