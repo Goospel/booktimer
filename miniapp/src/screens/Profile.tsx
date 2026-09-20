@@ -1,6 +1,6 @@
 import { Button, TextField } from '@toss/tds-mobile';
 import { useCallback, useEffect, useState } from 'react';
-import type { ReactNode } from 'react';
+import type { CSSProperties, ReactNode } from 'react';
 
 import type {
   BookStatus,
@@ -276,6 +276,29 @@ export function MutualFollowers({ users, total }: { users?: UserBrief[]; total?:
  */
 /** TDS `Button`(기본 size)의 실측 높이 — 옆에 세우는 정사각 ⋯ 버튼의 한 변이다(목 모드 390×844 실측: 57px). */
 const TDS_BUTTON_HEIGHT = 57;
+
+/** 팔로우 옆 정사각 버튼(종이비행기·⋯) — 연필테 카드지. 높이는 flex stretch가 옆 팔로우 버튼에 맞춘다. */
+const SQUARE_BUTTON: CSSProperties = {
+  flex: '0 0 auto',
+  width: TDS_BUTTON_HEIGHT, // 높이는 stretch가 정한다 — 어긋나 봐야 「정사각이 아님」이지 「높이 불일치」는 아니다
+  padding: 0,
+  borderRadius: 12,
+  border: '1px solid transparent',
+  borderImage: PENCIL_FRAME,
+  background: 'var(--adaptiveGrey100, #FCFAF5)',
+  color: 'var(--adaptiveGrey700, #57534A)',
+  cursor: 'pointer',
+};
+
+/** 종이비행기 — DM 자리 표식. 기본 이모지 대신 선으로 그린다(이모지 금지 규칙). */
+function PaperPlane() {
+  return (
+    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="M21.5 2.5 10.5 13.5" />
+      <path d="M21.5 2.5 14.5 21.5 10.5 13.5 2.5 9.5Z" />
+    </svg>
+  );
+}
 
 export function shelfTitle(activeTag: string | null, statusFilter: BookStatus | null, count: number): string {
   if (activeTag !== null) return `${activeTag} 근거 책 ${count}`;
@@ -651,6 +674,13 @@ export function ProfileCard({
           서로 팔로우하면 메시지를 보낼 수 있어요
         </Text>
       )}
+      {/* 맞팔인데 잠긴 경우 — 거의 다 웹 전용 상대다(대화 화면이 미니앱에만 있어 서버가 막는다). 사람에 대한 단정이
+          아니라 규칙 문장이라 제재 같은 다른 사유에도 거짓이 아니다. */}
+      {onMessage !== undefined && !profile.self && profile.following && profile.followsMe === true && !canMessage(profile) && (
+        <Text typography="st12" color="grey600" style={{ display: 'block', marginTop: 4 }}>
+          대화는 두 사람 모두 토스에서 북타이머를 쓸 때 열려요
+        </Text>
+      )}
 
       {/* 태그가 서술보다 <b>먼저</b>다. 서술은 서버가 써 준 다섯 줄짜리 문단이고 태그는 그 요약인데,
           문단이 앞에 있으면 「이 사람이 어떤 독자인가」를 스크롤해야 알 수 있었다(요약이 원문 뒤에 있는 꼴).
@@ -747,11 +777,25 @@ export function ProfileCard({
           <Button style={{ flex: 1 }} variant={profile.following ? 'weak' : 'fill'} disabled={busy} onClick={onFollowToggle}>
             {profile.following ? '팔로우 취소' : '팔로우'}
           </Button>
-          {/* 인스타 「메시지」 자리 — 맞팔 ∧ dmAvailable일 때만 선다({@link canMessage}). */}
-          {onMessage !== undefined && canMessage(profile) && (
-            <Button style={{ flex: 1 }} variant="weak" disabled={busy} onClick={onMessage}>
-              메시지
-            </Button>
+          {/* DM 자리 — 대화가 켜져 있으면 남의 책방엔 늘 보인다(인스타·X처럼). 눌리는 건 맞팔 ∧ dmAvailable일 때뿐이고
+              ({@link canMessage}), 아니면 흐리게 잠긴 채 위의 안내 한 줄(맞팔 아님 / 토스 미연결)이 이유를 말한다. */}
+          {onMessage !== undefined && (
+            <button
+              type="button"
+              aria-label="메시지 보내기"
+              disabled={busy || !canMessage(profile)}
+              onClick={onMessage}
+              style={{
+                ...SQUARE_BUTTON,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                opacity: canMessage(profile) ? 1 : 0.4,
+                cursor: canMessage(profile) ? 'pointer' : 'default',
+              }}
+            >
+              <PaperPlane />
+            </button>
           )}
           {/*
             드문 안전장치다 — 글자 버튼으로 팔로우와 나란히 서 있으면 남의 책방 첫인상이 방어적이었다.
@@ -766,19 +810,7 @@ export function ProfileCard({
             aria-label="신고·차단"
             disabled={busy}
             onClick={onMore}
-            style={{
-              flex: '0 0 auto',
-              width: TDS_BUTTON_HEIGHT, // 높이는 stretch가 정한다 — 어긋나 봐야 「정사각이 아님」이지 「높이 불일치」는 아니다
-              padding: 0,
-              borderRadius: 12,
-              border: '1px solid transparent',
-              borderImage: PENCIL_FRAME,
-              background: 'var(--adaptiveGrey100, #FCFAF5)',
-              color: 'var(--adaptiveGrey700, #57534A)',
-              fontSize: 17,
-              lineHeight: 1,
-              cursor: 'pointer',
-            }}
+            style={{ ...SQUARE_BUTTON, fontSize: 17, lineHeight: 1 }}
           >
             ⋯
           </button>
