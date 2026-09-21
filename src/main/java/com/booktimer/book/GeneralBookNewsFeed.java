@@ -114,12 +114,13 @@ public class GeneralBookNewsFeed {
     static List<Item> merge(Map<String, List<NewsArticle>> byTopic, Instant now) {
         Comparator<Item> newestFirst = Comparator.comparing((Item i) -> i.article().publishedAt()).reversed();
         Instant oldest = now.minus(MAX_AGE);
+        List<String> droppedSources = new ArrayList<>();
         List<Item> all = new ArrayList<>();
         byTopic.forEach((label, articles) -> articles.stream()
                 .filter(a -> a.link() != null && a.link().startsWith(LINK_PREFIX))
                 .filter(a -> a.publishedAt() != null && !a.publishedAt().isBefore(oldest))
                 .filter(a -> !blocked(a.title()))
-                .filter(a -> trustedSource(a.source()))
+                .filter(a -> keepTrusted(a.source(), droppedSources))
                 .map(a -> new Item(label, a))
                 .sorted(newestFirst)
                 .limit(MAX_PER_TOPIC)
@@ -127,10 +128,22 @@ public class GeneralBookNewsFeed {
         all.sort(newestFirst);
         Set<String> seenLinks = new HashSet<>();
         Set<String> seenTitles = new HashSet<>();
-        return all.stream()
+        List<Item> merged = all.stream()
                 .filter(i -> seenLinks.add(i.article().link()) && seenTitles.add(BookNewsMatcher.key(i.article().title())))
                 .limit(MAX_TOTAL)
                 .toList();
+        // 배포 후 오탐 감시용 계측기 — 이 목록에 한글 매체나 국내 방송(「SBS Biz」류)이 보이면 규칙이 과하다.
+        log.info("일반 책 뉴스 병합 — 최종 {}건 · 출처 탈락 {}건 {}", merged.size(), droppedSources.size(), droppedSources);
+        return merged;
+    }
+
+    /** {@link #trustedSource}와 같은 판정인데, 탈락한 매체명을 모아 로그에 남긴다. */
+    private static boolean keepTrusted(String source, List<String> droppedSources) {
+        if (trustedSource(source)) {
+            return true;
+        }
+        droppedSources.add(source);
+        return false;
     }
 
     private static final Pattern HANGUL = Pattern.compile("[가-힣]");
