@@ -14,9 +14,12 @@ import java.util.Comparator;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 /**
  * 게스트(로그인 전) 「일반 책 뉴스」 — <b>운영자가 정한 고정 주제</b>로 구글 뉴스를 모아 메모리에 둔다.
@@ -38,8 +41,16 @@ public class GeneralBookNewsFeed {
             new Topic("신간", "신간 when:7d"),
             new Topic("출판계", "출판계 when:7d"),
             new Topic("베스트셀러", "베스트셀러 도서 when:7d"));
-    /** 첫 화면·심사 화면이라 책 기사여도 사건 제목은 뺀다. 짧게, 명백한 것만. */
-    static final List<String> BLOCKED_TITLE_WORDS = List.of("사망", "숨져", "살인", "성폭행", "성추행", "마약", "자살", "시신");
+    /**
+     * 첫 화면·심사 화면이라 책 기사여도 사건 제목은 뺀다. 짧게, 명백한 것만 — 사건어 8 + 도박어 4.
+     *
+     * <p>「도박」·「배당」·「토토」는 <b>넣지 않는다</b> — 『도박 묵시록』·「배당주 투자」·「이웃집 토토로」에 걸린다.
+     */
+    static final List<String> BLOCKED_TITLE_WORDS = List.of(
+            "사망", "숨져", "살인", "성폭행", "성추행", "마약", "자살", "시신",
+            "카지노", "슬롯", "바카라", "먹튀");
+    /** 매체가 아니라 블로그 플랫폼 — 개인 글·SEO·일일 목록이 뉴스로 온다. 스팸 이름 차단목록이 아니다(그건 사후약방문). */
+    static final List<String> BLOCKED_SOURCES = List.of("브런치");
     static final int MAX_PER_TOPIC = 10;
     static final int MAX_TOTAL = 30;
     /** {@code when:7d}는 비공식 연산자라 조용히 죽을 수 있다 — 서버가 한 번 더 막는다. */
@@ -99,7 +110,7 @@ public class GeneralBookNewsFeed {
         return merged.size();
     }
 
-    /** 필터(https·발행일·제외어) → 주제별 상한 → 합쳐 최신순 → link·제목 키 중복 제거 → 전체 상한. */
+    /** 필터(https·발행일·제외어·출처) → 주제별 상한 → 합쳐 최신순 → link·제목 키 중복 제거 → 전체 상한. */
     static List<Item> merge(Map<String, List<NewsArticle>> byTopic, Instant now) {
         Comparator<Item> newestFirst = Comparator.comparing((Item i) -> i.article().publishedAt()).reversed();
         Instant oldest = now.minus(MAX_AGE);
@@ -108,6 +119,7 @@ public class GeneralBookNewsFeed {
                 .filter(a -> a.link() != null && a.link().startsWith(LINK_PREFIX))
                 .filter(a -> a.publishedAt() != null && !a.publishedAt().isBefore(oldest))
                 .filter(a -> !blocked(a.title()))
+                .filter(a -> trustedSource(a.source()))
                 .map(a -> new Item(label, a))
                 .sorted(newestFirst)
                 .limit(MAX_PER_TOPIC)
@@ -119,6 +131,40 @@ public class GeneralBookNewsFeed {
                 .filter(i -> seenLinks.add(i.article().link()) && seenTitles.add(BookNewsMatcher.key(i.article().title())))
                 .limit(MAX_TOTAL)
                 .toList();
+    }
+
+    private static final Pattern HANGUL = Pattern.compile("[가-힣]");
+    private static final Pattern ACRONYM = Pattern.compile("[A-Z0-9]{2,5}");
+    private static final Pattern HOST_LIKE = Pattern.compile("[\\w-]+(?:\\.[\\w-]+)*\\.([A-Za-z]{2,})");
+
+    /**
+     * 국내 매체인가 — 구글 RSS {@code <source>}는 발행사가 등록한 표시명이 있으면 그것을, 없으면 <b>호스트명</b>을 준다.
+     * 국내 중소 매체는 호스트명({@code youthassembly.kr})으로, 해외 스팸 농장은 등록 표시명(「Histoire pour tous」)으로 온다.
+     *
+     * <p>그래서 한글 표시명·약어(YTN)·{@code .kr}/일반도메인 호스트는 통과시키고, 설명형 라틴 표시명과 외국
+     * 국가도메인({@code .fr}·{@code .vn})은 뺀다. 2026-09-21 실측 스팸 11/11 탈락 · 라틴 표기 국내 매체 0 탈락.
+     * 이름 차단목록이 주 방어가 아닌 이유: 한 주에 스팸 출처 이름이 셋 갈린다(늘 한 발 늦는다).
+     *
+     * <p>null·빈 값은 <b>통과</b> — RSS 형식이 드리프트해도 스냅샷이 통째로 0건이 되지 않게.
+     * 알려진 오탐 계급: 한글 없는 다단어 국내 매체 표시명(「SBS Biz」류). 실측 110건에 0회 — 배포 후 로그로 본다.
+     */
+    static boolean trustedSource(String source) {
+        if (source == null || source.isBlank()) {
+            return true;
+        }
+        String s = source.strip();
+        if (BLOCKED_SOURCES.contains(s)) {
+            return false;
+        }
+        if (HANGUL.matcher(s).find() || ACRONYM.matcher(s).matches()) {
+            return true;
+        }
+        Matcher host = HOST_LIKE.matcher(s);
+        if (!host.matches()) {
+            return false;
+        }
+        String tld = host.group(1).toLowerCase(Locale.ROOT);
+        return tld.equals("kr") || tld.length() >= 3;
     }
 
     private static boolean blocked(String title) {

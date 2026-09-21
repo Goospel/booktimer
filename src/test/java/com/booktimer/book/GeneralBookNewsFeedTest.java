@@ -1,9 +1,14 @@
 package com.booktimer.book;
 
 import com.booktimer.book.GoogleNewsRssClient.NewsArticle;
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.CsvSource;
 
+import java.io.InputStream;
 import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
@@ -270,5 +275,135 @@ class GeneralBookNewsFeedTest {
         assertThat(feed.collect()).isZero();
         assertThat(feed.snapshot()).isEmpty();
         assertThat(client.queries).isEmpty();
+    }
+
+    // ────────────────────────────────────────────────────────────────────
+    // 2026-09-21 — 스팸 출처 차단(매체명 표기 규칙 + 브런치 + 도박어)
+    // ────────────────────────────────────────────────────────────────────
+
+    /** 스냅샷 픽스처 전용 시계 — `guest-news-2026-09-21.json`의 발행일이 전부 이 시각의 14일 안. */
+    private static final Clock SNAPSHOT_CLOCK = Clock.fixed(Instant.parse("2026-09-21T14:07:00Z"), ZoneOffset.UTC);
+
+    private static NewsArticle article(String title, String linkId, Instant publishedAt, String source) {
+        return new NewsArticle(title, "https://news.google.com/rss/articles/" + linkId, publishedAt, source);
+    }
+
+    @Test
+    @DisplayName("스팸 출처는 빠지고 국내 매체는 남는다 — 라틴 표기 국내 매체(v.daum.net·chosun.com)도 생존")
+    void dropsUntrustedSources() {
+        StubClient client = new StubClient(true);
+        client.byQuery.put(q(0), List.of(
+                article("결과 표시가 여러 번 나오는 이유는? 메랜 슬롯 교환 진행 설명", "sp1", daysAgo(1), "Calgary Roughnecks"),
+                article("배당표 예시와 실제 조합을 구분하는 왕좌의 게임 아트북", "sp2", daysAgo(1), "Histoire pour tous"),
+                article("전 세계 출판 업계가 주목하는 새로운 흐름", "sp3", daysAgo(1), "Vietnam.vn"),
+                article("[신간] 드래곤 마스터 20", "sp4", daysAgo(1), "NANOOM ENERGY"),
+                article("달콤씁쓸했던 서점 나들이", "sp5", daysAgo(1), "브런치")));
+        client.byQuery.put(q(1), List.of(
+                article("[신간] 인생 후반기에 중요한 것…'딱 알맞은 고독'", "ok1", daysAgo(2), "v.daum.net"),
+                article("[카페 2030] 문학이라는 동네의 가격", "ok2", daysAgo(2), "chosun.com"),
+                article("133억 들인 출판전산망 ‘구멍’…신간 4권 중 3권 누락", "ok3", daysAgo(2), "youthassembly.kr"),
+                article("[새로 나온 책] ‘가장 지혜로운 책’ 창비 한국사상선 30권 완간 등", "ok4", daysAgo(2), "KBS 뉴스"),
+                article("[신간] 『AI 나라의 홍콩할머니』", "ok5", daysAgo(2), "독서신문"),
+                article("임의 기사", "ok6", daysAgo(2), "YTN"),
+                article("임의 기사 2", "ok7", daysAgo(2), "nc.press")));
+        GeneralBookNewsFeed feed = new GeneralBookNewsFeed(client, CLOCK);
+
+        feed.collect();
+
+        assertThat(feed.snapshot()).extracting(i -> i.article().title()).containsExactlyInAnyOrder(
+                "[신간] 인생 후반기에 중요한 것…'딱 알맞은 고독'",
+                "[카페 2030] 문학이라는 동네의 가격",
+                "133억 들인 출판전산망 ‘구멍’…신간 4권 중 3권 누락",
+                "[새로 나온 책] ‘가장 지혜로운 책’ 창비 한국사상선 30권 완간 등",
+                "[신간] 『AI 나라의 홍콩할머니』",
+                "임의 기사",
+                "임의 기사 2");
+    }
+
+    @ParameterizedTest(name = "[{index}] {0} → {1}")
+    @DisplayName("매체명 표기 규칙 — 한글·약어·.kr/일반도메인은 통과, 설명형 라틴 표시명·외국 국가도메인·플랫폼은 탈락")
+    @CsvSource(nullValues = "NULL", value = {
+            "NULL, true",
+            "'', true",
+            "독서신문, true",
+            "v.daum.net, true",
+            "YTN, true",
+            "JTBC, true",
+            "nc.press, true",
+            "Vietnam.vn, false",
+            "Histoire pour tous, false",
+            "NANOOM ENERGY, false",
+            "브런치, false",
+            "histoire-pour-tous.fr, false"})
+    void trustedSourceTable(String source, boolean trusted) {
+        assertThat(GeneralBookNewsFeed.trustedSource(source)).isEqualTo(trusted);
+    }
+
+    @Test
+    @DisplayName("도박어는 국내 매체가 실어도 뺀다 — 단 배당·토토는 제외어가 아니다(책 제목에 걸린다)")
+    void dropsGamblingTitlesEvenFromKoreanSource() {
+        StubClient client = new StubClient(true);
+        client.byQuery.put(q(0), List.of(
+                article("결과 표시가 여러 번 나오는 이유는? 메랜 슬롯 교환 진행 설명", "g1", daysAgo(1), "연합뉴스"),
+                article("작은 화면에서 읽기 쉬운가? 카지노가입 모바일 점검", "g2", daysAgo(1), "연합뉴스"),
+                article("바카라 규칙을 다룬 신간이라는 광고", "g3", daysAgo(1), "연합뉴스"),
+                article("먹튀 없는 곳을 고르는 법이라는 홍보 글", "g4", daysAgo(1), "연합뉴스")));
+        client.byQuery.put(q(1), List.of(
+                article("배당 투자로 월급 만들기 출간", "k1", daysAgo(2), "연합뉴스"),
+                article("이웃집 토토로 그림책 재출간", "k2", daysAgo(2), "연합뉴스"),
+                article("[신간] 『AI 나라의 홍콩할머니』", "k3", daysAgo(2), "독서신문")));
+        GeneralBookNewsFeed feed = new GeneralBookNewsFeed(client, CLOCK);
+
+        feed.collect();
+
+        assertThat(feed.snapshot()).extracting(i -> i.article().title()).containsExactlyInAnyOrder(
+                "배당 투자로 월급 만들기 출간",
+                "이웃집 토토로 그림책 재출간",
+                "[신간] 『AI 나라의 홍콩할머니』");
+    }
+
+    @Test
+    @DisplayName("2026-09-21 운영 스냅샷 25건 재생 — 스팸 2건만 빠지고 정상 23건은 전부 남는다")
+    void snapshotReplay_2026_09_21_dropsOnlySpam() throws Exception {
+        GeneralBookNewsFeed feed = new GeneralBookNewsFeed(snapshotClient(), SNAPSHOT_CLOCK);
+
+        feed.collect();
+
+        assertThat(feed.snapshot()).hasSize(23);
+        assertThat(feed.snapshot()).extracting(i -> i.article().title())
+                .doesNotContain(
+                        "결과 표시가 여러 번 나오는 이유는? 메랜 슬롯 교환 진행 설명",
+                        "배당표 예시와 실제 조합을 구분하는 왕좌의 게임 아트북")
+                .contains(
+                        "[새로 나온 책] ‘가장 지혜로운 책’ 창비 한국사상선 30권 완간 등",
+                        "[카페 2030] 문학이라는 동네의 가격",
+                        "133억 들인 출판전산망 ‘구멍’…신간 4권 중 3권 누락",
+                        "취미와 접목하고, 편의점 진출…일상 파고드는 서점·출판가");
+    }
+
+    /**
+     * 2026-09-21 14:07 운영 {@code /api/public/news} 25건을 그날의 질의 슬롯에 그대로 넣은 스텁.
+     * 외부 RSS는 부르지 않는다 — 픽스처는 {@code src/test/resources/news/guest-news-2026-09-21.json}.
+     */
+    private static StubClient snapshotClient() throws Exception {
+        Map<String, Integer> slot = Map.of("신간", 0, "출판계", 1, "베스트셀러", 2);
+        StubClient client = new StubClient(true);
+        for (int i = 0; i < 3; i++) {
+            client.byQuery.put(q(i), new ArrayList<>());
+        }
+        for (JsonNode row : snapshotFixture()) {
+            client.byQuery.get(q(slot.get(row.get("fetchedBy").asText()))).add(new NewsArticle(
+                    row.get("title").asText(),
+                    "https://news.google.com/rss/articles/" + row.get("id").asText() + "?oc=5",
+                    Instant.parse(row.get("publishedAt").asText()),
+                    row.get("source").asText()));
+        }
+        return client;
+    }
+
+    private static JsonNode snapshotFixture() throws Exception {
+        try (InputStream in = GeneralBookNewsFeedTest.class.getResourceAsStream("/news/guest-news-2026-09-21.json")) {
+            return new ObjectMapper().readTree(in);
+        }
     }
 }
