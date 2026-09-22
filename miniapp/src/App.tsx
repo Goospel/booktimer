@@ -1332,10 +1332,15 @@ export function App() {
    *
    * 여기도 시트를 얹지 않는다 — 책방은 `setMargin(null)`을 거쳐야 열려(`onOpenProfile`) 작성과 공존할
    * 수 없고, 여기서 여는 여백은 `composeBook: null`이다.
+   *
+   * `key={shop}` — 지금 이 화면에서 사람이 바뀌는 길은 없지만(전이가 전부 다른 분기를 거친다) 규칙을
+   * 자리마다 예외 없이 적는다. `<Profile>`의 정체성은 loginId라는 한 줄이 `profile-identity-guard`의
+   * 계측 대상이고, 예외를 하나 두면 가드가 예외 목록을 들어야 한다(그게 이 한 줄보다 길다).
    */
   if (shop !== null) {
     return (
       <Profile
+        key={shop}
         loginId={shop}
         onBack={() => setShop(null)}
         onOpenMargin={(bookId) => openMargin({ loginId: shop, bookId, isbn13: null, composeBook: null })}

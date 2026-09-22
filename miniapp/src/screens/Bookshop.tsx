@@ -158,10 +158,18 @@ export function Bookshop({
     );
   }
 
-  // 남의 책방 — header도 카운트 핸들러도 주지 않는다(서버 follow-list는 본인 것만 준다). 지금과 동일한 화면.
+  /*
+   * 남의 책방 — header도 카운트 핸들러도 주지 않는다(서버 follow-list는 본인 것만 준다). 지금과 동일한 화면.
+   *
+   * ⚠️ `key={loginId}`가 이 분기와 아래 내 책방 분기를 **다른 화면으로 갈라 놓는다**. 없으면 둘이 같은
+   * fiber로 이어져(아래 `key` 주석) 남의 책방에서 건 상태 필터가 내 책방에 남는다 — 2026-09-22 목 모드
+   * 실측: 「다 읽음」을 누르고 나오면 내 책방이 그 칩이 눌린 채 서고, 소제목은 「다 읽음 3」인데 격자엔
+   * 전체 3권이 그대로였다.
+   */
   if (open !== null) {
     return (
       <Profile
+        key={open}
         loginId={open}
         onBack={() => setOpen(null)}
         onError={onError}
@@ -233,7 +241,14 @@ export function Bookshop({
       ) : (
         // onBack을 주지 않는다 — 탭 루트라 나갈 곳이 없다(출구는 플로팅 탭바). 남의 책방에만 있는
         // 차단 진입도 여기엔 없어, 차단 후 돌려보낼 자리도 필요 없다.
+        //
+        // key — 「분기가 다르니 재마운트된다」는 틀린 전제였다. React는 **키 없는 최상위 프래그먼트를
+        // 배열로 풀어** 맞추므로, 위 이른 return의 `<Profile/>`과 이 프래그먼트 첫 자식이 둘 다
+        // 「index 0 · key=null · type=Profile」이라 같은 fiber로 이어진다. `Profile`은 마운트 때만 도는
+        // 초기화에 기대어 산다(`useState(() => cacheGet(cacheKeyProfile(loginId)))`) — 사람이 바뀌면
+        // 통째로 새로 세우는 게 이 화면의 계약이다.
         <Profile
+          key={handle}
           loginId={handle}
           onError={onError}
           header={header}

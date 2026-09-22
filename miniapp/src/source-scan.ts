@@ -23,6 +23,31 @@ export function sourceFiles(dir: string): string[] {
   });
 }
 
+/**
+ * `<Name …>` 여는 태그 전부 — 중괄호 깊이를 세어 속성 속 `=>`·`>`에 속지 않는다.
+ *
+ * <p>이름 경계로 접두사 동명이인을 뺀다: `Text`는 `<TextField>`·`<TextArea>`를, `Profile`은
+ * `<ProfileCard>`를 안 집는다.
+ */
+export function openingTags(src: string, name: string): string[] {
+  const tags: string[] = [];
+  const re = new RegExp(`<${name}(?=[\\s/>])`, 'g');
+  let match: RegExpExecArray | null;
+  while ((match = re.exec(src)) !== null) {
+    let depth = 0;
+    let i = match.index;
+    for (; i < src.length; i++) {
+      const ch = src[i];
+      if (ch === '{') depth++;
+      else if (ch === '}') depth--;
+      else if (ch === '>' && depth === 0) break;
+    }
+    tags.push(src.slice(match.index, i + 1));
+    re.lastIndex = i + 1;
+  }
+  return tags;
+}
+
 /** 주석을 걷는다 — 주석 속 예시·경위 설명은 코드가 아니다. 줄머리 `//`만 본다(URL의 `//`를 살리려고). */
 export function stripComments(src: string): string {
   return src
