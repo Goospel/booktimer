@@ -2,7 +2,7 @@ import { readFileSync } from 'node:fs';
 
 import { describe, expect, it } from 'vitest';
 
-import { sourceFiles, stripComments } from './source-scan';
+import { openingTags, sourceFiles, stripComments } from './source-scan';
 
 /**
  * TDS `Text`에 `style={{ textAlign }}`을 주지 않는다 — <b>DOM에 안 실리는 죽은 키</b>다
@@ -28,29 +28,6 @@ import { sourceFiles, stripComments } from './source-scan';
 /** TDS `Text`가 자기 prop으로 덮어써 `style`에 적어도 DOM에 안 실리는 키. */
 const DEAD_KEYS = ['textAlign'];
 
-/**
- * `<Text …>` 여는 태그 전부 — 중괄호 깊이를 세어 속성 속 `=>`·`>`에 속지 않는다.
- * `<TextField>`·`<TextArea>` 같은 다른 이름은 이름 경계로 뺀다.
- */
-export function textOpeningTags(src: string): string[] {
-  const tags: string[] = [];
-  const re = /<Text(?=[\s/>])/g;
-  let match: RegExpExecArray | null;
-  while ((match = re.exec(src)) !== null) {
-    let depth = 0;
-    let i = match.index;
-    for (; i < src.length; i++) {
-      const ch = src[i];
-      if (ch === '{') depth++;
-      else if (ch === '}') depth--;
-      else if (ch === '>' && depth === 0) break;
-    }
-    tags.push(src.slice(match.index, i + 1));
-    re.lastIndex = i + 1;
-  }
-  return tags;
-}
-
 /** 태그의 `style={{ … }}` 리터럴에 든 죽은 키. 리터럴이 없으면 빈 배열. */
 export function deadStyleKeys(tag: string): string[] {
   const at = tag.indexOf('style={{');
@@ -69,7 +46,7 @@ describe('TDS Text의 style에 죽은 키(textAlign)를 적지 않는다', () =>
   const root = new URL('.', import.meta.url).pathname.replace(/^\/([A-Za-z]:)/, '$1');
   const files = sourceFiles(root);
   const tags = files.flatMap((file) =>
-    textOpeningTags(stripComments(readFileSync(file, 'utf8'))).map((tag) => ({ file, tag })),
+    openingTags(stripComments(readFileSync(file, 'utf8')), 'Text').map((tag) => ({ file, tag })),
   );
 
   /** 계측기 자체의 판별력 — 겨눈 꼴은 잡고, 옳은 꼴은 놓아줘야 가드다(T-212: 대상을 안 잡아도 초록인 계측기). */
@@ -88,7 +65,7 @@ describe('TDS Text의 style에 죽은 키(textAlign)를 적지 않는다', () =>
 
   it('태그 추출이 속성 속 화살표·다른 이름에 속지 않는다', () => {
     const src = `<TextField style={{ textAlign: 'center' }} /><Text onClick={() => go(1 > 0)} style={{ textAlign: 'left' }}>a</Text>`;
-    const tags = textOpeningTags(src);
+    const tags = openingTags(src, 'Text');
 
     expect(tags).toHaveLength(1);
     expect(tags[0]).toContain(`onClick={() => go(1 > 0)}`);
