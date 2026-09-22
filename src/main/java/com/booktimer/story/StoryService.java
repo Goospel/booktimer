@@ -2,6 +2,7 @@ package com.booktimer.story;
 
 import com.booktimer.book.Book;
 import com.booktimer.book.BookRepository;
+import com.booktimer.book.BookVisibility;
 import com.booktimer.book.Isbn;
 import com.booktimer.profile.ProfileService;
 import com.booktimer.search.UserRowAssembler;
@@ -127,6 +128,37 @@ public class StoryService {
                 target, book, PageRequest.of(0, MAX_MARGIN_ENTRIES));
         return new MarginResponse(MarginBook.of(book), target.getNickname(), self,
                 withLikes(stories, viewer));
+    }
+
+    /**
+     * 한 사람의 여백 <b>전체</b> — 책 구분 없이 최신순. 책방의 「여백」 탭이 이 문을 지난다.
+     *
+     * <p>게이트는 {@link #marginOf}와 <b>같은 두 겹</b>인데 책 좌표가 없어 한 겹으로 접힌다:
+     * <ol>
+     *   <li>{@link ProfileService#resolveVisibleTarget} — 차단·ADMIN·미존재·핸들 없음 → 404</li>
+     *   <li>책 가시성 — 남이 보면 PUBLIC만, <b>본인이면 PRIVATE까지</b>. {@code marginOf}의
+     *       {@code !book.isPublic() && !self}를 컬렉션 파라미터로 옮긴 것이다(비공개 책 여백 =
+     *       나만 보는 메모, 2026-08-16 결정 2). 이 계산이 틀어지면 남의 메모가 통째로 샌다</li>
+     * </ol>
+     *
+     * <p>{@code shared}는 보지 않는다 — 사람축은 올리든 말든 다 보인다({@code marginOf}와 같다).
+     * 응답이 래퍼 없이 배열인 것은 {@code likers}의 선례다: 화면이 이미 {@code GET /api/profile}로
+     * {@code self}를 들고 있어(같은 화면) 헤더로 다시 실을 값이 없다.
+     */
+    @Transactional(readOnly = true)
+    public List<ProfileMarginEntry> allMarginsOf(User viewer, String loginId) {
+        User target = profileService.resolveVisibleTarget(viewer, loginId)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "글을 찾을 수 없습니다"));
+        boolean self = isSameUser(target, viewer);
+        List<BookVisibility> visibilities = self
+                ? List.of(BookVisibility.PUBLIC, BookVisibility.PRIVATE)
+                : List.of(BookVisibility.PUBLIC);
+        List<Story> stories = storyRepository.recentByUser(target, visibilities,
+                PageRequest.of(0, MAX_MARGIN_ENTRIES));
+        Likes likes = stories.isEmpty() ? new Likes(Map.of(), Set.of()) : likesOf(stories, viewer);
+        return stories.stream()
+                .map(s -> ProfileMarginEntry.of(s, likes.countOf(s), likes.likedBy(s)))
+                .toList();
     }
 
     /**

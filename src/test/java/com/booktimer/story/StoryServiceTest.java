@@ -30,6 +30,7 @@ import java.util.Optional;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyCollection;
 import static org.mockito.ArgumentMatchers.anyList;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.inOrder;
@@ -962,6 +963,21 @@ class StoryServiceTest {
         BookMarginResponse response = service.bookMarginOf(me, ISBN);
 
         assertThat(response.totalCount()).isEqualTo(137L);
+        assertThat(captor.getValue().getPageSize()).isEqualTo(100);
+    }
+
+    // --- allMarginsOf (사람축 전체 목록) ---
+
+    @Test
+    @DisplayName("allMarginsOf: 상한 100장 — 책축 한 책 목록과 같은 상수")
+    void allMarginsOf_capsAtHundred() {
+        User target = visibleTarget("target");
+        ArgumentCaptor<Pageable> captor = ArgumentCaptor.forClass(Pageable.class);
+        when(storyRepository.recentByUser(eq(target), anyCollection(), captor.capture()))
+                .thenReturn(List.of());
+
+        service.allMarginsOf(me, "target");
+
         assertThat(captor.getValue().getPageSize()).isEqualTo(100);
     }
 }
