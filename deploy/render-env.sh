@@ -45,12 +45,17 @@ declare -A SECRET_MAP=(
   [SPRING_MAIL_USERNAME]=SPRING_MAIL_USERNAME
   [SPRING_MAIL_PASSWORD]=SPRING_MAIL_PASSWORD
   [MYSQL_ROOT_PASSWORD]=MYSQL_ROOT_PASSWORD
-  # 맞팔 DM 메시지 본문 AES-256-GCM 키(SecureString, 2026-09-19 생성). DM 푸시 키는 SSM에 아직 없어
-  # 넣지 않는다 — 여기 있는 키는 전부 필수라 없으면 배포가 멈춘다.
+  # 맞팔 DM 메시지 본문 AES-256-GCM 키(SecureString, 2026-09-19 생성).
+  # ⚠️ 여기 있는 키는 전부 필수라 SSM에 없으면 배포가 멈춘다 — 매핑을 더할 땐 SSM 파라미터를 먼저 만든다.
   [CHAT_MESSAGE_KEY]=BOOKTIMER_CHAT_MESSAGE_KEY
   # 맞팔 DM 킬스위치(2026-09-19 true). false로 바꾸고 재배포(workflow_dispatch)하면 /api/chat/** 가 404 —
   # 미니앱의 대화 진입점이 통째로 사라진다.
   [CHAT_ENABLED]=BOOKTIMER_CHAT_ENABLED
+  # 새 메시지 푸시(2026-09-22 점등) — 콘솔 템플릿 12740 `booktimer-dm-message`,
+  # 「대화 알림 동의문」 termsId 125007. 동의한 사람에게만 가고 같은 방은 30분에 한 통이다.
+  # 끄려면 SSM을 false로 바꾸고 재배포(workflow_dispatch) — 대화 자체는 살고 알림만 멎는다.
+  [TOSS_DM_MESSAGE_ENABLED]=BOOKTIMER_TOSS_DM_MESSAGE_ENABLED
+  [TOSS_DM_MESSAGE_TEMPLATE_CODE]=BOOKTIMER_TOSS_DM_MESSAGE_TEMPLATE_CODE
 )
 
 # ── 평문 설정 (구 task-definition의 environment 블록) ──

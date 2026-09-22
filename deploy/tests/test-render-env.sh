@@ -47,7 +47,8 @@ case "\$*" in
                  TOSS_GOAL_MET_ENABLED TOSS_GOAL_MET_TEMPLATE_CODE \\
                  TOSS_RETENTION_ENABLED TOSS_RETENTION_TEMPLATE_CODE \\
                  TOSS_STUDY_GOAL_ENABLED TOSS_STUDY_GOAL_TEMPLATE_CODE \\
-                 CHAT_MESSAGE_KEY; do
+                 CHAT_MESSAGE_KEY CHAT_ENABLED \\
+                 TOSS_DM_MESSAGE_ENABLED TOSS_DM_MESSAGE_TEMPLATE_CODE; do
             printf '/booktimer/%s\tvalue-of-%s\n' "\$n" "\$n"
         done
         # 여러 줄 SecureString(PEM)도 같은 /booktimer 경로에 살아 이 목록에 함께 나온다.
@@ -131,6 +132,14 @@ assert_has "  .env 에 공부 회당 시간 템플릿 코드" "$env_out" "BOOKTI
 assert_has "  .env 에 Claude API 키" "$env_out" "BOOKTIMER_CLAUDE_API_KEY=value-of-CLAUDE_API_KEY"
 # 맞팔 DM 메시지 암호화 키 — 빠지면 스위치를 켜도 ChatGate가 「키 없음」으로 /api/chat/**를 404로 닫는다.
 assert_has "  .env 에 대화 암호화 키" "$env_out" "BOOKTIMER_CHAT_MESSAGE_KEY=value-of-CHAT_MESSAGE_KEY"
+# 맞팔 DM 킬스위치 — 빠지면 SSM이 true여도 .env에 안 실려 ChatGate가 /api/chat/**를 404로 닫고
+# 미니앱의 대화 진입점이 통째로 사라진다. 이 단언이 없어 #1172의 매핑 추가가 모의 목록 갱신 없이
+# 머지됐고, 「정상 렌더」가 exit=1로 죽어 이 파일 전체가 3일간 빨간불이었다(2026-09-22 발견).
+assert_has "  .env 에 대화 킬스위치" "$env_out" "BOOKTIMER_CHAT_ENABLED=value-of-CHAT_ENABLED"
+# 새 메시지 푸시 — 빠지면 SSM을 true로 켜도 ChatPushService가 캠페인 꺼짐으로 읽어 알림이 영영 안 간다.
+# 화면은 멀쩡하고 대화도 되므로 아무도 모르는 무성 장애다(재참여·공부 푸시와 같은 부류).
+assert_has "  .env 에 대화 푸시 게이트" "$env_out" "BOOKTIMER_TOSS_DM_MESSAGE_ENABLED=value-of-TOSS_DM_MESSAGE_ENABLED"
+assert_has "  .env 에 대화 푸시 템플릿 코드" "$env_out" "BOOKTIMER_TOSS_DM_MESSAGE_TEMPLATE_CODE=value-of-TOSS_DM_MESSAGE_TEMPLATE_CODE"
 
 # ── Case 2: 인증서 누락 → 배포 실패, 파일도 안 남는다 ──
 r="$(run TOSS_MTLS_CERT)"; rc="${r%%$'\n'*}"; out="${r#*$'\n'}"
