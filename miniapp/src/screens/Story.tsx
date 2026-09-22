@@ -487,7 +487,7 @@ export function MarginTabs({ tab, onSelect }: { tab: 'mine' | 'all'; onSelect: (
  *
  * <p>`marginBottom: -1`은 컨테이너의 1px 밑줄을 <b>덮어</b> 선택된 칸만 두꺼운 선으로 잇는 값이다.
  */
-const tabStyle = (active: boolean) =>
+export const tabStyle = (active: boolean) =>
   ({
     flex: 1,
     padding: '9px 0',
@@ -508,7 +508,7 @@ const tabStyle = (active: boolean) =>
  *
  * <p>`onCompose`가 없으면 우상단이 빈다 — 서재에 없는 책엔 글을 남길 수 없다(손잡이 관례).
  */
-function MarginBoard({ count, onCompose, children }: { count: number; onCompose?: () => void; children: ReactNode }) {
+export function MarginBoard({ count, onCompose, children }: { count: number; onCompose?: () => void; children: ReactNode }) {
   return (
     <div
       style={{
@@ -954,10 +954,12 @@ export function MarginCard({
   entry,
   now,
   author,
+  book,
   expanded,
   onToggleLike,
   onShowLikers,
   onOpenAuthor,
+  onOpenBook,
   onOpenMenu,
   onToggleExpand,
 }: {
@@ -980,6 +982,16 @@ export function MarginCard({
   author?: { loginId: string; nickname: string };
   /** 작성자 줄의 손잡이 — 있으면 눌러서 그의 책방으로 간다(전체 화면 전이는 셸이 든다). */
   onOpenAuthor?: (loginId: string) => void;
+  /**
+   * 책 라벨 — <b>사람축 전체 목록에만</b> 붙는다(책방 「여백」 탭). 한 책의 목록은 헤더가 책을 한 번만
+   * 말하면 되지만, 책 구분 없이 쌓인 목록에선 「어느 책의 여백인가」가 카드의 정보다.
+   */
+  book?: { id: number; title: string };
+  /**
+   * 책 라벨의 손잡이 — 있으면 눌러서 그 책의 여백 전체 화면으로 간다({@link onOpenAuthor} 관례).
+   * 없으면 제목이 글자로만 선다(죽은 버튼을 만들지 않는다).
+   */
+  onOpenBook?: (bookId: number) => void;
   /**
    * 행 오른쪽 끝 ⋯ — <b>있으면 버튼, 없으면 ⋯ 자체가 없다</b>({@link onToggleLike} 관례). 내 글에만
    * 넘긴다: 남의 글은 내가 올리거나 지울 수 없다(서버도 404로 거절한다).
@@ -1019,6 +1031,21 @@ export function MarginCard({
               style={{ ...authorLine, border: 'none', background: 'transparent', cursor: 'pointer' }}
             >
               {author.nickname} @{author.loginId}
+            </button>
+          ))}
+        {/* 책 라벨도 같은 행 머리 슬롯이다 — 작성자 줄과 같은 자리·같은 무게(세이지 12px 700)로 둬야
+            「이 글이 어디서 왔나」가 한 가지 모양으로 읽힌다. 겹낫표는 책 제목의 관례 표기다. */}
+        {book !== undefined &&
+          (onOpenBook === undefined ? (
+            <p style={authorLine}>『{book.title}』</p>
+          ) : (
+            <button
+              type="button"
+              aria-label={`『${book.title}』 여백 보기`}
+              onClick={() => onOpenBook(book.id)}
+              style={{ ...authorLine, border: 'none', background: 'transparent', cursor: 'pointer' }}
+            >
+              『{book.title}』
             </button>
           ))}
         {/* 인용은 主가 아니라 從이다 — 작게·옅게 두고 세로선으로만 가른다. 크게 뽑으면 행의 주인공이

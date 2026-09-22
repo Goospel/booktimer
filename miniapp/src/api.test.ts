@@ -33,6 +33,7 @@ import {
   fetchPersonalityTagBooks,
   fetchProfile,
   fetchProfileBooks,
+  fetchProfileMargins,
   fetchShelf,
   follow,
   issueWebLoginCode,
@@ -1130,5 +1131,45 @@ describe('미읽음 조회 경로', () => {
     await fetchChatMe();
     expect(lastRequest()[0]).toMatch(/\/api\/chat\/me$/);
     expect(lastRequest()[1].method).toBe('GET');
+  });
+});
+
+describe('사람축 전체 여백 (책방 「여백」 탭)', () => {
+  it('GET /api/stories/of/{loginId}/all — 래퍼 없이 배열이 그대로 온다', async () => {
+    vi.mocked(globalThis.fetch).mockResolvedValue(
+      response(
+        200,
+        JSON.stringify([
+          {
+            id: 3,
+            text: '한 문장',
+            quote: null,
+            bgCode: 'paper',
+            createdAt: '2026-09-20T00:00:00Z',
+            likeCount: 2,
+            liked: true,
+            shared: false,
+            bookId: 7,
+            bookTitle: '데미안',
+          },
+        ]),
+      ) as never,
+    );
+
+    const result = await fetchProfileMargins('goospel');
+
+    expect(lastRequest()[0]).toBe('http://localhost:8080/api/stories/of/goospel/all');
+    expect(lastRequest()[1].method).toBe('GET');
+    expect(result).toHaveLength(1);
+    expect(result[0].bookId).toBe(7);
+    expect(result[0].bookTitle).toBe('데미안');
+  });
+
+  it('핸들은 인코딩해서 넣는다 — 경로 세그먼트가 깨지지 않게', async () => {
+    vi.mocked(globalThis.fetch).mockResolvedValue(response(200, '[]') as never);
+
+    await fetchProfileMargins('a b');
+
+    expect(lastRequest()[0]).toBe('http://localhost:8080/api/stories/of/a%20b/all');
   });
 });

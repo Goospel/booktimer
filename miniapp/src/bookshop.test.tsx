@@ -9,6 +9,7 @@ import type {
   PersonalityMutation,
   PersonalityStatus,
   ProfileBook,
+  ProfileMarginEntry,
   ProfileResponse,
   UserRow,
 } from './api';
@@ -26,6 +27,7 @@ import {
   analysisFailed,
   claimPersonality,
   followCountsOpenable,
+  marginTabEmptyText,
   needsBioToggle,
   newestEntry,
   personalityActions,
@@ -126,6 +128,11 @@ function card(
     openMargin?: boolean;
     /** 걸린 상태 필터 — 기본은 「전체」(null). 클릭이 안 도는 하니스라 결과 상태를 밖에서 준다. */
     statusFilter?: BookStatus | null;
+    /** 선 탭 — 기본 `'books'`라 위 46건이 무변경 통과해야 한다(그게 곧 회귀 계측기다). */
+    tab?: 'books' | 'margins';
+    /** 여백 목록 — `null`이면 아직 안 받았다(탭 진입 전·로딩·실패). 빈 배열(0건)과 구분한다. */
+    margins?: ProfileMarginEntry[] | null;
+    marginsError?: string | null;
   } = {},
 ) {
   return render(
@@ -153,8 +160,41 @@ function card(
       safety={null}
       header={view.header}
       onOpenFollowList={view.openFollowList === true ? () => {} : undefined}
+      tab={view.tab ?? 'books'}
+      onSelectTab={() => {}}
+      margins={view.margins ?? null}
+      marginsError={view.marginsError ?? null}
+      onRetryMargins={() => {}}
+      expanded={new Set()}
+      onToggleExpand={() => {}}
     />,
   );
+}
+
+/**
+ * 상태 칩만 세는 자 — 「책 | 여백」 탭 줄도 `aria-pressed`를 쓰므로(밑줄 2분할 탭의 관례) 마크업 전체를
+ * 세면 칩과 탭이 섞인다. 칩 라벨로 좁혀야 이 테스트들이 재던 것(「그 칩만 눌렸다」)을 계속 잰다.
+ */
+function chips(markup: string, pressed: 'true' | 'false' | null = null): string[] {
+  const state = pressed ?? '(?:true|false)';
+  const re = new RegExp(`aria-pressed="${state}"[^>]*>(?:전체|읽고 싶어요|읽는 중|다 읽음)<`, 'g');
+  return markup.match(re) ?? [];
+}
+
+/** 여백 탭 카드 한 장 — 책 라벨이 붙은 사람축 항목. */
+function margin(id: number, bookId: number, bookTitle: string, text = `문장 ${id}`): ProfileMarginEntry {
+  return {
+    id,
+    text,
+    quote: null,
+    bgCode: 'paper',
+    createdAt: new Date(NOW - 3_600_000).toISOString(),
+    likeCount: 0,
+    liked: false,
+    shared: false,
+    bookId,
+    bookTitle,
+  };
 }
 
 /** 관문 통과 상태(첫 분석) — 각 테스트는 여기서 한 필드만 어긋내 그 필드의 책임을 잰다. */
@@ -488,13 +528,13 @@ describe('공개 책 상태 필터', () => {
     expect(markup).toContain('읽는 중');
     expect(markup).toContain('다 읽음');
     expect(markup).toContain('읽고 싶어요');
-    expect(markup.match(/aria-pressed="true"/g)).toHaveLength(1);
+    expect(chips(markup, 'true')).toHaveLength(1);
   });
 
   it('상태를 고르면 그 칩만 눌린 상태다', () => {
     const markup = card(profile(), [book(1, '자바 최적화')], null, { statusFilter: 'FINISHED' });
 
-    expect(markup.match(/aria-pressed="true"/g)).toHaveLength(1);
+    expect(chips(markup, 'true')).toHaveLength(1);
     expect(markup).toContain('다 읽음 1'); // 소제목이 상태를 말한다
   });
 
@@ -502,7 +542,7 @@ describe('공개 책 상태 필터', () => {
     const markup = card(profile(), [book(1, '자바 최적화')], '한우물형');
 
     expect(markup).not.toContain('읽고 싶어요');
-    expect(markup).not.toContain('aria-pressed');
+    expect(chips(markup)).toHaveLength(0);
   });
 
   it('필터가 걸린 채 비면 상태용 빈 문구다 — 「공개한 책이 없어요」는 거짓말이 된다', () => {
@@ -1247,5 +1287,101 @@ describe('책방 세션 캐시 (Profile)', () => {
 
     expect(markup).not.toContain('여느밤');
     expect(markup).toContain('불러오는 중');
+  });
+});
+
+/**
+ * 책방 「책 | 여백」 탭 — 격자가 서던 자리에서 제자리 전환한다(인스타 프로필의 격자↔탭 관계).
+ *
+ * <p>탭 상태·목록은 컨테이너(`Profile`)가 들고 `ProfileCard`는 프롭으로만 받는다 — 정적 렌더 하니스가
+ * 닿는 유일한 길이다. 컨테이너의 lazy fetch·초기화는 여기서 못 재므로 목 모드 실측이 그 게이트다
+ * (T-149: 부정 단언으로 대신하지 않는다).
+ */
+describe('책방 「책 | 여백」 탭', () => {
+  it('탭 줄이 선다 — 두 칸, aria-pressed가 선 탭을 따른다', () => {
+    const onBooks = card(profile(), [book(1, '데미안')]);
+    const onMargins = card(profile(), [book(1, '데미안')], null, { tab: 'margins', margins: [] });
+
+    expect(onBooks).toMatch(/aria-pressed="true"[^>]*>책</);
+    expect(onBooks).toMatch(/aria-pressed="false"[^>]*>여백</);
+    expect(onMargins).toMatch(/aria-pressed="true"[^>]*>여백</);
+    expect(onMargins).toMatch(/aria-pressed="false"[^>]*>책</);
+  });
+
+  it('「책」 탭 — 격자·상태 칩은 있고 게시판은 없다', () => {
+    const html = card(profile(), [book(1, '데미안')]);
+
+    expect(html).toContain('데미안');
+    expect(chips(html)).toHaveLength(4); // 상태 칩 줄이 그대로 선다
+    expect(html).not.toContain('글 0');
+  });
+
+  it('「여백」 탭 + 아직 못 받음 → 로딩. 책 도구도 빈 문구도 안 뜬다', () => {
+    const html = card(profile(), [], null, { tab: 'margins', margins: null });
+
+    expect(html).toContain('불러오는 중');
+    expect(html).not.toContain('공개한 책이 없어요');
+    expect(chips(html)).toHaveLength(0); // 상태 칩 줄이 여백 탭에 남지 않는다
+    expect(html).not.toContain('남긴 글이 없어요'); // 빈 문구 조기 깜빡임 금지
+  });
+
+  it('「여백」 탭 0건 — 빈 문구는 내 책방에만 길을 붙인다', () => {
+    const mine = card(profile({ self: true }), [], null, { tab: 'margins', margins: [] });
+    const others = card(profile({ self: false }), [], null, { tab: 'margins', margins: [] });
+
+    expect(mine).toContain('서재에서 책을 고르고 여백에 글을 남겨 보세요');
+    expect(others).toContain('아직 남긴 글이 없어요.');
+    expect(others).not.toContain('서재에서 책을 고르고');
+  });
+
+  it('「여백」 탭 — 글마다 책 라벨이 그 책의 여백을 여는 버튼이다', () => {
+    const html = card(profile(), [], null, {
+      tab: 'margins',
+      margins: [margin(1, 7, '데미안', '첫 문장'), margin(2, 8, '코스모스', '둘째 문장')],
+    });
+
+    expect(html).toContain('글 2');
+    expect(html).toContain('첫 문장');
+    expect(html).toContain('둘째 문장');
+    expect(html).toContain('aria-label="『데미안』 여백 보기"');
+    expect(html).toContain('aria-label="『코스모스』 여백 보기"');
+  });
+
+  /** 404를 0건으로 접으면 「글이 없다」는 거짓말이 된다 — 서버 미배포 구간의 fail-closed. */
+  it('「여백」 탭 실패 → 에러 줄 + 다시 시도, 카드도 빈 문구도 없다', () => {
+    const html = card(profile(), [], null, {
+      tab: 'margins',
+      margins: null,
+      marginsError: '요청에 실패했어요 (404)',
+    });
+
+    expect(html).toContain('요청에 실패했어요 (404)');
+    expect(html).toContain('다시 시도');
+    expect(html).not.toContain('남긴 글이 없어요');
+    expect(html).not.toContain('글 0');
+    expect(html).not.toContain('불러오는 중'); // 실패했는데 계속 도는 로딩은 거짓말이다
+  });
+
+  it('여백 탭에서는 드릴다운 도구가 숨는다 — 「책」으로 돌아오면 그대로 있다', () => {
+    const onMargins = card(profile(), [book(1, '데미안')], '한우물형', { tab: 'margins', margins: [] });
+    const backToBooks = card(profile(), [book(1, '데미안')], '한우물형');
+
+    expect(onMargins).not.toContain('전체 보기');
+    expect(onMargins).not.toContain('근거 책');
+    expect(backToBooks).toContain('전체 보기');
+    expect(backToBooks).toContain('한우물형 근거 책 1');
+  });
+
+  it('기본 「책」 탭엔 「공개한 책」 제목이 없다 — 좁혔을 때만 제목이 선다', () => {
+    const plain = card(profile(), [book(1, '데미안')]);
+    const filtered = card(profile(), [book(1, '데미안')], null, { statusFilter: 'FINISHED' });
+
+    expect(plain).not.toContain('공개한 책<');
+    expect(filtered).toContain('다 읽음 1');
+  });
+
+  it('marginTabEmptyText — 내 책방에만 다음 걸음을 붙인다', () => {
+    expect(marginTabEmptyText(true)).toContain('서재에서 책을 고르고');
+    expect(marginTabEmptyText(false)).toBe('아직 남긴 글이 없어요.');
   });
 });

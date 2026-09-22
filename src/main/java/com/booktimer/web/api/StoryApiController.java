@@ -5,6 +5,7 @@ import com.booktimer.security.CurrentUserService;
 import com.booktimer.story.BookMarginResponse;
 import com.booktimer.story.MarginEntry;
 import com.booktimer.story.MarginResponse;
+import com.booktimer.story.ProfileMarginEntry;
 import com.booktimer.story.Story;
 import com.booktimer.story.StoryService;
 import com.booktimer.user.User;
@@ -54,6 +55,22 @@ public class StoryApiController {
                                    @RequestParam Long bookId,
                                    Principal principal) {
         return storyService.marginOf(currentUserService.resolve(principal), loginId, bookId);
+    }
+
+    /**
+     * 한 사람의 여백 <b>전체</b> — 책 구분 없이 최신순(상한 100장). 책방의 「여백」 탭이 이 문을 지난다.
+     * 카드마다 책 라벨이 실려({@link com.booktimer.story.ProfileMarginEntry}) 그 책의 여백으로 갈 수 있다.
+     *
+     * <p>경로를 {@code ?bookId} 선택으로 겹치지 않고 <b>세그먼트를 더한</b> 이유: 응답 모양이 다르다
+     * (책 한 권은 헤더가 딸린 자기완결 객체, 전체는 배열). 한 핸들러에서 {@code if}로 가르면
+     * {@code MarginResponse.book}이 nullable이 되어 화면·목·테스트가 전부 {@code book?.}로 물든다.
+     *
+     * <p>노출 게이트는 전부 {@link StoryService#allMarginsOf}에 있다(차단·ADMIN·미존재 → 404 /
+     * 남의 PRIVATE 책 글은 목록에서 제외).
+     */
+    @GetMapping("/api/stories/of/{loginId}/all")
+    public List<ProfileMarginEntry> allMarginsOf(@PathVariable String loginId, Principal principal) {
+        return storyService.allMarginsOf(currentUserService.resolve(principal), loginId);
     }
 
     /**

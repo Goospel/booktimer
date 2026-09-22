@@ -13,6 +13,7 @@ import type {
   PersonalityMutation,
   PersonalityStatus,
   ProfileBook,
+  ProfileMarginEntry,
   ProfileResponse,
   PublicNewsResponse,
   ShelfResponse,
@@ -491,5 +492,33 @@ describe('dev-mock 맞팔 DM', () => {
     await expect(mockRequest('/api/chat/rooms/2/messages', { body: { body: '안녕' } })).rejects.toMatchObject({
       status: 403,
     });
+  });
+});
+
+/**
+ * 사람축 전체 여백 — 책방 「여백」 탭의 유일한 재료다. 이 라우트가 없으면 브라우저 실측이 전부 404라
+ * 화면을 볼 길 자체가 없다(목이 서버가 낼 수 있는 상태를 다 내야 한다 — T-175).
+ */
+describe('dev-mock 사람축 전체 여백', () => {
+  it('남의 책방 — 공개 책들의 글이 최신순으로 합쳐지고, 카드마다 책 제목이 있다', async () => {
+    const entries = await mockRequest<ProfileMarginEntry[]>('/api/stories/of/nabi/all', {});
+
+    expect(entries.length).toBeGreaterThan(0);
+    expect(entries.every((e) => e.bookTitle.length > 0)).toBe(true);
+    const times = entries.map((e) => e.createdAt);
+    expect([...times].sort().reverse()).toEqual(times);
+  });
+
+  it('밑줄러는 0건 — 빈 상태 화면을 브라우저에서 볼 수 있어야 한다', async () => {
+    expect(await mockRequest<ProfileMarginEntry[]>('/api/stories/of/underline/all', {})).toEqual([]);
+  });
+
+  it('내 책방 — 비공개 책(5)의 글까지 실린다(나만 보는 메모는 내 탭에 있다)', async () => {
+    // 핸들은 앞선 「바꾸기」 테스트가 이미 갈아치웠을 수 있다 — 상수로 박으면 실행 순서에 묶인다.
+    const { myLoginId } = await mockRequest<{ myLoginId: string }>('/api/blocks', {});
+
+    const entries = await mockRequest<ProfileMarginEntry[]>(`/api/stories/of/${myLoginId}/all`, {});
+
+    expect(entries.map((e) => e.id)).toContain(921);
   });
 });

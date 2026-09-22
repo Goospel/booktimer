@@ -4,12 +4,14 @@ import com.booktimer.block.Block;
 import com.booktimer.book.Book;
 import com.booktimer.book.BookRepository;
 import com.booktimer.book.BookStatus;
+import com.booktimer.book.BookVisibility;
 import com.booktimer.config.JpaConfig;
 import com.booktimer.follow.Follow;
 import com.booktimer.user.Role;
 import com.booktimer.user.User;
 import com.booktimer.user.UserRepository;
 import jakarta.persistence.EntityManager;
+import org.hibernate.Hibernate;
 import jakarta.persistence.PersistenceContext;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -381,5 +383,88 @@ class StoryRepositoryTest {
         assertThat(storyRepository.sharedByIsbn(ISBN, viewer.getId(), ALL)).isEmpty();
         assertThat(storyRepository.countSharedByIsbn(ISBN, viewer.getId())).isZero();
         assertThat(storyRepository.sharedCountsByIsbn(List.of(ISBN))).isEmpty();
+    }
+
+    // ── 사람축 전체 목록(recentByUser) — 책방 「여백」 탭 ─────────────────────────
+    // marginOf에서 <b>책 좌표만 뺀</b> 쿼리다. 술어 미러의 짝은 StoryService.assertVisible
+    // (사람 게이트 → 책 PUBLIC)이지 sharedByIsbn이 아니다 — 여기엔 shared·차단·ADMIN이 없다
+    // (대상이 한 사람이라 resolveVisibleTarget이 진다).
+
+    private static final List<BookVisibility> PUBLIC_ONLY = List.of(BookVisibility.PUBLIC);
+    private static final List<BookVisibility> SELF_VIEW =
+            List.of(BookVisibility.PUBLIC, BookVisibility.PRIVATE);
+
+    private Book privateBookOf(User owner, String title) {
+        return bookRepository.save(
+                Book.register(owner, title, null, null, null, null, null, BookStatus.READING));
+    }
+
+    @Test
+    @DisplayName("사람축 목록: 남의 시선이면 공개 책 글만 — 같은 사람의 비공개 책 글은 빠진다(양성 대조군 동거)")
+    void recentByUser_othersView_excludesPrivateBookStories() {
+        User target = user("target@booktimer.com", "target");
+        storyAt(target, publicBookOf(target, "공개 책"), "보여야 하는 글", NOW.minusSeconds(60));
+        storyAt(target, privateBookOf(target, "비공개 책"), "새면 안 되는 메모", NOW.minusSeconds(30));
+        em.clear();
+
+        List<Story> entries = storyRepository.recentByUser(target, PUBLIC_ONLY, ALL);
+
+        assertThat(entries).extracting(Story::getText).containsExactly("보여야 하는 글");
+        // U-9: fetch join 실증 — @DataJpaTest는 트랜잭션 안이라 지연 로딩이 조용히 성공한다.
+        // 이 단언이 없으면 카드 100장 × 책 조회(N+1)가 초록 뒤에 숨는다.
+        assertThat(Hibernate.isInitialized(entries.get(0).getBook())).isTrue();
+    }
+
+    @Test
+    @DisplayName("사람축 목록: 본인 시선이면 비공개 책 글까지 실린다 — 나만 보는 메모는 내 탭에 있어야 한다")
+    void recentByUser_selfView_includesPrivateBookStories() {
+        User me = user("me@booktimer.com", "meuser");
+        storyAt(me, publicBookOf(me, "공개 책"), "공개 책 글", NOW.minusSeconds(60));
+        storyAt(me, privateBookOf(me, "비공개 책"), "나만 보는 메모", NOW.minusSeconds(30));
+
+        List<Story> entries = storyRepository.recentByUser(me, SELF_VIEW, ALL);
+
+        assertThat(entries).extracting(Story::getText)
+                .containsExactly("나만 보는 메모", "공개 책 글");
+    }
+
+    @Test
+    @DisplayName("사람축 목록: 다른 사람의 글은 섞이지 않는다 — 책 제목이 같아도")
+    void recentByUser_isScopedToTarget() {
+        User target = user("target@booktimer.com", "target");
+        User stranger = user("stranger@booktimer.com", "stranger");
+        storyAt(target, publicBookOf(target, "같은 제목"), "대상의 글", NOW.minusSeconds(60));
+        storyAt(stranger, publicBookOf(stranger, "같은 제목"), "남의 글", NOW.minusSeconds(30));
+
+        List<Story> entries = storyRepository.recentByUser(target, PUBLIC_ONLY, ALL);
+
+        assertThat(entries).extracting(Story::getText).containsExactly("대상의 글");
+    }
+
+    @Test
+    @DisplayName("사람축 목록: 최신순 + 동시각 id 내림차순 — 상한은 최신부터 자른다")
+    void recentByUser_newestFirstAndLimitTakesNewest() {
+        User target = user("target@booktimer.com", "target");
+        Book one = publicBookOf(target, "책 하나");
+        Book two = publicBookOf(target, "책 둘");
+        storyAt(target, one, "오래된", NOW.minusSeconds(300));
+        Story olderTie = storyAt(target, two, "동시각 먼저", NOW.minusSeconds(100));
+        Story newerTie = storyAt(target, one, "동시각 나중", NOW.minusSeconds(100));
+
+        assertThat(storyRepository.recentByUser(target, PUBLIC_ONLY, ALL))
+                .extracting(Story::getId)
+                .containsExactly(newerTie.getId(), olderTie.getId(), oldestIdOf(target));
+
+        assertThat(storyRepository.recentByUser(target, PUBLIC_ONLY, PageRequest.of(0, 2)))
+                .extracting(Story::getText)
+                .containsExactly("동시각 나중", "동시각 먼저");
+    }
+
+    /** 위 tie 테스트의 셋째 글 id — 시각이 가장 오래된 하나. */
+    private Long oldestIdOf(User target) {
+        return storyRepository.recentByUser(target, PUBLIC_ONLY, ALL).stream()
+                .min((a, b) -> a.getCreatedAt().compareTo(b.getCreatedAt()))
+                .orElseThrow()
+                .getId();
     }
 }

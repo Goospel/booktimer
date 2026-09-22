@@ -10,6 +10,7 @@ import type {
   PersonalityMutation,
   PersonalityStatus,
   ProfileBook,
+  ProfileMarginEntry,
   ProfileResponse,
   ReportReason,
   UserBrief,
@@ -23,6 +24,7 @@ import {
   fetchPersonalityTagBooks,
   fetchProfile,
   fetchProfileBooks,
+  fetchProfileMargins,
   follow,
   openChatRoom,
   reportUser,
@@ -35,7 +37,7 @@ import { PERSONALITY_AD_GROUP_ID, watchRewardAd } from '../toss';
 import { Avatar, ErrorMessage, Loading, PENCIL_FRAME, SERIF_VALUE, Screen, SectionTitle, Sheet, Text } from '../ui';
 import { waiverErrorMessage } from './Home';
 import { BookGrid, SECTIONS } from './Library';
-import { hasFreshStory } from './Story';
+import { MarginBoard, MarginCard, hasFreshStory, tabStyle } from './Story';
 
 /**
  * 책방(프로필) 뷰 — 닉네임·책BTI·공개 책 목록 + 팔로우/언팔로우 + 차단·신고.
@@ -300,6 +302,43 @@ function PaperPlane() {
   );
 }
 
+/** 책방 본문이 무엇을 보여 주는가 — 책 격자인가, 그 사람의 여백 글인가. */
+export type BookshopTab = 'books' | 'margins';
+
+/**
+ * 책방 본문의 탭 줄 — 「책 | 여백」. 여백 화면의 탭(`MarginTabs`)과 **같은 `tabStyle`**을 쓴다:
+ * 같은 모양의 밑줄 2분할이어야 「제자리에서 두 좌표계를 오간다」가 앱 안에서 한 가지 몸짓으로 읽힌다.
+ *
+ * <p><b>개수를 안 적는다</b>(2026-08-29 사용자 지정) — 여백 수는 바로 아래 게시판 머리글(`MarginBoard`)이
+ * 이미 말하고, 책 수는 화면 상단 「공개 책」 카운트가 말한다. 이모지·아이콘도 없다.
+ *
+ * <p>`MarginTabs`를 그대로 못 쓰는 것은 타입이 `'mine' | 'all'`로 굳어 있어서다. 제네릭화보다
+ * 여기 15줄을 두는 쪽이 싸다(항목 배열·`aria-pressed`·`onClick`이 전부).
+ */
+export function BookshopTabs({ tab, onSelect }: { tab: BookshopTab; onSelect: (tab: BookshopTab) => void }) {
+  const items = [
+    { key: 'books' as const, label: '책' },
+    { key: 'margins' as const, label: '여백' },
+  ];
+
+  return (
+    <div style={{ display: 'flex', borderBottom: '1px solid #E2DACA' }}>
+      {items.map(({ key, label }) => (
+        <button key={key} type="button" aria-pressed={tab === key} onClick={() => onSelect(key)} style={tabStyle(tab === key)}>
+          {label}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+/**
+ * 여백 탭의 빈 문구 — **내 책방에만 다음 걸음을 붙인다**. 남의 빈 여백에 이유나 길을 붙이는 것은
+ * 남의 화면에서 내 할 일을 말하는 셈이다(`MarginView`의 빈 상태와 같은 갈래).
+ */
+export const marginTabEmptyText = (self: boolean): string =>
+  self ? '아직 남긴 글이 없어요. 서재에서 책을 고르고 여백에 글을 남겨 보세요.' : '아직 남긴 글이 없어요.';
+
 export function shelfTitle(activeTag: string | null, statusFilter: BookStatus | null, count: number): string {
   if (activeTag !== null) return `${activeTag} 근거 책 ${count}`;
   if (statusFilter !== null) return `${SECTIONS.find((s) => s.status === statusFilter)!.title} ${count}`;
@@ -343,6 +382,13 @@ export function Profile({
   const [activeTag, setActiveTag] = useState<string | null>(null);
   /** 걸린 상태 필터 — `null`이 「전체」다. 기본이 전체라 진입 화면·발광·여백 문이 지금 그대로다. */
   const [statusFilter, setStatusFilter] = useState<BookStatus | null>(null);
+  /** 선 탭 — 「여백」은 눌러야 받는다(아래 lazy effect). 화면을 떠났다 오면 재마운트라 「책」으로 돌아온다. */
+  const [tab, setTab] = useState<BookshopTab>('books');
+  /** `null`이면 아직 안 받았다 — 빈 배열(0건)과 구분해야 받는 동안 빈 문구가 먼저 깜빡이지 않는다. */
+  const [margins, setMargins] = useState<ProfileMarginEntry[] | null>(null);
+  const [marginsError, setMarginsError] = useState<string | null>(null);
+  /** 펼쳐 둔 글 — 접기가 기본이라 여기 담긴 것만 전문이 보인다(여백 화면과 같은 규칙). */
+  const [expanded, setExpanded] = useState<ReadonlySet<number>>(new Set());
   const [archiveOpen, setArchiveOpen] = useState(false);
   const [more, setMore] = useState<SafetyState | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
@@ -372,6 +418,11 @@ export function Profile({
 
   const load = useCallback(() => {
     setError(null); // 재시도가 성공했는데 지난 실패 문구가 남지 않게
+    // 대상이 바뀌면 탭·목록도 함께 처음으로 — 실제 진입로에선 재마운트라 이미 초기화되지만, 그 전제에
+    // 기대면 `activeTag`가 같은 자리에서 초기화되지 않는 기존 함정을 새 상태에까지 물려주게 된다.
+    setTab('books');
+    setMargins(null);
+    setMarginsError(null);
     fetchProfile(loginId)
       .then((page) => {
         cachePut(cacheKeyProfile(loginId), page);
@@ -392,6 +443,28 @@ export function Profile({
   }, [loginId, fail, loadPersonalityStatus]);
 
   useEffect(load, [load]);
+
+  /**
+   * 「여백」 탭은 **누를 때** 받는다 — 책만 보고 나가는 사람에게 글 목록까지 미리 받으면 책방 진입
+   * 핫패스가 두 배가 되는데, 그 값은 탭을 안 누르면 영영 안 쓰인다(`BookMargin`의 「모두」 탭과 같은 모양).
+   * 실패는 탭 안의 자기 에러로 접는다 — 재시도는 `margins`를 다시 `null`로 돌려 이 effect를 깨운다.
+   */
+  useEffect(() => {
+    if (tab !== 'margins' || margins !== null || marginsError !== null) return;
+    fetchProfileMargins(loginId)
+      .then(setMargins)
+      .catch((e: Error) => {
+        if (e.name === 'UnauthorizedError') onError(e);
+        else setMarginsError(e.message);
+      });
+  }, [tab, margins, marginsError, loginId, onError]);
+
+  const toggleExpand = (id: number) =>
+    setExpanded((prev) => {
+      const next = new Set(prev);
+      if (!next.delete(id)) next.add(id);
+      return next;
+    });
 
   // 열린 시트는 뒤로가기가 먼저 먹는다 — 시트가 열린 채로 책방이 통째로 닫히지 않게(서재와 같다).
   useBackClose(archiveOpen, () => setArchiveOpen(false));
@@ -520,6 +593,16 @@ export function Profile({
         onMore={() => setMore(toggleSafety)}
         header={header}
         onOpenFollowList={onOpenFollowList}
+        tab={tab}
+        onSelectTab={setTab}
+        margins={margins}
+        marginsError={marginsError}
+        onRetryMargins={() => {
+          setMarginsError(null);
+          setMargins(null); // effect가 다시 돈다
+        }}
+        expanded={expanded}
+        onToggleExpand={toggleExpand}
         safety={
           more === null ? null : (
             <SafetyPanel
@@ -570,6 +653,13 @@ export function ProfileCard({
   safety,
   header,
   onOpenFollowList,
+  tab,
+  onSelectTab,
+  margins,
+  marginsError,
+  onRetryMargins,
+  expanded,
+  onToggleExpand,
 }: {
   profile: ProfileResponse;
   books: ProfileBook[];
@@ -600,6 +690,23 @@ export function ProfileCard({
   /** 제목보다 **위**에 얹히는 슬롯 — 셸이 검색 진입바·여백 스트립을 끼운다. */
   header?: ReactNode;
   onOpenFollowList?: (type: FollowListType) => void;
+  /** 선 탭 — 상태의 주인은 컨테이너다(정적 렌더가 두 본문에 닿는 유일한 길). */
+  tab: BookshopTab;
+  onSelectTab: (tab: BookshopTab) => void;
+  /**
+   * 여백 탭의 글 목록 — **`null`이면 아직 안 받았다**(탭 진입 전·로딩·실패). 빈 배열(0건)과 구분해야
+   * 받는 동안 빈 문구가 먼저 깜빡이지 않는다.
+   */
+  margins: ProfileMarginEntry[] | null;
+  /**
+   * 여백 목록만의 에러 — 화면 공용 `error`와 **따로** 둔다. 공용 쪽엔 팔로우·신고 실패까지 섞여
+   * 화면 하단에 뜨는데, 이 줄은 탭 안의 「다시 시도」와 짝이 맞아야 한다.
+   */
+  marginsError: string | null;
+  onRetryMargins: () => void;
+  /** 펼쳐 둔 글 — 3줄 클램프를 못 펴는 자리를 만들지 않는다(여백 화면과 같은 규칙). */
+  expanded: ReadonlySet<number>;
+  onToggleExpand: (id: number) => void;
 }) {
   const sectionTitle = shelfTitle(activeTag, statusFilter, books.length);
   const openable = followCountsOpenable(profile.self, onOpenFollowList !== undefined);
@@ -829,40 +936,82 @@ export function ProfileCard({
        * 발광한다. 판정 재료(`lastStoryAt`)는 서버가 주고 창 계산은 `hasFreshStory`가 한다.
        */}
       <section style={{ marginTop: 28 }}>
-        <SectionTitle style={{ marginBottom: 10 }}>{sectionTitle}</SectionTitle>
-        {activeTag !== null && (
-          <Button size="small" variant="weak" style={{ marginBottom: 10 }} onClick={() => onSelectTag(null)}>
-            전체 보기
-          </Button>
-        )}
-        {/* 상태 필터 — 격자 바로 위(성향 태그 줄과 자리로 구분된다). 드릴다운 중엔 숨긴다: 태그와 배타라
-            눌러 봐야 갈 곳이 없고, 칩이 없으면 "드릴다운 중 상태 클릭"이라는 경로 자체가 안 생긴다. */}
-        {activeTag === null && (
-          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 10 }}>
-            {[null, ...SECTIONS.map((s) => s.status)].map((status) => (
-              <button
-                key={status ?? 'ALL'}
-                type="button"
-                aria-pressed={statusFilter === status}
-                onClick={() => onSelectStatus(status)}
-                style={filterChipStyle(statusFilter === status)}
-              >
-                {status === null ? '전체' : SECTIONS.find((s) => s.status === status)!.title}
-              </button>
-            ))}
+        {/* 탭 줄이 격자 <b>바로 위</b>에 선다 — 인스타 프로필에서 격자와 태그 탭이 만나는 그 자리다.
+            신원 블록보다 위로 올리면 성향 카드·공통 친구 줄까지 탭 아래로 들어가 탭이 무엇을 가르는지 흐려진다. */}
+        <BookshopTabs tab={tab} onSelect={onSelectTab} />
+        {tab === 'books' ? (
+          <div style={{ marginTop: 12 }}>
+            {/* 제목은 **좁혔을 때만** 선다 — 기본 상태에선 바로 위 「책」 탭이 같은 말을 하고 있다.
+                좁힌 상태에선 「다 읽음 2」·「한우물형 근거 책 1」이 필터 정보를 그대로 전한다. */}
+            {(activeTag !== null || statusFilter !== null) && (
+              <SectionTitle style={{ marginBottom: 10 }}>{sectionTitle}</SectionTitle>
+            )}
+            {activeTag !== null && (
+              <Button size="small" variant="weak" style={{ marginBottom: 10 }} onClick={() => onSelectTag(null)}>
+                전체 보기
+              </Button>
+            )}
+            {/* 상태 필터 — 격자 바로 위(성향 태그 줄과 자리로 구분된다). 드릴다운 중엔 숨긴다: 태그와 배타라
+                눌러 봐야 갈 곳이 없고, 칩이 없으면 "드릴다운 중 상태 클릭"이라는 경로 자체가 안 생긴다. */}
+            {activeTag === null && (
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 10 }}>
+                {[null, ...SECTIONS.map((s) => s.status)].map((status) => (
+                  <button
+                    key={status ?? 'ALL'}
+                    type="button"
+                    aria-pressed={statusFilter === status}
+                    onClick={() => onSelectStatus(status)}
+                    style={filterChipStyle(statusFilter === status)}
+                  >
+                    {status === null ? '전체' : SECTIONS.find((s) => s.status === status)!.title}
+                  </button>
+                ))}
+              </div>
+            )}
+            {books.length === 0 ? (
+              <Text typography="st11" color="grey600" style={{ display: 'block' }}>
+                {/* 좁혀서 빈 것과 애초에 없는 것은 다른 사실이다 — 필터를 건 채 "공개한 책이 없어요"는 거짓말이다. */}
+                {statusFilter === null && activeTag === null ? '공개한 책이 없어요.' : '이 상태의 공개 책이 없어요.'}
+              </Text>
+            ) : (
+              <BookGrid
+                rows={books.map((b) => ({ ...b, fresh: hasFreshStory(b.lastStoryAt, now) }))}
+                selectedId={null}
+                onPick={onOpenMargin}
+              />
+            )}
           </div>
-        )}
-        {books.length === 0 ? (
-          <Text typography="st11" color="grey600" style={{ display: 'block' }}>
-            {/* 좁혀서 빈 것과 애초에 없는 것은 다른 사실이다 — 필터를 건 채 "공개한 책이 없어요"는 거짓말이다. */}
-            {statusFilter === null && activeTag === null ? '공개한 책이 없어요.' : '이 상태의 공개 책이 없어요.'}
-          </Text>
         ) : (
-          <BookGrid
-            rows={books.map((b) => ({ ...b, fresh: hasFreshStory(b.lastStoryAt, now) }))}
-            selectedId={null}
-            onPick={onOpenMargin}
-          />
+          <>
+            {/* 404를 「0건」으로 접지 않는다 — 서버가 아직 이 경로를 모르는 구간에 「글이 없어요」는 거짓말이다.
+                실패하면 목록도 빈 문구도 안 그리고 다시 받을 길만 준다(fail-closed). */}
+            <ErrorMessage message={marginsError} onRetry={onRetryMargins} />
+            {margins === null ? (
+              marginsError === null && <Loading />
+            ) : (
+              <MarginBoard count={margins.length}>
+                {margins.length === 0 ? (
+                  <div style={{ padding: '34px 16px', textAlign: 'center' }}>
+                    <Text typography="st12" color="grey600" style={{ wordBreak: 'keep-all' }}>
+                      {marginTabEmptyText(profile.self)}
+                    </Text>
+                  </div>
+                ) : (
+                  margins.map((e) => (
+                    <MarginCard
+                      key={e.id}
+                      entry={e}
+                      now={now}
+                      book={{ id: e.bookId, title: e.bookTitle }}
+                      onOpenBook={onOpenMargin}
+                      expanded={expanded.has(e.id)}
+                      onToggleExpand={onToggleExpand}
+                    />
+                  ))
+                )}
+              </MarginBoard>
+            )}
+          </>
         )}
       </section>
 

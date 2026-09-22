@@ -1,6 +1,7 @@
 package com.booktimer.story;
 
 import com.booktimer.book.Book;
+import com.booktimer.book.BookVisibility;
 import com.booktimer.user.User;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
@@ -132,6 +133,35 @@ public interface StoryRepository extends JpaRepository<Story, Long> {
      * 조회한 그 책) 카드에는 책 라벨이 없다(헤더에 한 번만 실린다).
      */
     List<Story> findByUserAndBookOrderByCreatedAtDescIdDesc(User user, Book book, Pageable pageable);
+
+    /**
+     * 사람축 전체 목록 — 한 사람이 남긴 글 전부(책 구분 없이 최신순). 책방 「여백」 탭이 이 문을 지난다.
+     *
+     * <p><b>{@code marginOf}에서 책 좌표만 뺀 것</b>이다 — {@code sharedRecent}/{@code sharedByIsbn}류의
+     * 미러가 아니다. 거기엔 {@code shared}·차단·ADMIN이 쿼리에 있지만, 여기선 대상이 <b>한 사람</b>이라
+     * 그 셋을 {@code ProfileService.resolveVisibleTarget}이 통째로 진다(호출부 {@code allMarginsOf}).
+     * 술어 미러의 짝은 {@code StoryService.assertVisible}(사람 게이트 → 책 PUBLIC)이므로, <b>거기에
+     * 술어가 늘면 이 쿼리의 {@code visibilities} 계산에도 같이 늘려야 한다</b>.
+     *
+     * <p>{@code visibilities}가 공개 판정을 진다: 남이 보면 {@code {PUBLIC}}, 본인이 보면
+     * {@code {PUBLIC, PRIVATE}} — {@code marginOf}의 {@code !isPublic && !self}를 컬렉션 파라미터로
+     * 옮긴 것이다. 이 한 줄이 빠지면 남의 비공개 메모가 그의 책방 탭에 통째로 실린다.
+     *
+     * <p>{@code s.shared}는 보지 않는다 — 사람축은 올리든 말든 다 보인다({@code marginOf}와 같다).
+     *
+     * <p>book은 <b>fetch한다</b>({@code findByUserAndBook…}과 반대) — 카드마다 책 라벨을 그리므로
+     * 안 하면 100장 × 책 조회(N+1)다. {@code s.user}는 fetch하지 않는다(전부 target 한 사람이고
+     * 카드에 작성자 줄이 없다). ToOne fetch + Pageable은 {@code sharedRecent}가 이미 쓰는 조합.
+     */
+    @Query("""
+            select s from Story s join fetch s.book b
+            where s.user = :target
+              and b.visibility in :visibilities
+            order by s.createdAt desc, s.id desc
+            """)
+    List<Story> recentByUser(@Param("target") User target,
+                             @Param("visibilities") Collection<BookVisibility> visibilities,
+                             Pageable pageable);
 
     /**
      * 책축(isbn13) 목록 — 같은 책을 보는 <b>누구에게나</b> 열린 글(「함께 걸기」). 최신순, 동시각 tie는 id로.

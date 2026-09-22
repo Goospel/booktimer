@@ -1290,6 +1290,30 @@ export const STORY_BG_CODES = [
 export const fetchBookMargin = (loginId: string, bookId: number): Promise<MarginResponse> =>
   request(`/api/stories/of/${loginId}`, { query: { bookId } });
 
+/**
+ * `story.ProfileMarginEntry` — 사람축 **전체** 목록의 카드. {@link MarginEntry}에 **책 라벨**이 더해진
+ * 모양이다({@link SharedMarginEntry}가 작성자 줄을 더한 것과 같은 방향).
+ *
+ * <p>책방 「여백」 탭이 그린다: 한 사람의 글이 책 구분 없이 한 줄로 쌓이므로 카드마다 「어느 책인가」가
+ * 정보가 된다. `bookId`는 라벨을 눌렀을 때 그 책의 여백 전체 화면으로 가는 **좌표**다.
+ */
+export interface ProfileMarginEntry extends MarginEntry {
+  bookId: number;
+  bookTitle: string;
+}
+
+/**
+ * 한 사람의 여백 **전체** — 책 구분 없이 최신순(상한 100장). 책방의 「여백」 탭이 이 문을 지난다.
+ *
+ * <p>차단·ADMIN·미존재·핸들 없음은 모두 404다(존재 비노출). 남의 비공개 책 글은 **목록에서 빠진다**
+ * (404가 아니다 — 공개 책 글은 그대로 실린다).
+ *
+ * <p>래퍼 없이 **배열**이 온다(`GET /api/stories/{id}/likes` 선례) — 화면이 `GET /api/profile`로 `self`를
+ * 이미 들고 있어(같은 화면) 헤더로 다시 실을 값이 없다.
+ */
+export const fetchProfileMargins = (loginId: string): Promise<ProfileMarginEntry[]> =>
+  request(`/api/stories/of/${encodeURIComponent(loginId)}/all`);
+
 /** bookId는 **필수**다 — 여백은 책에 딸린 자리라 책 없는 글은 서버가 400으로 거절한다. */
 /** `quote`는 맨 뒤다 — `text`와 같은 타입이라 붙여 두면 순서를 바꿔 넣어도 컴파일러가 안 잡는다. */
 export const createStory = (

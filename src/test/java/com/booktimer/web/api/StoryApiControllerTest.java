@@ -9,6 +9,8 @@ import com.booktimer.follow.Follow;
 import com.booktimer.follow.FollowRepository;
 import com.booktimer.security.RateLimitService;
 import com.booktimer.story.Story;
+import com.booktimer.story.StoryLike;
+import com.booktimer.story.StoryLikeRepository;
 import com.booktimer.story.StoryRepository;
 import com.booktimer.user.Role;
 import com.booktimer.user.User;
@@ -56,6 +58,9 @@ class StoryApiControllerTest {
 
     @Autowired
     private StoryRepository storyRepository;
+
+    @Autowired
+    private StoryLikeRepository storyLikeRepository;
 
     @Autowired
     private BookRepository bookRepository;
@@ -732,6 +737,80 @@ class StoryApiControllerTest {
 
         mockMvc.perform(get("/api/stories/book/" + SHARE_ISBN)
                         .with(user("bookaxis-empty@booktimer.com")))
+                .andExpect(status().isNotFound());
+    }
+
+    // --- GET /api/stories/of/{loginId}/all (사람축 전체 여백 — 책방 「여백」 탭) ---
+
+    @Test
+    @DisplayName("GET /api/stories/of/{loginId}/all 낯선 이 → 공개 책 글만, 책 라벨이 그 책과 일치")
+    void allMarginsOf_stranger_returnsOnlyPublicBookStories() throws Exception {
+        register("all-viewer@booktimer.com", "allviewer", "열람자");
+        User target = register("all-target@booktimer.com", "alltarget", "대상");
+        Book open = publicBookOf(target, "공개 책");
+        Book secret = bookRepository.save(
+                Book.register(target, "비공개 책", null, null, null, null, null, BookStatus.READING));
+        storyOf(target, open, "낯선 사람에게도 보일 문장");
+        storyOf(target, secret, "새면 안 되는 메모");
+
+        mockMvc.perform(get("/api/stories/of/alltarget/all")
+                        .with(user("all-viewer@booktimer.com")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.length()").value(1))
+                .andExpect(jsonPath("$[0].text").value("낯선 사람에게도 보일 문장"))
+                .andExpect(jsonPath("$[0].bookId").value(open.getId()))
+                .andExpect(jsonPath("$[0].bookTitle").value("공개 책"));
+    }
+
+    @Test
+    @DisplayName("GET /api/stories/of/{loginId}/all 본인 → 비공개 책 글까지 최신순으로 실린다")
+    void allMarginsOf_self_includesPrivateBookStories() throws Exception {
+        User me = register("all-self@booktimer.com", "allself", "나");
+        storyOf(me, publicBookOf(me, "공개 책"), "공개 책 글");
+        Book secret = bookRepository.save(
+                Book.register(me, "비공개 책", null, null, null, null, null, BookStatus.READING));
+        storyOf(me, secret, "나만 보는 메모"); // 나중에 저장 = 최신
+
+        mockMvc.perform(get("/api/stories/of/allself/all")
+                        .with(user("all-self@booktimer.com")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.length()").value(2))
+                .andExpect(jsonPath("$[0].text").value("나만 보는 메모"))
+                .andExpect(jsonPath("$[0].bookTitle").value("비공개 책"))
+                .andExpect(jsonPath("$[1].text").value("공개 책 글"));
+    }
+
+    @Test
+    @DisplayName("GET /api/stories/of/{loginId}/all 좋아요가 눌린 글은 liked:true·likeCount:1로 온다")
+    void allMarginsOf_carriesLikeState() throws Exception {
+        User author = register("all-like-author@booktimer.com", "alllikeauthor", "글쓴이");
+        User fan = register("all-like-fan@booktimer.com", "alllikefan", "독자");
+        Story story = storyOf(author, publicBookOf(author, "좋아요가 달릴 책"), "누를 만한 문장");
+        storyLikeRepository.save(StoryLike.of(fan, story));
+
+        mockMvc.perform(get("/api/stories/of/alllikeauthor/all")
+                        .with(user("all-like-fan@booktimer.com")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[0].likeCount").value(1))
+                .andExpect(jsonPath("$[0].liked").value(true));
+    }
+
+    /**
+     * 게이트를 안 태우면 차단한 사람의 글이 새고 존재까지 누설된다. ⚠️ 이 테스트만은 <b>구현 전에
+     * Red가 안 난다</b> — 미매핑 경로도 404라 기대값과 같기 때문이다(설계 §4 태스크 2). 판별력은
+     * 구현 후 {@code resolveVisibleTarget} 호출을 지운 돌연변이로 잰다.
+     */
+    @Test
+    @DisplayName("GET /api/stories/of/{loginId}/all 차단 관계 → 404 (존재 누설 금지)")
+    void allMarginsOf_blocked_returns404() throws Exception {
+        register("all-blk-viewer@booktimer.com", "allblkviewer", "열람자");
+        User target = register("all-blk-target@booktimer.com", "allblktarget", "대상");
+        User viewer = userRepository.findByEmail("all-blk-viewer@booktimer.com").orElseThrow();
+        storyOf(target, publicBookOf(target, "가려질 책"), "가려질 문장");
+        blockRepository.save(Block.of(target, viewer));
+
+        mockMvc.perform(get("/api/stories/of/allblktarget/all")
+                        .with(user("all-blk-viewer@booktimer.com")))
                 .andExpect(status().isNotFound());
     }
 }
