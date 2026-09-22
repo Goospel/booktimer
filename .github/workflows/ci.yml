@@ -16,6 +16,11 @@ jobs:
       # 여기가 뚫리면 로그인 IP 잠금이 통째로 무력화되므로 PR 게이트에 둔다. 러너에 Docker 내장.
       - name: Verify Caddy forwarded-header trust boundary
         run: bash deploy/tests/test-caddy-forwarded.sh
+      # SSM→.env 매핑 계약. 매핑이 빠지면 앱은 멀쩡히 뜨는데 그 기능만 조용히 꺼진 채 돈다(무성 장애).
+      # 로컬 수동이라 #1172가 CHAT_ENABLED 매핑을 모의 갱신 없이 머지했고, 「정상 렌더」가 exit=1로
+      # 죽어 파일 전체가 3일간 빨간불인 걸 아무도 몰랐다(2026-09-22 발견). 그래서 PR 게이트로 올린다.
+      - name: Verify SSM-to-env mapping contract
+        run: bash deploy/tests/test-render-env.sh
       - uses: actions/setup-node@v7
         with:
           node-version: '20'
