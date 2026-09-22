@@ -367,6 +367,13 @@ function card(p: ProfileResponse, onMessage: (() => void) | null = () => {}) {
       onMore={() => {}}
       safety={null}
       onMessage={onMessage ?? undefined}
+      tab="books"
+      onSelectTab={() => {}}
+      margins={null}
+      marginsError={null}
+      onRetryMargins={() => {}}
+      expanded={new Set()}
+      onToggleExpand={() => {}}
     />,
   );
 }

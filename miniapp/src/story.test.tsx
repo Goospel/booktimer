@@ -1155,3 +1155,32 @@ describe('여백 배너 지면 배선', () => {
     expect(view(margin(), { adSuppressed: false })).toContain('data-ad-group="ait.test.margin"');
   });
 });
+
+/**
+ * 책 라벨 — <b>사람축 전체 목록에만</b> 붙는다(책방 「여백」 탭). 한 책의 목록에선 헤더가 한 번만
+ * 말하면 되는 값이라, 프롭이 없으면 라벨 자체가 서지 않는다. 손잡이(`onOpenBook`) 유무가 버튼이냐
+ * 글자냐를 가르는 것은 `author`/`onOpenAuthor` 관례 그대로다.
+ */
+describe('MarginCard 책 라벨', () => {
+  it('book + onOpenBook → 그 책의 여백을 여는 버튼', () => {
+    const html = render(
+      <MarginCard entry={entry(1)} now={NOW} book={{ id: 7, title: '데미안' }} onOpenBook={() => {}} />,
+    );
+
+    expect(html).toContain('aria-label="『데미안』 여백 보기"');
+    expect(html).toContain('데미안');
+  });
+
+  it('book만 있고 손잡이가 없으면 제목은 글자로만 선다 — 죽은 버튼을 만들지 않는다', () => {
+    const html = render(<MarginCard entry={entry(1)} now={NOW} book={{ id: 7, title: '데미안' }} />);
+
+    expect(html).toContain('데미안');
+    expect(html).not.toContain('aria-label="『데미안』 여백 보기"');
+  });
+
+  it('book이 없으면 라벨 자리 자체가 없다 — 서재 미리보기·두 여백 화면 회귀 가드', () => {
+    const html = render(<MarginCard entry={entry(1)} now={NOW} />);
+
+    expect(html).not.toContain('여백 보기');
+  });
+});

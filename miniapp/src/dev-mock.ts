@@ -21,6 +21,7 @@ import type {
   PersonalityMutation,
   PersonalityStatus,
   ProfileBook,
+  ProfileMarginEntry,
   PublicNewsResponse,
   ReaderStatus,
   RequestOptions,
@@ -1578,6 +1579,20 @@ const routes: [Method, RegExp, (ctx: Ctx) => unknown][] = [
       // 빈 배열로 두면 「비팔로워도 읽힌다」를 목 모드에서 원리상 확인할 수 없다.
       entries: [...(marginEntries[bookId] ?? [])],
     };
+  }],
+  /*
+   * 사람축 전체 — 책 구분 없이 최신순. 책방 「여백」 탭이 이 문을 지난다(없으면 그 탭이 통째로 404다).
+   * 위 `/of/([^/]+)$`는 `$`로 끝나 충돌하지 않는다.
+   */
+  ['GET', /^\/api\/stories\/of\/([^/]+)\/all$/, ({ param }): ProfileMarginEntry[] => {
+    const user = mustFindUser(param);
+    // 0건 상태 전용 픽스처 — 목이 서버가 낼 수 있는 상태를 못 내면 그 화면을 볼 길이 없다(T-175).
+    if (param === 'underline') return [];
+    // 본인이면 내 서재(비공개 5번 포함 — 나만 보는 메모는 내 탭에 있다), 남이면 공개 책방 책.
+    const source: { id: number; title: string }[] = user.self ? books : profileBooks;
+    return source
+      .flatMap((b) => (marginEntries[b.id] ?? []).map((e) => ({ ...e, bookId: b.id, bookTitle: b.title })))
+      .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
   }],
   /*
    * 책축 — 사람 좌표 없이 isbn13 하나. 「모두」 탭·검색 배지가 이 문을 지난다.
