@@ -31,7 +31,7 @@ import {
   attachMarginBanner,
   marginBannerEnabled,
 } from '../toss';
-import { BookCover, ErrorMessage, HANDWRITING, Loading, Screen, Sheet, Text, UserList } from '../ui';
+import { BookCover, ErrorMessage, HANDWRITING, Loading, PUFF, SECTION_RULE, Screen, Sheet, Text, UserList } from '../ui';
 
 /**
  * 여백 — <b>책에 딸린 자리</b>와 거기 쌓이는 글 (2026-08-16 재설계).
@@ -464,7 +464,7 @@ export function MarginTabs({ tab, onSelect }: { tab: 'mine' | 'all'; onSelect: (
   ];
 
   return (
-    <div style={{ display: 'flex', marginTop: 16, borderBottom: '1px solid #E2DACA' }}>
+    <div style={{ display: 'flex', marginTop: 16, borderBottom: SECTION_RULE }}>
       {items.map(({ key, label }) => (
         <button
           key={key}
@@ -492,10 +492,10 @@ export const tabStyle = (active: boolean) =>
     flex: 1,
     padding: '9px 0',
     border: 0,
-    borderBottom: active ? '2px solid var(--adaptiveBlue700, #4F6B4C)' : '2px solid transparent',
+    borderBottom: active ? '2px solid var(--adaptiveBlue700, #3F5A3C)' : '2px solid transparent',
     marginBottom: -1,
     background: 'transparent',
-    color: active ? '#3E5A3B' : 'var(--adaptiveGrey600, #8C877B)',
+    color: active ? 'var(--adaptiveBlue700, #3F5A3C)' : 'var(--adaptiveGrey600, #4E5A4B)',
     fontSize: 14,
     fontWeight: 700,
     textAlign: 'center',
@@ -511,12 +511,10 @@ export const tabStyle = (active: boolean) =>
 export function MarginBoard({ count, onCompose, children }: { count: number; onCompose?: () => void; children: ReactNode }) {
   return (
     <div
-      style={{
-        marginTop: 12,
-        borderRadius: 12,
-        border: '0.5px solid #E6DFCF',
-        background: 'var(--adaptiveBackground, #FCFAF5)',
-      }}
+      data-margin-board=""
+      // Soft 부푼 면 — 게시판은 화면에 한 장이라 큰 그림자 예산 안이다. 행(`MarginCard`)은 반복이라 그림자 없이
+      // 토큰 구분선만 진다(설계 §6). `overflow`는 두지 않는다 — 부푼 그림자가 잘린다.
+      style={{ ...PUFF, marginTop: 12 }}
     >
       <div
         style={{
@@ -1012,7 +1010,7 @@ export function MarginCard({
   const clamped = foldable && expanded !== true;
 
   return (
-    <div style={{ display: 'flex', gap: 9, padding: '11px 12px', borderTop: '1px solid #EFE8D9' }}>
+    <div data-margin-row="" style={{ display: 'flex', gap: 9, padding: '11px 12px', borderTop: SECTION_RULE }}>
       {/* 팔레트 색이 사는 유일한 자리 — 배경으로 깔면 목록이 색 덩어리가 되고, 아예 버리면 작성 화면의
           색 선택이 뜻을 잃는다. 3px 막대가 그 사이의 값이다. */}
       <div style={{ flex: '0 0 auto', width: 3, background: bg.background }} />
@@ -1402,7 +1400,7 @@ export function StoryComposer({
       </Text>
       {/* 두 칸을 한 배경 안에 넣는다 — 쓰는 동안 보이는 것이 곧 카드여야 미리보기 값을 한다.
           라벨·카운터도 안에 두는 이유는 같다(밖으로 빼면 배경마다 대비가 어긋난다). */}
-      <div style={{ background: bg.background, color: bg.color, borderRadius: 12, padding: 16 }}>
+      <div style={{ background: bg.background, color: bg.color, borderRadius: 20, padding: 16 }}>
         <p style={composerLabel}>책에서 옮긴 문장 (선택)</p>
         <textarea
           value={quote}
@@ -1440,7 +1438,8 @@ export function StoryComposer({
               height: 32,
               borderRadius: 999,
               background: option.background,
-              border: option.code === bgCode ? '2px solid var(--adaptiveBlue500, #6E8A6A)' : '1px solid #E4DDD0',
+              // 칸의 채움(`option.background`)은 내용의 색이라 그대로다 — 고름 표시만 토큰이다.
+              border: option.code === bgCode ? '2px solid var(--adaptiveBlue500, #5B7F55)' : '1px solid var(--adaptiveGrey200, #D6DFD2)',
               cursor: 'pointer',
             }}
           />
@@ -1458,7 +1457,7 @@ export function StoryComposer({
           checked={shared}
           disabled={busy}
           onChange={(e) => setShared(e.target.checked)}
-          style={{ width: 18, height: 18, flex: '0 0 auto', accentColor: '#6E8A6A' }}
+          style={{ width: 18, height: 18, flex: '0 0 auto', accentColor: 'var(--adaptiveBlue500, #5B7F55)' }}
         />
         <span style={{ minWidth: 0 }}>
           <Text typography="st11" style={{ display: 'block', wordBreak: 'keep-all' }}>

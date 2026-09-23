@@ -845,14 +845,14 @@ export function UserList({
           key={u.loginId}
           type="button"
           onClick={() => onSelect(u.loginId)}
+          // 반복 행이라 부푼 그림자 대신 옅은 실선 행(SOFT_ROW)이다 — 행 수 × 큰 blur는 저사양 안드로이드의
+          // 스크롤 재래스터를 부른다(설계 §6 그림자 예산). 검색 결과·팔로우 목록·좋아요 명단이 함께 바뀐다.
           style={{
+            ...SOFT_ROW,
             display: 'block',
             width: '100%',
             padding: 16,
             marginBottom: 8,
-            border: 'none',
-            borderRadius: 12,
-            background: 'var(--adaptiveGrey100, #FCFAF5)',
             textAlign: 'left',
             cursor: 'pointer',
           }}

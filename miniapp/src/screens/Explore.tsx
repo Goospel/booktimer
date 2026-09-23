@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 
 import type { ExploreUser, UserRow } from '../api';
 import { fetchExplore } from '../api';
-import { Avatar, BookCover, ErrorMessage, Loading, Screen, SearchField, Text, UserList } from '../ui';
+import { Avatar, BookCover, ErrorMessage, Loading, SOFT_ROW, Screen, SearchField, Text, UserList } from '../ui';
 
 /**
  * 둘러보기 — <b>아이디를 몰라도 사람을 만나는 화면</b>(2026-08-20).
@@ -156,14 +156,13 @@ function ExploreCard({ user, onSelect }: { user: ExploreUser; onSelect: (loginId
       type="button"
       aria-label={`${user.nickname}님 책방 열기`}
       onClick={() => onSelect(user.loginId)}
+      // 표지를 품은 반복 카드 — 큰 그림자 대신 옅은 실선 행(SOFT_ROW)이다(설계 §6: 표지·목록 행 금지 자리).
       style={{
+        ...SOFT_ROW,
         display: 'block',
         width: '100%',
         padding: 12,
         marginBottom: 10,
-        borderRadius: 12,
-        border: '1px solid var(--adaptiveGrey200, #E4DDD0)',
-        background: 'var(--adaptiveGrey100, #FCFAF5)',
         textAlign: 'left',
         cursor: 'pointer',
       }}

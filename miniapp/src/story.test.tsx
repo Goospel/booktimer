@@ -22,6 +22,7 @@ import {
 } from './screens/Story';
 import { marginBannerEnabled } from './toss';
 
+import { bigShadow, tagWith } from './soft-guard';
 import { userAgent } from './test-fixtures';
 
 /**
@@ -1182,5 +1183,45 @@ describe('MarginCard 책 라벨', () => {
     const html = render(<MarginCard entry={entry(1)} now={NOW} />);
 
     expect(html).not.toContain('여백 보기');
+  });
+});
+
+
+/**
+ * Soft 재테마(PR-4) — 여백. 게시판 껍데기는 화면에 한 장이라 부푼 면이고, 행은 글 수만큼 반복되므로 큰 그림자
+ * 없이 토큰 구분선만 진다. 작성 시트의 배경 6색은 <b>내용의 색</b>이라 그대로이고, 고르는 칸의 테두리만 토큰이다.
+ */
+describe('Soft 표면 — 여백 (PR-4)', () => {
+  it('게시판 껍데기는 부푼 면이다', () => {
+    const tag = tagWith(view(margin({ entries: [entry(1), entry(2)] })), 'data-margin-board=""');
+    expect(tag).not.toBe('');
+    expect(tag).toContain('box-shadow:var(--puffShadow');
+  });
+
+  it('게시판 행엔 큰 그림자가 없고 구분선은 토큰이다', () => {
+    const html = view(margin({ entries: [entry(1), entry(2), entry(3)] }));
+    const rows = html.match(/<div[^>]*data-margin-row=""[^>]*>/g) ?? [];
+    expect(rows).toHaveLength(3);
+    for (const row of rows) {
+      expect(row).toContain('border-top:1px solid var(--adaptiveGrey200');
+      expect(bigShadow(row)).toBe(false);
+    }
+  });
+
+  it('배경 고르기 — 고른 칸은 2px 모드색 테두리, 나머지는 1px 토큰선', () => {
+    const html = render(
+      <StoryComposer
+        book={{ id: 7, title: '데미안', author: '헤르만 헤세', coverUrl: null }}
+        onDone={() => {}}
+        onCancel={() => {}}
+        onError={() => {}}
+      />,
+    );
+    const picked = tagWith(html, 'aria-label="paper"');
+    const other = tagWith(html, 'aria-label="night"');
+    expect(picked).not.toBe('');
+    expect(other).not.toBe('');
+    expect(picked).toContain('2px solid var(--adaptiveBlue500');
+    expect(other).toContain('1px solid var(--adaptiveGrey200');
   });
 });

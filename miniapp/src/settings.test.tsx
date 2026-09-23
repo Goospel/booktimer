@@ -1,4 +1,4 @@
-import { TDSMobileProvider } from '@toss/tds-mobile';
+import { Button, TDSMobileProvider } from '@toss/tds-mobile';
 import { isValidElement, type ReactNode } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
@@ -16,6 +16,7 @@ import {
   logoutAndLeave,
   replayGuide,
 } from './screens/Settings';
+import { readFileSync } from 'node:fs';
 import { graph, stubLocalStorage, userAgent } from './test-fixtures';
 
 vi.mock('./api', async (importOriginal) => ({
@@ -395,5 +396,64 @@ describe('groupCode', () => {
   it('8자가 아니면 손대지 않는다 — 서버 형식이 바뀌어도 엉뚱한 자리에 공백을 넣지 않는다', () => {
     expect(groupCode('ABC')).toBe('ABC');
     expect(groupCode('ABCD23456')).toBe('ABCD23456');
+  });
+});
+
+/**
+ * 위험 버튼은 붉게 남는다 (Soft 재테마 PR-4) — `global.css`의 TDS 버튼 재색칠 규칙은 인라인 문자열을 키로
+ * 잡는다(`[style*='--button-background-color:#3182f6']`). 누가 키를 넓히면(예: 값을 빼고 프로퍼티 이름만)
+ * danger 버튼까지 사정권에 들어 로그아웃·탈퇴가 세이지로 삼켜진다 — 이 테스트는 그 <b>규칙 매칭 자체</b>를 잰다.
+ *
+ * <p>계측기는 <b>닫힌 쪽으로</b> 센다: 주석을 걷은 css의 <b>모든</b> `[style*=…]` 키를 따옴표 종류·선택자 접두
+ * (`.tds-mobile-button`이든 맨 `button`이든)·규칙 본문과 무관하게 모으고, 「이건 색을 안 바꾼다」고 확인된 키만
+ * 허용표({@link SIZE_ONLY_KEYS})로 뺀다. 본문으로 거르면 `filter: grayscale(1)`처럼 색 속성 이름이 아닌 재색칠이,
+ * 선택자 접두로 거르면 맨 `button[style*=…]`이, 홑따옴표로 거르면 `"…"` 키가 샌다(리뷰 돌연변이 셋 전부 생존).
+ * `[style*=X]`는 인라인 style 문자열에 X가 들어 있느냐이므로, 정적 렌더한 버튼 태그에 X가 들어 있으면
+ * 브라우저에서도 그 규칙이 걸린다.
+ */
+/** 크기만 바꾸는 small 라벨 규칙(15px 바닥) — danger도 걸리는 게 의도다(`global.css` 그 규칙의 주석). */
+const SIZE_ONLY_KEYS = ['--button-font-size:var(--tds-t-t7', '--button-font-size: var(--tds-t-t7'];
+
+describe('위험 버튼은 붉게 남는다 — Soft 버튼 규칙이 red를 삼키지 않는다 (PR-4)', () => {
+  const css = readFileSync(new URL('./global.css', import.meta.url), 'utf8').replace(/\/\*[\s\S]*?\*\//g, '');
+  const keys = [...css.matchAll(/\[style\*=(['"])(.+?)\1\]/g)]
+    .map((m) => m[2])
+    .filter((key) => !SIZE_ONLY_KEYS.includes(key));
+  const buttons = (html: string) => html.match(/<button[^>]*class="[^"]*tds-mobile-button[^"]*"[^>]*>/g) ?? [];
+  const recolored = (tag: string) => keys.filter((key) => tag.includes(key));
+  const wrap = (node: ReactNode) => renderToStaticMarkup(<TDSMobileProvider userAgent={userAgent}>{node}</TDSMobileProvider>);
+
+  it('계측기 자기검증 — 색 규칙 키가 있고, 보통 primary·weak 버튼은 실제로 걸린다(양성 대조)', () => {
+    expect(keys.length).toBeGreaterThanOrEqual(3);
+    // 허용표가 실제 css 키와 맞는다 — 규칙 문자열이 바뀌어 허용표가 헛돌면(아무것도 안 뺌) 여기서 안다.
+    expect(SIZE_ONLY_KEYS.every((key) => css.includes(`[style*='${key}']`))).toBe(true);
+    const plain = buttons(
+      wrap(
+        <>
+          <Button>기본</Button>
+          <Button variant="weak">약하게</Button>
+        </>,
+      ),
+    );
+    expect(plain).toHaveLength(2);
+    for (const tag of plain) expect(recolored(tag).length).toBeGreaterThan(0);
+  });
+
+  it('로그아웃 확정·탈퇴 진입·탈퇴 실행 버튼은 붉은 채로 어떤 색 규칙에도 안 걸린다', () => {
+    const html = [
+      wrap(<LogoutSection confirm onConfirm={() => {}} onLogout={() => {}} />),
+      wrap(<DeleteAccountSection open={false} busy={false} error={null} onOpen={() => {}} onClose={() => {}} onDelete={() => {}} />),
+      wrap(<DeleteAccountSection open busy={false} error={null} onOpen={() => {}} onClose={() => {}} onDelete={() => {}} />),
+    ].join('');
+    // 버튼마다 이름으로 집는다 — 붉은 버튼 「개수」로 세면 하나가 붉음을 잃어도 나머지가 수를 채워 초록이다
+    // (돌연변이 실측: 「정말 로그아웃」의 danger를 지워도 ≥3이 살아남았다).
+    for (const label of ['정말 로그아웃', '회원 탈퇴', '모두 삭제하고 탈퇴']) {
+      const at = html.indexOf(label);
+      expect(at, label).toBeGreaterThanOrEqual(0); // 그 버튼이 렌더됐다(-1이면 slice가 엉뚱한 버튼을 집는다)
+      const tag = buttons(html.slice(0, at)).at(-1) ?? '';
+      expect(tag, label).toMatch(/--button-background-color:(#f04452|rgba\(251, 136, 144)/); // 붉다(아래 부재 단언이 공허하지 않음)
+      expect(recolored(tag), label).toEqual([]);
+      expect(tag, label).not.toContain('--adaptiveBlue');
+    }
   });
 });

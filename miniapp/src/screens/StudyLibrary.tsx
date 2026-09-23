@@ -7,7 +7,7 @@ import { useBackClose } from '../back';
 import { CACHE_STUDY_SHELF, cacheGet, cachePut } from '../cache';
 import { formatDuration } from '../format';
 import { openExternal } from '../toss';
-import { ErrorMessage, Loading, PENCIL_FRAME, Screen, SearchField, Sheet, Text } from '../ui';
+import { ErrorMessage, Loading, SOFT_OUTLINE, SOFT_ROW, Screen, SearchField, Sheet, Text } from '../ui';
 import { BookCarousel, type LeadCard } from './Home';
 import { GridSheet, HANDLE_ROW_HEIGHT, SearchResultRow, handleStyle, resolveSelected } from './Library';
 
@@ -119,14 +119,16 @@ export function studyBookChips(book: StudyBookRow): { label: string; value: stri
  * 이 스타일만 인라인인 것은 중복이 아니라 계약이다.
  */
 function handleRowStyle(tone: 'tint' | 'card'): CSSProperties {
+  // Soft — 틴트는 옅은 모드색 **면**(테두리 없음), 카드는 1.5px 세이지 실선 보조 손잡이(규칙 1).
+  // 독서 서재(PR-3)의 「관리」와 같은 옷이다. 모드색은 토큰 경유라 공부 모드에선 저절로 파랑이다.
+  const surface: CSSProperties =
+    tone === 'tint'
+      ? { border: 'none', borderRadius: 18, background: 'var(--adaptiveBlue50, #DCE8D6)', color: 'var(--adaptiveBlue700, #3F5A3C)' }
+      : SOFT_OUTLINE;
   return {
+    ...surface,
     flex: 1,
     height: HANDLE_ROW_HEIGHT,
-    border: '1px solid transparent',
-    borderImage: PENCIL_FRAME,
-    borderRadius: 14,
-    background: tone === 'tint' ? 'var(--adaptiveBlue50, #E7EEE2)' : '#FCFAF5',
-    color: tone === 'tint' ? 'var(--adaptiveBlue700, #4F6B4C)' : '#2C2C2A',
     fontSize: 15,
     fontWeight: 700,
     cursor: 'pointer',
@@ -345,7 +347,7 @@ export function StudyShelf({
             {/*
               * 한 회독을 끝냈을 때 누르는 자리 — 이 화면의 유일한 핵심 동작이라 <b>채움</b>이다.
               * 독서 서재의 구조적 대응물은 「검색해서 담기」(0번 칸 전용 틴트)가 아니라 같은 2:1 줄의
-              * 「여백에 글쓰기」이고, 그쪽 레시피(채움 + 연필 프레임 + 크림 잉크)를 그대로 쓴다.
+              * 「여백에 글쓰기」이고, 그쪽 레시피(채움 + 부푼 그림자 + 채움 잉크)를 그대로 쓴다.
               * TDS `Button`이 아니라 맨 `<button>`인 것도 그쪽과 같은 이유다 — `--button-min-height: 56px`가
               * 박혀 있어 38px 손잡이 줄에서 혼자 솟는다.
               */}
@@ -353,14 +355,16 @@ export function StudyShelf({
               type="button"
               disabled={busy}
               onClick={() => onReadCount(selected, selected.readCount + 1)}
+              // Soft(PR-4): 독서 서재 「여백에 글쓰기」(PR-3)와 같은 채움 — 연필선 대신 부푼 그림자,
+              // 글자는 `--filledInk`. 채움 개수 가드(typography.test D5)가 세는 키를 그대로 쓴다.
               style={{
                 flex: 2,
                 height: HANDLE_ROW_HEIGHT,
-                border: '1px solid transparent',
-                borderImage: PENCIL_FRAME,
-                borderRadius: 14,
-                background: 'var(--adaptiveBlue700, #4F6B4C)',
-                color: '#F7F2E8',
+                border: 'none',
+                borderRadius: 18,
+                background: 'var(--adaptiveBlue700, #3F5A3C)',
+                color: 'var(--filledInk, #FFFFFF)',
+                boxShadow: 'var(--puffShadow)',
                 fontSize: 15,
                 fontWeight: 700,
                 cursor: 'pointer',
@@ -481,16 +485,13 @@ function StudySheetRow({
       disabled={busy}
       onClick={onClick}
       style={{
+        // 시트 바닥과 같은 색이라 배경만으론 경계가 안 보인다 — 1.5px 옅은 실선이 줄을 버튼으로 읽히게 한다.
+        ...SOFT_ROW,
         display: 'block',
         width: '100%',
         marginBottom: 8,
         padding: '15px 14px',
-        // 시트 바닥과 같은 크림색이라 배경만으론 경계가 안 보인다 — 테두리가 있어야 줄이 버튼으로 읽힌다.
-        border: '1px solid transparent',
-        borderImage: PENCIL_FRAME,
-        borderRadius: 10,
-        background: '#FFFDF8',
-        color: danger ? '#A32D2D' : '#2C2C2A',
+        color: danger ? '#A32D2D' : 'var(--adaptiveGrey800, #232C21)',
         fontSize: 15,
         textAlign: 'left',
         cursor: 'pointer',

@@ -7,11 +7,13 @@ import type { StudyCalendarDay } from './api';
 import {
   CalendarGrid,
   CalendarLegend,
+  StudyCalendar,
   calendarCells,
   cycleCheck,
   monthTitle,
   tappable,
 } from './screens/StudyCalendar';
+import { bigShadow, tagWith } from './soft-guard';
 import { userAgent } from './test-fixtures';
 
 /**
@@ -200,5 +202,42 @@ describe('달력 격자 렌더', () => {
     );
 
     for (const word of ['지킨 날', '못 지킨 날', '측정 기록']) expect(markup).toContain(word);
+  });
+});
+
+/**
+ * Soft 재테마(PR-4) — 공부 일정. 달력(월 넘김 · 격자 · 범례)이 부푼 카드 한 장 안에 선다. 날짜 칸은 한 달
+ * 30칸 반복이라 큰 그림자가 붙으면 안 된다(그림자 예산 §6).
+ */
+describe('Soft 표면 — 공부 일정 (PR-4)', () => {
+  const html = renderToStaticMarkup(
+    <TDSMobileProvider userAgent={userAgent}>
+      <StudyCalendar onError={() => {}} />
+    </TDSMobileProvider>,
+  );
+
+  it('달력은 부푼 카드 한 장 안에 선다', () => {
+    const card = tagWith(html, 'data-calendar-card=""');
+    expect(card).not.toBe('');
+    expect(card).toContain('box-shadow:var(--puffShadow');
+    expect(html.indexOf('data-calendar-card')).toBeLessThan(html.indexOf('data-cal-day'));
+  });
+
+  /**
+   * 360px 기기에서도 날짜 칸이 44px 히트영역을 지킨다 — 칸 폭은 `(기기 폭 − 화면 좌우 여백 − 카드 좌우 여백) / 7`.
+   * 두 여백은 상수가 아니라 <b>렌더된 마크업에서</b> 읽는다: 어느 쪽을 넓혀도(카드 10 → 42.9px) 빨강이다.
+   */
+  it('360px 기기에서도 날짜 칸 폭이 44px 이상이다', () => {
+    const screenX = Number(html.match(/<main style="padding:\d+px (\d+)px/)?.[1]);
+    const cardX = Number(tagWith(html, 'data-calendar-card=""').match(/padding:\d+px (\d+)px/)?.[1]);
+    expect(screenX).toBeGreaterThan(0); // 둘 다 실제로 읽었다(NaN이면 아래 비교가 공허하다)
+    expect(cardX).toBeGreaterThan(0);
+    expect((360 - 2 * screenX - 2 * cardX) / 7).toBeGreaterThanOrEqual(44);
+  });
+
+  it('날짜 칸엔 큰 그림자가 없다', () => {
+    const cells = html.match(/<button[^>]*data-cal-day=[^>]*>/g) ?? [];
+    expect(cells.length).toBeGreaterThanOrEqual(28);
+    expect(cells.filter(bigShadow)).toEqual([]);
   });
 });

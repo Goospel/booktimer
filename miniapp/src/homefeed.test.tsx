@@ -24,6 +24,7 @@ import {
   sourceOf,
   visibleTabs,
 } from './screens/HomeFeed';
+import { bigShadow } from './soft-guard';
 import { userAgent } from './test-fixtures';
 
 /**
@@ -742,5 +743,26 @@ describe('홈 피드 세션 캐시 (HomeFeedBox)', () => {
     cachePut(CACHE_FEED, feed({ social: [event('여느밤', '데미안', 'FINISHED', 2)] }));
 
     expect(renderMounted()).toContain('여느밤');
+  });
+});
+
+/**
+ * 그림자 예산 (Soft 재테마 PR-4 가드) — 피드 행은 소식 수만큼 반복된다. 큰 흐림 그림자(부푼 그림자 변수 또는
+ * blur ≥ 8px 리터럴)가 붙으면 저사양 안드로이드에서 스크롤 중 타일 재래스터가 난다(설계 §6).
+ */
+describe('피드 행엔 큰 그림자가 없다 (그림자 예산)', () => {
+  it('소식 행 전부', () => {
+    const html = renderBox(
+      feed({
+        social: [
+          event('여느밤', '데미안', 'FINISHED', 1),
+          event('나비', '아몬드', 'STARTED', 2),
+          story('구름', '파친코', 3, 2),
+        ],
+      }),
+    );
+    const rows = html.match(/<[a-z]+[^>]*data-feed-row[^>]*>/g) ?? [];
+    expect(rows.length).toBeGreaterThanOrEqual(3);
+    expect(rows.filter(bigShadow)).toEqual([]);
   });
 });

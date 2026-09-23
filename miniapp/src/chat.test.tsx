@@ -23,6 +23,7 @@ import {
 } from './screens/Chat';
 import { BookshopHeader } from './screens/Bookshop';
 import { ProfileCard, canMessage } from './screens/Profile';
+import { bigShadow, tagWith } from './soft-guard';
 import { userAgent } from './test-fixtures';
 
 /**
@@ -448,5 +449,59 @@ describe('보내기 성공 뒤 입력창 비우기', () => {
 
   it('보낸 글과 같을 때만 비운다', () => {
     expect(flat).toContain("setDraft((d) => (d.trim() === text ? '' : d));");
+  });
+});
+
+/**
+ * Soft 재테마(PR-4) — 대화 화면. 입력줄은 눌린 면(규칙 3 「입력 자리는 파인다」), 말풍선은 내 것 옅은 세이지 ·
+ * 남의 것 눌린 바탕이고 <b>그림자가 없다</b>(반복 요소 — 그림자 예산 §6). 대화함 행도 반복 행이다.
+ */
+describe('Soft 표면 — 대화 (PR-4)', () => {
+  const bubbles = (html: string) => html.match(/<div[^>]*data-bubble="(mine|theirs)"[^>]*>/g) ?? [];
+
+  it('입력줄은 눌린 면이다 — 연필선이 아니다', () => {
+    const textarea = tagWith(roomView(), '<textarea');
+    expect(textarea).not.toBe('');
+    expect(textarea).toContain('box-shadow:var(--dentShadow');
+    expect(textarea).toContain('border-radius:20px'); // 입력 반경은 DENT 기본 20(설계 §3-1)
+    expect(textarea).not.toContain('border-image');
+  });
+
+  it('잠긴 방의 입력줄은 파인 자리를 거둔다 — 평평한 흐린 면 + 흐린 글자', () => {
+    const textarea = tagWith(roomView({ writable: false }), '<textarea');
+    expect(textarea).toContain('disabled'); // 정말 잠긴 렌더다
+    expect(textarea).toContain('background:var(--adaptiveGrey200');
+    expect(textarea).toContain('box-shadow:none');
+    expect(textarea).toContain('color:var(--adaptiveGrey600');
+  });
+
+  it('내 말풍선은 옅은 세이지, 남의 말풍선은 눌린 바탕이다', () => {
+    const list = bubbles(roomView());
+    expect(list).toHaveLength(2);
+    expect(list.find((b) => b.includes('data-bubble="mine"'))).toContain('background:var(--adaptiveBlue50');
+    expect(list.find((b) => b.includes('data-bubble="theirs"'))).toContain('background:var(--softDent');
+  });
+
+  it('말풍선엔 큰 그림자가 없다 — 메시지 수만큼 반복되는 요소다', () => {
+    const list = bubbles(roomView({ messages: [message(1), message(2, { mine: true }), message(3)] }));
+    expect(list).toHaveLength(3);
+    for (const b of list) expect(bigShadow(b)).toBe(false);
+  });
+
+  it('대화함 행은 옅은 실선 행이고 큰 그림자가 없다', () => {
+    const html = inbox({ rooms: [room(1), room(2)] });
+    const rows = (html.match(/<button[^>]*>/g) ?? []).filter((t) => t.includes('text-align:left'));
+    expect(rows).toHaveLength(2);
+    for (const row of rows) {
+      expect(row).toContain('1.5px solid var(--adaptiveGrey200');
+      expect(bigShadow(row)).toBe(false);
+    }
+  });
+
+  it('종이비행기 버튼은 1.5px 세이지 실선이다', () => {
+    const plane = planeButton(card(profile()));
+    expect(plane).not.toBeNull();
+    expect(plane).toContain('1.5px solid var(--adaptiveBlue700');
+    expect(plane).not.toContain('border-image');
   });
 });

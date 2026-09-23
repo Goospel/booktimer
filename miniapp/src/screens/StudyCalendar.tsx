@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 
 import type { StudyCalendarDay } from '../api';
 import { fetchStudyCalendar, setStudyCheck } from '../api';
-import { ErrorMessage, SERIF_VALUE, Screen, Text } from '../ui';
+import { ErrorMessage, SERIF_VALUE, Screen, Text, sectionStyle } from '../ui';
 
 /**
  * 공부 일정 달력 — <b>지킨 날을 사용자가 직접 표시하는</b> 화면.
@@ -57,6 +57,13 @@ function todayIso(): string {
 }
 
 const WEEKDAYS = ['일', '월', '화', '수', '목', '금', '토'];
+
+/**
+ * 달력 카드의 좌우 안쪽 여백 — 섹션 기본(18)보다 좁다. 7칸 격자가 **360px 기기**(이 앱이 고려하는 가장 좁은
+ * 폭 — `Explore.tsx` 표지 폭 주석)에서도 칸마다 44px 히트영역을 지켜야 해서다:
+ * `(360 − 화면 좌우 20×2 − 6×2) / 7 = 44.0`. 10이면 42.9로 모자란다. `study-calendar.test`가 이 계산을 잠근다.
+ */
+export const CALENDAR_CARD_PAD_X = 6;
 
 /** 셀 안의 원 지름 — 44px 히트영역 안에 여백을 남기고 앉는다. */
 const MARK = 34;
@@ -342,25 +349,34 @@ export function StudyCalendar({ onError }: { onError: (error: Error) => void }) 
         지킨 날을 눌러 표시해요. 한 번 더 누르면 못 지킨 날, 또 누르면 표시가 지워져요.
       </Text>
 
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, marginTop: 12 }}>
-        {navButton('prev', false)}
-        {/* 같은 이유로 `textAlign`은 prop(T-219) — style에 두면 짧은 달(「1월」)이 120px 상자의 왼쪽에 붙는다. */}
-        <Text typography="st10" fontWeight="bold" textAlign="center" style={{ ...SERIF_VALUE, fontSize: 19, minWidth: 120 }}>
-          {monthTitle(year, month)}
-        </Text>
-        {navButton('next', atCurrentMonth)}
-      </div>
+      {/* 달력 카드 — 월 넘김·격자·범례가 한 장의 부푼 면에 선다. 좌우 여백은 {@link CALENDAR_CARD_PAD_X}. */}
+      <section
+        data-calendar-card=""
+        style={{ ...sectionStyle, marginTop: 12, padding: `6px ${CALENDAR_CARD_PAD_X}px 14px` }}
+      >
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
+          {navButton('prev', false)}
+          {/* 같은 이유로 `textAlign`은 prop(T-219) — style에 두면 짧은 달(「1월」)이 120px 상자의 왼쪽에 붙는다. */}
+          <Text typography="st10" fontWeight="bold" textAlign="center" style={{ ...SERIF_VALUE, fontSize: 19, minWidth: 120 }}>
+            {monthTitle(year, month)}
+          </Text>
+          {navButton('next', atCurrentMonth)}
+        </div>
 
-      <CalendarGrid
-        year={year}
-        month={month}
-        days={days ?? []}
-        todayIso={today}
-        busyDate={busyDate}
-        onPick={pick}
-      />
+        <CalendarGrid
+          year={year}
+          month={month}
+          days={days ?? []}
+          todayIso={today}
+          busyDate={busyDate}
+          onPick={pick}
+        />
 
-      <CalendarLegend />
+        {/* 범례만 안쪽으로 한 번 더 — 카드 좌우 여백은 격자 칸 폭 몫이라 글줄에는 좁다. */}
+        <div style={{ padding: '0 12px' }}>
+          <CalendarLegend />
+        </div>
+      </section>
       <ErrorMessage message={error} />
     </Screen>
   );
