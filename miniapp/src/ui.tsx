@@ -337,6 +337,58 @@ export const SOFT_ROW = {
 } as const;
 
 /**
+ * 새싹 세 획(줄기 · 왼 잎 · 오른 잎) — 24 격자. 홈의 「오늘 목표 달성」 표식과 메달 한가운데가 <b>같은 새싹</b>이라
+ * 모양을 한 곳에 둔다(표식은 획만, 메달은 잎을 채워 그린다).
+ */
+export const SPROUT_PATHS = [
+  'M12 20v-6',
+  'M12 14c0-3.5-2.5-6-6-6 0 3.5 2.5 6 6 6z',
+  'M12 14c0-3.5 2.5-6 6-6 0 3.5-2.5 6-6 6z',
+] as const;
+
+/**
+ * 목표 달성 메달 — 코인 + 리본 둘 + 새싹(시안 Soft-Goal). 이 앱의 「부푼 입체 오브젝트」는 한 화면에 하나라
+ * 달성 순간엔 이게 그 하나다.
+ *
+ * <p>튀는 움직임은 `global.css`의 `.medal-pop`(transform·opacity만, 1회). SVG 안에 글자·이미지가 없어 튀는
+ * 동안 다시 그릴 콘텐츠가 없다(T-176). 색은 그림의 색이라 리터럴이다 — 메달은 독서 모드·측정 밖에서만 선다.
+ */
+export function GoalMedal({ size = 132 }: { size?: number }) {
+  const id = `medal-coin-${size}`;
+  return (
+    <svg
+      className="medal-pop"
+      data-medal=""
+      aria-hidden="true"
+      width={size}
+      height={Math.round((size * 130) / 120)}
+      viewBox="0 0 120 130"
+      style={{ display: 'block', flex: 'none' }}
+    >
+      <defs>
+        <radialGradient id={id} cx="0.38" cy="0.32" r="0.75">
+          <stop offset="0" stopColor="#FFF8DF" />
+          <stop offset="0.7" stopColor="#EEDB97" />
+          <stop offset="1" stopColor="#D9BF6A" />
+        </radialGradient>
+      </defs>
+      <ellipse cx="60" cy="124" rx="34" ry="5" fill="rgba(94,122,90,0.22)" />
+      <path d="M40 86 L30 122 L44 114 L50 126 L58 92 Z" fill="#6E9565" />
+      <path d="M80 86 L90 122 L76 114 L70 126 L62 92 Z" fill="#3F5A3C" />
+      <circle cx="60" cy="56" r="46" fill={`url(#${id})`} />
+      <circle cx="60" cy="56" r="36" fill="none" stroke="#FFFFFF" strokeWidth="3" opacity="0.7" />
+      <ellipse cx="44" cy="30" rx="14" ry="6" fill="#FFFFFF" opacity="0.55" transform="rotate(-24 44 30)" />
+      {/* 새싹 — 24 격자의 (12,14)를 코인 중심(60,56)에 맞춰 3배로 키운다. */}
+      <g transform="translate(24 14) scale(3)" stroke="#3F5A3C" strokeWidth="1.1" strokeLinecap="round" strokeLinejoin="round">
+        <path d={SPROUT_PATHS[0]} fill="none" />
+        <path d={SPROUT_PATHS[1]} fill="#8FB087" />
+        <path d={SPROUT_PATHS[2]} fill="#A9C7A1" />
+      </g>
+    </svg>
+  );
+}
+
+/**
  * 섹션 카드 — 부푼 면 그대로. 배경이 리터럴이 아니라 토큰이라야 독서등이 이 카드도 함께 밤으로 데려간다.
  */
 export const sectionStyle = { marginTop: 20, padding: 18, ...PUFF } as const;

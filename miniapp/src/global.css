@@ -583,8 +583,11 @@ body.reading-lamp .lamp-page {
 
   background: #F9FBF7 !important; /* 인라인 `var(--adaptiveGrey100)`은 자기 요소의 재정의를 못 본다 */
   color: #232C21;
-  /* 값이 고정된 그림자 한 겹 — 페이지 래스터에 한 번 그려지고 끝이라 스크롤해도 재계산이 없다. */
-  box-shadow: 0 0 54px 16px rgba(255, 220, 160, 0.2);
+  /* 값이 고정된 그림자 한 겹 — 페이지 래스터에 한 번 그려지고 끝이라 스크롤해도 재계산이 없다.
+     `!important`인 이유(Soft PR-2): 히어로가 인라인 `box-shadow: var(--puffShadow)`를 싣는데, ⓐ 인라인이 이
+     글로우를 덮고 ⓑ 위에서 `--puffShadow`를 카드 안 타일용 낮값으로 재선언하므로 히어로 자신도 흰 .95
+     하이라이트를 받아 밤 캔버스에 흰 테가 뜬다. 밤엔 이 글로우 하나가 히어로의 그림자다(soft-surface.test). */
+  box-shadow: 0 0 54px 16px rgba(255, 220, 160, 0.2) !important;
 }
 
 /*
@@ -701,6 +704,40 @@ body .lamp-page {
 @media (prefers-reduced-motion: reduce) {
   .sheet-dim,
   .sheet-panel {
+    animation: none;
+  }
+}
+
+/*
+ * 목표 달성 메달 — 채운 순간 카드 안에서 한 번 튀어 오르고 멈춘다(시안 Soft-Goal · Soft-Intro-Done).
+ *
+ * ⚠️ 움직이는 속성은 transform·opacity뿐이고 `both`로 끝 프레임에 멈춘다(무한 반복 없음). 걸리는 노드는
+ * 메달 SVG 하나다 — 글자·이미지를 품지 않아 튀는 동안 재래스터화될 콘텐츠가 없다(T-176). 시안의 글자
+ * 올라오기(rise)는 글자를 감싼 요소에 걸려 옮기지 않았다 — 글자는 처음부터 제자리에 선다.
+ */
+@keyframes medal-pop {
+  0% {
+    transform: scale(0.55) translateY(14px);
+    opacity: 0;
+  }
+
+  60% {
+    transform: scale(1.08);
+    opacity: 1;
+  }
+
+  100% {
+    transform: none;
+    opacity: 1;
+  }
+}
+
+.medal-pop {
+  animation: medal-pop 0.7s cubic-bezier(0.2, 0.9, 0.3, 1.25) both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .medal-pop {
     animation: none;
   }
 }

@@ -1,4 +1,4 @@
-import { Button, ProgressBar } from '@toss/tds-mobile';
+import { Button } from '@toss/tds-mobile';
 import type { CSSProperties, ReactNode } from 'react';
 import { useEffect, useRef, useState } from 'react';
 
@@ -7,7 +7,7 @@ import { ApiError, waiveDebt } from '../api';
 import type { TimerMode } from '../App';
 import { useBackClose } from '../back';
 import { Coachmark } from '../coachmark';
-import { elapsedSeconds, formatClock, formatDuration } from '../format';
+import { elapsedSeconds, formatClock, formatDuration, hasFinalConsonant } from '../format';
 import {
   sessionGoalHandleLabel,
   sessionGoalSheetTarget,
@@ -28,11 +28,15 @@ import {
   Avatar,
   BookCover,
   CoverInitial,
+  DENT,
   ErrorMessage,
+  GoalMedal,
   HANDWRITING,
-  PENCIL_FRAME,
+  PUFF,
   SECTION_RULE,
   SERIF_VALUE,
+  SOFT_OUTLINE,
+  SPROUT_PATHS,
   Screen,
   SectionTitle,
   Sheet,
@@ -48,10 +52,22 @@ const AGREEMENT_KEY = 'booktimer.notificationAgreement';
 const STUDY_AGREEMENT_KEY = 'booktimer.notificationAgreement.studyGoal';
 
 /**
- * 진행바 색 — `global.css`가 TDS `--adaptiveBlue500`을 이 세이지로 재테마한다. TDS ProgressBar는
- * 색을 prop으로만 받아 CSS 변수가 안 닿으므로 값을 직접 준다(다른 초록을 쓰면 화면에 초록이 둘이 된다).
+ * 캐러셀 위치 점 — 지금 칸은 세이지, 나머지는 선 색. 토큰이라 공부 모드에서 저절로 파랑이 된다.
+ * 게스트 홈의 같은 점 줄도 이 둘을 쓴다(점 색이 두 화면에서 갈리지 않게).
  */
-export const SAGE = '#6E8A6A';
+export const DOT_ON = 'var(--adaptiveBlue500, #5B7F55)';
+export const DOT_OFF = 'var(--adaptiveGrey200, #D6DFD2)';
+
+/**
+ * 게이지 채움 — 시안 Soft-Home의 세이지 그라데이션(시작 blue400 → 끝 blue500). 트랙은 눌린 면(`DENT`)이다.
+ * 옛 TDS `ProgressBar`는 색을 prop 하나로만 받아 그라데이션을 못 그려 자체 막대로 바꿨다.
+ */
+const GAUGE_FILL = 'linear-gradient(90deg, #8FB087, #5B7F55)';
+
+/** 히어로 2열 타일의 공통 모양 — 색·그림자 틴트만 타일마다 갈린다(시안 Soft-Home). */
+const TILE = { display: 'flex', flexDirection: 'column', gap: 4, padding: '12px 14px', borderRadius: 20 } as const;
+/** 타일 윗변의 1px 빛 — 부푼 면의 흰 하이라이트를 타일 크기에 맞게 줄인 것이다. */
+const TILE_HIGHLIGHT = 'inset 0 1px 0 rgba(255, 255, 255, 0.7)';
 
 /**
  * 히어로 카드 배경 토큰 — js–css 매듭이라 이름을 한 곳에서 든다(`LAMP_PAGE_CLASS`와 같은 이유).
@@ -92,13 +108,17 @@ export function heroOverline(mode: TimerMode, achieved: boolean): string | null 
 }
 
 /**
- * 히어로 우측 상단의 「독서 | 공부」 세그먼트 — 이 앱에서 <b>모드를 바꾸는 유일한 손잡이</b>다.
+ * 히어로 머리 줄 오른쪽의 「독서 | 공부」 세그먼트 — 이 앱에서 <b>모드를 바꾸는 유일한 손잡이</b>다.
  *
- * <p>시각 알약은 21px로 작지만 <b>히트영역은 44px</b>이다 — 컨테이너 높이 + 버튼 세로 패딩이 그 몫을
- * 들고, 알약은 그 안에서 작게만 그려진다(알약 자체를 키우면 카드 머리가 뚱뚱해진다).
+ * <p>시안 Soft-Home: 눌린 트랙(`--softDent` + 1.5px 선) 위에 고른 쪽만 진한 세이지로 찬 알약이 선다.
+ * 세그먼트 버튼이 <b>그 자체로 44px</b>를 든다(시안 40 — 손가락 최소치 44를 버튼 사각형이 직접 넘게, U-8).
  *
  * <p>선택 세그먼트의 색이 <b>토큰</b>인 것이 요점이다 — `body.study-mode`가 토큰을 갈아 끼우면 이 알약도
  * 코드 한 줄 없이 파랑으로 따라온다.
+ *
+ * <p>⚠️ 선택 배경은 <b>삼항 안에</b> 둔다. `typography.test`의 「채움 버튼 개수」 가드가 소스에서
+ * `background: '` + `var(--adaptiveBlue700` 꼴을 채움 버튼으로 세므로, 그 꼴의 리터럴로 적으면 이 토글이
+ * 홈의 두 번째 채움으로 오검출된다(홈의 채움은 탭바 원 하나다).
  *
  * <p>측정 중엔 `aria-disabled`로 잠근다(진짜 `disabled`가 아니다 — 그러면 클릭이 안 와서 <b>왜</b>
  * 못 바꾸는지 말할 기회가 사라진다. 탭 잠금과 같은 문법).
@@ -124,35 +144,24 @@ export function ModeToggle({
         aria-disabled={locked ? true : undefined}
         onClick={() => (locked ? onBlocked() : onChange(target))}
         style={{
-          // flex라야 알약이 가운데 선다 — inline 흐름이면 알약이 버튼 baseline에 앉고 상속 폰트(16px)의
-          // line box strut이 아래로 민다(실측 위 4.5px / 아래 −0.5px로 테두리를 삐져나갔다).
+          // flex라야 글자가 가운데 선다 — inline 흐름이면 상속 폰트의 line box strut이 글자를 아래로 민다.
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
-          // 히트영역 44는 이제 버튼이 명시로 든다 — strut이 벌어주던 7px이 위 수정으로 사라졌다.
-          // 가로 4px은 그대로(2px일 때 실측 40.1px로 손가락 최소치에 모자랐다, 목 모드 390×844).
           minHeight: 44,
-          padding: '0 4px',
+          padding: '0 16px',
           border: 0,
-          background: 'transparent',
+          borderRadius: 999,
+          // 토큰이라 공부 모드에서 저절로 파랑이 된다 — 리터럴이면 세이지로 남는다(삼항인 이유는 위 ⚠️).
+          background: selected ? 'var(--adaptiveBlue700, #3F5A3C)' : 'transparent',
+          color: selected ? 'var(--filledInk, #FFFFFF)' : 'var(--adaptiveGrey700, #3A4637)',
+          fontFamily: 'inherit',
+          fontSize: 15,
+          fontWeight: selected ? 700 : 400,
           cursor: 'pointer',
         }}
       >
-        <span
-          style={{
-            display: 'inline-block',
-            padding: '0 8px',
-            borderRadius: 8.5,
-            // 토큰이라 공부 모드에서 저절로 파랑이 된다 — 리터럴이면 세이지로 남는다.
-            background: selected ? 'var(--accentPill, rgba(110,138,106,.18))' : 'transparent',
-            color: selected ? 'var(--adaptiveBlue700, #4F6B4C)' : 'var(--adaptiveGrey600, #6F6A5E)',
-            fontSize: 13,
-            lineHeight: '17px',
-            fontWeight: selected ? 700 : 400,
-          }}
-        >
-          {label}
-        </span>
+        {label}
       </button>
     );
   };
@@ -161,29 +170,18 @@ export function ModeToggle({
     <div
       data-mode-toggle=""
       style={{
-        position: 'absolute',
-        top: 0,
-        right: 8,
         display: 'flex',
-        alignItems: 'center',
-        height: 44, // 손가락 몫 — 알약은 이 안에서 작게 그려진다
+        flex: 'none',
+        gap: 4,
+        padding: 3,
+        borderRadius: 999,
+        background: 'var(--softDent, #E6ECE3)',
+        border: '1.5px solid var(--adaptiveGrey200, #D6DFD2)',
         opacity: locked ? 0.4 : 1,
       }}
     >
-      <span
-        style={{
-          display: 'flex',
-          alignItems: 'center',
-          height: 21,
-          padding: 2,
-          borderRadius: 10.5,
-          // 중립 종이 음영 — 모드와 무관하게 같다(홈이 「지금 어느 쪽인가」를 알약 안에서만 말하게).
-          background: 'rgba(44, 42, 36, 0.06)',
-        }}
-      >
-        {segment('reading', '독서')}
-        {segment('study', '공부')}
-      </span>
+      {segment('reading', '독서')}
+      {segment('study', '공부')}
     </div>
   );
 }
@@ -214,9 +212,9 @@ function SproutMark({ size }: { size: number }) {
       data-sprout=""
       style={{ stroke: ACCENT, flex: 'none', verticalAlign: '-2px' }}
     >
-      <path d="M12 20v-6" />
-      <path d="M12 14c0-3.5-2.5-6-6-6 0 3.5 2.5 6 6 6z" />
-      <path d="M12 14c0-3.5 2.5-6 6-6 0 3.5-2.5 6-6 6z" />
+      {SPROUT_PATHS.map((d) => (
+        <path key={d} d={d} />
+      ))}
     </svg>
   );
 }
@@ -241,10 +239,83 @@ export function FirstSessionBanner({ show }: { show: boolean }) {
   if (!show) return null;
 
   return (
-    <div style={{ marginTop: 12, padding: 14, borderRadius: 12, background: '#EFF3EE', textAlign: 'center' }}>
+    <div
+      style={{ marginTop: 12, padding: 14, borderRadius: 20, background: 'var(--adaptiveBlue50, #DCE8D6)', textAlign: 'center' }}
+    >
       <Text typography="st11" style={{ display: 'block', wordBreak: 'keep-all' }}>
         <SproutMark size={14} /> 첫 독서 기록이 심어졌어요! 기록 탭에 첫 칸이 생겼어요.
       </Text>
+    </div>
+  );
+}
+
+/**
+ * 목표를 채운 순간의 히어로 속(시안 Soft-Goal) — 메달이 한 번 튀고, 연속 일수와 「내일도 N분이면」을 말한다.
+ *
+ * <p><b>카드 안</b>이다 — 화면을 덮는 시트·딤이 아니라 히어로의 속만 갈아 끼운다(T-183). 닫는 버튼이 따로
+ * 없는 것도 그래서다: 「이어서 읽기」(측정 시작)나 탭 이동이 곧 닫기이고, 그 뒤엔 새싹 머리말이 달성을 말한다.
+ *
+ * <p>「기록 보기」는 채움이 아니라 옅은 세이지다 — 홈의 채움은 탭바 원 하나다(설계 D5).
+ */
+export function GoalReachedView({
+  streak,
+  goalSeconds,
+  todayRead,
+  onContinue,
+  onGoHistory,
+}: {
+  /** 연속 일수 — stop 응답의 잔디가 `onGraphChange`로 이미 갱신돼 오늘이 들어 있다. */
+  streak: number;
+  goalSeconds: number;
+  todayRead: number;
+  onContinue: () => void;
+  onGoHistory: () => void;
+}) {
+  const button = { height: 56, borderRadius: 18, fontFamily: 'inherit', fontSize: 17, fontWeight: 700, cursor: 'pointer' } as const;
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 16, paddingTop: 6 }}>
+      <GoalMedal />
+      <div style={{ textAlign: 'center', wordBreak: 'keep-all' }}>
+        <span style={{ display: 'block', ...SERIF_VALUE, fontSize: 26 }}>오늘 목표를 채웠어요</span>
+        <span style={{ display: 'block', marginTop: 6, fontSize: 17, lineHeight: 1.5, color: 'var(--adaptiveGrey700, #3A4637)' }}>
+          연속 {streak}일째예요.
+          <br />
+          {/* 길이가 사용자 값이라 조사를 고정할 수 없다 — 「30분이면」/「1시간 30초면」(게스트 「잔디 첫 칸」과 같은 처방). */}
+          내일도 {formatDuration(goalSeconds)}
+          {hasFinalConsonant(formatDuration(goalSeconds)) ? '이면' : '면'} {streak + 1}일이 돼요.
+        </span>
+      </div>
+      <div
+        style={{
+          alignSelf: 'stretch',
+          display: 'flex',
+          alignItems: 'center',
+          gap: 12,
+          padding: '12px 14px',
+          borderRadius: 20,
+          background: 'var(--adaptiveBlue50, #DCE8D6)',
+        }}
+      >
+        <span style={{ fontSize: 15, color: 'var(--adaptiveBlue900, #283B27)' }}>오늘 읽은 시간</span>
+        <span style={{ marginLeft: 'auto', ...SERIF_VALUE, fontSize: 24 }}>{formatClock(todayRead)}</span>
+        <svg width="26" height="26" viewBox="0 0 24 24" aria-hidden="true" style={{ flex: 'none' }}>
+          <circle cx="12" cy="12" r="11" style={{ fill: 'var(--adaptiveBlue700, #3F5A3C)' }} />
+          <path d="M6.5 12.5l3.5 3.5 7.5-8" fill="none" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round" style={{ stroke: 'var(--filledInk, #FFFFFF)' }} />
+        </svg>
+      </div>
+      <div style={{ alignSelf: 'stretch', display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: 10 }}>
+        <button type="button" onClick={onContinue} style={{ ...SOFT_OUTLINE, ...button }}>
+          이어서 읽기
+        </button>
+        <button
+          type="button"
+          onClick={onGoHistory}
+          style={{ ...button, border: 0, background: 'var(--adaptiveBlue50, #DCE8D6)', color: 'var(--adaptiveBlue700, #3F5A3C)' }}
+        >
+          기록 보기
+        </button>
+      </div>
     </div>
   );
 }
@@ -290,10 +361,10 @@ export const COVER_HEIGHT = Math.round(COVER_WIDTH * 1.4);
 
 /**
  * 트랙 세로 여백 — 아래 선택 표지의 `scale(1.1)`이 위아래로 각각 높이의 **0.05**만큼 삐져나가므로
- * 그 몫(+ 그림자 여유 2px)을 여백으로 미리 확보한다. 여기가 모자라면 커진 표지가 트랙을 세로로 넘쳐
- * 손가락에 위아래로 들썩인다(그래서 아래 `overflowY: 'hidden'`과 한 쌍이다).
+ * 그 몫(+ 선택 링 3px × 1.1 여유 4px)을 여백으로 미리 확보한다. 여기가 모자라면 커진 표지가 트랙을 세로로
+ * 넘쳐 손가락에 위아래로 들썩이고, 링 윗변이 스크롤 영역에 잘린다.
  */
-export const TRACK_V_PAD = Math.ceil(COVER_HEIGHT * 0.05) + 2;
+export const TRACK_V_PAD = Math.ceil(COVER_HEIGHT * 0.05) + 4;
 
 /**
  * 첫·마지막 표지를 가운데까지 올려 주는 여백 — **트랙의 padding이 아니라 양끝 표지의 margin으로 준다.**
@@ -436,8 +507,11 @@ export function NoBookCard({ width = COVER_WIDTH, label = '책 없이' }: { widt
         height: Math.round(width * 1.4),
         flex: '0 0 auto',
         boxSizing: 'border-box',
-        // 토큰이라야 독서등(밤)에서 이 점선도 함께 어두워진다 — 리터럴이면 밤 종이 위에 낮의 선이 뜬다.
-        border: '2px dashed var(--adaptiveGrey200, #E4DDD0)',
+        // 시안 Soft-Home 「책 없이」 점선 — 옛 grey200 점선은 부푼 면 위에서 거의 안 보였다. 중간 명도라
+        // 독서등(밤)의 「읽는 중」 카드 위에서도 보인다. 시안의 옅은 면(#F3F6F1)은 두지 않는다 — 밤 카드에
+        // 밝은 상자가 뜨고, 낮엔 카드색(#F9FBF7)과 거의 같아 투명과 구별되지 않는다. 굵기는 2px 그대로 —
+        // 서재 「책 추가」 칸과 같은 부품이라 서재 판정(PR-3)과 함께 본다.
+        border: '2px dashed #7C8A78',
         borderRadius: 4,
         display: 'flex',
         flexDirection: 'column',
@@ -452,6 +526,43 @@ export function NoBookCard({ width = COVER_WIDTH, label = '책 없이' }: { widt
         {label}
       </Text>
     </div>
+  );
+}
+
+/**
+ * 고른 칸의 체크 배지(시안 Soft-Home) — 표지 우상단 24px 원 + 흰 체크(이모지 대신 획 SVG).
+ *
+ * <p>시안은 표지 밖으로 7px 삐져나가지만 여기선 <b>안쪽에</b> 둔다: 트랙이 가로 스크롤 컨테이너라 삐져나간
+ * 배지는 세로 넘침이 돼 잘리고 트랙이 위아래로 들썩인다(`TRACK_V_PAD` 주석과 같은 사고).
+ */
+const BADGE_FILL = 'var(--adaptiveBlue700, #3F5A3C)';
+
+function CheckBadge() {
+  return (
+    <span
+      data-check-badge=""
+      aria-hidden="true"
+      style={{
+        position: 'absolute',
+        top: 4,
+        right: 4,
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        width: 24,
+        height: 24,
+        boxSizing: 'border-box',
+        borderRadius: '50%',
+        // 상수 경유인 이유: 「채움 버튼 개수」 가드가 `background: '` + 진한 세이지 토큰 리터럴 꼴을 채움 버튼으로
+        // 센다 — 배지는 버튼이 아닌데 그 꼴로 적으면 홈의 두 번째 채움으로 오검출된다(모드 토글과 같은 사정).
+        background: BADGE_FILL,
+        border: '2px solid var(--adaptiveGrey100, #F9FBF7)',
+      }}
+    >
+      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" strokeWidth="3.5" strokeLinecap="round" strokeLinejoin="round" style={{ stroke: 'var(--filledInk, #FFFFFF)' }}>
+        <path d="M5 12.5l4.5 4.5L19 7.5" />
+      </svg>
+    </span>
   );
 }
 
@@ -585,9 +696,14 @@ export function BookCarousel<T extends BookOption>({
                 border: 'none',
                 background: 'transparent',
                 cursor: 'pointer',
-                // 가운데 온 칸만 또렷하게 — 스냅 위치를 색·크기로도 말해 준다.
+                // 가운데 온 칸만 크게 + 링·체크 배지(시안 Soft-Home). 안 고른 칸은 .7 — .45로 흐리면 40대
+                // 이상 눈엔 「없는 책」으로 읽혀 흐림으로 지우지 않는다.
+                position: 'relative',
                 transform: current ? 'scale(1.1)' : 'scale(1)',
-                opacity: current ? 1 : 0.45,
+                opacity: current ? 1 : 0.7,
+                // 링은 blur 0 한 겹이라 싸다(표지는 이미지 — 흐린 그림자를 두르지 않는다, T-176).
+                boxShadow: current ? '0 0 0 3px var(--adaptiveBlue700, #3F5A3C)' : undefined,
+                borderRadius: 4,
                 transition: 'transform 0.2s ease, opacity 0.2s ease',
               }}
             >
@@ -597,6 +713,7 @@ export function BookCarousel<T extends BookOption>({
                 // 표지 없음·로드 실패 분기는 BookCover가 든다 — title을 주면 첫 글자 + 제목색으로 떨어진다.
                 <BookCover url={item.coverUrl} title={item.title} width={COVER_WIDTH} eager />
               )}
+              {current && <CheckBadge />}
             </button>
           );
         })}
@@ -653,7 +770,7 @@ export function BookCarousel<T extends BookOption>({
                 width: 6,
                 height: 6,
                 borderRadius: '50%',
-                background: current ? SAGE : '#E4DDD0',
+                background: current ? DOT_ON : DOT_OFF,
               }}
             />
           );
@@ -1061,9 +1178,10 @@ export function AccountSection({
             // 시안 25는 계단(typography.test `SCALE`)에 없어 t3(26)로 **올려** 붙였다 — A가 정한
             // 「섹션 제목은 올림, 내리면 시안 의도가 죽는다」 그대로다. 홈엔 `Screen` 제목이 없어
             // t3와 부딪히지 않는다. (책방 닉네임 Profile.tsx는 19 — 그 화면은 2a~2e 밖이다.)
+            // Soft(시안 Soft-Home)에서 28로 — 계단 t3(28)와 같은 칸이다.
             ...SERIF_VALUE,
-            fontSize: 26,
-            color: 'var(--adaptiveGrey900, #3A362E)',
+            fontSize: 28,
+            color: 'var(--adaptiveGrey900, #1B221A)',
             overflow: 'hidden',
             textOverflow: 'ellipsis',
             whiteSpace: 'nowrap',
@@ -1074,7 +1192,7 @@ export function AccountSection({
         {loginId !== null && (
           <span
             data-handle={loginId}
-            style={{ display: 'block', marginTop: 1, fontSize: 13, color: 'var(--adaptiveGrey600, #6F6A5E)' }}
+            style={{ display: 'block', marginTop: 2, fontSize: 15, color: 'var(--adaptiveGrey600, #4E5A4B)' }}
           >
             @{loginId}
           </span>
@@ -1169,6 +1287,9 @@ export function Home({
   onSetSessionGoal = () => Promise.resolve(),
   chatUnread,
   onOpenChat,
+  goalReached = false,
+  onContinueReading = () => {},
+  onGoHistory = () => {},
 }: {
   dashboard: DashboardResponse;
   /** 지금 재는 것 — 히어로 한 장이 이 값으로 두 얼굴을 갖는다(파생은 App이 한다). */
@@ -1221,6 +1342,15 @@ export function Home({
    */
   chatUnread?: number;
   onOpenChat?: () => void;
+  /**
+   * 방금 하루 목표를 넘겼다 — 상태는 `MainTabs`가 든다(측정 종료 응답 한 번으로 켜고, 시작·탭 이동에 끈다).
+   * 선택 프롭인 이유는 옛 하니스들이다 — 안 넘기면 메달이 없는 평소 홈이다.
+   */
+  goalReached?: boolean;
+  /** 메달 화면의 「이어서 읽기」 — 탭바 원과 같은 동작(측정 시작)이다. */
+  onContinueReading?: () => void;
+  /** 메달 화면의 「기록 보기」 — 기록 탭으로 간다(탭 이동이 메달을 끈다). */
+  onGoHistory?: () => void;
 }) {
   /** 측정할 책 — 아직 안 골랐으면 기본값(이어 읽기)으로 떨어진다. 고른 값은 App이 들어 화면을 나갔다 와도 남는다. */
   const selectedBookId = picked === undefined ? defaultBookId(dashboard.readingBooks, dashboard.recentBookId) : picked;
@@ -1283,6 +1413,8 @@ export function Home({
       : 0;
   // 측정 중이면 elapsed가 매초 늘어 todayRead도 매초 늘어난다 — 카운트업의 동력이 이 한 줄이다.
   const { todayRead, remaining, overflow, progress, achieved } = todayProgress(dashboard, elapsed);
+  /** 메달은 독서 하루 목표의 것이고, 다시 재기 시작하면 제 역할을 다했다(히어로가 측정 중 화면으로 돌아간다). */
+  const showMedal = goalReached && mode === 'reading' && !dashboard.hasActiveSession;
   /** 공부 경과 — 서버가 준 완료 합에 진행 중 몫을 클라가 매초 얹는다(독서 히어로와 같은 분업). */
   const studyElapsed =
     study.hasActiveSession && study.activeStartedAt !== null ? elapsedSeconds(study.activeStartedAt, now) : 0;
@@ -1372,56 +1504,57 @@ export function Home({
       <div
         className={LAMP_PAGE_CLASS}
         style={{
-          // 모드 토글이 카드 모서리에 붙는다 — 그 좌표의 기준이 이 카드다.
-          position: 'relative',
-          padding: '28px 20px',
-          borderRadius: 16,
+          // 부푼 면(시안 Soft-Home). ⚠️ 밤(독서등)엔 `global.css`의 `.lamp-page` 등불 글로우가 `!important`로
+          // 이 인라인 그림자를 이긴다 — 안 그러면 카드 안 타일용으로 재선언된 낮 `--puffShadow`의 흰 .95
+          // 하이라이트가 밤 캔버스 위에 뜬다(soft-surface.test가 그 선언을 잰다).
+          ...PUFF,
+          borderRadius: 30,
+          padding: 20,
           // 이 카드 <b>한 장만</b>의 토큰이다(grey100은 전 화면 공용이라 스왑하면 앱이 통째로 파래진다).
           // 공부 모드에서 화면 최대 면이 색으로 말하는 자리 — 값은 `global.css`가 정한다.
-          background: `var(${HERO_CARD_BG_VAR}, #FCFAF5)`,
-          border: '1px solid transparent',
-          borderImage: PENCIL_FRAME,
-          textAlign: 'center',
+          background: `var(${HERO_CARD_BG_VAR}, #F9FBF7)`,
         }}
       >
         {/* 첫 사용 안내는 이 카드 <b>속을 통째로</b> 가져간다 — 처음 온 사람에게 이 박스는 타이머가
             아니라 안내 시작 버튼이다(M-1, 2026-08-23 실기기 제보: 헤더 아래 얇은 배너는 놓치기 쉬웠다).
             껍데기(연필 테두리·독서등 표식)가 여기 남아 자리가 안 흔들리고, 안내를 닫으면 그 자리에서
             평소의 타이머로 돌아온다. 만드는 쪽은 흐름을 든 `MainTabs`다 — 안 본 길 안내가 있고 측정
-            중이 아닐 때만 노드가 오므로, 「측정 중 N분」이 안내에 덮이는 일은 없다. */}
-        {guide ?? (
-          <>
-          {/* 모드 손잡이 — 카드 우측 상단. 첫 사용 안내가 카드를 통째로 가져간 동안엔 서지 않는다
-              (안내 위에 다른 손잡이를 겹치지 않는다). */}
-          <ModeToggle
-            mode={mode}
-            locked={measuring}
-            onChange={onChangeMode}
-            onBlocked={onBlockedModeChange}
+            중이 아닐 때만 노드가 오므로, 「측정 중 N분」이 안내에 덮이는 일은 없다.
+            주의: 메달이 안내보다 <b>먼저</b>다 — 안내 기록이 없는 기기(새 사용자)는 측정을 끝내는 순간 안내가
+            카드를 되찾는데, 순서가 반대면 그 순간의 메달이 가려지고, 나중에 ✕를 누를 때 맥락 없이 튄다. */}
+        {showMedal ? (
+          <GoalReachedView
+            streak={dashboard.graph.currentStreak}
+            goalSeconds={goal}
+            todayRead={todayRead}
+            onContinue={onContinueReading}
+            onGoHistory={onGoHistory}
           />
-          {/* 라벨과 값은 각자 블록이어야 세로로 쌓인다 — 같은 줄에 붙으면 "오늘 읽은 시간45:00"으로 읽힌다. */}
-          <div>
-            {/* 오버라인 — 자간을 벌려 「제목이 아니라 머리말」로 읽히게 한다(시안 2a 자간 3 · 세이지, 크기는
-                Soft 바닥 상향으로 14). 아래 62px 값과 크기 차가 크므로 색·자간이 그 사이를 잇는다. */}
-            <span
-              style={{
-                fontSize: 14,
-                letterSpacing: 3,
-                color: ACCENT,
-              }}
-            >
+        ) : (
+          guide ?? (
+          <>
+          {/* 머리 줄(시안 Soft-Home) — 왼쪽 머리말, 오른쪽 모드 손잡이. 첫 사용 안내가 카드를 통째로 가져간
+              동안엔 서지 않는다(안내 위에 다른 손잡이를 겹치지 않는다). */}
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
+            {/* 머리말 — 흐린 잉크 16, 자간 없음(시안). 옛 자간 3 세이지 머리말은 가운데 정렬 카드의 것이었다. */}
+            <span style={{ minWidth: 0, fontSize: 16, color: 'var(--adaptiveGrey600, #4E5A4B)' }}>
               {/* 달성일 때만 새싹이 선다 — 평소 머리말은 글자 그대로여서 미달성 렌더가 안 흔들린다.
                   새싹은 독서 하루 목표의 것이다 — 공부 하루 목표는 폐기돼(2026-09-13, Q6) 공부엔 오지 않는다. */}
               {heroOverline(mode, mode === 'reading' && achieved) ?? (
                 <>
-                  <SproutMark size={13} /> 오늘 목표 달성
+                  <SproutMark size={15} /> 오늘 목표 달성
                 </>
               )}
             </span>
+            <ModeToggle
+              mode={mode}
+              locked={measuring}
+              onChange={onChangeMode}
+              onBlocked={onBlockedModeChange}
+            />
           </div>
-          <div style={{ marginTop: 6 }}>
-            {/* 세리프 + t2(44px) — 이 화면이 답하려는 유일한 수다. 개구 26px일 땐 화면 제목(22px)보다
-                4px 큰 게 전부라 히어로로 읽히지 않았다. */}
+          <div style={{ marginTop: 16, textAlign: 'center' }}>
+            {/* 세리프 + t2(62px) — 이 화면이 답하려는 유일한 수다. */}
             {/* 공부 모드에선 잉크색이 바뀐다 — 화면 최대 활자가 「파란 펜」이 되는 것이라 종이·연필
                 서사를 깨지 않는다(토큰 경유라 값은 css가 정한다). */}
             <Text
@@ -1439,7 +1572,30 @@ export function Home({
           */}
           {mode === 'study' ? null : progress !== null ? (
             <div style={{ marginTop: 16 }}>
-              <ProgressBar progress={progress} size="normal" color={SAGE} />
+              {/* 게이지 — 눌린 트랙 안에 세이지 그라데이션 막대(시안 Soft-Home). 막대의 윗 하이라이트는 정적이다. */}
+              <div
+                data-gauge-track=""
+                role="progressbar"
+                aria-label="오늘 목표 진행률"
+                aria-valuemin={0}
+                aria-valuemax={100}
+                aria-valuenow={Math.round(progress * 100)}
+                aria-valuetext={`${Math.round(progress * 100)}%`}
+                style={{ ...DENT, position: 'relative', height: 20, borderRadius: 999 }}
+              >
+                <div
+                  style={{
+                    position: 'absolute',
+                    left: 3,
+                    top: 3,
+                    bottom: 3,
+                    width: `calc((100% - 6px) * ${progress})`, // 트랙 안쪽 폭(양옆 3px 뺀 값)의 비율
+                    borderRadius: 999,
+                    background: GAUGE_FILL,
+                    boxShadow: 'inset 0 2px 0 rgba(255, 255, 255, 0.35)',
+                  }}
+                />
+              </div>
               {/*
                 2열 통계 — 「남은 시간 | 하루 목표」. 옛 자리는 "남은시간 : 15:00 ⓘ" 대시 밑줄 한 줄이
                 전부였고, 그 한 줄이 **설명과 이동을 겸했다**(UX 감사 3e). 여기서 역할을 가른다:
@@ -1449,8 +1605,10 @@ export function Home({
                 잠갔는데, 그러면 **목표를 다 채운 사람은 홈에서 목표를 바꿀 길이 통째로 사라졌다** —
                 카드 안 `GoalHandle`은 목표가 0일 때만 서기 때문이다. 달성이 문을 닫아선 안 된다.
               */}
-              <div style={{ display: 'flex', marginTop: 12 }}>
-                <div style={{ flex: 1, minWidth: 0 }}>
+              {/* 두 타일 — 「남은 시간」은 버터(모드 무관 정보색), 「하루 목표」는 옅은 세이지(모드색). 타일 그림자는
+                  화면당 이 둘뿐이라 큰 흐림 예산 안이다(설계 §6). */}
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: 12, marginTop: 16 }}>
+                <div style={{ ...TILE, background: 'var(--butterBg, #F2E8C6)', boxShadow: `${TILE_HIGHLIGHT}, 5px 5px 12px rgba(160, 140, 70, 0.18)` }}>
                   {/* ⓘ는 라벨에 붙는다 — 값이 아니라 「남은 시간」이라는 개념을 설명하는 손잡이다. */}
                   <button
                     type="button"
@@ -1459,16 +1617,13 @@ export function Home({
                     style={{
                       display: 'flex',
                       alignItems: 'center',
-                      justifyContent: 'center',
                       gap: 4,
-                      width: '100%',
                       padding: 0,
                       border: 0,
                       background: 'transparent',
-                      color: 'var(--adaptiveGrey600, #6F6A5E)',
-                      // 시안 11.5는 계단(typography.test `SCALE`)에 없어 st13에 맞춘다 — Soft 재테마가
-                      // 바닥을 13으로 올려 지금은 13이다(규칙 1 「최소 13px」).
-                      fontSize: 13,
+                      color: 'var(--butterInk, #5A4A14)',
+                      fontFamily: 'inherit',
+                      fontSize: 15,
                       cursor: 'pointer',
                     }}
                   >
@@ -1476,47 +1631,56 @@ export function Home({
                     {/* 색은 속성이 아니라 style로 준다 — 프레젠테이션 속성엔 `var()`가 안 먹는다(토큰이
                         죽으면 독서등에서 이 아이콘만 낮 색으로 남는다). */}
                     <svg
-                      width="13"
-                      height="13"
+                      width="15"
+                      height="15"
                       viewBox="0 0 24 24"
                       fill="none"
                       strokeWidth="2"
                       strokeLinecap="round"
-                      style={{ stroke: ACCENT, flex: 'none' }}
+                      style={{ stroke: 'var(--butterInk, #5A4A14)', flex: 'none' }}
                     >
                       <circle cx="12" cy="12" r="9" />
                       <path d="M12 11v5M12 7.5v.5" />
                     </svg>
                   </button>
-                  <div style={{ ...SERIF_VALUE, fontSize: 19, fontWeight: 700, marginTop: 2 }}>
-                    {formatClock(remaining)}
-                  </div>
+                  <div style={{ ...SERIF_VALUE, fontSize: 24 }}>{formatClock(remaining)}</div>
                 </div>
-                <div style={{ width: 1, background: 'rgba(44, 42, 36, 0.12)' }} />
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ fontSize: 13, color: 'var(--adaptiveGrey600, #6F6A5E)' }}>하루 목표</div>
-                  <div style={{ ...SERIF_VALUE, fontSize: 19, fontWeight: 700, marginTop: 2 }}>
-                    {formatClock(goal)}
+                <div
+                  style={{
+                    ...TILE,
+                    flexDirection: 'row',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    // 목표가 1시간을 넘거나(「1:00:00」) 좁은 폰이면 값과 손잡이가 한 줄에 안 든다 — 손잡이가 아래로 내려선다.
+                    flexWrap: 'wrap',
+                    gap: 6,
+                    paddingRight: 10,
+                    background: 'var(--adaptiveBlue50, #DCE8D6)',
+                    boxShadow: `${TILE_HIGHLIGHT}, 5px 5px 12px rgba(94, 122, 90, 0.18)`,
+                  }}
+                >
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 4, minWidth: 0 }}>
+                    <span style={{ fontSize: 15, color: 'var(--adaptiveBlue900, #283B27)' }}>하루 목표</span>
+                    <span style={{ ...SERIF_VALUE, fontSize: 24 }}>{formatClock(goal)}</span>
                   </div>
-                  {/* 목표로 가는 명시적 문. 전면광고 로드에 1~2초가 걸려 그동안 라벨이 그대로면
-                      눌러도 아무 일 없는 것처럼 보인다 — 대기 사실이 목표값보다 우선이다. */}
+                  {/* 목표로 가는 명시적 문 — 1.5px 실선 보조 손잡이(규칙 1). 전면광고 로드에 1~2초가 걸려
+                      그동안 라벨이 그대로면 눌러도 아무 일 없는 것처럼 보인다 — 대기 사실이 목표값보다 우선이다. */}
                   <button
                     type="button"
                     onClick={onGoGoal}
                     disabled={goalAdPending}
                     style={{
-                      marginTop: 5,
-                      padding: '3px 10px',
-                      border: 0,
-                      borderRadius: 8,
-                      background: 'rgba(110, 138, 106, 0.14)',
-                      color: ACCENT,
-                      fontSize: 14,
+                      ...SOFT_OUTLINE,
+                      flex: 'none',
+                      minHeight: 44,
+                      padding: '0 12px',
+                      fontFamily: 'inherit',
+                      fontSize: 15,
                       fontWeight: 700,
                       cursor: 'pointer',
                     }}
                   >
-                    {goalAdPending ? '준비 중…' : goal > 0 ? '변경 ›' : '정하기 ›'}
+                    {goalAdPending ? '준비 중…' : goal > 0 ? '변경' : '정하기'}
                   </button>
                 </div>
               </div>
@@ -1533,7 +1697,7 @@ export function Home({
                   remainingSeconds={remaining}
                   carryover={dashboard.carryover}
                 >
-                  {/* 목표 손잡이는 위 「변경 ›」 알약이 가져갔다 — 같은 일을 하는 문이 한 상자에 둘이면
+                  {/* 목표 손잡이는 위 「변경」 손잡이가 가져갔다 — 같은 일을 하는 문이 한 상자에 둘이면
                       어느 쪽이 진짜인지 사용자가 고민한다.
                       광고는 죄책감이 뜬 이 자리에만 나타난다. 문구에 "광고"를 명시해 광고 위장 금지 조항을 지킨다. */}
                   {showWaiverButton(dashboard.carriedDebtSeconds, dashboard.debtWaiverAvailable, REWARD_AD_GROUP_ID) && (
@@ -1563,7 +1727,10 @@ export function Home({
             </div>
           )}
           {mode === 'study' && study.hasActiveSession && (
-            <>
+            // 공부 측정 줄은 게이지·타일 없이 가운데 시계 <b>바로 밑</b>에 서서, 왼쪽 정렬이면 시계와 어긋나 보였다
+            // (목 모드 실측). 독서 측정 줄은 전폭 타일 밑이라 타일의 왼쪽 선을 따르는 게 맞아 그대로 둔다.
+            // 정렬은 감싼 div가 든다 — TDS `Text`는 style의 textAlign을 거른다(T-216).
+            <div style={{ textAlign: 'center' }}>
               <Text typography="t5" color="blue500" style={{ display: 'block', marginTop: 16 }}>
                 측정 중 {formatDuration(studyElapsed)}
                 {study.activeBook != null && ` · ${study.activeBook.title}`}
@@ -1584,7 +1751,7 @@ export function Home({
               <Text typography="st12" color="grey600" style={{ display: 'block', marginTop: 6 }}>
                 {ACTIVE_STUDY_RELIEF}
               </Text>
-            </>
+            </div>
           )}
           {mode === 'reading' && dashboard.hasActiveSession && (
             <>
@@ -1600,7 +1767,7 @@ export function Home({
             </>
           )}
           </>
-        )}
+          ))}
       </div>
 
       {/* 축하는 <b>독서</b> 기록에 대한 말이다(「기록 탭에 첫 칸이 생겼어요」 — 공부는 그 탭에 안 남는다).

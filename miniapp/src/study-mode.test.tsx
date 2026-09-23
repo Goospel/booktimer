@@ -716,7 +716,7 @@ describe('모드 토글', () => {
   });
 
   it('선택 세그먼트는 토큰을 탄다 — 공부 모드에서 저절로 파랑이 된다', () => {
-    expect(toggle('reading')).toContain('--accentPill');
+    expect(toggle('reading')).toContain('background:var(--adaptiveBlue700');
   });
 
   it('측정 중이면 잠긴다 — 진짜 disabled가 아니라 aria-disabled라야 이유를 말할 기회가 남는다', () => {
@@ -729,8 +729,10 @@ describe('모드 토글', () => {
     expect(toggle('reading')).not.toContain('aria-disabled');
   });
 
-  it('히트영역은 44px 컨테이너가 든다 — 알약은 작아도 손가락은 닿아야 한다', () => {
-    expect(toggle('reading')).toContain('height:44px');
+  it('세그먼트는 눌린 트랙 위에 선다(시안 Soft-Home) — 절대위치가 아니라 머리 줄의 흐름 안이다', () => {
+    const markup = toggle('reading');
+    expect(markup).toContain('background:var(--softDent');
+    expect(markup).not.toContain('position:absolute');
   });
 
   /**

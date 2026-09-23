@@ -434,6 +434,23 @@ export function shouldShowGuideHero(running: boolean, closed: boolean, measuring
   return !running && !closed && !measuring && flowStepsOnAbandon().some((name) => !coachmarkSeen(name));
 }
 
+/**
+ * 측정 하나가 하루 목표를 <b>넘겼는가</b> — 종료 직전 스냅샷과 종료 응답을 비교한다.
+ *
+ * <p>`todayProgress().achieved`로 메달을 켜면 안 된다: 매 렌더 다시 계산되는 파생값이라 「방금 넘었다」를
+ * 모르고, 이미 채운 날엔 홈을 열 때마다 메달이 튄다. 목표 0은 채울 것이 없으니 거짓이다.
+ */
+export function crossedGoal(
+  before: Pick<TimerState, 'todayReadSeconds' | 'todayGoalSeconds'>,
+  after: Pick<TimerState, 'todayReadSeconds' | 'todayGoalSeconds'>,
+): boolean {
+  return (
+    after.todayGoalSeconds > 0 &&
+    before.todayReadSeconds < before.todayGoalSeconds &&
+    after.todayReadSeconds >= after.todayGoalSeconds
+  );
+}
+
 export function flowStepsOnAbandon(): string[] {
   return COACHMARK_FLOW.filter((step) => step.bubble !== undefined).map((step) => step.name);
 }
@@ -1530,6 +1547,16 @@ export function MainTabs({
   const [shelfEpoch, setShelfEpoch] = useState(0);
   /** 첫 완료 축하 — 홈에 prop으로 내린다. 다른 탭에서 끝냈어도 홈에 돌아오면 배너가 보인다. */
   const [celebrate, setCelebrate] = useState(false);
+  /**
+   * 방금 하루 목표를 넘었다 — 홈 히어로 속이 메달 화면이 된다. 켜는 건 측정 종료 응답 한 번뿐이고
+   * ({@link crossedGoal}), 다시 재기 시작하거나 홈·독서를 떠나면 꺼진다(달성 표식은 새싹 머리말이 이어받는다).
+   */
+  const [goalReached, setGoalReached] = useState(false);
+  // 끄는 자리를 한 곳에 모은다 — 탭이 바뀌는 길(탭바·코치마크·기록 보기)과 모드가 뒤집히는 길(토글·공부 시작·
+  // 다른 기기)이 전부 이 두 값을 지난다. 바뀔 때만 도므로 다른 탭에서 끝낸 달성은 홈에 돌아오면 그대로 뜬다.
+  useEffect(() => {
+    if (tab !== 'home' || mode !== 'reading') setGoalReached(false);
+  }, [tab, mode]);
   /** 액션 실패 문구 — 다른 탭엔 홈의 ErrorMessage가 없으므로 탭바 위 스트립으로 띄운다. */
   const [actionError, setActionError] = useState<string | null>(null);
   /**
@@ -1759,6 +1786,8 @@ export function MainTabs({
           onTimerChange(result.timer);
           onGraphChange(result.graph); // stop 응답에 잔디가 동봉돼 새로고침 없이 즉시 갱신된다.
           setCelebrate(result.firstCompletedSession);
+          // 종료 직전 스냅샷(`dashboard`)과 응답을 비교한다 — 이미 채운 날 또 재면 거짓이라 메달이 한 번만 튄다.
+          setGoalReached(crossedGoal(dashboard, result.timer));
           // 이 앱의 핵심 전환 — 콘솔 대표 전환이 이 이벤트라, 빠지면 지표 자체가 죽는다.
           trackEvent('reading_session_completed', { duration_seconds: duration });
           // 종료 직후 시트를 저절로 연다(태깅은 지금 기억이 가장 선명하다). 붙일 책이 0권이면 열지 않는다 —
@@ -1770,6 +1799,7 @@ export function MainTabs({
         .finally(() => setBusy(false));
     } else {
       setCelebrate(false); // 지난 세션의 축하가 새 측정 화면에 남아 있으면 거짓말이 된다.
+      setGoalReached(false);
       onStartTimer()
         .then((timer) => {
           // 책은 서버가 확정한 값을 쓴다(`?? null`은 이 필드를 안 주는 옛 서버 방어 — api.ts의 기존 규약).
@@ -1892,6 +1922,9 @@ export function MainTabs({
             }
             chatUnread={chat?.unread}
             onOpenChat={chat?.onOpenInbox}
+            goalReached={goalReached}
+            onContinueReading={timerAction}
+            onGoHistory={() => changeTab('history')}
           />
         )}
         {/* 서재 탭은 두 모드 공통이지만 화면은 갈린다 — 공부 책과 독서 책이 섞이지 않는 것이 요구 그 자체다. */}
