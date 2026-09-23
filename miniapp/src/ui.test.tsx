@@ -19,7 +19,6 @@ import {
   coverColor,
   coverSource,
   initialOf,
-  sectionStyle,
 } from './ui';
 import { graph, stubLocalStorage, userAgent } from './test-fixtures';
 
@@ -163,7 +162,7 @@ describe('잔디 렌더', () => {
     // 웹 app.css --grass-0..4 와 같은 값(잔디 색의 단일 출처는 웹 브랜드 팔레트다).
     // 토큰 경유 — 공부 모드가 `body.study-mode`에서 이 토큰을 파랑 사다리로 갈아 끼운다.
     // 리터럴은 fallback으로 남아 독서 렌더의 색은 한 픽셀도 안 바뀐다.
-    const colors = ['#EAE4D7', '#C3D9B0', '#94BE7F', '#5E9250', '#35662F'];
+    const colors = ['#E3E9E0', '#C9DAC4', '#A3C09B', '#6E9565', '#3F5A3C']; // Soft 범례 5칸
     colors.forEach((color, i) => {
       expect(markup).toContain(`background:var(--grass${i}, ${color})`);
     });
@@ -298,20 +297,18 @@ describe('섹션 카드·화면 제목', () => {
   // 섹션은 "읽는 중인 책"이 있을 때만 그려진다 — 빈 서재로는 카드 자체가 안 나온다.
   const markup = home({ readingBooks: [{ id: 1, title: '데미안', coverUrl: null, author: null }] });
 
-  it('섹션은 크림 캔버스 위 카드지로 뜬다 — 배경만으로는 종이톤끼리 경계가 안 보인다', () => {
-    // 리터럴이 아니라 토큰이라야 독서등(밤)이 이 카드도 함께 데려간다 — 값은 여전히 웹 --card-bg다.
-    expect(markup).toContain('background:var(--adaptiveGrey100, #FCFAF5)');
-    // 경계를 긋는 주체가 1px 실선에서 연필선(border-image)으로 바뀌었다. 테두리가 통째로 빠지면
-    // 종이톤 카드가 종이톤 캔버스에 녹아 사라지므로, 그리는 수단이 실재하는지를 못 박는다.
-    expect(markup).toContain('border:1px solid transparent');
-    expect(markup).toMatch(/border-image:url\(&quot;data:image\/svg\+xml/);
+  it('섹션은 바탕 위 부푼 면으로 뜬다 — 배경만으로는 옅은 톤끼리 경계가 안 보인다', () => {
+    // 리터럴이 아니라 토큰이라야 독서등(밤)이 이 카드도 함께 데려간다.
+    expect(markup).toContain('background:var(--adaptiveGrey100, #F9FBF7)');
+    // 경계를 긋는 주체가 연필선(border-image)에서 부푼 그림자로 바뀌었다(Soft 재테마). 그림자가 통째로
+    // 빠지면 옅은 카드가 옅은 바탕에 녹아 사라지므로, 그리는 수단이 실재하는지를 못 박는다.
+    expect(markup).toContain('box-shadow:var(--puffShadow');
   });
 
-  it('그림 폭을 border-width와 분리해 레이아웃을 밀지 않는다', () => {
+  it('연필 그림 폭을 border-width와 분리해 레이아웃을 밀지 않는다 (PR-5 철거 전까지 남은 자리)', () => {
     // `8 / 8px`의 뒷값이 화면에 그릴 폭이고, 요소의 border는 1px 그대로다. 이 분리가 깨지면
     // 테두리가 두꺼워진 만큼 카드가 커져 화면 전체가 밀린다.
     expect(PENCIL_FRAME).toMatch(/\s8\s\/\s8px\sstretch$/);
-    expect(sectionStyle.border).toBe('1px solid transparent');
   });
 
   it('타일 반복(round)이 아니라 stretch다 — 농도 얼룩이 이음매마다 끊긴다', () => {
@@ -358,9 +355,9 @@ describe('배경·color-scheme', () => {
     expect(read('../index.html')).toContain('name="color-scheme" content="light"');
   });
 
-  it('body에 웹 종이톤 캔버스를 칠한다 — 투명이면 기기 다크 캔버스가 그대로 비친다', () => {
+  it('body에 Soft 바탕을 칠한다 — 투명이면 기기 다크 캔버스가 그대로 비친다', () => {
     // `html body`(0-0-2)여야 한다 — TDS가 나중에 주입하는 `body`(0-0-1) 규칙과 동률이면 순서로 진다.
-    expect(read('./global.css')).toMatch(/html\s+body\s*\{[^}]*background:\s*#F7F2E8/); // 웹 --bg
+    expect(read('./global.css')).toMatch(/html\s+body\s*\{[^}]*background:\s*#EEF2EB/); // 시안 body
   });
 
   it('목표 휠 페이드가 캔버스와 같은 색이다 — 어긋나면 휠 위아래에 띠가 진다', () => {
@@ -403,15 +400,15 @@ describe('웹 브랜드 재테마 (global.css)', () => {
     expect(override).not.toBe('');
   });
 
-  it('블루 계열을 웹 세이지로 갈아끼운다 — 버튼·선택 탭이 여기서 결정된다', () => {
-    expect(override).toMatch(/--adaptiveBlue500:\s*#6E8A6A/); // 웹 --accent
-    expect(override).toMatch(/--adaptiveBlue700:\s*#4F6B4C/); // 웹 --accent-hover
+  it('블루 계열을 Soft 세이지로 갈아끼운다 — 버튼·선택 탭이 여기서 결정된다', () => {
+    expect(override).toMatch(/--adaptiveBlue500:\s*#5B7F55/); // 시안 측정 점·막대 끝
+    expect(override).toMatch(/--adaptiveBlue700:\s*#3F5A3C/); // 시안 주 버튼
   });
 
-  it('표면·잉크를 웹 종이톤으로 갈아끼운다', () => {
-    expect(override).toMatch(/--adaptiveBackground:\s*#FCFAF5/); // 웹 --card-bg
-    expect(override).toMatch(/--adaptiveGrey100:\s*#FCFAF5/);
-    expect(override).toMatch(/--adaptiveGrey600:\s*#6F6A5E/); // 웹 --muted
+  it('표면·잉크를 Soft 톤으로 갈아끼운다', () => {
+    expect(override).toMatch(/--adaptiveBackground:\s*#F9FBF7/); // 시안 .puff
+    expect(override).toMatch(/--adaptiveGrey100:\s*#F9FBF7/);
+    expect(override).toMatch(/--adaptiveGrey600:\s*#4E5A4B/); // 흐린 글자 — 카드 위 6.98:1
   });
 
   it('본문 폰트를 고운돋움으로 잡고 실제로 받아온다 — 스택만 바꾸면 폰트가 없어 시스템 폰트로 떨어진다', () => {
@@ -436,34 +433,15 @@ describe('웹 브랜드 재테마 (global.css)', () => {
  * 대부분의 픽셀은 완전투명이고 드문 입자만 어둡게 얹혀, 결은 남되 밑에 깔린 색을 들어올리지 않는다.
  */
 describe('종이 결 (global.css)', () => {
-  const css = readFileSync(new URL('./global.css', import.meta.url), 'utf8');
-  // 여는 중괄호까지 붙여 규칙 블록을 잡는다 — 두 이름 다 위쪽 주석에서 먼저 언급돼(파일 8행의
-  // `html:root`) 중괄호 없이 자르면 구간이 통째로 비고, 그러면 not.* 단언이 공허하게 통과한다.
-  const veil = css.slice(css.indexOf('body::before {'), css.indexOf('html:root {'));
+  // Soft 재테마(2026-09-23)에서 걷었다 — 표면 언어가 종이가 아니라 부푼 면이라, 결 입자가 그림자
+  // 하이라이트(흰 빛)와 싸운다. 덤으로 전면 노이즈 타일 2겹 페인트가 사라진다. 옛 결의 함정(회색 장막 ·
+  // fixed · 밀도)은 T-191~193에 남아 있다. 되살아나면 그 함정들을 다시 밟으므로 부재를 잠근다.
+  const live = readFileSync(new URL('./global.css', import.meta.url), 'utf8').replace(/\/\*[\s\S]*?\*\//g, '');
 
-  it('노이즈를 색이 아니라 알파로 얹는다 — 무채색 회색을 깔면 표지의 검정이 들려 뿌옇게 바랜다', () => {
-    expect(veil).toMatch(/feColorMatrix type='matrix'/); // 알파 행을 직접 쓴다
-    expect(veil).not.toContain("type='saturate'"); // 회색 장막
-  });
-
-  it('레이어 전체를 반투명으로 깔지 않는다 — opacity는 밑의 모든 픽셀을 함께 들어올린다', () => {
-    expect(veil).not.toMatch(/opacity:\s*0?\.\d/);
-  });
-
-  it('결이 종이와 함께 스크롤한다 — fixed면 뷰포트에 못 박혀 결만 제자리에 남는다', () => {
-    expect(veil).toMatch(/position:\s*absolute/);
-    expect(veil).not.toMatch(/position:\s*fixed/);
-  });
-
-  it('absolute의 기준을 body로 잡는다 — 기준이 없으면 초기 컨테이닝 블록(첫 화면 높이)만 덮는다', () => {
-    expect(css).toMatch(/body\s*\{[^}]*position:\s*relative/);
-  });
-
-  it('떠 있는 것 밑에 깔린다 — 결이 고정 요소 위를 미끄러지면 같은 어색함이 뒤집혀 재발한다', () => {
-    // 미니앱의 고정 요소: 탭바 100 · 시트 딤 200 · 시트 201. 결은 그 아래, 본문 위.
-    const z = Number(/z-index:\s*(\d+)/.exec(veil)?.[1]);
-    expect(z).toBeGreaterThan(0);
-    expect(z).toBeLessThan(100);
+  it('전면 결 레이어가 없다', () => {
+    expect(live).toContain('html body {'); // 주석 걷기가 규칙까지 먹지 않았다(부정 단언이 공허하지 않음)
+    expect(live).not.toMatch(/body::before\s*\{/);
+    expect(live).not.toContain('feTurbulence type=\'fractalNoise\' baseFrequency=\'0.75\'');
   });
 });
 
@@ -481,7 +459,32 @@ describe('TDS Button 재색칠 (global.css)', () => {
     expect(css).toMatch(/--button-background-color:\s*#3182f6/); // 선택자 키(토스 블루 인라인 값)
     // 채움을 투명으로 눕히지 않으면 TDS 내부 레이어가 테두리를 통째로 덮는다(실측).
     expect(css).toMatch(/--button-background-color:\s*transparent\s*!important/);
-    expect(css).toMatch(/background-color:\s*rgba\(110,\s*138,\s*106,\s*0\.2\)\s*!important/); // 연한 세이지
+    expect(css).toMatch(/background-color:\s*var\(--adaptiveBlue50,\s*#DCE8D6\)\s*!important/); // 옅은 세이지 타일
+  });
+
+  /**
+   * 버튼 라벨 바닥 15px(원장 U-6, 목 모드 실측 2026-09-23) — TDS는 `--button-font-size`를 크기별 토큰으로
+   * 인라인에 박는다: large=t5 · medium=t6 · **small=t7**. t7은 본문 「책별 기록」(14)과 같은 토큰이라 계단을
+   * 올려 풀 수 없고(Text까지 따라온다), small 버튼만 그 키로 잡아 15로 올린다. 책방 「보관함에서 비교하기」가
+   * 14px로 실측됐던 자리다.
+   */
+  it('small 버튼 라벨을 15px로 올린다 — t7(14)을 그대로 두면 보조 버튼이 규칙 1 바닥 아래로 샌다', () => {
+    const live = css.replace(/\/\*[\s\S]*?\*\//g, '');
+    for (const key of ["--button-font-size:var(--tds-t-t7", "--button-font-size: var(--tds-t-t7"]) {
+      const start = live.indexOf(`.tds-mobile-button[style*='${key}']`);
+      expect(start, key).toBeGreaterThan(-1); // 직렬화 두 벌 다 — 한쪽만 적으면 다른 경로에서 조용히 안 걸린다
+      const block = live.slice(start, live.indexOf('}', start));
+      expect(block).toMatch(/--button-font-size:\s*15px\s*!important/);
+    }
+  });
+
+  it('primary 규칙에 연필선이 없다 — Soft 버튼은 선이 아니라 면으로 말한다', () => {
+    const live = css.replace(/\/\*[\s\S]*?\*\//g, '');
+    const start = live.indexOf(".tds-mobile-button[style*='--button-background-color:#3182f6']");
+    const block = start < 0 ? '' : live.slice(start, live.indexOf('}', start));
+    expect(block).not.toBe(''); // 추출이 빗나가면 아래 부정 단언이 공허해진다
+    expect(block).toContain('--button-color'); // 규칙 본문까지 잡혔다
+    expect(block).not.toContain('border-image');
   });
 
   it('빗살무늬로 채우지 않는다 — 사선이 글자를 가로질러 지저분하다(사용자 반려)', () => {
@@ -494,12 +497,15 @@ describe('TDS Button 재색칠 (global.css)', () => {
    * 평소에도 결과가 같다. 그 폴백이 사라지면 밤이 아닌 화면의 버튼 글자가 통째로 죽으므로 함께 잠근다.
    */
   it('primary 글자를 잉크색으로 되돌린다 — 연한 채움 위에서 흰 글자는 읽히지 않는다', () => {
-    expect(css).toMatch(/--button-color:\s*var\(--brandButtonInk,\s*#4F6B4C\)\s*!important/);
+    expect(css).toMatch(/--button-color:\s*var\(--brandButtonInk,\s*#3F5A3C\)\s*!important/);
   });
 
-  it('weak 버튼은 채움 없이 흐린 연필선만 — 이게 primary(연한 채움)와의 위계를 만든다', () => {
+  it('weak 버튼은 채움 없이 1.5px 세이지 실선만 — 이게 primary(옅은 채움)와의 위계를 만든다', () => {
     expect(css).toMatch(/--button-background-color:\s*rgba\(100,\s*168,\s*255,\s*0\.15\)/); // 선택자 키
-    expect(css).toMatch(/border-image:\s*var\(--pencil-frame-soft\)/);
+    const live = css.replace(/\/\*[\s\S]*?\*\//g, '');
+    const start = live.indexOf(".tds-mobile-button[style*='--button-background-color:rgba(100, 168, 255, 0.15)']");
+    const block = start < 0 ? '' : live.slice(start, live.indexOf('}', start));
+    expect(block).toMatch(/border:\s*1\.5px solid var\(--adaptiveBlue700/);
   });
 
   it('연필 프레임 두 종이 정의돼 있다 — 변수가 비면 border-image가 조용히 사라진다', () => {

@@ -1847,20 +1847,20 @@ describe('홈 히어로 위계 (시안 2a)', () => {
     expect(tag).toContain('font-size:26px');
   });
 
-  it('오버라인은 자간 3의 세이지 12다 — 54px 값과의 크기 차를 색·자간이 잇는다', () => {
+  it('오버라인은 자간 3의 세이지 14다 — 큰 값과의 크기 차를 색·자간이 잇는다', () => {
     const tag = tagBefore(renderHome(), '오늘 읽은 시간');
 
     expect(tag).not.toBe('');
-    expect(tag).toContain('font-size:12px');
+    expect(tag).toContain('font-size:14px'); // Soft 바닥 상향(PR-1) — PR-2가 시안 16으로 재조정한다
     expect(tag).toContain('letter-spacing:3px');
     expect(tag).toContain('--adaptiveBlue700');
   });
 
-  it('2열 라벨은 11이다 — 값(19)보다 또렷하게 작아야 라벨로 읽힌다', () => {
+  it('2열 라벨은 13이다 — 값(19)보다 또렷하게 작아야 라벨로 읽힌다', () => {
     const markup = renderHome();
 
-    expect(tagBefore(markup, '남은 시간')).toContain('font-size:11px');
-    expect(tagBefore(markup, '하루 목표')).toContain('font-size:11px');
+    expect(tagBefore(markup, '남은 시간')).toContain('font-size:13px');
+    expect(tagBefore(markup, '하루 목표')).toContain('font-size:13px');
   });
 });
 

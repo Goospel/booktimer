@@ -128,7 +128,7 @@ const badgeStyle = (tone: 'solid' | 'tint' | 'outline') =>
     display: 'inline-block',
     padding: '1px 8px',
     borderRadius: 6,
-    fontSize: 11,
+    fontSize: 13,
     lineHeight: 1.6,
     ...(tone === 'solid'
       ? { background: 'var(--adaptiveBlue800, #40573E)', color: 'var(--adaptiveGrey100, #FCFAF5)' }
@@ -302,7 +302,7 @@ const mutualBadgeStyle = {
   border: '0.5px solid var(--adaptiveGrey200, #E4DDD0)',
   borderRadius: 6,
   color: 'var(--adaptiveGrey600, #6F6A5E)',
-  fontSize: 12,
+  fontSize: 14,
   lineHeight: 1.5,
 } as const;
 
@@ -355,7 +355,7 @@ export function ReaderRow({ reader, index, now }: { reader: ReaderStatus; index:
           style={{
             flex: '0 0 auto',
             alignSelf: 'center',
-            fontSize: 12,
+            fontSize: 14,
             fontWeight: 700,
             color: 'var(--adaptiveBlue700, #4F6B4C)',
           }}
@@ -613,7 +613,7 @@ export function FeedBox({
               borderRadius: 20,
               background: 'var(--adaptiveGrey200, #E4DDD0)',
               color: 'var(--adaptiveGrey700, #57534A)',
-              fontSize: 12,
+              fontSize: 14,
             }}
           >
             {mine ? `내 책 · 『${item.bookTitle}』` : item.bookTitle}

@@ -142,12 +142,12 @@ describe('소식 피드 (2b)', () => {
     expect(tagOf(feed(event({ type: 'STORY', count: 3 })), '3')).toContain('Gowun Batang');
   });
 
-  /** 시안 2b는 배지를 11로 둔다 — A가 계단의 `st13`을 12→11로 다시 재단한 그 칸이다. */
-  it('배지는 11이다 — 본문(14)과 같은 칸이면 배지가 문장처럼 읽힌다', () => {
+  /** Soft 재테마(2026-09-23)가 배지 바닥을 13으로 올렸다 — 규칙 1 「최소 13px」. */
+  it('배지는 13이다 — 본문(16)과 같은 칸이면 배지가 문장처럼 읽힌다', () => {
     const tag = tagOf(feed(event({ type: 'STORY', count: 3 })), '여백 ');
 
     expect(tag).not.toBe('');
-    expect(tag).toContain('font-size:11px');
+    expect(tag).toContain('font-size:13px');
   });
 
   /**

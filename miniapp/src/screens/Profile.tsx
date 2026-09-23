@@ -759,7 +759,7 @@ export function ProfileCard({
         {profile.followsMe === true && (
           <span
             style={{
-              fontSize: 12,
+              fontSize: 14,
               padding: '2px 7px',
               borderRadius: 9,
               background: 'var(--adaptiveGrey200, #E4DDD0)',
@@ -1193,7 +1193,7 @@ export function ArchiveSheet({
                   flex: '0 0 auto',
                   padding: '3px 8px',
                   borderRadius: 999,
-                  fontSize: 12,
+                  fontSize: 14,
                   background: '#6E8A6A',
                   color: '#FFFDF8',
                 }}

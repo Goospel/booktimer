@@ -108,7 +108,7 @@ type BookChipTone = 'neutral' | 'sage' | 'outline';
 
 /** 칩 세 톤 — 소식 배지와 같은 값이다(새 색을 만들지 않는다). */
 function bookChipStyle(tone: BookChipTone): CSSProperties {
-  const base: CSSProperties = { display: 'inline-block', padding: '2px 9px', borderRadius: 20, fontSize: 12, lineHeight: 1.6 };
+  const base: CSSProperties = { display: 'inline-block', padding: '2px 9px', borderRadius: 20, fontSize: 14, lineHeight: 1.6 };
   if (tone === 'sage') {
     return { ...base, background: 'var(--adaptiveBlue50, #E7EEE2)', color: 'var(--adaptiveBlue700, #4F6B4C)' };
   }

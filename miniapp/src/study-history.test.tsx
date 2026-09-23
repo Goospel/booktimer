@@ -69,7 +69,7 @@ describe('공부 기록 화면', () => {
   });
 
   it('하루 막대 3줄이 전부 토큰을 탄다 — 픽스처의 날 수만큼', () => {
-    const bars = markup.match(/height:6px;border-radius:3px;background:var\(--grass2, #94BE7F\)/g);
+    const bars = markup.match(/height:6px;border-radius:3px;background:var\(--grass2, #A3C09B\)/g);
     expect(bars).toHaveLength(3);
   });
 

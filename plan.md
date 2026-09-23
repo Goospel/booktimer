@@ -5093,6 +5093,20 @@ package-private static이라 호출이 공짜였고, 복제하면 0초 조각 �
   서체가 실제로 붙는지는 폭 실측으로 확인했다(184.5px vs 폴백 serif 203.4px — `fonts.check`는 구글 폰트의
   한글 subset 분할 때문에 로드됐는데도 false를 주므로 계측기로 쓸 수 없다).
 
+### 미니앱 「Soft UI」 재테마 — 연령 반영 · 부푼 면 (진행 중 🔜 2026-09-23~)
+> 「또렷한 연필」의 뒤를 잇는 재테마. 규칙: 본문 15~16px · 보조 14 · 최소 13 · 대비 4.5:1 이상 · 세이지 주색에
+> 파스텔은 포인트만 · 카드는 선이 아니라 **부푼(PUFF)/눌린(DENT) 면** · 연필테는 전부 걷는다. 설계 md는
+> `claude-docs/plans/2026-09-23-miniapp-soft-retheme.md`(gitignore — 작업용). **번들 배포는 PR-5 뒤 1회** — 그 전까지
+> main은 두 테마가 섞인 중간 상태지만 `deploy.sh`를 안 돌리므로 라이브에 가지 않는다.
+
+- ✅ **PR-1 「Soft 토대」** — 색·크기 토큰(`html:root`·독서등 밤·등불 밑 페이지·공부) · 표면 상수 `PUFF`/`DENT`/`SOFT_OUTLINE`/`SOFT_ROW`(그림자는 `--puffShadow`·`--dentShadow` 변수 경유) ·
+  `sectionStyle = PUFF` · TDS 버튼 3단(채움·옅은 채움·1.5px 실선, 공부 전용 리터럴 규칙 3개 삭제) · small 버튼 라벨 15px ·
+  종이 결 철거 · 계단 13/14/16/18/28/62 · 인라인 `fontSize` 11·12 → 13·14(24곳 + `UnreadBadge`) · 가드 신설(`soft-contrast`·`soft-surface`)
+- ⬜ **PR-2** 홈 · 게스트 홈 · 목표 달성 메달
+- ⬜ **PR-3** 기록 · 목표 · 서재
+- ⬜ **PR-4** 책방 · 여백 · 대화 · 설정 · 공부 · 시트
+- ⬜ **PR-5** 탭바 · 연필 철거(`PENCIL_FRAME`·`--pencil-frame*`) · 스토어 스크린샷 · 배포 1회 — 미검증 가정 원장(U-1~U-11) 전부 채움
+
 ### 미니앱 디자인 개선 핸드오프 — 「또렷한 연필」 + UX 수정 2건 (완료 ✅ 2026-08-24 — 배포 업로드까지)
 > 클로드 디자인 핸드오프(`private-docs/standardHTML/design_handoff_miniapp_ux/`)를 세 덩어리로 나눠 받는다.
 > 시안 캔버스는 턴2 = 5개 화면 전체 시안 · 턴3 = UX 감사 6건 · 턴4 = 이번 구현 대상(4a·4b·4c).

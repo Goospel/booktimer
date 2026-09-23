@@ -146,7 +146,7 @@ export function ModeToggle({
             // 토큰이라 공부 모드에서 저절로 파랑이 된다 — 리터럴이면 세이지로 남는다.
             background: selected ? 'var(--accentPill, rgba(110,138,106,.18))' : 'transparent',
             color: selected ? 'var(--adaptiveBlue700, #4F6B4C)' : 'var(--adaptiveGrey600, #6F6A5E)',
-            fontSize: 11,
+            fontSize: 13,
             lineHeight: '17px',
             fontWeight: selected ? 700 : 400,
           }}
@@ -1401,11 +1401,11 @@ export function Home({
           />
           {/* 라벨과 값은 각자 블록이어야 세로로 쌓인다 — 같은 줄에 붙으면 "오늘 읽은 시간45:00"으로 읽힌다. */}
           <div>
-            {/* 오버라인 — 자간을 벌려 「제목이 아니라 머리말」로 읽히게 한다(시안 2a: 12px · 자간 3 · 세이지).
-                아래 54px 값과 크기 차가 크므로 색·자간이 그 사이를 잇는다. */}
+            {/* 오버라인 — 자간을 벌려 「제목이 아니라 머리말」로 읽히게 한다(시안 2a 자간 3 · 세이지, 크기는
+                Soft 바닥 상향으로 14). 아래 62px 값과 크기 차가 크므로 색·자간이 그 사이를 잇는다. */}
             <span
               style={{
-                fontSize: 12,
+                fontSize: 14,
                 letterSpacing: 3,
                 color: ACCENT,
               }}
@@ -1466,9 +1466,9 @@ export function Home({
                       border: 0,
                       background: 'transparent',
                       color: 'var(--adaptiveGrey600, #6F6A5E)',
-                      // 시안 11.5는 계단(typography.test `SCALE`)에 없어 st13(11)로 내렸다 — 그 11.5가
-                      // 전제한 고운돋움 스케일은 A가 st13을 12→11로 재단하며 이미 들여왔다.
-                      fontSize: 11,
+                      // 시안 11.5는 계단(typography.test `SCALE`)에 없어 st13에 맞춘다 — Soft 재테마가
+                      // 바닥을 13으로 올려 지금은 13이다(규칙 1 「최소 13px」).
+                      fontSize: 13,
                       cursor: 'pointer',
                     }}
                   >
@@ -1494,7 +1494,7 @@ export function Home({
                 </div>
                 <div style={{ width: 1, background: 'rgba(44, 42, 36, 0.12)' }} />
                 <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ fontSize: 11, color: 'var(--adaptiveGrey600, #6F6A5E)' }}>하루 목표</div>
+                  <div style={{ fontSize: 13, color: 'var(--adaptiveGrey600, #6F6A5E)' }}>하루 목표</div>
                   <div style={{ ...SERIF_VALUE, fontSize: 19, fontWeight: 700, marginTop: 2 }}>
                     {formatClock(goal)}
                   </div>
@@ -1511,7 +1511,7 @@ export function Home({
                       borderRadius: 8,
                       background: 'rgba(110, 138, 106, 0.14)',
                       color: ACCENT,
-                      fontSize: 12,
+                      fontSize: 14,
                       fontWeight: 700,
                       cursor: 'pointer',
                     }}
