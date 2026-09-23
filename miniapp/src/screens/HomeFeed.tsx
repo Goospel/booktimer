@@ -241,16 +241,19 @@ export function eventLine(event: SocialEvent): string {
   return `${event.nickname}님이 『${event.bookTitle}』${objectParticle(event.bookTitle)} ${predicate}`;
 }
 
-/** 탭 알약 — 선택된 쪽만 연세이지 배경(홈 우상단 목표 손잡이와 같은 값이라 화면에 색이 늘지 않는다). */
+/**
+ * 탭 알약 — 선택된 쪽만 알약 틴트 + 700(시안 Soft 탭바의 현재 칸과 같은 값). 안 고른 탭은 흐린 잉크 400이라
+ * 「지금 어디인가」가 색과 굵기 둘로 갈린다. 틴트가 반투명 토큰이라 독서등(밤)·공부 모드에 저절로 맞는다.
+ */
 const pillStyle = (active: boolean) =>
   ({
     padding: '6px 14px',
     border: 0,
-    borderRadius: 20,
-    background: active ? 'var(--adaptiveBlue50, #E7EEE2)' : 'transparent',
-    color: active ? 'var(--adaptiveBlue700, #4F6B4C)' : 'var(--adaptiveGrey600, #6F6A5E)',
+    borderRadius: 999,
+    background: active ? 'var(--accentPill, rgba(91,127,85,.2))' : 'transparent',
+    color: active ? 'var(--adaptiveBlue700, #3F5A3C)' : 'var(--adaptiveGrey600, #4E5A4B)',
     fontSize: 14,
-    fontWeight: 700,
+    fontWeight: active ? 700 : 400,
     cursor: 'pointer',
   }) as const;
 

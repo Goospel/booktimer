@@ -77,7 +77,7 @@ const requestAgreementMock = vi.mocked(requestNotificationAgreement);
 
 const BUTTON_LABEL = '광고 보고 밀린 하루 지우기';
 /** 목표 진입 알약 — ⓘ(설명)와 갈라선 「이동」 쪽 손잡이(감사 3e → 시안 4a). */
-const GOAL_PILL = '변경 ›';
+const GOAL_PILL = '>변경<'; // 버튼 글자 그대로 — 부분 문자열 「변경」은 다른 문구에도 걸린다
 /** ⓘ 툴팁이 말하는 이월 규칙 — 접혔는지 펼쳤는지를 이 문구로 잰다. */
 const CARRYOVER_NOTE = '내일 남은 시간에 더해져요';
 /** 이월을 끈 사용자가 듣는 말 — 위 문구는 그 사람에게 **거짓**이라 갈라 말한다. */
@@ -149,6 +149,7 @@ function renderHome(
     guide?: ReactNode;
     mode?: TimerMode;
     chatUnread?: number;
+    goalReached?: boolean;
   } = {},
 ) {
   return renderToStaticMarkup(
@@ -172,6 +173,9 @@ function renderHome(
         onComposeMargin={() => {}}
         chatUnread={props.chatUnread}
         onOpenChat={() => {}}
+        goalReached={props.goalReached}
+        onContinueReading={() => {}}
+        onGoHistory={() => {}}
       />
     </TDSMobileProvider>,
   );
@@ -210,8 +214,8 @@ describe('홈 렌더 배선', () => {
     expect(renderHome()).not.toContain(BUTTON_LABEL);
   });
 
-  it('진행률 게이지가 브랜드 세이지로 찬다 — 다른 초록이 섞이면 화면에 색이 둘이 된다', () => {
-    expect(renderHome()).toContain('#6E8A6A');
+  it('진행률 게이지가 세이지 그라데이션으로 찬다 — 다른 초록이 섞이면 화면에 색이 둘이 된다', () => {
+    expect(renderHome()).toContain('linear-gradient(90deg, #8FB087, #5B7F55)');
     expect(renderHome()).not.toContain('#2F8F6B');
   });
 });
@@ -507,7 +511,7 @@ describe('목표 진입 알약 (변경 ›)', () => {
   it('바꿀 목표가 없으면 「정하기」라 말한다 — 00:00을 「변경」하라는 건 말이 안 된다', () => {
     const markup = renderHome({ todayGoalSeconds: 0, carriedDebtSeconds: 1800, carryover: true });
 
-    expect(markup).toContain('정하기 ›');
+    expect(markup).toContain('>정하기<');
     expect(markup).not.toContain(GOAL_PILL);
   });
 });
@@ -743,7 +747,7 @@ describe('측정 중 안심 문구 (B1)', () => {
  */
 describe('첫 완료 축하 (B2)', () => {
   /** 배너 상자의 배경 — TDSMobileProvider가 늘 전역 style을 뿜어 "빈 마크업"으로는 부재를 가릴 수 없다. */
-  const BANNER_BACKGROUND = '#EFF3EE';
+  const BANNER_BACKGROUND = 'var(--adaptiveBlue50';
 
   const renderBanner = (show: boolean) =>
     renderToStaticMarkup(
@@ -1227,7 +1231,8 @@ describe('표지 캐러셀', () => {
   });
 
   it('트랙 세로 여백이 선택 표지의 확대분을 담는다 — 안 담으면 커진 표지가 트랙 밖으로 삐져나간다', () => {
-    expect(TRACK_V_PAD).toBeGreaterThanOrEqual((COVER_HEIGHT * 1.1 - COVER_HEIGHT) / 2);
+    // 확대분 + 고른 칸의 3px 링도 1.1배로 커진다(링 윗변이 스크롤 영역에 잘리지 않게).
+    expect(TRACK_V_PAD).toBeGreaterThanOrEqual((COVER_HEIGHT * 1.1 - COVER_HEIGHT) / 2 + 3 * 1.1);
   });
 
   it('표지 높이는 표지 컴포넌트와 같은 식 — 어긋나면 여백 계산이 실제 표지를 못 따라간다', () => {
@@ -1839,28 +1844,171 @@ describe('홈 히어로 위계 (시안 2a)', () => {
     return at < 0 ? '' : markup.slice(markup.lastIndexOf('<', at), at);
   };
 
-  it('인사말은 세리프 26이다 — 「누구의 화면인가」에 답하는 값이라 이름이 아니라 값으로 조판한다', () => {
+  it('인사말은 세리프 28이다(시안 Soft-Home) — 「누구의 화면인가」에 답하는 값이라 이름이 아니라 값으로 조판한다', () => {
     const tag = tagBefore(renderHome(), '구스펠님');
 
     expect(tag).not.toBe('');
     expect(tag).toContain('Gowun Batang');
-    expect(tag).toContain('font-size:26px');
+    expect(tag).toContain('font-size:28px');
   });
 
-  it('오버라인은 자간 3의 세이지 14다 — 큰 값과의 크기 차를 색·자간이 잇는다', () => {
+  it('오버라인은 흐린 잉크 16이고 자간이 없다(시안 Soft-Home) — 머리 줄 왼쪽에 토글과 나란히 선다', () => {
     const tag = tagBefore(renderHome(), '오늘 읽은 시간');
 
     expect(tag).not.toBe('');
-    expect(tag).toContain('font-size:14px'); // Soft 바닥 상향(PR-1) — PR-2가 시안 16으로 재조정한다
-    expect(tag).toContain('letter-spacing:3px');
-    expect(tag).toContain('--adaptiveBlue700');
+    expect(tag).toContain('font-size:16px');
+    expect(tag).not.toContain('letter-spacing');
+    expect(tag).toContain('--adaptiveGrey600');
   });
 
-  it('2열 라벨은 13이다 — 값(19)보다 또렷하게 작아야 라벨로 읽힌다', () => {
+  it('2열 라벨은 15다 — 값(세리프 24)보다 또렷하게 작아야 라벨로 읽힌다', () => {
     const markup = renderHome();
 
-    expect(tagBefore(markup, '남은 시간')).toContain('font-size:13px');
-    expect(tagBefore(markup, '하루 목표')).toContain('font-size:13px');
+    expect(tagBefore(markup, '남은 시간')).toContain('font-size:15px');
+    expect(tagBefore(markup, '하루 목표')).toContain('font-size:15px');
+  });
+});
+
+/**
+ * Soft 히어로(시안 Soft-Home) — 연필선 카드가 부푼 면이 되고, 게이지는 눌린 트랙, 「변경」은 1.5px 실선 손잡이다.
+ * 정적 렌더라 좌표는 못 재니 <b>그 모양을 만드는 인라인 값</b>을 자리마다 못 박는다.
+ */
+describe('Soft 히어로 (PR-2)', () => {
+  /** `marker`를 품은 여는 태그 하나. */
+  const tagWith = (markup: string, marker: string) => {
+    const at = markup.indexOf(marker);
+    return at < 0 ? '' : markup.slice(markup.lastIndexOf('<', at), markup.indexOf('>', at) + 1);
+  };
+  const hero = (markup: string) => tagWith(markup, LAMP_PAGE_CLASS);
+
+  it('히어로는 반경 30의 부푼 면이다 — 연필선이 되살아나지 않는다', () => {
+    const tag = hero(renderHome());
+
+    expect(tag).toContain('var(--puffShadow');
+    expect(tag).toContain('border-radius:30px');
+    expect(tag).not.toContain('border-image');
+  });
+
+  it('게이지 트랙은 눌린 면이다', () => {
+    expect(tagWith(renderHome(), 'data-gauge-track')).toContain('var(--dentShadow');
+  });
+
+  it('「변경」은 1.5px 실선 보조 손잡이이고 손가락 몫 44를 든다', () => {
+    const markup = renderHome();
+    const at = markup.indexOf(GOAL_PILL);
+    const tag = markup.slice(markup.lastIndexOf('<button', at), at);
+
+    expect(tag).toContain('1.5px solid var(--adaptiveBlue700');
+    expect(tag).toContain('min-height:44px');
+  });
+
+  it('남은 시간 타일은 버터, 하루 목표 타일은 옅은 세이지다 — 정보색과 모드색이 갈린다', () => {
+    const markup = renderHome();
+
+    expect(markup).toContain('background:var(--butterBg');
+    expect(markup).toContain('color:var(--butterInk');
+  });
+
+  it('캐러셀의 고른 칸은 3px 링 + 체크 배지로 선다(흐림으로 지우지 않는다)', () => {
+    const books = [book(1, '데미안'), book(2, '사피엔스')];
+    const markup = renderHome({ readingBooks: books }, { selectedBookId: 1 });
+    const at = markup.indexOf('aria-current="true"');
+    const cell = markup.slice(markup.lastIndexOf('<button', at), markup.indexOf('</button>', at));
+
+    expect(cell).toContain('0 0 0 3px');
+    expect(cell).toContain('data-check-badge');
+    expect(markup).toContain('opacity:0.7'); // 안 고른 칸은 .7 — .45는 40대 이상에게 지워진 것으로 읽혔다
+  });
+
+  it('모드 세그먼트는 15이고, 고른 쪽이 진한 채움이다', () => {
+    const markup = renderHome();
+    const at = markup.indexOf('aria-pressed="true"');
+    const tag = markup.slice(at, markup.indexOf('>', at));
+
+    expect(tag).toContain('font-size:15px');
+    expect(tag).toContain('background:var(--adaptiveBlue700');
+  });
+});
+
+/**
+ * 목표를 채운 순간 — 히어로 <b>속</b>이 메달 화면이 된다(시안 Soft-Goal). 켜는 쪽(측정 종료 전후 비교)은
+ * `crossedGoal`이 순수 함수로 재고(`goal-medal.test`), 여기선 prop → 화면 연결만 잰다.
+ */
+describe('목표 달성 메달 (PR-2)', () => {
+  const achieved = { todayReadSeconds: 3600, todayGoalSeconds: 3600, remainingSeconds: 0 };
+
+  it('방금 채웠으면 메달과 연속 일수를 말한다', () => {
+    const markup = renderHome(achieved, { goalReached: true });
+
+    expect(markup).toContain('data-medal');
+    expect(markup).toContain('오늘 목표를 채웠어요');
+    expect(markup).toContain(`연속 ${graph.currentStreak}일째예요.`);
+    expect(markup).toContain(`${graph.currentStreak + 1}일이 돼요`);
+    expect(markup).toContain('이어서 읽기');
+    expect(markup).toContain('기록 보기');
+  });
+
+  it('메달은 히어로 카드 안에 선다 — 화면을 덮는 층이 아니다(T-183)', () => {
+    const markup = renderHome(achieved, { goalReached: true });
+    const heroAt = markup.indexOf(LAMP_PAGE_CLASS);
+
+    expect(heroAt).toBeGreaterThan(-1);
+    expect(markup.indexOf('data-medal')).toBeGreaterThan(heroAt);
+    expect(markup.indexOf('data-medal')).toBeLessThan(markup.indexOf(CAROUSEL_HEADER));
+  });
+
+  it('상태가 꺼져 있으면 메달이 없다 — 달성한 날 홈을 열 때마다 튀지 않는다', () => {
+    const markup = renderHome(achieved, { goalReached: false });
+
+    expect(markup).toContain('data-sprout'); // 같은 렌더에 달성 표식은 있다(아래 부재 단언이 공허하지 않음)
+    expect(markup).not.toContain('오늘 목표를 채웠어요');
+    expect(markup).not.toContain('data-medal');
+  });
+
+  it('측정 중이면 메달이 없다 — 다시 재기 시작하면 메달은 제 역할을 다했다', () => {
+    const markup = renderHome(
+      { ...achieved, hasActiveSession: true, activeStartedAt: new Date().toISOString() },
+      { goalReached: true },
+    );
+
+    expect(markup).toContain(ACTIVE_SESSION_RELIEF);
+    expect(markup).not.toContain('data-medal');
+  });
+
+  it('공부 모드엔 메달이 없다 — 하루 목표는 독서의 것이다', () => {
+    const markup = renderHome(achieved, { goalReached: true, mode: 'study' });
+
+    expect(markup).toContain('오늘 공부한 시간');
+    expect(markup).not.toContain('data-medal');
+  });
+
+  it('「기록 보기」는 채움이 아니다 — 홈의 채움은 탭바 원 하나다(설계 D5)', () => {
+    const markup = renderHome(achieved, { goalReached: true });
+    const at = markup.indexOf('기록 보기');
+    const tag = markup.slice(markup.lastIndexOf('<button', at), at);
+
+    // 맨 <button>이라 `--btn-filled` 마커는 원래 붙을 수 없다 — 부재가 아니라 옅은 세이지 바탕을 양성으로 본다.
+    expect(tag).toContain('background:var(--adaptiveBlue50');
+  });
+
+  /**
+   * 안내 카드(guide)보다 메달이 먼저다 — 안내 기록이 없는 기기는 측정을 끝내는 순간 안내가 히어로를 되찾는다.
+   * 순서가 반대면 그 순간 메달이 가려지고, 나중에 ✕를 누를 때 맥락 없이 튄다(리뷰 I-1).
+   */
+  it('안내 카드가 올 자리여도 방금 채운 메달이 이긴다', () => {
+    const markup = renderHome(achieved, { goalReached: true, guide: <span data-guide-stub="" /> });
+
+    expect(markup).toContain('data-medal');
+    expect(markup).not.toContain('data-guide-stub');
+    expect(renderHome(achieved, { guide: <span data-guide-stub="" /> })).toContain('data-guide-stub'); // 짝 — 스텁이 실제로 그려진다
+  });
+
+  /** 움직이는 것은 메달 SVG 한 장뿐이다 — 글자를 감싼 요소에 붙으면 튀는 동안 글자까지 다시 그린다(T-176). */
+  it('medal-pop은 화면에 한 번, SVG 태그에만 붙는다', () => {
+    const markup = renderHome(achieved, { goalReached: true });
+
+    expect(markup.match(/medal-pop/g)).toHaveLength(1);
+    expect(markup.slice(markup.lastIndexOf('<', markup.indexOf('medal-pop')))).toMatch(/^<svg\b/);
   });
 });
 

@@ -595,6 +595,21 @@ describe('피드 박스 — 실패·로딩', () => {
  *
  * <p>서버는 부르지 않는다 — 게스트는 `feed={null}`과 no-op 핸들러로 부른다.
  */
+/** Soft 탭 머리 — 현재 탭만 알약이 채워지고 굵다. 안 고른 탭까지 굵으면 「어디에 있나」가 굵기로 안 갈린다. */
+describe('피드 탭 알약 (Soft PR-2)', () => {
+  const pill = (markup: string, key: string) =>
+    markup.match(new RegExp(`data-feed-tab="${key}"[^>]*style="([^"]*)"`))?.[1] ?? '';
+
+  it('현재 탭은 알약 틴트 + 700, 안 고른 탭은 흐린 잉크 400이다', () => {
+    const markup = renderBox(feed(), 'news');
+
+    expect(pill(markup, 'news')).toContain('background:var(--accentPill');
+    expect(pill(markup, 'news')).toContain('font-weight:700');
+    expect(pill(markup, 'social')).toContain('--adaptiveGrey600');
+    expect(pill(markup, 'social')).toContain('font-weight:400');
+  });
+});
+
 describe('피드 박스 — 잠김 (로그인 전)', () => {
   it('머리는 그대로 서서 무엇이 잠겼는지 보여 준다 — 「책 뉴스」까지 넷', () => {
     // 뉴스 게이트(`newsEnabled`)는 서버가 주는 값이라 게스트에겐 없다. 잠금 머리는 「이런 것들이

@@ -368,6 +368,70 @@ describe('게스트 홈 — 다 재고 나서', () => {
     expect(shell(at('2026-09-11T01:00:00.000Z', '2026-09-11T01:07:00.000Z'))).toContain('7분이 잔디 첫 칸');
     expect(shell(at('2026-09-11T01:00:00.000Z', '2026-09-11T03:00:00.000Z'))).toContain('2시간이 잔디 첫 칸');
   });
+
+  /** 시안 Soft-Intro-Done — 로그인 홈의 목표 달성과 <b>같은 메달</b>이 카드 안에서 한 번 튄다. */
+  it('카드 안에 메달이 서고, 잔디 첫 칸이 링으로 표시된다', () => {
+    const markup = shell(done);
+
+    expect(markup).toContain('data-medal');
+    expect(markup).toContain('0 0 0 4.5px');
+    expect(markup.match(/data-grass-preview-cell/g)).toHaveLength(7); // 한 주 — 첫 칸만 채워진다
+  });
+
+  it('medal-pop은 화면에 한 번, SVG 태그에만 붙는다 — 글자를 감싼 요소는 움직이지 않는다(T-176)', () => {
+    const markup = shell(done);
+
+    expect(markup.match(/medal-pop/g)).toHaveLength(1);
+    expect(markup.slice(markup.lastIndexOf('<', markup.indexOf('medal-pop')))).toMatch(/^<svg\b/);
+  });
+
+  it('「기록 없이 둘게요」는 1.5px 실선 보조 손잡이다', () => {
+    const markup = shell(done);
+    const at = markup.indexOf('기록 없이 둘게요');
+    const tag = markup.slice(markup.lastIndexOf('<button', at), at);
+
+    expect(tag).toContain('1.5px solid var(--adaptiveBlue700');
+  });
+});
+
+describe('게스트 홈 — 메달은 끝난 뒤에만', () => {
+  it('체험 전엔 메달이 없다', () => {
+    const markup = shell(null);
+
+    expect(markup).toContain('읽기 시작'); // 같은 렌더에 히어로는 있다(아래 부재 단언이 공허하지 않음)
+    expect(markup).not.toContain('data-medal');
+  });
+
+  it('재는 중에도 메달이 없다', () => {
+    const markup = shell(running);
+
+    expect(markup).toContain('그만 읽기');
+    expect(markup).not.toContain('data-medal');
+  });
+
+  it('체험 전·중 히어로엔 책 더미 그림 하나가 선다(부푼 오브젝트는 한 화면에 하나)', () => {
+    expect(shell(null).match(/data-book-stack/g)).toHaveLength(1);
+    expect(shell(done)).not.toContain('data-book-stack'); // 끝난 뒤엔 메달이 그 하나다
+  });
+
+  it('히어로는 반경 30의 부푼 면이다 — 연필선이 되살아나지 않는다', () => {
+    const markup = shell(null);
+    const at = markup.indexOf('data-guest-hero');
+    const tag = markup.slice(markup.lastIndexOf('<', at), markup.indexOf('>', at) + 1);
+
+    expect(tag).toContain('var(--puffShadow');
+    expect(tag).toContain('border-radius:30px');
+    expect(tag).not.toContain('border-image');
+  });
+
+  it('잠긴 탭 카드도 부푼 면이다', () => {
+    const markup = shell(null, 'library');
+    const at = markup.indexOf('서재는 계정이 있어야 열려요');
+    const card = markup.slice(markup.lastIndexOf('<div', markup.lastIndexOf('<svg', at)), at);
+
+    expect(card).toContain('var(--puffShadow');
+    expect(card).not.toContain('border-image');
+  });
 });
 
 describe('게스트 홈 — 잠긴 탭', () => {

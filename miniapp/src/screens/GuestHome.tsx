@@ -27,9 +27,12 @@ import {
   writeTrial,
 } from '../trial';
 import {
-  PENCIL_FRAME,
+  DENT,
+  GoalMedal,
+  PUFF,
   SECTION_RULE,
   SERIF_VALUE,
+  SOFT_OUTLINE,
   Screen,
   SectionTitle,
   Text,
@@ -41,9 +44,10 @@ import {
   COVER_GAP,
   COVER_HEIGHT,
   COVER_WIDTH,
+  DOT_OFF,
+  DOT_ON,
   HERO_CARD_BG_VAR,
   NoBookCard,
-  SAGE,
   heroOverline,
 } from './Home';
 import type { FeedTab } from './HomeFeed';
@@ -195,16 +199,7 @@ export function LockedScreen({ tab, onLogin }: { tab: LockedTab; onLogin: (sourc
         </Text>
       }
     >
-      <div
-        style={{
-          padding: '24px 20px',
-          borderRadius: 16,
-          background: `var(${HERO_CARD_BG_VAR}, #FCFAF5)`,
-          border: '1px solid transparent',
-          borderImage: PENCIL_FRAME,
-          textAlign: 'center',
-        }}
-      >
+      <div style={{ ...PUFF, padding: '24px 20px', textAlign: 'center' }}>
         <svg
           width="28"
           height="28"
@@ -254,7 +249,7 @@ function LockedSlot() {
         height: COVER_HEIGHT,
         flex: '0 0 auto',
         boxSizing: 'border-box',
-        border: '2px dashed var(--adaptiveGrey200, #E4DDD0)',
+        border: '2px dashed #B6C3B2', // 「책 없이」 점선(#7C8A78)보다 한 톤 옅게 — 잠긴 칸은 고를 수 없는 칸이다
         borderRadius: 4,
         display: 'flex',
         alignItems: 'center',
@@ -301,11 +296,11 @@ function GuestBookCard({ onLogin }: { onLogin: (source: LoginSource) => void }) 
         <span data-book-slot="free" style={{ transform: 'scale(1.1)' }}>
           <NoBookCard />
         </span>
-        {/* 잠긴 두 칸 — 로그인 홈 캐러셀에서 가운데가 아닌 표지와 같은 흐림(0.45)이다. */}
-        <span data-book-slot="locked" style={{ opacity: 0.45 }}>
+        {/* 잠긴 두 칸 — 로그인 홈 캐러셀에서 가운데가 아닌 표지와 같은 흐림(0.7)이다. */}
+        <span data-book-slot="locked" style={{ opacity: 0.7 }}>
           <LockedSlot />
         </span>
-        <span data-book-slot="locked" style={{ opacity: 0.45 }}>
+        <span data-book-slot="locked" style={{ opacity: 0.7 }}>
           <LockedSlot />
         </span>
       </div>
@@ -325,7 +320,7 @@ function GuestBookCard({ onLogin }: { onLogin: (source: LoginSource) => void }) 
           <span
             key={i}
             data-dot={i === 0 ? 'active' : 'idle'}
-            style={{ width: 6, height: 6, borderRadius: '50%', background: i === 0 ? SAGE : '#E4DDD0' }}
+            style={{ width: 6, height: 6, borderRadius: '50%', background: i === 0 ? DOT_ON : DOT_OFF }}
           />
         ))}
       </div>
@@ -387,9 +382,54 @@ export function LockedFeedBody({ newsOpen }: { newsOpen: boolean }) {
 function TrialStat({ label, value }: { label: string; value: string }) {
   return (
     <div style={{ flex: 1, minWidth: 0 }}>
-      <div style={{ fontSize: 14, color: 'var(--adaptiveGrey600, #6F6A5E)' }}>{label}</div>
-      <div style={{ ...SERIF_VALUE, fontSize: 19, marginTop: 2 }}>{value}</div>
+      <div style={{ fontSize: 14, color: 'var(--adaptiveGrey600, #4E5A4B)' }}>{label}</div>
+      <div style={{ ...SERIF_VALUE, fontSize: 21, marginTop: 2 }}>{value}</div>
     </div>
+  );
+}
+
+/**
+ * 체험 전·중 히어로의 책 더미(시안 Soft-Intro) — 이 화면의 「부푼 입체 오브젝트」 하나다. 끝난 뒤엔 메달이
+ * 그 자리를 이어받으므로 둘이 같이 서지 않는다. 정적 그림이라 움직이지 않는다.
+ */
+function BookStack() {
+  const book = (id: string, top: string, bottom: string) => (
+    <linearGradient id={id} x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stopColor={top} />
+      <stop offset="1" stopColor={bottom} />
+    </linearGradient>
+  );
+  return (
+    <svg data-book-stack="" width="104" height="94" viewBox="0 0 120 108" aria-hidden="true" style={{ display: 'block', margin: '0 auto' }}>
+      <defs>
+        {book('stack-sand', '#F3EBDD', '#D8C6A6')}
+        {book('stack-butter', '#F7EFCF', '#E2CE8B')}
+        {book('stack-mint', '#E3EFDF', '#A9C7A1')}
+      </defs>
+      <ellipse cx="60" cy="100" rx="48" ry="6" fill="rgba(94,122,90,0.2)" />
+      <rect x="10" y="68" width="100" height="28" rx="13" fill="url(#stack-sand)" />
+      <rect x="90" y="73" width="14" height="18" rx="5" fill="#FFFFFF" opacity="0.75" />
+      <ellipse cx="34" cy="74" rx="16" ry="3.5" fill="#FFFFFF" opacity="0.65" />
+      <g transform="rotate(-4 60 58)">
+        <rect x="18" y="44" width="86" height="28" rx="13" fill="url(#stack-butter)" />
+        <rect x="84" y="49" width="14" height="18" rx="5" fill="#FFFFFF" opacity="0.75" />
+        <ellipse cx="40" cy="50" rx="14" ry="3.5" fill="#FFFFFF" opacity="0.65" />
+      </g>
+      <g transform="rotate(3 60 34)">
+        <rect x="28" y="20" width="70" height="28" rx="13" fill="url(#stack-mint)" />
+        <rect x="78" y="25" width="14" height="18" rx="5" fill="#FFFFFF" opacity="0.75" />
+        <ellipse cx="48" cy="26" rx="12" ry="3.5" fill="#FFFFFF" opacity="0.65" />
+      </g>
+    </svg>
+  );
+}
+
+/** 체크 줄 머리의 획 체크 — 이모지 대신(`no-emoji.test`). */
+function CheckMark() {
+  return (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" style={{ flex: 'none', marginTop: 2, stroke: 'var(--adaptiveBlue700, #3F5A3C)' }}>
+      <path d="M5 12.5l4.5 4.5L19 7.5" />
+    </svg>
   );
 }
 
@@ -436,10 +476,10 @@ export function GuestHome({
           아바타 자리에 사람 아이콘이 서서 <b>그 아이콘이 곧 로그인 문</b>이 된다(로그아웃한 기존 사용자의 길). */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12, padding: '2px 2px 0' }}>
         <span style={{ flex: 1, minWidth: 0 }}>
-          <span style={{ display: 'block', ...SERIF_VALUE, fontSize: 26, color: 'var(--adaptiveGrey900, #3A362E)' }}>
+          <span style={{ display: 'block', ...SERIF_VALUE, fontSize: 28, color: 'var(--adaptiveGrey900, #1B221A)' }}>
             북타이머
           </span>
-          <span style={{ display: 'block', marginTop: 1, fontSize: 13, color: 'var(--adaptiveGrey600, #6F6A5E)' }}>
+          <span style={{ display: 'block', marginTop: 2, fontSize: 15, color: 'var(--adaptiveGrey600, #4E5A4B)' }}>
             둘러보는 중
           </span>
         </span>
@@ -478,26 +518,26 @@ export function GuestHome({
       </div>
 
       <div
-        style={{
-          padding: '28px 20px',
-          borderRadius: 16,
-          background: `var(${HERO_CARD_BG_VAR}, #FCFAF5)`,
-          border: '1px solid transparent',
-          borderImage: PENCIL_FRAME,
-          textAlign: 'center',
-        }}
+        data-guest-hero=""
+        style={{ ...PUFF, borderRadius: 30, padding: '24px 20px', background: `var(${HERO_CARD_BG_VAR}, #F9FBF7)`, textAlign: 'center' }}
       >
-        {/* 오버라인 — 로그인 홈과 <b>같은 글자</b>다(`heroOverline`). 로그인하면 이 줄만 그대로 남는다. */}
-        <div>
-          <span style={{ fontSize: 14, letterSpacing: 3, color: 'var(--adaptiveBlue700, #4F6B4C)' }}>
-            {heroOverline('reading', false)}
-          </span>
-        </div>
-        <div style={{ marginTop: 6 }}>
-          <Text typography="t2" fontWeight="bold" style={{ ...SERIF_VALUE }}>
-            {formatClock(seconds)}
-          </Text>
-        </div>
+        {phase !== 'done' && (
+          <>
+            {/* 책 더미 — 이 화면의 입체 오브젝트 하나(시안 Soft-Intro). 끝나면 메달이 그 자리를 잇는다. */}
+            <BookStack />
+            {/* 오버라인 — 로그인 홈과 <b>같은 글자</b>다(`heroOverline`). 로그인하면 이 줄만 그대로 남는다. */}
+            <div style={{ marginTop: 14 }}>
+              <span style={{ fontSize: 15, letterSpacing: 3, color: 'var(--adaptiveBlue700, #3F5A3C)' }}>
+                {heroOverline('reading', false)}
+              </span>
+            </div>
+            <div style={{ marginTop: 6 }}>
+              <Text typography="t2" fontWeight="bold" style={{ ...SERIF_VALUE }}>
+                {formatClock(seconds)}
+              </Text>
+            </div>
+          </>
+        )}
 
         {phase === 'none' && (
           <>
@@ -523,36 +563,75 @@ export function GuestHome({
 
         {phase === 'done' && (
           <>
-            <Text typography="st11" style={{ display: 'block', marginTop: 16, wordBreak: 'keep-all' }}>
-              {formatDuration(duration)} 읽었어요. 기록을 남기려면 계정이 필요해요.
-            </Text>
+            {/* 로그인 홈의 목표 달성과 <b>같은 메달</b>이 카드 안에서 한 번 튄다(시안 Soft-Intro-Done). */}
+            <div style={{ display: 'flex', justifyContent: 'center' }}>
+              <GoalMedal size={76} />
+            </div>
+            <span style={{ display: 'block', marginTop: 14, ...SERIF_VALUE, fontSize: 24 }}>
+              {formatDuration(duration)} 읽었어요
+            </span>
+            <span style={{ display: 'block', marginTop: 4, fontSize: 16, color: 'var(--adaptiveGrey700, #3A4637)' }}>
+              기록을 남기려면 계정이 필요해요.
+            </span>
 
             {/* 계정을 만들면 무엇이 되는가 — 방금 잰 값으로 보여 준다. 「연속 1일」은 <b>투영</b>이라
                 아래 한 줄이 「시작하면 …이 돼요」로 그 사실을 말한다(없는 기록을 있다고 하지 않는다). */}
-            <div style={{ display: 'flex', marginTop: 20 }}>
+            <div style={{ ...DENT, display: 'flex', marginTop: 16, padding: '12px 6px' }}>
               <TrialStat label="오늘" value={formatDuration(duration)} />
-              <div style={{ width: 1, background: 'rgba(44, 42, 36, 0.12)' }} />
+              <div style={{ width: 1, background: 'var(--adaptiveGrey200, #D6DFD2)' }} />
               <TrialStat label="연속" value="1일" />
-              <div style={{ width: 1, background: 'rgba(44, 42, 36, 0.12)' }} />
+              <div style={{ width: 1, background: 'var(--adaptiveGrey200, #D6DFD2)' }} />
               <TrialStat label="목표" value="—" />
             </div>
-            <Text typography="st12" color="grey600" style={{ display: 'block', marginTop: 12, wordBreak: 'keep-all' }}>
+
+            {/* 잔디 한 주 — 첫 칸만 채워져 링을 두른다. 방금 잰 시간이 「어디에」 남는지를 그림으로 말한다.
+                링은 blur 0 한 겹이라 싸다(잔디 칸엔 흐린 그림자를 두르지 않는다, 설계 §6). */}
+            <div aria-hidden="true" style={{ display: 'flex', justifyContent: 'center', gap: 6, marginTop: 16 }}>
+              {Array.from({ length: 7 }, (_, i) => (
+                <span
+                  key={i}
+                  data-grass-preview-cell=""
+                  style={{
+                    width: 26,
+                    height: 26,
+                    borderRadius: 8,
+                    background: i === 0 ? 'var(--adaptiveBlue500, #5B7F55)' : 'var(--grass0, #E3E9E0)',
+                    boxShadow:
+                      i === 0 ? '0 0 0 2px var(--adaptiveGrey100, #F9FBF7), 0 0 0 4.5px var(--adaptiveBlue700, #3F5A3C)' : undefined,
+                  }}
+                />
+              ))}
+            </div>
+            <span
+              style={{ display: 'block', marginTop: 8, fontSize: 16, fontWeight: 700, color: 'var(--adaptiveBlue700, #3F5A3C)', wordBreak: 'keep-all' }}
+            >
               {/* 길이가 사용자 데이터라 조사를 고정할 수 없다 — 「7분이」/「12초가」/「2시간이」가 다 지나간다. */}
               시작하면 방금 {formatDuration(duration)}
               {hasFinalConsonant(formatDuration(duration)) ? '이' : '가'} 잔디 첫 칸이 돼요.
-            </Text>
+            </span>
 
-            {WHY_LOGIN.map((line) => (
-              <Text key={line} typography="st12" color="grey600" style={{ display: 'block', marginTop: 8, wordBreak: 'keep-all' }}>
-                {line}
-              </Text>
-            ))}
-            <Button display="block" style={{ marginTop: 24 }} onClick={() => onLogin('trial')}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginTop: 16, textAlign: 'left' }}>
+              {WHY_LOGIN.map((line) => (
+                <span
+                  key={line}
+                  style={{ display: 'flex', alignItems: 'flex-start', gap: 8, fontSize: 15, lineHeight: 1.5, color: 'var(--adaptiveGrey700, #3A4637)', wordBreak: 'keep-all' }}
+                >
+                  <CheckMark />
+                  {line}
+                </span>
+              ))}
+            </div>
+            {/* 「토스로 시작하기」는 TDS primary(옅은 세이지) 그대로다 — 이 화면의 채움은 탭바 원이다(설계 D5). */}
+            <Button display="block" style={{ marginTop: 20 }} onClick={() => onLogin('trial')}>
               토스로 시작하기
             </Button>
-            <Button display="block" variant="weak" style={{ marginTop: 12 }} onClick={onDiscard}>
+            <button
+              type="button"
+              onClick={onDiscard}
+              style={{ ...SOFT_OUTLINE, width: '100%', height: 52, marginTop: 10, fontFamily: 'inherit', fontSize: 17, fontWeight: 700, cursor: 'pointer' }}
+            >
               기록 없이 둘게요
-            </Button>
+            </button>
           </>
         )}
       </div>
