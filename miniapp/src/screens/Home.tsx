@@ -509,8 +509,9 @@ export function NoBookCard({ width = COVER_WIDTH, label = '책 없이' }: { widt
         boxSizing: 'border-box',
         // 시안 Soft-Home 「책 없이」 점선 — 옛 grey200 점선은 부푼 면 위에서 거의 안 보였다. 중간 명도라
         // 독서등(밤)의 「읽는 중」 카드 위에서도 보인다. 시안의 옅은 면(#F3F6F1)은 두지 않는다 — 밤 카드에
-        // 밝은 상자가 뜨고, 낮엔 카드색(#F9FBF7)과 거의 같아 투명과 구별되지 않는다. 굵기는 2px 그대로 —
-        // 서재 「책 추가」 칸과 같은 부품이라 서재 판정(PR-3)과 함께 본다.
+        // 밝은 상자가 뜨고, 낮엔 카드색(#F9FBF7)과 거의 같아 투명과 구별되지 않는다. 굵기는 2px 그대로다
+        // (Soft PR-3 서재 판정): 시안의 1.5px은 DPR 3 크롬에서 computed 1px로 떨어져 캔버스 위 「책 추가」 칸의
+        // 점선이 흐려지고, 밤 카드 위에선 거의 사라졌다(목 모드 390×844@3 실측).
         border: '2px dashed #7C8A78',
         borderRadius: 4,
         display: 'flex',

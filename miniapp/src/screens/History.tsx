@@ -1,11 +1,26 @@
 import type { CSSProperties } from 'react';
 import { useEffect, useState } from 'react';
 
-import type { BookRead, ContributionGraph, DailyRecord, MonthlySection } from '../api';
+import type { BookRead, ContributionDay, ContributionGraph, DailyRecord, MonthlySection } from '../api';
 import { fetchHistory } from '../api';
 import { CACHE_HISTORY, cacheGet, cachePut } from '../cache';
 import { formatDuration } from '../format';
-import { BookCover, ErrorMessage, GrassGrid, LEVEL_COLORS, MANUAL_OUTLINE, SECTION_RULE, SERIF_VALUE, Screen, SectionTitle, Text, monthLabelPositions } from '../ui';
+import {
+  BookCover,
+  DENT,
+  ErrorMessage,
+  GrassGrid,
+  LEVEL_COLORS,
+  MANUAL_OUTLINE,
+  SECTION_RULE,
+  SERIF_VALUE,
+  Screen,
+  SectionTitle,
+  TODAY_RING,
+  Text,
+  monthLabelPositions,
+  sectionStyle,
+} from '../ui';
 
 /** 기록 화면 잔디 칸 — `GrassGrid`의 기본값과 같아야 월 라벨이 그 열 위에 선다. */
 const CELL_SIZE = 11;
@@ -43,11 +58,13 @@ export function History({ graph }: { graph: ContributionGraph }) {
       <StatStrip graph={graph} />
 
       {/* 시안 2d — 이 화면이 답하는 것의 이름이라 값으로 조판한다(세리프 20). */}
-      <SectionTitle style={{ margin: '24px 0 8px', ...SERIF_VALUE, fontSize: 20 }}>읽은 날짜</SectionTitle>
+      <SectionTitle style={{ margin: '24px 0 12px', ...SERIF_VALUE, fontSize: 20 }}>읽은 날짜</SectionTitle>
 
-      <GrassPanel graph={graph} />
-
-      <Legend />
+      {/* 잔디 카드 — 격자와 범례가 한 면에 선다(시안 Soft-History). */}
+      <section style={GRASS_CARD}>
+        <GrassPanel graph={graph} />
+        <Legend />
+      </section>
 
       {sections !== null && <MonthlyRecords months={sections} />}
       <ErrorMessage message={error} />
@@ -66,33 +83,59 @@ export function GrassPanel({ graph }: { graph: ContributionGraph }) {
   const months = monthLabelPositions(graph.monthLabels, CELL_SIZE);
 
   return (
-    <div className="no-scrollbar" style={{ overflowX: 'auto', paddingBottom: 8 }}>
+    // 스크롤 상자가 링의 바깥 4.5px을 자르지 않게 좌우·아래에 여백을 둔다(overflow가 그림자를 자른다).
+    // 위쪽은 안쪽 상자의 `paddingTop: 22`(월 라벨 자리)가 대신한다.
+    <div className="no-scrollbar" style={{ overflowX: 'auto', padding: '0 5px 8px' }}>
       {/* 라벨은 격자 폭 안에서 절대 배치된다 — inline-block이라 이 상자가 격자만큼만 넓어진다. */}
-      <div style={{ position: 'relative', display: 'inline-block', paddingTop: 16 }}>
-        <div aria-hidden="true" style={{ position: 'absolute', top: 0, left: 0, height: 14 }}>
+      <div style={{ position: 'relative', display: 'inline-block', paddingTop: 22 }}>
+        <div aria-hidden="true" style={{ position: 'absolute', top: 0, left: 0, height: 20 }}>
           {months.map(({ label, left }) => (
             <span
               key={label}
-              style={{ position: 'absolute', left, fontSize: 13, color: '#6F6A5E', whiteSpace: 'nowrap' }}
+              style={{ position: 'absolute', left, fontSize: 14, color: 'var(--adaptiveGrey600, #4E5A4B)', whiteSpace: 'nowrap' }}
             >
               {label}
             </span>
           ))}
         </div>
-        <GrassGrid weeks={graph.weeks} cellSize={CELL_SIZE} />
+        <GrassGrid weeks={graph.weeks} cellSize={CELL_SIZE} today={latestDate(graph.weeks)} />
       </div>
     </div>
   );
 }
 
 /**
+ * 판의 오늘 — 서버가 미래 칸을 `date: null`로 비워 보내므로(`ContributionGraphBuilder`) 가장 늦은 날짜가 곧
+ * <b>유저 타임존의 오늘</b>이다. 기기 시계를 읽으면 자정 언저리에 서버와 날이 갈려 링이 엉뚱한 칸에 선다.
+ * ISO 날짜라 문자열 비교가 곧 날짜 비교다. 날짜가 하나도 없으면(빈 판) `undefined` — 링을 세우지 않는다.
+ */
+export function latestDate(weeks: ContributionDay[][]): string | undefined {
+  let latest: string | undefined;
+  for (const week of weeks) {
+    for (const { date } of week) {
+      if (date !== null && (latest === undefined || date > latest)) latest = date;
+    }
+  }
+  return latest;
+}
+
+/** 잔디 카드 — 섹션 카드 그대로, 제목 바로 아래 붙으므로 위 여백만 뺀다. */
+export const GRASS_CARD: CSSProperties = { ...sectionStyle, marginTop: 0 };
+
+/**
  * 화면 맨 위 스탯 줄 — 연속 · 읽은 날 · 총 시간.
  *
  * <p>여기 있던 식물 성장 카드(땅→새싹→꽃→나무 + 진행 막대)는 폐기했다. 사다리가 주는 것은
  * 「다음 단계까지 N일」이라는 재촉뿐이었고, 정작 이 화면이 답해야 할 세 수는 카드 안팎으로
- * 흩어져 있었다. 상자도 배경도 없이 한 줄로 세운다 — 값이 셋뿐이면 칸막이보다 가는 선이 낫다.
+ * 흩어져 있었다.
  *
- * <p>총 시간 칸만 넓다: 「11시간 5분」은 「4일」의 두 배가 넘어, 같은 폭이면 그 칸만 줄바꿈된다.
+ * <p>Soft(PR-3): 세로선 칸막이 → <b>타일 셋</b>(시안 Soft-History). 「연속」은 버터(정보색 — 모드 무관),
+ * 나머지 둘은 부푼 면의 축소판이다. 그림자는 시안 값 리터럴이다 — `--puffShadow`(10/24px)를 그대로 쓰면
+ * 12px 간격의 이웃 타일까지 번진다. 화면당 타일 3개라 큰 흐림 예산 안이다(§6 「스탯/2열 타일 ≤ 3」).
+ *
+ * <p>총 시간 칸만 넓다: 「11시간 5분」은 「4일」의 두 배가 넘는다. 그래도 분이 붙는 대부분의 값에서 띄어쓰기로
+ * 두 줄로 접힌다(`keep-all`, 390폭 실측: 「1시간 30분」도) — 한 줄 고정이면 타일 밖으로 삐져나간다.
+ * 사용자 결정으로 허용했다(리뷰 I-1, 2026-09-23) — 줄은 공백 자리(「42시간」/「30분」)에서만 갈린다.
  */
 export function StatStrip({
   graph,
@@ -103,31 +146,27 @@ export function StatStrip({
   activeDaysLabel?: string;
 }) {
   const cells = [
-    { label: '연속', value: `${graph.currentStreak}일`, flex: 1 },
-    { label: activeDaysLabel, value: `${graph.activeDays}일`, flex: 1 },
-    { label: '총 시간', value: formatDuration(graph.totalSeconds), flex: 1.5 },
+    { label: '연속', value: `${graph.currentStreak}일`, flex: 1, butter: true },
+    { label: activeDaysLabel, value: `${graph.activeDays}일`, flex: 1, butter: false },
+    { label: '총 시간', value: formatDuration(graph.totalSeconds), flex: 1.5, butter: false },
   ];
 
   return (
-    <div style={{ display: 'flex', marginTop: 14 }}>
-      {cells.map(({ label, value, flex }, index) => (
-        <div
-          key={label}
-          style={
-            index === 0
-              ? { flex }
-              : { flex, borderLeft: '1px solid var(--adaptiveGrey200, #E4DDD0)', paddingLeft: 14 }
-          }
-        >
-          <Text typography="st12" color="grey600" style={{ display: 'block' }}>
+    <div style={{ display: 'flex', gap: 12, marginTop: 14 }}>
+      {cells.map(({ label, value, flex, butter }) => (
+        <div key={label} data-stat-tile="" style={{ ...(butter ? STAT_TILE_BUTTER : STAT_TILE), flex, minWidth: 0 }}>
+          <Text
+            typography="st12"
+            color={butter ? 'var(--butterInk, #5A4A14)' : 'grey600'}
+            style={{ display: 'block', fontSize: 15 }}
+          >
             {label}
           </Text>
-          {/* 세리프 + 19 — 라벨(st12)과 크기·서체 두 축으로 갈린다. 시안은 18이었으나 계단에 18은
-              없다(`typography.test` SCALE) — 한 값 때문에 계단을 넓히느니 옆 칸을 쓴다. */}
+          {/* 세리프 24 — 라벨(15)과 크기·서체 두 축으로 갈린다(시안 Soft-History). */}
           <Text
             typography="st10"
             fontWeight="bold"
-            style={{ ...SERIF_VALUE, display: 'block', fontSize: 19, marginTop: 3, whiteSpace: 'nowrap' }}
+            style={{ ...SERIF_VALUE, display: 'block', fontSize: 24, marginTop: 2, wordBreak: 'keep-all' }}
           >
             {value}
           </Text>
@@ -136,6 +175,19 @@ export function StatStrip({
     </div>
   );
 }
+
+/** 스탯 타일 공통 꼴 + 윗변 1px 빛(부푼 면의 흰 하이라이트를 타일 크기로 줄인 것 — 홈 2열 타일과 같은 값). */
+const STAT_TILE_BASE: CSSProperties = { padding: '10px 14px', borderRadius: 20 };
+const STAT_TILE_BUTTER: CSSProperties = {
+  ...STAT_TILE_BASE,
+  background: 'var(--butterBg, #F2E8C6)',
+  boxShadow: 'inset 0 1px 0 rgba(255, 255, 255, 0.7), 5px 5px 12px rgba(160, 140, 70, 0.18)',
+};
+const STAT_TILE: CSSProperties = {
+  ...STAT_TILE_BASE,
+  background: 'var(--adaptiveGrey100, #F9FBF7)',
+  boxShadow: '5px 5px 12px rgba(94, 122, 90, 0.16), -4px -4px 10px rgba(255, 255, 255, 0.95)',
+};
 
 const WEEKDAYS = ['일', '월', '화', '수', '목', '금', '토'];
 
@@ -257,41 +309,68 @@ export function MonthlyRecords({ months }: { months: MonthlySection[] }) {
   }
 
   return (
-    <div style={{ marginTop: 28, borderTop: '1px solid var(--adaptiveGrey200, #E4DDD0)' }}>
+    <div style={{ marginTop: 12 }}>
       {months.map((section) => (
         <section key={section.month}>
-          {/* 달 이름과 합계가 한 줄로 머리를 이룬다 — 선은 그 줄 아래를 지난다(시안 2d). */}
-          <div
-            style={{
-              display: 'flex',
-              justifyContent: 'space-between',
-              alignItems: 'baseline',
-              margin: '20px 0 4px',
-              paddingBottom: 10,
-              borderBottom: SECTION_RULE,
-            }}
-          >
-            {/* 시안 2d — 달 이름과 그 달의 합계는 둘 다 값이다. 크기로 층을 두되 서체는 같이 간다. */}
-            <Text typography="st10" fontWeight="bold" style={{ ...SERIF_VALUE, fontSize: 20 }}>
-              {formatMonthTitle(section.month)}
-            </Text>
-            <Text typography="st12" color="grey600" style={{ ...SERIF_VALUE, fontSize: 14 }}>
-              {formatDuration(section.totalSeconds)}
-            </Text>
-          </div>
-          {section.days.map((day) => (
-            <DayRow
-              key={day.date}
-              day={day}
-              expanded={day.date === openDate}
-              onToggle={() => setOpenDate(day.date === openDate ? null : day.date)}
-            />
-          ))}
+          <MonthHead month={section.month} totalSeconds={section.totalSeconds} />
+          {section.days.length > 0 && (
+            <div style={DAY_TRAY}>
+              {section.days.map((day) => (
+                <DayRow
+                  key={day.date}
+                  day={day}
+                  expanded={day.date === openDate}
+                  onToggle={() => setOpenDate(day.date === openDate ? null : day.date)}
+                />
+              ))}
+            </div>
+          )}
         </section>
       ))}
     </div>
   );
 }
+
+/**
+ * 월 머리 — 달 이름과 그 달 합계가 한 줄로 머리를 이룬다, 선은 그 줄 아래를 지난다(시안 2d). 공부 기록이 같이 쓴다.
+ *
+ * <p>합계는 16 굵게 세이지(시안 Soft-History) — 달 이름(세리프 20)과 크기로 층을 두되 서체는 같이 간다.
+ */
+export function MonthHead({ month, totalSeconds }: { month: string; totalSeconds: number }) {
+  return (
+    <div
+      style={{
+        display: 'flex',
+        justifyContent: 'space-between',
+        alignItems: 'baseline',
+        margin: '20px 0 12px',
+        paddingBottom: 10,
+        borderBottom: SECTION_RULE,
+      }}
+    >
+      <Text typography="st10" fontWeight="bold" style={{ ...SERIF_VALUE, fontSize: 20 }}>
+        {formatMonthTitle(month)}
+      </Text>
+      <Text typography="st12" fontWeight="bold" color="blue700" style={{ ...SERIF_VALUE, fontSize: 16 }}>
+        {formatDuration(totalSeconds)}
+      </Text>
+    </div>
+  );
+}
+
+/**
+ * 그 달의 날짜 줄들을 담는 <b>눌린 쟁반</b> 하나(시안 Soft-History). 줄 사이 구분선 대신 눌린 면 + 간격이 가른다.
+ *
+ * <p>월 쟁반을 다시 부푼 카드로 감싸지 않는다(시안은 감쌌다): 카드 패딩 18×2가 하루 막대 칸을 60px 아래로
+ * 깎아, 막대로 날을 견주는 것 자체가 흐려진다. 쟁반이 곧 캔버스에 파인 묶음이다.
+ */
+export const DAY_TRAY: CSSProperties = {
+  ...DENT,
+  display: 'flex',
+  flexDirection: 'column',
+  gap: 12,
+  padding: 14,
+};
 
 /**
  * 하루 한 줄의 고정 격자 — 날짜 · 표지 더미 · 막대 · 시간 · 손잡이.
@@ -301,18 +380,46 @@ export function MonthlyRecords({ months }: { months: MonthlySection[] }) {
  * 막대 길이로 날을 견주는 것 자체가 거짓이었다. 격자로 못 박으면 구조적으로 어긋날 수가 없다.
  *
  * <p>손잡이 칸은 <b>펼칠 수 없는 날에도 비워 남긴다</b> — 그 칸이 사라지면 시간의 오른쪽 끝이 밀린다.
+ *
+ * <p>줄 사이 구분선은 없다 — 눌린 쟁반({@link DAY_TRAY})의 간격이 가른다(Soft PR-3). 시간 칸 84px은 세리프 17의
+ * 「1시간 15분」(≈82px)이 들어가는 폭이다. 「10시간 30분」처럼 더 긴 값은 오른쪽 정렬이라 빈 막대 쪽으로 넘친다.
  */
 const ROW_GRID: CSSProperties = {
   display: 'grid',
-  gridTemplateColumns: '50px 56px minmax(0, 1fr) 76px 16px',
+  gridTemplateColumns: '50px 56px minmax(0, 1fr) 84px 14px',
   alignItems: 'center',
   columnGap: 8,
   width: '100%',
-  padding: '9px 0',
-  borderBottom: '1px solid var(--adaptiveGrey100, #EFEAE0)',
+  padding: 0,
 };
 
-/** 버튼의 기본 꼴을 지운다 — 손잡이지 알약이 아니다. `ROW_GRID`를 뒤에 펴서 아래 테두리를 되살린다. */
+/**
+ * 하루 막대 — 트랙(카드 면, 16px 알약) 위에 2px 띄워 앉은 세이지 그라데이션(시안 Soft-History). 폭은
+ * {@link barPercent} 그대로다.
+ *
+ * <p>양 끝 색이 <b>토큰</b>이다(시안은 `#8FB087 → #5B7F55` 리터럴): 공부 기록이 같은 막대를 쓰는데 `body.study-mode`가
+ * 이 두 토큰을 파랑 사다리로 갈아 끼운다 — 리터럴이면 공부 화면의 이 막대만 세이지로 남는다. 옛 막대가
+ * `LEVEL_COLORS[2]`를 쓰던 이유와 같다.
+ */
+export const BAR_TRACK: CSSProperties = {
+  height: 16,
+  borderRadius: 999,
+  background: 'var(--adaptiveGrey100, #F9FBF7)',
+  padding: 2,
+  boxSizing: 'border-box',
+};
+export const BAR_FILL = 'linear-gradient(90deg, var(--adaptiveBlue400, #8FB087), var(--adaptiveBlue500, #5B7F55))';
+
+/** 트랙 위 막대 한 줄 — `barPercent`가 낸 퍼센트를 받는다. 0%면 빈 트랙만 남는다. */
+export function DayBar({ percent }: { percent: number }) {
+  return (
+    <div aria-hidden="true" style={BAR_TRACK}>
+      <div style={{ width: `${percent}%`, height: 12, borderRadius: 999, background: BAR_FILL }} />
+    </div>
+  );
+}
+
+/** 버튼의 기본 꼴을 지운다 — 손잡이지 알약이 아니다. `ROW_GRID`를 뒤에 펴서 격자를 입힌다. */
 const BUTTON_RESET: CSSProperties = {
   border: 'none',
   background: 'none',
@@ -343,39 +450,16 @@ export function DayRow({
   const expandable = isExpandable(day);
   const summary = (
     <>
-      <div>
-        <Text typography="st11" style={{ display: 'block', lineHeight: 1.2, ...SERIF_VALUE, fontSize: 15 }}>
-          {formatRecordDate(day.date)}
-        </Text>
-        <Text typography="st12" color="grey600" style={{ display: 'block' }}>
-          {formatWeekday(day.date)}
-        </Text>
-      </div>
+      <DayDate date={day.date} />
 
       <CoverPile books={day.books} />
 
-      {/* 막대 색은 잔디 팔레트에서 가져온다 — 같은 「얼마나 읽었나」를 두 곳이 다른 색으로 말하지 않게.
-          기준은 그날 목표다(서버가 실어 준다). 롤링 배포 중 옛 서버 응답엔 그 필드가 없어 0으로 떨어진다
+      {/* 기준은 그날 목표다(서버가 실어 준다). 롤링 배포 중 옛 서버 응답엔 그 필드가 없어 0으로 떨어진다
           — 읽은 날은 가득. */}
-      <div
-        aria-hidden="true"
-        style={{
-          width: `${barPercent(day.totalSeconds, day.goalSeconds ?? 0)}%`,
-          height: 6,
-          borderRadius: 3,
-          background: LEVEL_COLORS[2],
-        }}
-      />
+      <DayBar percent={barPercent(day.totalSeconds, day.goalSeconds ?? 0)} />
 
-      {/* 정렬은 감싸는 요소가 한다 — TDS `Text` 는 style 의 `text-align` 을 <b>걸러 낸다</b>(인라인
-          스타일에 아예 안 실려서 조용히 왼쪽 정렬로 남는다). 오른쪽 정렬이라야 「10시간 30분」 같은 긴
-          값이 넘칠 때 빈 막대 쪽으로 넘치지, 옆의 손잡이를 침범하지 않는다. */}
-      <div style={{ textAlign: 'right' }}>
-        {/* 잉크색이다 — 이 줄이 대답하는 값이 이것인데, 흐린 색이면 왼쪽 날짜보다 뒤로 물러난다. */}
-        <Text typography="st11" style={{ whiteSpace: 'nowrap', ...SERIF_VALUE, fontSize: 15 }}>
-          {formatDuration(day.totalSeconds)}
-        </Text>
-      </div>
+      <DayTotal seconds={day.totalSeconds} />
+
 
       {expandable ? <Chevron open={expanded} /> : <span aria-hidden="true" />}
     </>
@@ -401,6 +485,37 @@ export function DayRow({
   );
 }
 
+/** 날짜 칸 — 세리프 17 날짜 위, 14 요일 아래(시안 Soft-History). 공부 기록 줄이 같이 쓴다. */
+export function DayDate({ date }: { date: string }) {
+  return (
+    <div>
+      <Text typography="st11" style={{ display: 'block', lineHeight: 1.2, ...SERIF_VALUE, fontSize: 17 }}>
+        {formatRecordDate(date)}
+      </Text>
+      <Text typography="st12" color="grey600" style={{ display: 'block' }}>
+        {formatWeekday(date)}
+      </Text>
+    </div>
+  );
+}
+
+/**
+ * 그날 합계 — 세리프 17 잉크색. 이 줄이 대답하는 값이 이것이라 흐린 색이면 왼쪽 날짜보다 뒤로 물러난다.
+ *
+ * <p>정렬은 감싸는 요소가 한다 — TDS `Text`는 style의 `text-align`을 <b>걸러 낸다</b>(인라인 스타일에 아예 안
+ * 실려서 조용히 왼쪽 정렬로 남는다). 오른쪽 정렬이라야 「10시간 30분」 같은 긴 값이 넘칠 때 빈 막대 쪽으로
+ * 넘치지, 옆의 손잡이를 침범하지 않는다.
+ */
+export function DayTotal({ seconds }: { seconds: number }) {
+  return (
+    <div style={{ textAlign: 'right' }}>
+      <Text typography="st11" style={{ whiteSpace: 'nowrap', ...SERIF_VALUE, fontSize: 17 }}>
+        {formatDuration(seconds)}
+      </Text>
+    </div>
+  );
+}
+
 /**
  * 더미에서 뒷장이 내다보는 폭 — 20px 표지의 12px을 남긴다.
  *
@@ -412,14 +527,14 @@ const PILE_OVERLAP = -8;
 /**
  * 더미의 한 장.
  *
- * <p>테두리는 캔버스와 같은 종이색이다(`#F7F2E8` — 이 앱 배경엔 css 변수가 없어 리터럴을 쓴다).
+ * <p>테두리는 더미가 앉은 바탕색이다 — 지금은 눌린 쟁반({@link DAY_TRAY})이라 `--softDent`(blur 0 링).
  * 이게 없으면 색이 비슷한 책 둘이 붙어 <b>한 덩어리로 뭉쳐</b> 몇 권인지가 안 보인다.
  */
 const PILE_CARD: CSSProperties = {
   position: 'relative',
   display: 'flex',
   borderRadius: 4,
-  boxShadow: '0 0 0 1.5px #F7F2E8',
+  boxShadow: '0 0 0 1.5px var(--softDent, #E6ECE3)',
 };
 
 /**
@@ -499,14 +614,15 @@ function BookLines({ rows, goalSeconds }: { rows: DayBookRow[]; goalSeconds?: nu
     // 그 줄이 B에서 세이지 200으로 옮겨 갔으므로 여기도 함께 옮긴다(안 옮기면 이 주석이 거짓이 된다).
     // 시안 2d는 `rgba(110,138,106,.35)`로 인용(.5)보다 한 톤 옅지만, 15% 알파 차이로 두 자리를
     // 갈라 두면 「한 가지로 한다」는 규약만 잃는다.
+    // 들여쓰기 58 = 날짜 칸(50) + 간격(8) — 가이드라인이 표지 더미 칸 시작점에 선다(쟁반 안이라 옛 70은 막대를 깎았다).
     <div
       style={{
-        margin: '2px 0 9px 70px',
+        margin: '10px 0 0 58px',
         paddingLeft: 16,
         borderLeft: '2px solid var(--adaptiveBlue200, #B6C9AE)',
         display: 'flex',
         flexDirection: 'column',
-        gap: 7,
+        gap: 8,
       }}
     >
       {rows.map((row) => (
@@ -514,7 +630,7 @@ function BookLines({ rows, goalSeconds }: { rows: DayBookRow[]; goalSeconds?: nu
           key={row.title}
           style={{
             display: 'grid',
-            gridTemplateColumns: '18px minmax(0, 1fr) 46px 56px',
+            gridTemplateColumns: '26px minmax(0, 1fr) 36px 72px',
             alignItems: 'center',
             columnGap: 8,
           }}
@@ -524,25 +640,20 @@ function BookLines({ rows, goalSeconds }: { rows: DayBookRow[]; goalSeconds?: nu
               aria-hidden="true"
               style={{
                 display: 'block',
-                width: 18,
-                height: 25,
+                width: 26,
+                height: 36,
                 borderRadius: 3,
                 border: '1px dashed var(--adaptiveGrey200, #E4DDD0)',
               }}
             />
           ) : (
-            <BookCover url={row.coverUrl} title={row.title} width={18} />
+            <BookCover url={row.coverUrl} title={row.title} width={26} />
           )}
 
-          {row.unassigned ? (
-            <Text typography="st12" color="grey600" style={name}>
-              {row.title}
-            </Text>
-          ) : (
-            <Text typography="st12" style={name}>
-              {row.title}
-            </Text>
-          )}
+          {/* 이름 16 — 시안 펼친 줄. 책 안 고른 줄은 책이 아니라 설명이라 흐리게 눌러 그린다. */}
+          <Text typography="st11" color={row.unassigned ? 'grey600' : undefined} style={{ ...name, fontSize: 16 }}>
+            {row.title}
+          </Text>
 
           <div
             aria-hidden="true"
@@ -555,7 +666,7 @@ function BookLines({ rows, goalSeconds }: { rows: DayBookRow[]; goalSeconds?: nu
           />
 
           <div style={{ textAlign: 'right' }}>
-            <Text typography="st12" color="grey600" style={{ whiteSpace: 'nowrap', ...SERIF_VALUE, fontSize: 13 }}>
+            <Text typography="st11" color="grey700" style={{ whiteSpace: 'nowrap', ...SERIF_VALUE, fontSize: 16 }}>
               {formatDuration(row.seconds)}
             </Text>
           </div>
@@ -622,6 +733,11 @@ export function Legend({ manual = true }: { manual?: boolean } = {}) {
           </Text>
         </>
       )}
+      {/* 오늘 칸 링의 설명 — 격자의 그 칸과 같은 링을 두른다(링이 스와치 밖 4.5px까지 나가 간격을 더 둔다). */}
+      <span style={{ ...swatch, marginLeft: 14, background: LEVEL_COLORS[2], boxShadow: TODAY_RING }} />
+      <Text typography="st12" color="grey600" style={{ marginLeft: 4 }}>
+        오늘
+      </Text>
     </div>
   );
 }

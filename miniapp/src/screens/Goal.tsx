@@ -3,7 +3,7 @@ import { useState } from 'react';
 
 import { setGoal } from '../api';
 import { formatDuration } from '../format';
-import { ErrorMessage, FilledButton, Screen, Text } from '../ui';
+import { ErrorMessage, FilledButton, PUFF, Screen, Text } from '../ui';
 import { combineWheel, wheelIndices } from '../wheelTime';
 
 /** 휠 시간 열의 상한 — 하루 독서 목표로 12시간이면 넘치고, 더 길면 휠만 길어져 고르기 힘들다. */
@@ -92,48 +92,51 @@ export function Goal({
 
       {/* 고르는 자리는 세로 가운데 — 위아래 남는 공간을 `auto`가 반씩 먹는다. */}
       <div style={{ margin: 'auto 0' }}>
-      {/* 프리셋 칩 대신 휠 2열 — 초는 selected 하나가 단일 소스고, 시/분은 그때그때 풀었다 다시 합친다.
-          높이는 컨테이너가 줘야 한다 — Wheel 루트가 height:100%라(항목 한 칸 = 그 16%) 높이 없는 부모에
-          넣으면 컨테이너가 0이 되어 항목이 전부 한 줄에 겹친다(브라우저 실측 2026-08-13). */}
-      <div
-        className="goal-wheels"
-        style={{ position: 'relative', display: 'flex', justifyContent: 'center', gap: 8, height: 180 }}
-      >
-        {/* 선택 밴드(시안 2e) — 가운데 칸이 「고른 것」임을 색으로 말한다. 정적이다(애니메이션 0):
-            T-176이 발광 애니메이션으로 표지를 초당 60번 재래스터화했던 자리와 같은 종류다. */}
+      {/* 휠 카드 — 부푼 면(Soft PR-3). 안개(global.css `.goal-wheels`)가 이 카드 면색과 같아야 띠가 안 진다. */}
+      <div style={{ ...PUFF, padding: '12px 0' }}>
+        {/* 프리셋 칩 대신 휠 2열 — 초는 selected 하나가 단일 소스고, 시/분은 그때그때 풀었다 다시 합친다.
+            높이는 컨테이너가 줘야 한다 — Wheel 루트가 height:100%라(항목 한 칸 = 그 16%) 높이 없는 부모에
+            넣으면 컨테이너가 0이 되어 항목이 전부 한 줄에 겹친다(브라우저 실측 2026-08-13). */}
         <div
-          aria-hidden="true"
-          data-wheel-band=""
-          style={{
-            position: 'absolute',
-            left: 0,
-            right: 0,
-            top: '50%',
-            height: 44,
-            transform: 'translateY(-50%)',
-            // ⚠️ 시안·설계는 `rgba(110,138,106,.12)`인데 **토큰으로 바꿨다**: 종이색 위 합성값이
-            // ≈`#EAECE4`로 이 토큰(`#E7EEE2`)과 사실상 같고, 토큰이라야 밤 테마를 함께 탄다.
-            // (이탈이라는 사실이 어디에도 없어 처음부터 그랬던 것처럼 읽혔다 — 독립 리뷰 적발.)
-            background: 'var(--adaptiveBlue50, #E7EEE2)',
-            borderRadius: 10,
-          }}
-        />
-        <Wheel
-          options={HOUR_OPTIONS}
-          formatValue={(n) => `${n}시간`}
-          initialIndex={initialWheel.hours}
-          onChange={(hours) => setSelected((s) => combineWheel(hours, wheelIndices(s).minutes))}
-          width={120}
-          aria-label="시간 선택"
-        />
-        <Wheel
-          options={MINUTE_OPTIONS}
-          formatValue={(n) => `${n}분`}
-          initialIndex={initialWheel.minutes}
-          onChange={(minutes) => setSelected((s) => combineWheel(wheelIndices(s).hours, minutes))}
-          width={120}
-          aria-label="분 선택"
-        />
+          className="goal-wheels"
+          style={{ position: 'relative', display: 'flex', justifyContent: 'center', gap: 8, height: 180 }}
+        >
+          {/* 선택 밴드(시안 2e) — 가운데 칸이 「고른 것」임을 색으로 말한다. 정적이다(애니메이션 0):
+              T-176이 발광 애니메이션으로 표지를 초당 60번 재래스터화했던 자리와 같은 종류다. */}
+          <div
+            aria-hidden="true"
+            data-wheel-band=""
+            style={{
+              position: 'absolute',
+              left: 0,
+              right: 0,
+              top: '50%',
+              height: 44,
+              transform: 'translateY(-50%)',
+              // ⚠️ 시안·설계는 `rgba(110,138,106,.12)`인데 **토큰으로 바꿨다**: 종이색 위 합성값이
+              // ≈`#EAECE4`로 이 토큰(`#E7EEE2`)과 사실상 같고, 토큰이라야 밤 테마를 함께 탄다.
+              // (이탈이라는 사실이 어디에도 없어 처음부터 그랬던 것처럼 읽혔다 — 독립 리뷰 적발.)
+              background: 'var(--adaptiveBlue50, #E7EEE2)',
+              borderRadius: 10,
+            }}
+          />
+          <Wheel
+            options={HOUR_OPTIONS}
+            formatValue={(n) => `${n}시간`}
+            initialIndex={initialWheel.hours}
+            onChange={(hours) => setSelected((s) => combineWheel(hours, wheelIndices(s).minutes))}
+            width={120}
+            aria-label="시간 선택"
+          />
+          <Wheel
+            options={MINUTE_OPTIONS}
+            formatValue={(n) => `${n}분`}
+            initialIndex={initialWheel.minutes}
+            onChange={(minutes) => setSelected((s) => combineWheel(wheelIndices(s).hours, minutes))}
+            width={120}
+            aria-label="분 선택"
+          />
+        </div>
       </div>
 
       {/* 고른 값의 일주일 환산 — 휠이 돌면 함께 바뀐다(selected가 단일 소스).

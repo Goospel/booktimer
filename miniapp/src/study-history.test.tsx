@@ -69,8 +69,27 @@ describe('공부 기록 화면', () => {
   });
 
   it('하루 막대 3줄이 전부 토큰을 탄다 — 픽스처의 날 수만큼', () => {
-    const bars = markup.match(/height:6px;border-radius:3px;background:var\(--grass2, #A3C09B\)/g);
+    // Soft PR-3: 막대가 트랙 위 그라데이션이 됐다. 양 끝 색이 둘 다 토큰이라야 공부 모드에서 파랑이 된다
+    // (시안 값 `#8FB087 → #5B7F55`를 리터럴로 적으면 이 자리만 세이지로 남는다).
+    const bars = markup.match(
+      /height:12px;border-radius:999px;background:linear-gradient\(90deg, var\(--adaptiveBlue400, #8FB087\), var\(--adaptiveBlue500, #5B7F55\)\)/g,
+    );
     expect(bars).toHaveLength(3);
+  });
+
+  it('달마다 눌린 날짜 묶음 하나 · 오늘 칸 링 하나 — 독서 기록과 같은 판을 쓴다', () => {
+    const dated: StudyHistoryResponse = {
+      graph: {
+        ...graph,
+        weeks: [[{ date: '2026-09-02', totalSeconds: 600, level: 2, manual: false }, { date: '2026-09-01', totalSeconds: 0, level: 0, manual: false }]],
+      },
+      months,
+    };
+    const view = render(<StudyHistoryView data={dated} />);
+
+    expect(view.split('var(--dentShadow').length - 1).toBe(2); // 픽스처 두 달
+    // 칸(`title=` 날짜를 단 div)만 센다 — 범례 「오늘」 스와치도 같은 링을 두른다.
+    expect(view.match(/<div title="[^"]*" style="[^"]*0 0 0 4\.5px var\(--adaptiveBlue700/g)).toHaveLength(1);
   });
 
   it('범례 스와치 5개가 전부 토큰을 탄다 — 농도 0~4가 한 칸도 빠짐없이', () => {

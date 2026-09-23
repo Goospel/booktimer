@@ -212,6 +212,80 @@ describe('잔디 가로 채움 (GrassGrid fill)', () => {
   });
 });
 
+/**
+ * 오늘 칸 링 (Soft PR-3) — 잔디 한 판에서 「오늘이 어디인가」를 칸 하나에 두른 두 겹 링으로 말한다.
+ *
+ * <p>⚠️ 공용 픽스처 `graph`는 칸 날짜가 전부 `2026-08-10`이라 「정확히 1개」를 물을 수 없다(다섯 칸이 다
+ * 오늘이 된다). 그래서 날짜가 서로 다른 판을 여기서 따로 만든다 — 픽스처가 계측기의 판별력을 정한다.
+ */
+describe('잔디 오늘 칸 링 (GrassGrid today)', () => {
+  const cell = (date: string | null, level: number) => ({ date, totalSeconds: level * 600, level, manual: false });
+  // weeks[0] = 최신 주(왼쪽). 오늘 = 2026-09-23. 날짜 없는 칸은 미래(아직 안 온 날) 자리다.
+  const weeks = [
+    [cell('2026-09-21', 2), cell('2026-09-22', 0), cell('2026-09-23', 3), cell(null, 0)],
+    [cell('2026-09-14', 1), cell('2026-09-15', 4), cell('2026-09-16', 0), cell('2026-09-17', 2)],
+  ];
+  /** 바깥 링의 표식 — 칸 두 겹 링 중 세이지 쪽. 이 문자열은 오늘 칸에만 실린다. */
+  const RING = '0 0 0 4.5px var(--adaptiveBlue700';
+  const rings = (markup: string) => markup.split(RING).length - 1;
+  const render = (today?: string) => renderToStaticMarkup(<GrassGrid weeks={weeks} today={today} />);
+
+  it('오늘 칸 하나에만 링을 두른다 — 둘이면 오늘이 어디인지 되묻고, 0이면 링이 없는 것과 같다', () => {
+    const markup = render('2026-09-23');
+
+    expect(markup.match(/width:11px;height:11px/g)).toHaveLength(8); // 판이 다 그려졌다(칸 8개)
+    expect(rings(markup)).toBe(1);
+  });
+
+  it('링이 선 칸이 바로 오늘 날짜 칸이다 — 개수만 맞고 자리가 틀린 오매칭을 잡는다', () => {
+    const markup = render('2026-09-23');
+    const tag = markup.slice(markup.lastIndexOf('<', markup.indexOf(RING)), markup.indexOf(RING));
+
+    expect(tag).toContain('title="2026-09-23"');
+  });
+
+  it('today를 안 주면 링이 없다 — 옛 호출부(날짜를 모르는 자리)는 무변경', () => {
+    const markup = render();
+
+    expect(markup.match(/width:11px;height:11px/g)).toHaveLength(8);
+    expect(rings(markup)).toBe(0);
+  });
+
+  it('판에 없는 날짜면 링이 없다 — 다른 칸이 대신 떠맡지 않는다', () => {
+    const markup = render('2026-09-24');
+
+    expect(markup.match(/width:11px;height:11px/g)).toHaveLength(8);
+    expect(rings(markup)).toBe(0);
+  });
+
+  it('링은 blur 0 두 겹이다 — 흐린 그림자는 칸마다 재래스터를 부른다(§6 · 안드로이드 72%)', () => {
+    expect(render('2026-09-23')).toContain(
+      'box-shadow:0 0 0 2px var(--adaptiveGrey100, #F9FBF7), 0 0 0 4.5px var(--adaptiveBlue700, #3F5A3C)',
+    );
+  });
+
+  it('오늘이 0단(아직 안 읽음)이어도 링이 선다 — 0단 칸 일반의 옅은 링(§2-4)과 다른 규칙이다', () => {
+    const markup = render('2026-09-22'); // 픽스처에서 level 0인 칸
+    const at = markup.indexOf(RING);
+    const tag = markup.slice(markup.lastIndexOf('<', at), at);
+
+    expect(rings(markup)).toBe(1);
+    expect(tag).toContain('title="2026-09-22"');
+    expect(tag).toContain('background:var(--grass0'); // 정말 0단 칸을 겨눴다
+  });
+
+  it('오늘 칸은 층을 한 칸 올린다(z 1) — 링이 칸 간격 3px을 넘어 뒤 칸 밑에 깔리지 않게, 덮개 판정(≥99)엔 한참 못 미치게', () => {
+    const markup = render('2026-09-23');
+    const tag = markup.slice(markup.lastIndexOf('<', markup.indexOf(RING)), markup.indexOf(RING) + 200);
+
+    expect(tag).toContain('position:relative;z-index:1');
+  });
+
+  it('칸 모서리는 3px — 11px 칸에 시안의 7은 동그라미가 된다', () => {
+    expect(render()).toContain('width:11px;height:11px;border-radius:3px');
+  });
+});
+
 /** 홈은 시각 화면이라 단위테스트를 두지 않지만, 목표 0(0으로 나누기) 경계만은 계측한다. */
 function home(overrides: Partial<DashboardResponse>) {
   const dashboard: DashboardResponse = {
@@ -360,15 +434,8 @@ describe('배경·color-scheme', () => {
     expect(read('./global.css')).toMatch(/html\s+body\s*\{[^}]*background:\s*#EEF2EB/); // 시안 body
   });
 
-  it('목표 휠 페이드가 캔버스와 같은 색이다 — 어긋나면 휠 위아래에 띠가 진다', () => {
-    // TDS 휠의 위아래 그라데이션은 캔버스로 「사라지게」 하는 마스크라, 캔버스 색이 바뀌면
-    // 여기도 함께 바뀌어야 한다. 손으로 동기화되는 두 값이라 한쪽만 고치기 쉽다.
-    const css = read('./global.css');
-    const bg = /html\s+body\s*\{[^}]*background:\s*(#[0-9A-Fa-f]{6})/.exec(css)?.[1] ?? '';
-    const rgb = [1, 3, 5].map((i) => parseInt(bg.substr(i, 2), 16)).join(', ');
-    expect(bg).toMatch(/^#[0-9A-Fa-f]{6}$/); // 위 정규식이 빗나가면 아래 단언이 공허해진다
-    expect(css).toContain(`rgba(${rgb}, 0.95)`);
-  });
+  // 「목표 휠 페이드 = 캔버스색」 단언은 Soft PR-3에서 goal.test.tsx 「안개 색 = 카드 면 색」으로 옮겼다 —
+  // 휠이 캔버스가 아니라 부푼 카드(와 시트 패널) 위에 서게 되어 짝이 캔버스에서 `--adaptiveGrey100`으로 바뀌었다.
 
   it('TDS Text를 블록으로 되돌린다 — TDS가 호출부의 display:block을 inline-block으로 덮어써 줄이 붙는다', () => {
     expect(read('./global.css')).toMatch(/Paragraph\.Text[^}]*display:\s*block\s*!important/);

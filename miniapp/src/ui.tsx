@@ -58,6 +58,9 @@ export const LEVEL_COLORS = [
 /** 수동 기록 칸의 테두리 — 웹 `--neutral-3`. 격자와 범례가 같은 값을 봐야 범례가 거짓말을 안 한다. */
 export const MANUAL_OUTLINE = '1px solid #9A9486';
 
+/** 잔디 오늘 칸 링 — 범례 「오늘」 스와치도 같은 값을 둘러야 범례가 거짓말을 안 한다. */
+export const TODAY_RING = '0 0 0 2px var(--adaptiveGrey100, #F9FBF7), 0 0 0 4.5px var(--adaptiveBlue700, #3F5A3C)';
+
 /** 주 컬럼 사이 간격 — 격자와 월 라벨 배치가 이 값을 공유해야 라벨이 그 열 위에 선다. */
 export const GRASS_GAP = 3;
 
@@ -94,10 +97,17 @@ export function GrassGrid({
   weeks,
   cellSize = 11,
   fill = false,
+  today,
 }: {
   weeks: ContributionDay[][];
   cellSize?: number;
   fill?: boolean;
+  /**
+   * 오늘(ISO) — 그 날짜 칸 하나에 두 겹 링을 두른다(시안 Soft-History). 안쪽 한 겹은 카드 면색이라 링이 칸에서
+   * 떨어져 보인다. 둘 다 blur 0이라 칸 수만큼 반복돼도 재래스터가 없다(§6). 0단 칸 전체에 두르는 옅은 링(§2-4)은
+   * 없다. 오늘 링은 0단이어도 선다 — 아직 안 읽은 오늘이 가장 「오늘이 어디인가」를 물을 때다.
+   */
+  today?: string;
 }) {
   return (
     <div style={{ display: 'flex', gap: GRASS_GAP, width: fill ? '100%' : undefined }}>
@@ -106,21 +116,30 @@ export function GrassGrid({
           key={weekIndex}
           style={{ display: 'flex', flexDirection: 'column', gap: GRASS_GAP, flex: fill ? 1 : undefined }}
         >
-          {week.map((day, dayIndex) => (
-            <div
-              key={dayIndex}
-              title={day.date ?? ''}
-              style={{
-                width: fill ? '100%' : cellSize,
-                height: fill ? undefined : cellSize,
-                aspectRatio: fill ? '1 / 1' : undefined,
-                borderRadius: 2,
-                // 날짜 없는 칸은 그리드 가장자리 placeholder라 빈 칸으로 둔다.
-                background: day.date === null ? 'transparent' : LEVEL_COLORS[day.level],
-                outline: day.manual ? MANUAL_OUTLINE : undefined,
-              }}
-            />
-          ))}
+          {week.map((day, dayIndex) => {
+            const isToday = today !== undefined && day.date === today;
+            return (
+              <div
+                key={dayIndex}
+                title={day.date ?? ''}
+                style={{
+                  width: fill ? '100%' : cellSize,
+                  height: fill ? undefined : cellSize,
+                  aspectRatio: fill ? '1 / 1' : undefined,
+                  // 11px 칸에 시안의 7px은 동그라미가 된다 — 판단값 3.
+                  borderRadius: 3,
+                  // 날짜 없는 칸은 그리드 가장자리 placeholder라 빈 칸으로 둔다.
+                  background: day.date === null ? 'transparent' : LEVEL_COLORS[day.level],
+                  outline: day.manual ? MANUAL_OUTLINE : undefined,
+                  boxShadow: isToday ? TODAY_RING : undefined,
+                  // 링 바깥 4.5px이 칸 간격 3px을 넘어 이웃 칸에 걸친다 — 층을 한 칸 올려야 문서 순서상 뒤 칸
+                  // 밑에 깔리지 않고 사방이 고르게 보인다. 1이면 충분하다(99 이상은 덮개 판정식에 걸린다, T-183).
+                  position: isToday ? 'relative' : undefined,
+                  zIndex: isToday ? 1 : undefined,
+                }}
+              />
+            );
+          })}
         </div>
       ))}
     </div>

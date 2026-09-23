@@ -431,17 +431,18 @@ html strong {
  * 콜론 뒤 공백 차이에 걸리지 않는다.
  */
 .goal-wheels [style*='--wheel-top-shadow-gradient'] {
-  /* #EEF2EB = 위 `html body`의 캔버스색. 휠을 캔버스로 사라지게 하는 마스크라 둘이 같아야
-     한다 — 어긋나면 휠 위아래로 띠가 진다(ui.test.tsx가 둘을 묶어 둔다). */
+  /* #F9FBF7 = 카드 면(`--adaptiveGrey100`). 휠을 그 면으로 사라지게 하는 마스크라 둘이 같아야 한다 —
+     어긋나면 휠 위아래로 띠가 진다(goal.test.tsx가 둘을 묶어 둔다). Soft PR-3에서 캔버스색 → 카드 면색:
+     목표 화면 휠이 부푼 카드 위로 올라갔고, 회당 시간 시트 휠은 원래 시트 패널(같은 토큰) 위에 서 있었다. */
   --wheel-top-shadow-gradient: linear-gradient(
     to bottom,
-    rgba(238, 242, 235, 0.95) 0%,
-    rgba(238, 242, 235, 0.45) 100%
+    rgba(249, 251, 247, 0.95) 0%,
+    rgba(249, 251, 247, 0.45) 100%
   ) !important;
   --wheel-bottom-shadow-gradient: linear-gradient(
     to bottom,
-    rgba(238, 242, 235, 0.45) 0%,
-    rgba(238, 242, 235, 0.95) 100%
+    rgba(249, 251, 247, 0.45) 0%,
+    rgba(249, 251, 247, 0.95) 100%
   ) !important;
 }
 

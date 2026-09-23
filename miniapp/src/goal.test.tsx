@@ -140,6 +140,30 @@ describe('목표 화면 렌더', () => {
     expect(render(false, 3600)).toContain('goal-wheels');
   });
 
+  /**
+   * Soft PR-3 — 휠은 부푼 카드 위에 선다. 그러면 안개(휠 위아래로 사라지게 덮는 그라데이션)의 색은
+   * 캔버스가 아니라 <b>카드 면</b>(`--adaptiveGrey100`)과 같아야 한다 — 어긋나면 카드 안에 옅은 띠 두 줄이 진다.
+   * 회당 시간 시트도 같은 휠이 시트 패널(= 같은 `--adaptiveGrey100`) 위에 서므로 한 규칙이 둘 다 맞춘다.
+   */
+  it('휠은 부푼 카드 안에 선다', () => {
+    const markup = render(false, 3600);
+    const at = markup.indexOf('class="goal-wheels"');
+    const card = markup.slice(markup.lastIndexOf('<div', markup.lastIndexOf('<', at) - 1), at);
+
+    expect(at).toBeGreaterThan(-1);
+    expect(card).toContain('var(--puffShadow');
+  });
+
+  it('안개 색 = 카드 면 색 — 전역 토큰 `--adaptiveGrey100`의 RGB와 안개 rgba가 같다', () => {
+    const css = readFileSync(new URL('./global.css', import.meta.url), 'utf8');
+    const hex = css.match(/html:root\s*\{[^}]*--adaptiveGrey100:\s*#([0-9A-Fa-f]{6})/)?.[1] ?? '';
+    const fog = css.match(/--wheel-top-shadow-gradient:\s*linear-gradient\([^)]*?rgba\((\d+),\s*(\d+),\s*(\d+)/);
+
+    expect(hex).not.toBe('');
+    expect(fog).not.toBeNull();
+    expect(fog!.slice(1, 4).map(Number)).toEqual([0, 2, 4].map((i) => parseInt(hex.slice(i, i + 2), 16)));
+  });
+
   it('첫 실행 휠은 10분에서 시작한다 — 1시간에서 시작하면 첫날 달성이 불가능하다', () => {
     expect(wheelIndices(initialGoalSelection(true, 3600))).toEqual({ hours: 0, minutes: 10 });
   });
