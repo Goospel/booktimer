@@ -16,6 +16,7 @@ import {
   readCountLabel,
   studyOwned,
 } from './screens/StudyLibrary';
+import { bigShadow } from './soft-guard';
 import { userAgent } from './test-fixtures';
 
 /**
@@ -352,5 +353,77 @@ describe('dev-mock 공부 서재', () => {
     expect(reading.books.some((b) => b.title === '섞이면 안 되는 책')).toBe(false);
 
     await mockRequest(`/api/study/books/${added.id}/delete`, { body: {} });
+  });
+});
+
+/**
+ * Soft 재테마(PR-4) — 공부 서재 손잡이 줄·관리 시트. 독서 서재(PR-3)와 같은 옷이다: 주 동작 「회독 +1」은
+ * 채움 + 부푼 그림자 + `--filledInk` 글자, 「관리」는 1.5px 세이지 실선, 「검색해서 담기」는 옅은 모드색 채움,
+ * 시트 행은 옅은 실선 행. 연필선(`border-image`)은 넷 다 직전 main에 실제로 있던 자리다.
+ */
+describe('Soft 표면 — 공부 서재 (PR-4)', () => {
+  const shelf = (rows: StudyBookRow[], selectedId: number | undefined) =>
+    render(
+      <StudyShelf
+        books={rows}
+        selectedId={selectedId}
+        sheet={null}
+        busy={false}
+        searchEnabled
+        onSelect={() => {}}
+        onSheet={() => {}}
+        onReadCount={() => {}}
+        onDelete={() => {}}
+        onAddBook={() => {}}
+      />,
+    );
+  const button = (html: string, label: string) => {
+    const at = html.indexOf('>' + label + '</button>');
+    return at < 0 ? '' : html.slice(html.lastIndexOf('<button', at), at + 1);
+  };
+
+  it('「회독 +1」은 채움이다 — 모드색 채움 + 부푼 그림자 + 채움 잉크', () => {
+    const tag = button(shelf([studyBook(1, '기본서', 3)], 1), '회독 +1');
+    expect(tag).not.toBe('');
+    expect(tag).toContain('background:var(--adaptiveBlue700');
+    expect(tag).toContain('color:var(--filledInk');
+    expect(tag).toContain('box-shadow:var(--puffShadow');
+    expect(tag).not.toContain('border-image');
+  });
+
+  it('「관리」는 1.5px 세이지 실선 보조 손잡이다', () => {
+    const tag = button(shelf([studyBook(1, '기본서', 3)], 1), '관리');
+    expect(tag).not.toBe('');
+    expect(tag).toContain('1.5px solid var(--adaptiveBlue700');
+    expect(tag).not.toContain('border-image');
+  });
+
+  it('「검색해서 담기」는 옅은 모드색 채움이다 — 테두리 없이 면으로 선다', () => {
+    const tag = button(shelf([], undefined), '검색해서 담기');
+    expect(tag).not.toBe('');
+    expect(tag).toContain('background:var(--adaptiveBlue50');
+    expect(tag).not.toContain('border-image');
+  });
+
+  it('관리 시트 행은 옅은 실선 행이고 삭제만 붉다', () => {
+    const html = render(
+      <StudyActionSheet
+        book={studyBook(1, '기본서', 2, { purchaseLink: 'https://www.aladin.co.kr/shop/x' })}
+        busy={false}
+        confirmDelete={false}
+        onConfirmDelete={() => {}}
+        onReadCount={() => {}}
+        onDelete={() => {}}
+        onClose={() => {}}
+      />,
+    );
+    for (const label of ['회독 -1 (지금 2독)', '알라딘에서 구매', '서재에서 삭제']) {
+      const tag = button(html, label);
+      expect(tag).not.toBe('');
+      expect(tag).toContain('1.5px solid var(--adaptiveGrey200');
+      expect(tag).not.toContain('border-image');
+      expect(bigShadow(tag)).toBe(false);
+    }
+    expect(button(html, '서재에서 삭제')).toContain('color:#A32D2D');
   });
 });

@@ -3,6 +3,7 @@ import { readFileSync } from 'node:fs';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
 
+import { bigShadow } from './soft-guard';
 import { DENT, PUFF, SOFT_OUTLINE, SOFT_ROW, sectionStyle } from './ui';
 
 /**
@@ -117,5 +118,48 @@ describe('독서등 히어로 그림자 — 등불 글로우가 부푼 그림자
   it('글로우엔 흰 하이라이트가 없다 — 밤 캔버스에 흰 테가 뜨지 않는다', () => {
     expect(shadow).not.toBe('');
     expect(shadow).not.toMatch(/255,\s*255,\s*255/);
+  });
+});
+
+/**
+ * `bigShadow` 계측기 자기검증 — 화면 테스트들이 반복 행에 「큰 그림자 없음」을 걸 때 쓰는 판정이다. 부정
+ * 단언에만 쓰이므로 <b>양성 대조</b>가 없으면 「언제나 false」인 고장이 초록으로 숨는다.
+ */
+describe('bigShadow 계측기 자기검증', () => {
+  const tag = (style: object) => renderToStaticMarkup(<div style={style} />);
+
+  it('부푼 그림자(변수 경유)와 blur 8px 이상 리터럴을 잡는다', () => {
+    expect(bigShadow(tag(sectionStyle))).toBe(true);
+    expect(bigShadow(tag({ boxShadow: 'var(--puffShadow)' }))).toBe(true);
+    expect(bigShadow(tag({ boxShadow: '5px 5px 12px rgba(94,122,90,.18)' }))).toBe(true);
+    expect(bigShadow(tag({ boxShadow: 'inset 0 1px 0 #fff, 0 2px 8px rgba(0,0,0,.2)' }))).toBe(true);
+  });
+
+  // 리뷰 돌연변이에서 살아남은 네 갈래 — 판정은 닫힌 쪽이다(모르면 크다).
+  it.each([
+    ['다른 변수의 폴백 속 큰 그림자', 'var(--ring, 0 8px 24px rgba(0,0,0,.1))'],
+    ['부푼 그림자가 아닌 다른 그림자 변수', 'var(--cardShadow)'],
+    ['그림자 변수의 폴백(이름은 dent가 아님)', 'var(--softShadow, 0 1px 2px #000)'],
+    ['rem 단위(0.75rem = 12px)', '0 0.25rem 0.75rem rgba(0,0,0,.1)'],
+    ['em 단위(1em = 16px)', '0 0 1em #000'],
+    ['calc()', '0 2px calc(4px + 6px) #000'],
+    ['대문자 PX', '0 2PX 12PX rgba(0,0,0,.1)'],
+  ])('%s → 크다', (_, boxShadow) => {
+    expect(bigShadow(tag({ boxShadow }))).toBe(true);
+  });
+
+  it.each([
+    ['눌린 그림자 변수(허용표)', 'var(--dentShadow)'],
+    ['rem이지만 작다(0.25rem = 4px)', '0 1px 0.25rem #000'],
+    ['색 변수만 있는 링', '0 0 0 2px var(--adaptiveGrey100), 0 0 0 4.5px var(--adaptiveBlue700)'],
+  ])('%s → 작다', (_, boxShadow) => {
+    expect(bigShadow(tag({ boxShadow }))).toBe(false);
+  });
+
+  it('링·눌린 면·그림자 없음은 통과한다', () => {
+    expect(bigShadow(tag({ boxShadow: '0 0 0 3px var(--adaptiveBlue700)' }))).toBe(false);
+    expect(bigShadow(tag(DENT))).toBe(false);
+    expect(bigShadow(tag(SOFT_ROW))).toBe(false);
+    expect(bigShadow(tag({}))).toBe(false);
   });
 });

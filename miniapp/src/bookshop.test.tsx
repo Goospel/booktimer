@@ -39,6 +39,7 @@ import {
   showPersonalityAdButton,
   toggleSafety,
 } from './screens/Profile';
+import { bigShadow, tagWith } from './soft-guard';
 import { userAgent } from './test-fixtures';
 import { watchRewardAd } from './toss';
 
@@ -1383,5 +1384,82 @@ describe('책방 「책 | 여백」 탭', () => {
   it('marginTabEmptyText — 내 책방에만 다음 걸음을 붙인다', () => {
     expect(marginTabEmptyText(true)).toContain('서재에서 책을 고르고');
     expect(marginTabEmptyText(false)).toBe('아직 남긴 글이 없어요.');
+  });
+});
+
+/**
+ * Soft 재테마(PR-4) — 책방·프로필의 연필선을 Soft 표면으로. 태그를 먼저 찾고(`''`이 아님) 그다음 부재를 건다.
+ * `border-image` 부재는 직전 main에서 실제로 연필선이 있던 태그에만 건다(헤더 손잡이 2 · 정사각 버튼 2 ·
+ * 성향 카드 · 신고 select).
+ */
+describe('Soft 표면 — 책방·프로필 (PR-4)', () => {
+  const SOFT_LINE = '1.5px solid var(--adaptiveBlue700';
+
+  it('헤더 손잡이(친구 찾기·대화함)는 1.5px 세이지 실선이다 — 연필선이 아니다', () => {
+    const html = render(<BookshopHeader onSearch={() => {}} inbox={{ unread: 2, onOpen: () => {} }} />);
+    for (const marker of ['aria-label="아이디로 친구 찾기"', 'aria-label="대화함"']) {
+      const tag = tagWith(html, marker);
+      expect(tag).not.toBe('');
+      expect(tag).toContain(SOFT_LINE);
+      expect(tag).not.toContain('border-image');
+    }
+  });
+
+  it('팔로우 옆 정사각 버튼(종이비행기·신고·차단)은 1.5px 세이지 실선이다', () => {
+    const html = card(profile({ following: true, followsMe: true, dmAvailable: true }), [], null, {});
+    const more = tagWith(html, 'aria-label="신고·차단"');
+    expect(more).not.toBe('');
+    expect(more).toContain(SOFT_LINE);
+    expect(more).not.toContain('border-image');
+  });
+
+  it('성향 카드는 부푼 면이다 — 한 장뿐인 카드라 큰 그림자 예산 안이다', () => {
+    const tag = tagWith(card(profile({ personality: '밑줄을 아끼지 않는 완독형이에요.' })), 'data-bio-card=""');
+    expect(tag).not.toBe('');
+    expect(tag).toContain('box-shadow:var(--puffShadow');
+    expect(tag).not.toContain('border-image');
+  });
+
+  it('신고 사유 select는 1.5px 세이지 실선이다', () => {
+    const html = render(
+      <SafetyPanel busy={false} confirmBlock={false} onConfirmBlock={() => {}} onBlock={() => {}} onReport={() => {}} />,
+    );
+    const select = tagWith(html, '<select');
+    expect(select).not.toBe('');
+    expect(select).toContain(SOFT_LINE);
+    expect(select).not.toContain('border-image');
+  });
+
+  it('신고·차단 패널은 부푼 면이다 — 한 장뿐인 패널이라 큰 그림자 예산 안이다', () => {
+    const html = render(
+      <SafetyPanel busy={false} confirmBlock={false} onConfirmBlock={() => {}} onBlock={() => {}} onReport={() => {}} />,
+    );
+    expect(tagWith(html, 'data-safety-panel=""')).toContain('box-shadow:var(--puffShadow');
+  });
+
+  it('사용자 목록 행은 옅은 실선 행(SOFT_ROW)이고 큰 그림자가 없다 — 반복 행이다', () => {
+    const html = render(<UserList users={[user('a'), user('b')]} emptyMessage="없어요" onSelect={() => {}} />);
+    const rows = html.match(/<button[^>]*>/g) ?? [];
+    expect(rows).toHaveLength(2);
+    for (const row of rows) {
+      expect(row).toContain('1.5px solid var(--adaptiveGrey200');
+      expect(bigShadow(row)).toBe(false);
+    }
+  });
+
+  it('보관함 카드는 옅은 실선 행이고, 대표 카드만 세이지 테두리다', () => {
+    const html = render(
+      <ArchiveSheet
+        entries={[entry(9, '2026-08-15T10:00:00Z', true), entry(4, '2026-08-01T10:00:00Z', false)]}
+        busy={false}
+        onSelect={() => {}}
+        onClose={() => {}}
+      />,
+    );
+    const cards = html.match(/<div[^>]*data-archive-entry[^>]*>/g) ?? [];
+    expect(cards).toHaveLength(2);
+    expect(cards.filter((c) => c.includes('1.5px solid var(--adaptiveBlue500'))).toHaveLength(1);
+    expect(cards.filter((c) => c.includes('1.5px solid var(--adaptiveGrey200'))).toHaveLength(1);
+    expect(cards.every((c) => !bigShadow(c))).toBe(true);
   });
 });

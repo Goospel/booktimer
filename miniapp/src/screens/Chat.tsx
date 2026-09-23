@@ -14,7 +14,7 @@ import {
   sendChatMessage,
 } from '../api';
 import { DM_TEMPLATE_CODE, notificationAgreementSupported, requestNotificationAgreement } from '../toss';
-import { ErrorMessage, Loading, PENCIL_FRAME, Screen, Text, UnreadBadge, sectionStyle } from '../ui';
+import { DENT, ErrorMessage, Loading, SOFT_ROW, Screen, Text, UnreadBadge, sectionStyle } from '../ui';
 import type { SafetyState } from './Profile';
 import { SafetyPanel, toggleSafety } from './Profile';
 
@@ -228,16 +228,15 @@ export function InboxView({
             key={room.roomId}
             type="button"
             onClick={() => onOpen(room)}
+            // 반복 행 — 사용자 목록(`UserList`)과 같은 옅은 실선 행이다. 그림자는 없다(설계 §6 예산).
             style={{
+              ...SOFT_ROW,
               display: 'flex',
               alignItems: 'center',
               gap: 10,
               width: '100%',
               padding: 16,
               marginBottom: 8,
-              border: 'none',
-              borderRadius: 12,
-              background: 'var(--adaptiveGrey100, #FCFAF5)',
               textAlign: 'left',
               cursor: 'pointer',
             }}
@@ -480,12 +479,15 @@ export function RoomView({
           messages.map((m) => (
             <div key={m.id} style={{ display: 'flex', justifyContent: m.mine ? 'flex-end' : 'flex-start', marginBottom: 8 }}>
               <div
+                data-bubble={m.mine ? 'mine' : 'theirs'}
+                // 말풍선은 메시지 수만큼 반복된다 — 그림자 없이 면의 색으로만 가른다(설계 §6 예산).
+                // 내 것은 옅은 세이지, 남의 것은 눌린 바탕. 둘 다 진한 잉크라 대비는 본문과 같다.
                 style={{
                   maxWidth: '78%',
                   padding: '8px 12px',
                   borderRadius: 14,
-                  background: m.mine ? 'var(--adaptiveBlue500, #6E8A6A)' : 'var(--adaptiveGrey100, #FCFAF5)',
-                  color: m.mine ? '#FFFDF8' : 'var(--adaptiveGrey900, #3A362E)',
+                  background: m.mine ? 'var(--adaptiveBlue50, #DCE8D6)' : 'var(--softDent, #E6ECE3)',
+                  color: 'var(--adaptiveGrey800, #232C21)',
                   fontSize: 15,
                   lineHeight: 1.45,
                   whiteSpace: 'pre-wrap',
@@ -515,14 +517,21 @@ export function RoomView({
           placeholder={writable ? '메시지 입력' : undefined}
           aria-label="메시지 입력"
           onChange={(e) => onDraft(e.target.value)}
+          // 입력 자리는 눌린 면이다(규칙 3) — 테두리 없이 안으로 파인 그림자로 「여기 적는다」를 말한다.
+          // 잠긴 방은 파인 자리를 거둔다(평평한 흐린 면 + 흐린 글자): 인라인 배경·글자색이 브라우저의 disabled
+          // 기본 모양을 덮어, 그대로 두면 잠긴 입력줄이 열린 것과 computed 값까지 똑같았다(목 모드 실측).
+          // 잠김 판정은 `writable`만 본다 — 첫 응답 전(`loading`)의 잠깐 disabled까지 바꾸면 방을 열 때마다 깜빡인다.
           style={{
+            ...DENT,
             flex: 1,
             padding: 10,
-            borderRadius: 10,
-            border: '1px solid transparent',
-            borderImage: PENCIL_FRAME,
+            border: 'none',
+            color: 'var(--adaptiveGrey800, #232C21)',
             fontSize: 15,
             resize: 'none',
+            ...(writable
+              ? {}
+              : { background: 'var(--adaptiveGrey200, #D6DFD2)', boxShadow: 'none', color: 'var(--adaptiveGrey600, #4E5A4B)' }),
           }}
         />
         <Button size="medium" disabled={!writable || loading || busy || draft.trim() === ''} onClick={onSend}>

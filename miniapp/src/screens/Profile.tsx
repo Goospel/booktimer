@@ -34,7 +34,20 @@ import {
 import { useBackClose } from '../back';
 import { cacheGet, cacheKeyProfile, cacheKeyProfileBooks, cachePut } from '../cache';
 import { PERSONALITY_AD_GROUP_ID, watchRewardAd } from '../toss';
-import { Avatar, ErrorMessage, Loading, PENCIL_FRAME, SERIF_VALUE, Screen, SectionTitle, Sheet, Text } from '../ui';
+import {
+  Avatar,
+  ErrorMessage,
+  Loading,
+  PUFF,
+  SECTION_RULE,
+  SERIF_VALUE,
+  SOFT_OUTLINE,
+  SOFT_ROW,
+  Screen,
+  SectionTitle,
+  Sheet,
+  Text,
+} from '../ui';
 import { waiverErrorMessage } from './Home';
 import { BookGrid, SECTIONS } from './Library';
 import { MarginBoard, MarginCard, hasFreshStory, tabStyle } from './Story';
@@ -279,16 +292,12 @@ export function MutualFollowers({ users, total }: { users?: UserBrief[]; total?:
 /** TDS `Button`(기본 size)의 실측 높이 — 옆에 세우는 정사각 ⋯ 버튼의 한 변이다(목 모드 390×844 실측: 57px). */
 const TDS_BUTTON_HEIGHT = 57;
 
-/** 팔로우 옆 정사각 버튼(종이비행기·⋯) — 연필테 카드지. 높이는 flex stretch가 옆 팔로우 버튼에 맞춘다. */
+/** 팔로우 옆 정사각 버튼(종이비행기·⋯) — Soft 보조 손잡이(1.5px 세이지 실선). 높이는 flex stretch가 옆 팔로우 버튼에 맞춘다. */
 const SQUARE_BUTTON: CSSProperties = {
+  ...SOFT_OUTLINE,
   flex: '0 0 auto',
   width: TDS_BUTTON_HEIGHT, // 높이는 stretch가 정한다 — 어긋나 봐야 「정사각이 아님」이지 「높이 불일치」는 아니다
   padding: 0,
-  borderRadius: 12,
-  border: '1px solid transparent',
-  borderImage: PENCIL_FRAME,
-  background: 'var(--adaptiveGrey100, #FCFAF5)',
-  color: 'var(--adaptiveGrey700, #57534A)',
   cursor: 'pointer',
 };
 
@@ -322,7 +331,7 @@ export function BookshopTabs({ tab, onSelect }: { tab: BookshopTab; onSelect: (t
   ];
 
   return (
-    <div style={{ display: 'flex', borderBottom: '1px solid #E2DACA' }}>
+    <div style={{ display: 'flex', borderBottom: SECTION_RULE }}>
       {items.map(({ key, label }) => (
         <button key={key} type="button" aria-pressed={tab === key} onClick={() => onSelect(key)} style={tabStyle(tab === key)}>
           {label}
@@ -1097,14 +1106,8 @@ function Bio({ text }: { text: string }) {
     // 요약이다. 화면에 그냥 떠 있으면 다섯 줄짜리 벽으로 읽히고, 상자에 담기면 「분석 결과」가 된다.
     <div
       data-bio-card=""
-      style={{
-        marginTop: 12,
-        padding: 12,
-        borderRadius: 12,
-        background: 'var(--adaptiveGrey100, #FCFAF5)',
-        border: '1px solid transparent',
-        borderImage: PENCIL_FRAME,
-      }}
+      // 부푼 면 — 화면에 한 장뿐이라 큰 그림자 예산 안이다(설계 §6).
+      style={{ ...PUFF, borderRadius: 20, marginTop: 12, padding: 12 }}
     >
       <span
         style={{
@@ -1174,13 +1177,14 @@ export function ArchiveSheet({
       {entries.map((e) => (
         <div
           key={e.id}
+          data-archive-entry=""
           style={{
+            // 시트 안 반복 카드 — 옅은 실선 행(SOFT_ROW), 그림자 없음.
+            ...SOFT_ROW,
             marginBottom: 10,
             padding: 14,
-            borderRadius: 12,
             // 대표 카드만 테두리 색으로 — 여러 장을 훑을 때 "지금 걸린 것"을 잃지 않게(격자 시트와 같은 문법).
-            border: `1px solid ${e.selected ? '#6E8A6A' : '#E4DDD0'}`,
-            background: '#FFFDF8',
+            ...(e.selected ? { border: '1.5px solid var(--adaptiveBlue500, #5B7F55)' } : {}),
           }}
         >
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
@@ -1194,7 +1198,7 @@ export function ArchiveSheet({
                   padding: '3px 8px',
                   borderRadius: 999,
                   fontSize: 14,
-                  background: '#6E8A6A',
+                  background: 'var(--adaptiveBlue500, #5B7F55)',
                   color: '#FFFDF8',
                 }}
               >
@@ -1252,7 +1256,7 @@ export function SafetyPanel({
   const [detail, setDetail] = useState('');
 
   return (
-    <div style={{ marginTop: 12, padding: 16, borderRadius: 12, background: 'var(--adaptiveGrey100, #FCFAF5)' }}>
+    <div data-safety-panel="" style={{ ...PUFF, borderRadius: 20, marginTop: 12, padding: 16 }}>
       <Text typography="st12" color="grey600" style={{ display: 'block', marginBottom: 10 }}>
         신고 사유
       </Text>
@@ -1261,7 +1265,7 @@ export function SafetyPanel({
         value={reason}
         disabled={busy}
         onChange={(e) => setReason(e.target.value as ReportReason)}
-        style={{ width: '100%', padding: 10, borderRadius: 8, border: '1px solid transparent', borderImage: PENCIL_FRAME }}
+        style={{ ...SOFT_OUTLINE, width: '100%', padding: 10, fontSize: 15 }}
       >
         {REPORT_REASONS.map((r) => (
           <option key={r.value} value={r.value}>

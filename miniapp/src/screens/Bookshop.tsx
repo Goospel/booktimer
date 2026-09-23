@@ -11,7 +11,7 @@ import {
   validateHandleFormat,
 } from '../api';
 import { useBackClose } from '../back';
-import { ErrorMessage, Loading, PENCIL_FRAME, Screen, Sheet, Text, UnreadBadge, UserList } from '../ui';
+import { ErrorMessage, Loading, SOFT_OUTLINE, Screen, Sheet, Text, UnreadBadge, UserList } from '../ui';
 import { Explore } from './Explore';
 import { Profile } from './Profile';
 import { BookMargin, StoryComposer } from './Story';
@@ -324,6 +324,8 @@ export function BookshopHeader({
       aria-label="아이디로 친구 찾기"
       onClick={onSearch}
       style={{
+        // Soft 보조 손잡이 — 1.5px 세이지 실선(규칙 1). 높이는 그대로 44.
+        ...SOFT_OUTLINE,
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
@@ -331,12 +333,8 @@ export function BookshopHeader({
         height: SEARCH_BAR_HEIGHT,
         marginBottom: 16,
         padding: '0 14px',
-        borderRadius: 10,
-        // 캔버스가 종이톤 크림(#F7F2E8)이라 카드지 fill + 테두리라야 눌리는 자리로 뜬다.
-        background: 'var(--adaptiveGrey100, #FCFAF5)',
-        border: '1px solid transparent',
-        borderImage: PENCIL_FRAME,
-        color: 'var(--adaptiveGrey600, #6F6A5E)',
+        // 글자는 흐린 잉크로 둔다 — 생김새가 검색바라 문구가 입력 자리의 안내(placeholder)로 읽혀야 한다.
+        color: 'var(--adaptiveGrey600, #4E5A4B)',
         fontSize: 15,
         cursor: 'pointer',
       }}
@@ -354,6 +352,7 @@ export function BookshopHeader({
         aria-label="대화함"
         onClick={inbox.onOpen}
         style={{
+          ...SOFT_OUTLINE,
           flex: '0 0 auto',
           display: 'flex',
           alignItems: 'center',
@@ -361,11 +360,6 @@ export function BookshopHeader({
           height: SEARCH_BAR_HEIGHT,
           marginBottom: 16,
           padding: '0 14px',
-          borderRadius: 10,
-          background: 'var(--adaptiveGrey100, #FCFAF5)',
-          border: '1px solid transparent',
-          borderImage: PENCIL_FRAME,
-          color: 'var(--adaptiveGrey700, #57534A)',
           fontSize: 15,
           cursor: 'pointer',
         }}
