@@ -21,8 +21,10 @@ import {
   BookCover,
   ErrorMessage,
   Loading,
-  PENCIL_FRAME,
+  PUFF,
   SECTION_RULE,
+  SOFT_OUTLINE,
+  SOFT_ROW,
   Screen,
   SearchField,
   SectionTitle,
@@ -257,8 +259,8 @@ export function MarginBoxView({
   return (
     <div
       data-margin-box=""
-      style={{ marginTop: 16, padding: 14, border: '1px solid transparent',
- borderImage: PENCIL_FRAME, borderRadius: 16, background: '#FFFDF8' }}
+      // 부푼 면(Soft PR-3) — 옛 크림 상자 + 연필선 자리. 캔버스 위에 떠 캐러셀 아래 한 덩어리로 읽힌다.
+      style={{ ...PUFF, marginTop: 16, padding: 16 }}
     >
       {/* 선은 제목이 아니라 이 줄에 건다 — 오른쪽 「전체 보기 ›」까지 지나야 머리 한 줄로 읽힌다(시안 2c). */}
       <div style={{ display: 'flex', alignItems: 'baseline', paddingBottom: 9, borderBottom: empty ? undefined : SECTION_RULE }}>
@@ -593,8 +595,9 @@ export function Shelf({
                 fontWeight: current ? 700 : 400,
                 boxShadow: current ? '0 1px 3px rgba(0, 0, 0, 0.08)' : undefined,
                 cursor: 'pointer',
-                background: current ? '#FCFAF5' : 'transparent',
-                color: current ? '#2C2C2A' : 'var(--adaptiveGrey700, #57534A)',
+                // 카드 면·잉크 토큰 — 옛 크림 `#FCFAF5` 리터럴은 Soft 카드 면(#F9FBF7)과 한 톤 어긋났다.
+                background: current ? 'var(--adaptiveGrey100, #F9FBF7)' : 'transparent',
+                color: current ? 'var(--adaptiveGrey800, #232C21)' : 'var(--adaptiveGrey700, #3A4637)',
               }}
             >
               {/* 이름만 적는다 — 권수는 「펼쳐보기」 시트 제목(`읽는 중 N권`)이 이미 말한다. 세 칸에
@@ -654,13 +657,15 @@ export function Shelf({
                 type="button"
                 disabled={busy}
                 onClick={onAddBook}
+                // 옅은 세이지 채움 = TDS primary와 같은 옷(Soft 버튼 3단의 가운데). 옛 `rgba(110,138,106,.14)`
+                // 리터럴은 PR-1 팔레트 교체를 못 따라왔다.
                 style={{
                   flex: 1,
                   height: HANDLE_ROW_HEIGHT,
                   border: 'none',
-                  borderRadius: 14,
-                  background: 'rgba(110,138,106,.14)',
-                  color: '#4E6B4A',
+                  borderRadius: 18,
+                  background: 'var(--adaptiveBlue50, #DCE8D6)',
+                  color: 'var(--adaptiveBlue700, #3F5A3C)',
                   fontSize: 16,
                   fontWeight: 700,
                   cursor: 'pointer',
@@ -683,21 +688,18 @@ export function Shelf({
                       style={{
                         flex: 2,
                         height: HANDLE_ROW_HEIGHT,
-                        // 시안 2c — 이 화면의 주 동작 하나라 **채움**이다(전엔 14% 틴트였다).
-                        // ⚠️ 연필 프레임을 옆 「관리」와 똑같이 준다. 처음엔 이게 빠져 한 줄에 나란한
-                        // 두 버튼의 테두리가 갈렸다(독립 리뷰 적발) — 시안도 두 버튼 다 프레임이다
-                        // (`.pf`·`.pfs` 둘 다 `border-image` 연필선). 「시안은 평면이다」던 옛 주석은
-                        // **시안을 확인하지 않고 쓴 거짓**이었다.
-                        // ⚠️ 설계 D5는 이 자리를 `FilledButton`으로 교체하라고 했는데 **안 따랐다**:
-                        // TDS Button이 `--button-min-height: 56px`를 박아 이 38px 손잡이 줄에서
-                        // 혼자 56px로 솟는다(실측). 프레임은 이 두 줄로 같은 값을 얻으므로, 사이즈
-                        // 변수 4개와 싸우는 것보다 싸다. 채움 개수 계측은 `typography.test`가
-                        // **두 형태를 함께 세는** 방식으로 받는다.
-                        border: '1px solid transparent',
-                        borderImage: PENCIL_FRAME,
-                        borderRadius: 14,
-                        background: 'var(--adaptiveBlue700, #4F6B4C)',
-                        color: '#F7F2E8',
+                        // 시안 2c — 이 화면의 주 동작 하나라 **채움**이다. Soft(PR-3): 연필 프레임 대신
+                        // 부푼 그림자 — TDS 채움 버튼 규칙(global.css `--btn-filled`)과 같은 옷이다. 글자는
+                        // `--filledInk`(낮 흰색 · 밤 어두운 잉크)라 채움색이 밤에 밝아져도 읽힌다.
+                        // ⚠️ 설계 D5의 `FilledButton` 교체는 **안 따랐다**: TDS Button이
+                        // `--button-min-height: 56px`를 박아 이 38px 손잡이 줄에서 혼자 56px로 솟는다(실측).
+                        // 채움 개수 계측은 `typography.test`가 **두 형태를 함께 세는** 방식으로 받는다 —
+                        // 그 가드가 세는 키 `background: 'var(--adaptiveBlue700`을 그대로 쓴다.
+                        border: 'none',
+                        borderRadius: 18,
+                        background: 'var(--adaptiveBlue700, #3F5A3C)',
+                        color: 'var(--filledInk, #FFFFFF)',
+                        boxShadow: 'var(--puffShadow)',
                         fontSize: 15,
                         fontWeight: 700,
                         cursor: 'pointer',
@@ -710,14 +712,11 @@ export function Shelf({
                     type="button"
                     disabled={busy}
                     onClick={() => onSheet({ kind: 'actions', confirmDelete: false, confirmPublish: false })}
+                    // 보조 손잡이 — 1.5px 세이지 실선(규칙 1). 옆 채움과 면/선으로 위계가 갈린다.
                     style={{
+                      ...SOFT_OUTLINE,
                       flex: 1,
                       height: HANDLE_ROW_HEIGHT,
-                      border: '1px solid transparent',
-                      borderImage: PENCIL_FRAME,
-                      borderRadius: 14,
-                      background: '#FCFAF5',
-                      color: '#2C2C2A',
                       fontSize: 15,
                       fontWeight: 700,
                       cursor: 'pointer',
@@ -999,16 +998,13 @@ function SheetRow({
       disabled={busy}
       onClick={onClick}
       style={{
+        // 시트 바닥과 같은 색이라 배경만으론 경계가 안 보인다 — 1.5px 옅은 실선이 줄을 버튼으로 읽히게 한다.
+        ...SOFT_ROW,
         display: 'block',
         width: '100%',
         marginBottom: 8,
         padding: '15px 14px',
-        // 시트 바닥과 같은 크림색이라 배경만으론 경계가 안 보인다 — 테두리가 있어야 줄이 버튼으로 읽힌다.
-        border: '1px solid transparent',
- borderImage: PENCIL_FRAME,
-        borderRadius: 10,
-        background: '#FFFDF8',
-        color: danger ? '#A32D2D' : '#2C2C2A',
+        color: danger ? '#A32D2D' : 'var(--adaptiveGrey800, #232C21)',
         fontSize: 15,
         textAlign: 'left',
         cursor: 'pointer',
@@ -1027,15 +1023,11 @@ function SheetRow({
  */
 export const HANDLE_ROW_HEIGHT = 38;
 
-/** 테두리만 있는 작은 손잡이 — 제목 줄 「펼쳐보기」가 쓴다(캐러셀 아래 줄은 전폭 손잡이로 갈렸다). */
+/** 테두리만 있는 작은 손잡이 — 제목 줄 「펼쳐보기」가 쓴다(캐러셀 아래 줄은 전폭 손잡이로 갈렸다). 1.5px 실선(규칙 1). */
 export const handleStyle = {
+  ...SOFT_OUTLINE,
   flex: '0 0 auto',
   padding: '8px 14px',
-  border: '1px solid transparent',
-  borderImage: PENCIL_FRAME,
-  borderRadius: 10,
-  background: '#FCFAF5',
-  color: '#2C2C2A',
   fontSize: 14,
   cursor: 'pointer',
 } as const;

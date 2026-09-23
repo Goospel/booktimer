@@ -4,9 +4,8 @@ import { useEffect, useState } from 'react';
 import type { StudyDay, StudyHistoryResponse, StudyMonth } from '../api';
 import { fetchStudyHistory } from '../api';
 import { CACHE_STUDY_HISTORY, cacheGet, cachePut } from '../cache';
-import { formatDuration } from '../format';
-import { ErrorMessage, LEVEL_COLORS, Loading, SECTION_RULE, SERIF_VALUE, Screen, SectionTitle, Text } from '../ui';
-import { GrassPanel, Legend, StatStrip, barPercent, formatMonthTitle, formatRecordDate, formatWeekday } from './History';
+import { ErrorMessage, Loading, SERIF_VALUE, Screen, SectionTitle, Text } from '../ui';
+import { DAY_TRAY, DayBar, DayDate, DayTotal, GRASS_CARD, GrassPanel, Legend, MonthHead, StatStrip, barPercent } from './History';
 
 /**
  * 공부 기록 — <b>타이머가 잰 측정 사실만</b> 그린다.
@@ -57,19 +56,20 @@ export function StudyHistoryView({ data }: { data: StudyHistoryResponse }) {
     <>
       <StatStrip graph={data.graph} activeDaysLabel="공부한 날" />
 
-      <SectionTitle style={{ margin: '24px 0 8px', ...SERIF_VALUE, fontSize: 20 }}>공부한 날짜</SectionTitle>
+      <SectionTitle style={{ margin: '24px 0 12px', ...SERIF_VALUE, fontSize: 20 }}>공부한 날짜</SectionTitle>
 
-      <GrassPanel graph={data.graph} />
-
-      {/* 「직접 채움」은 뺀다 — 공부 원장엔 수동 입력이 없어 그 스와치가 없는 것을 설명하게 된다. */}
-      <Legend manual={false} />
+      <section style={GRASS_CARD}>
+        <GrassPanel graph={data.graph} />
+        {/* 「직접 채움」은 뺀다 — 공부 원장엔 수동 입력이 없어 그 스와치가 없는 것을 설명하게 된다. */}
+        <Legend manual={false} />
+      </section>
 
       <StudyMonthlyRecords months={data.months} />
     </>
   );
 }
 
-/** 잔디 아래 날짜별 기록 — 독서 `MonthlyRecords`와 같은 조판이되 펼침 상태가 없다(펼칠 것이 없다). */
+/** 잔디 아래 날짜별 기록 — 독서 `MonthlyRecords`와 같은 조판(월 머리 + 눌린 쟁반)이되 펼침 상태가 없다(펼칠 것이 없다). */
 export function StudyMonthlyRecords({ months }: { months: StudyMonth[] }) {
   if (months.length === 0) {
     return (
@@ -80,29 +80,17 @@ export function StudyMonthlyRecords({ months }: { months: StudyMonth[] }) {
   }
 
   return (
-    <div style={{ marginTop: 28, borderTop: '1px solid var(--adaptiveGrey200, #E4DDD0)' }}>
+    <div style={{ marginTop: 12 }}>
       {months.map((section) => (
         <section key={section.month}>
-          <div
-            style={{
-              display: 'flex',
-              justifyContent: 'space-between',
-              alignItems: 'baseline',
-              margin: '20px 0 4px',
-              paddingBottom: 10,
-              borderBottom: SECTION_RULE,
-            }}
-          >
-            <Text typography="st10" fontWeight="bold" style={{ ...SERIF_VALUE, fontSize: 20 }}>
-              {formatMonthTitle(section.month)}
-            </Text>
-            <Text typography="st12" color="grey600" style={{ ...SERIF_VALUE, fontSize: 14 }}>
-              {formatDuration(section.totalSeconds)}
-            </Text>
-          </div>
-          {section.days.map((day) => (
-            <StudyDayRow key={day.date} day={day} monthMax={maxOf(section)} />
-          ))}
+          <MonthHead month={section.month} totalSeconds={section.totalSeconds} />
+          {section.days.length > 0 && (
+            <div style={DAY_TRAY}>
+              {section.days.map((day) => (
+                <StudyDayRow key={day.date} day={day} monthMax={maxOf(section)} />
+              ))}
+            </div>
+          )}
         </section>
       ))}
     </div>
@@ -117,49 +105,25 @@ function maxOf(section: StudyMonth): number {
 /**
  * 하루 한 줄의 고정 격자 — 날짜 · 막대 · 시간.
  *
- * <p>독서 행의 표지 열(56px)·손잡이 열(16px)이 없다. <b>고정 폭</b>인 이유는 독서와 같다: 시간 글자 폭이
- * 행마다 다르면 막대의 시작·끝이 흔들려 길이로 날을 견주는 것 자체가 거짓이 된다.
+ * <p>독서 행의 표지 열(56px)·손잡이 열이 없다. <b>고정 폭</b>인 이유는 독서와 같다: 시간 글자 폭이
+ * 행마다 다르면 막대의 시작·끝이 흔들려 길이로 날을 견주는 것 자체가 거짓이 된다. 시간 칸 84px·줄 구분선 없음
+ * (쟁반 간격이 가른다)도 독서 행과 같다.
  */
 const ROW_GRID: CSSProperties = {
   display: 'grid',
-  gridTemplateColumns: '50px minmax(0, 1fr) 76px',
+  gridTemplateColumns: '50px minmax(0, 1fr) 84px',
   alignItems: 'center',
   columnGap: 8,
   width: '100%',
-  padding: '9px 0',
-  borderBottom: '1px solid var(--adaptiveGrey100, #EFEAE0)',
 };
 
-/** 하루 한 줄 — 날짜(2줄) · 막대 · 시간. 누를 것이 없어 버튼이 아니다. */
+/** 하루 한 줄 — 날짜(2줄) · 막대 · 시간. 누를 것이 없어 버튼이 아니다. 세 조각은 독서 행 것 그대로다. */
 function StudyDayRow({ day, monthMax }: { day: StudyDay; monthMax: number }) {
   return (
     <div style={ROW_GRID}>
-      <div>
-        <Text typography="st11" style={{ display: 'block', lineHeight: 1.2, ...SERIF_VALUE, fontSize: 15 }}>
-          {formatRecordDate(day.date)}
-        </Text>
-        <Text typography="st12" color="grey600" style={{ display: 'block' }}>
-          {formatWeekday(day.date)}
-        </Text>
-      </div>
-
-      {/* 막대 색은 잔디 팔레트에서 가져온다 — 같은 「얼마나 했나」를 두 곳이 다른 색으로 말하지 않게. */}
-      <div
-        aria-hidden="true"
-        style={{
-          width: `${barPercent(day.totalSeconds, monthMax)}%`,
-          height: 6,
-          borderRadius: 3,
-          background: LEVEL_COLORS[2],
-        }}
-      />
-
-      {/* 정렬은 감싸는 요소가 한다 — TDS `Text`는 style의 `text-align`을 걸러 낸다(독서 행과 같은 이유). */}
-      <div style={{ textAlign: 'right' }}>
-        <Text typography="st11" style={{ whiteSpace: 'nowrap', ...SERIF_VALUE, fontSize: 15 }}>
-          {formatDuration(day.totalSeconds)}
-        </Text>
-      </div>
+      <DayDate date={day.date} />
+      <DayBar percent={barPercent(day.totalSeconds, monthMax)} />
+      <DayTotal seconds={day.totalSeconds} />
     </div>
   );
 }

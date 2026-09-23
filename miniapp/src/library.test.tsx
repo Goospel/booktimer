@@ -12,6 +12,7 @@ import {
   BookSearch,
   HANDLE_ROW_HEIGHT,
   Library,
+  handleStyle,
   MarginBoxView,
   RecommendCard,
   SearchResultRow,
@@ -1411,25 +1412,67 @@ describe('서재 위계 (시안 2c)', () => {
 
     expect(tag).not.toBe('');
     expect(tag).toContain('--adaptiveBlue700');
-    expect(tag).toContain('#F7F2E8');
+    expect(tag).toContain('var(--filledInk'); // 채움 위 글자 — 밤엔 어두운 잉크로 스왑된다(Soft PR-1 토큰)
+    expect(tag).toContain('var(--puffShadow'); // 채움은 부푼다(TDS 채움 버튼 규칙과 같은 그림자)
     expect(tag).toContain('font-size:15px'); // 시안 15.5 -> 계단 15(설계 D3 반올림)
   });
 
   /**
-   * ⚠️ 연필 프레임이 <b>옆 「관리」와 같아야</b> 한 줄로 읽힌다. 처음엔 이 버튼만 `border: none`이라
-   * 나란한 두 버튼의 테두리가 갈렸다(독립 리뷰 적발) — 시안도 두 버튼 다 프레임이다.
-   * 설계 D5의 `FilledButton` 교체는 안 따랐다: TDS가 `--button-min-height: 56px`를 박아 이 38px
-   * 손잡이 줄에서 혼자 솟는다(실측). 그 판단이 조용히 뒤집히지 않게 <b>프레임 자체</b>를 잠근다.
+   * Soft PR-3 — 연필 프레임을 걷었다(이 자리는 옛 「두 버튼 다 연필 프레임」 단언이었다 — 그 태그에
+   * `border-image`가 실제로 실려 있었으므로 아래 부재 단언은 공허하지 않다). 한 줄에 나란한 두 버튼은
+   * 이제 <b>면과 선</b>으로 위계를 말한다: 주 동작은 부푼 채움, 보조 「관리」는 1.5px 세이지 실선.
+   * 설계 D5의 `FilledButton` 교체를 안 따른 이유(TDS가 56px 최소 높이를 박는다)는 그대로 유효하다.
    */
-  it('「여백에 글쓰기」도 옆 「관리」와 같은 연필 프레임을 두른다', () => {
+  it('「여백에 글쓰기」는 부푼 채움, 「관리」는 1.5px 실선 — 연필 프레임은 둘 다 없다', () => {
     const markup = shelf([read()], { tab: 'READING', selectedId: 1 });
     const write = tagBefore(markup, '여백에 글쓰기');
     const manage = tagBefore(markup, '관리');
 
-    expect(write).toContain('border-image');
-    expect(manage).toContain('border-image'); // 짝이 되는 쪽도 함께 — 한쪽만 바뀌면 여기서 걸린다
+    expect(write).not.toBe('');
+    expect(manage).not.toBe('');
+    expect(manage).toContain('1.5px solid var(--adaptiveBlue700');
+    expect(write).not.toContain('border-image');
+    expect(manage).not.toContain('border-image');
     expect(write).toContain(`height:${HANDLE_ROW_HEIGHT}px`);
     expect(manage).toContain(`height:${HANDLE_ROW_HEIGHT}px`);
+  });
+
+  it('「검색해서 담기」는 옅은 세이지 채움(primary)이다 — 옛 세이지 틴트 리터럴은 새 팔레트를 못 탔다', () => {
+    const tag = tagBefore(shelf([], { tab: 'READING', selectedId: null }), '검색해서 담기');
+
+    expect(tag).toContain('var(--adaptiveBlue50');
+    expect(tag).toContain(`height:${HANDLE_ROW_HEIGHT}px`);
+  });
+
+  it('제목 줄 「펼쳐보기」도 1.5px 실선 손잡이다(`handleStyle`)', () => {
+    expect(handleStyle.border).toBe('1.5px solid var(--adaptiveBlue700, #3F5A3C)');
+  });
+
+  it('여백 박스는 부푼 면이다 — 옛 크림 상자 + 연필선 자리', () => {
+    const markup = renderToStaticMarkup(
+      <TDSMobileProvider userAgent={userAgent}>
+        <MarginBoxView view="loading" now={0} onOpenAll={() => {}} />
+      </TDSMobileProvider>,
+    );
+    const box = markup.match(/<div data-margin-box=""[^>]*>/)?.[0] ?? '';
+
+    expect(box).not.toBe('');
+    expect(box).toContain('var(--puffShadow');
+    expect(box).not.toContain('border-image');
+  });
+
+  it('관리 시트 행은 1.5px 옅은 실선 줄이다(`SOFT_ROW`) — 위험 행 글자는 빨강 그대로', () => {
+    const markup = shelf([read()], {
+      tab: 'READING',
+      selectedId: 1,
+      sheet: { kind: 'actions', confirmDelete: false, confirmPublish: false },
+    });
+    const row = tagBefore(markup, '다 읽음(으)로 옮기기');
+    const danger = tagBefore(markup, '서재에서 삭제');
+
+    expect(row).toContain('1.5px solid var(--adaptiveGrey200');
+    expect(row).not.toContain('border-image');
+    expect(danger).toContain('#A32D2D');
   });
 
   /**

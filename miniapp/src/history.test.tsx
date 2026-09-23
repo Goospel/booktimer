@@ -9,6 +9,7 @@ import {
   DayRow,
   History,
   MonthlyRecords,
+  StatStrip,
   barPercent,
   bookRows,
   coverStack,
@@ -17,9 +18,11 @@ import {
   formatWeekday,
   goalLabel,
   isExpandable,
+  latestDate,
 } from './screens/History';
+import { StudyMonthlyRecords } from './screens/StudyHistory';
 import { graph, userAgent } from './test-fixtures';
-import { monthLabelPositions } from './ui';
+import { GrassGrid, monthLabelPositions } from './ui';
 
 /**
  * 월 라벨 배치 — 서버가 준 `monthLabels`(주 인덱스 + "M월")를 잔디 격자 위 픽셀 자리로 옮긴다.
@@ -170,9 +173,10 @@ const bk = (title: string, seconds: number, coverUrl: string | null = null) => (
  * 마크업에서 <b>하루 막대</b>의 폭만 집어낸다.
  *
  * <p>폭 문자열을 그냥 `toContain`으로 찾으면 안 된다 — 행 격자도 `width:100%`라 「가득 찼다」는
- * 단언이 막대를 안 그려도 늘 초록이 된다(실제로 돌연변이가 살아남아 잡혔다). 높이 6px이 막대의 표식이다.
+ * 단언이 막대를 안 그려도 늘 초록이 된다(실제로 돌연변이가 살아남아 잡혔다). 높이 12px이 막대 채움의 표식이다
+ * (Soft PR-3 — 트랙 16px 안에 2px씩 띄워 앉는다. 트랙 자신은 폭이 없어 이 정규식에 안 걸린다).
  */
-const dayBarWidth = (markup: string): string | null => markup.match(/width:(\d+%);height:6px/)?.[1] ?? null;
+const dayBarWidth = (markup: string): string | null => markup.match(/width:(\d+%);height:12px/)?.[1] ?? null;
 
 const day = (over: Partial<DailyRecord> = {}): DailyRecord => ({
   date: '2026-08-14',
@@ -421,7 +425,7 @@ describe('월별 기록 목록', () => {
     );
 
     // 그 달 최대(10_800) 기준이었다면 목표를 채운 날은 3600/10800 = 33%로 납작했다.
-    expect(withLongDay.match(/width:\d+%;height:6px/g)).toEqual(['width:100%;height:6px', 'width:100%;height:6px']);
+    expect(withLongDay.match(/width:\d+%;height:12px/g)).toEqual(['width:100%;height:12px', 'width:100%;height:12px']);
   });
 
   it('기록이 없으면 안내를 대신 둔다 — 가입 직후 잔디 아래가 통째로 비어 고장처럼 보였다', () => {
@@ -498,7 +502,7 @@ describe('기록 위계 (시안 2d)', () => {
       </TDSMobileProvider>,
     );
 
-  it('월 머리글은 세리프 20, 월 합계는 세리프 14다', () => {
+  it('월 머리글은 세리프 20, 월 합계는 16 굵게 세이지다(시안 Soft-History)', () => {
     const markup = records();
     const head = tagBefore(markup, '2026년 8월');
     const total = tagBefore(markup, '2시간');
@@ -506,15 +510,17 @@ describe('기록 위계 (시안 2d)', () => {
     expect(head).toContain('Gowun Batang');
     expect(head).toContain('font-size:20px');
     expect(total).toContain('Gowun Batang');
-    expect(total).toContain('font-size:14px');
+    expect(total).toContain('font-size:16px');
+    expect(total).toContain('--tds-paragraph-font-weight:700');
+    expect(total).toContain('var(--adaptiveBlue700');
   });
 
-  it('날짜와 하루 합계는 둘 다 세리프 15다 — 한 줄이 대답하는 두 값이다', () => {
+  it('날짜와 하루 합계는 둘 다 세리프 17이다 — 한 줄이 대답하는 두 값이다', () => {
     const markup = records();
 
-    expect(tagBefore(markup, '08-21')).toContain('font-size:15px');
+    expect(tagBefore(markup, '08-21')).toContain('font-size:17px');
     expect(tagBefore(markup, '08-21')).toContain('Gowun Batang');
-    expect(tagBefore(markup, '30분')).toContain('font-size:15px');
+    expect(tagBefore(markup, '30분')).toContain('font-size:17px');
   });
 
   it('요일은 세리프가 아니다 — 값처럼 보이지만 말이다(설계 비세리프 목록)', () => {
@@ -529,7 +535,7 @@ describe('기록 위계 (시안 2d)', () => {
    * `indexOf`가 <b>합계(15px)를 먼저</b> 집는다. 그래서 두 권으로 갈라 책 줄만 겨눈다(월/일 합계에는
    * 이미 같은 규율을 썼는데 여기만 빠져 있었다 — 독립 리뷰 적발).
    */
-  it('펼친 책별 시간은 세리프 13이다 — 하루 합계(15)보다 한 단 작다', () => {
+  it('펼친 책별 시간은 세리프 16이다 — 하루 합계(17)보다 한 단 작다(시안 펼친 줄 16)', () => {
     const twoBooks: DailyRecord = {
       date: '2026-08-21',
       totalSeconds: 1_800,
@@ -549,8 +555,8 @@ describe('기록 위계 (시안 2d)', () => {
 
     expect(bookTime).not.toBe('');
     expect(bookTime).toContain('Gowun Batang');
-    expect(bookTime).toContain('font-size:13px');
-    expect(tagBefore(markup, '30분')).toContain('font-size:15px'); // 하루 합계는 그대로 15
+    expect(bookTime).toContain('font-size:16px');
+    expect(tagBefore(markup, '30분')).toContain('font-size:17px'); // 하루 합계는 17
   });
 
   it('가이드라인은 여백 인용 줄과 같은 세이지 선이다 — 「위 줄에 딸린 것」을 앱이 한 가지로 말한다', () => {
@@ -562,5 +568,182 @@ describe('기록 위계 (시안 2d)', () => {
 
     expect(markup).toContain('padding-left:16px');
     expect(markup).toContain('2px solid var(--adaptiveBlue200');
+  });
+});
+
+/**
+ * 오늘 날짜 — 서버가 미래 칸을 `date: null`로 비워 보내므로(`ContributionGraphBuilder`) 판에 적힌 가장 늦은
+ * 날짜가 곧 <b>유저 타임존의 오늘</b>이다. 기기 시계를 읽으면 서버와 날이 갈리는 자정 언저리에 링이 어긋난다.
+ */
+describe('잔디의 오늘 (latestDate)', () => {
+  const at = (date: string | null) => ({ date, totalSeconds: 0, level: 0, manual: false });
+
+  it('판에서 가장 늦은 날짜를 고른다 — 최신 주(weeks[0]) 안에서도 칸 순서가 아니라 날짜로', () => {
+    expect(latestDate([[at('2026-09-21'), at('2026-09-23'), at('2026-09-22'), at(null)], [at('2026-09-16')]])).toBe(
+      '2026-09-23',
+    );
+  });
+
+  it('날짜가 하나도 없으면 undefined — 가입 직후 빈 판에서 링을 억지로 세우지 않는다', () => {
+    expect(latestDate([])).toBeUndefined();
+    expect(latestDate([[at(null), at(null)]])).toBeUndefined();
+  });
+});
+
+/**
+ * 기록 화면 Soft (PR-3, 시안 Soft-History) — 스탯 타일 셋 · 잔디 카드와 오늘 링 · 달마다 눌린 날짜 묶음 ·
+ * 트랙 위 하루 막대.
+ */
+describe('기록 Soft (시안 Soft-History)', () => {
+  const render = (node: React.ReactNode) =>
+    renderToStaticMarkup(<TDSMobileProvider userAgent={userAgent}>{node}</TDSMobileProvider>);
+  const tiles = (markup: string) => markup.match(/<div data-stat-tile=""[^>]*>/g) ?? [];
+
+  it('스탯 세 칸이 타일이다 — 세로선 칸막이 대신 면으로 갈린다', () => {
+    expect(tiles(render(<StatStrip graph={graph} />))).toHaveLength(3);
+  });
+
+  it('「연속」 타일은 버터다 — 정보색(모드 무관), 라벨도 버터 잉크', () => {
+    const markup = render(<StatStrip graph={graph} />);
+
+    expect(tiles(markup)[0]).toContain('var(--butterBg');
+    expect(tagBefore(markup, '연속')).toContain('var(--butterInk');
+  });
+
+  it('「읽은 날」「총 시간」 타일은 부푼 면의 축소판이다 — 카드 바탕 + 시안의 5px 그림자', () => {
+    const [, days, total] = tiles(render(<StatStrip graph={graph} />));
+
+    for (const tile of [days, total]) {
+      expect(tile).toContain('var(--adaptiveGrey100');
+      expect(tile).toContain('5px 5px 12px');
+    }
+  });
+
+  it('라벨 15 · 값 세리프 24 — 연령 규칙(보조 14 이상)과 시안 값', () => {
+    const markup = render(<StatStrip graph={graph} />);
+
+    expect(tagBefore(markup, '읽은 날')).toContain('font-size:15px');
+    const value = tagBefore(markup, `${graph.activeDays}일<`);
+    expect(value).toContain('font-size:24px');
+    expect(value).toContain('Gowun Batang');
+  });
+
+  it('잔디는 카드에 담기고 오늘 칸 링이 정확히 하나 선다 — 기록 화면이 오늘을 판에서 찾아 넘긴다', () => {
+    const dated = {
+      ...graph,
+      weeks: [
+        [{ date: '2026-09-22', totalSeconds: 0, level: 0, manual: false }, { date: '2026-09-23', totalSeconds: 600, level: 2, manual: false }],
+        [{ date: '2026-09-15', totalSeconds: 600, level: 1, manual: false }, { date: '2026-09-16', totalSeconds: 0, level: 0, manual: false }],
+      ],
+    };
+    const markup = render(<History graph={dated} />);
+
+    expect(markup).toContain('var(--puffShadow'); // 잔디 카드(sectionStyle)
+    // 칸(`title=` 날짜를 단 div)만 센다 — 범례 「오늘」 스와치도 같은 링을 두르므로 문자열 전체 개수는 2다.
+    expect(markup.match(/<div title="[^"]*" style="[^"]*0 0 0 4\.5px var\(--adaptiveBlue700/g)).toHaveLength(1);
+    expect(markup).toContain('>오늘<'); // 범례가 링을 설명한다
+  });
+
+  it('달마다 눌린 날짜 묶음이 하나씩 — 날짜 줄이 없는 달엔 빈 쟁반을 두지 않는다', () => {
+    const d = (date: string) => ({ date, totalSeconds: 1_800, books: [], manuallyFilled: false, goalSeconds: 3_600 });
+    const markup = render(
+      <MonthlyRecords
+        months={[
+          { month: '2026-09', totalSeconds: 3_600, days: [d('2026-09-02'), d('2026-09-01')] },
+          { month: '2026-08', totalSeconds: 1_800, days: [d('2026-08-31')] },
+          { month: '2026-07', totalSeconds: 0, days: [] },
+        ]}
+      />,
+    );
+
+    expect(markup).toContain('2026년 7월'); // 빈 달도 머리는 선다 — 아래 개수가 빈 달을 빠뜨려서 맞은 게 아니다
+    expect(markup.split('var(--dentShadow').length - 1).toBe(2);
+  });
+
+  it('하루 막대는 16px 트랙 위 세이지 그라데이션이다 — 색은 토큰이라 공부 모드에서 파랑이 된다', () => {
+    const markup = render(<DayRow day={day({ totalSeconds: 1_800, goalSeconds: 3_600 })} expanded={false} onToggle={() => {}} />);
+
+    expect(markup).toContain('height:16px;border-radius:999px;background:var(--adaptiveGrey100');
+    expect(markup).toContain(
+      'width:50%;height:12px;border-radius:999px;background:linear-gradient(90deg, var(--adaptiveBlue400, #8FB087), var(--adaptiveBlue500, #5B7F55))',
+    );
+  });
+
+  it('펼친 책 줄은 표지 26 · 이름 16 · 시간 16 흐린 잉크(grey700)', () => {
+    const twoBooks = day({ totalSeconds: 1_800, books: [bk('사피엔스', 1_200), bk('데미안', 600)] });
+    const markup = render(<DayRow day={twoBooks} expanded onToggle={() => {}} />);
+
+    expect(tagBefore(markup, '사피엔스</')).toContain('font-size:16px');
+    expect(tagBefore(markup, '20분')).toContain('var(--adaptiveGrey700');
+    expect(markup).toContain('width:26px');
+  });
+});
+
+/**
+ * 그림자 예산 (설계 §6) — 반복 요소(잔디 칸 · 날짜 줄 · 펼친 책 줄)엔 blur 8px 이상 그림자를 두지 않는다.
+ * 칸·줄 수 × 큰 흐림이 저사양 안드로이드 WebView의 스크롤 중 재래스터(체커보드)를 부른다 — 안드로이드 72%.
+ *
+ * <p>계측기: `box-shadow` 값에서 층마다 세 번째 길이(blur)를 뽑는다. 먼저 <b>층이 실제로 뽑혔는지</b>를
+ * 못 박는다 — 0층이면 「큰 흐림 0개」가 공허하게 통과한다.
+ */
+describe('그림자 예산 — 반복 요소엔 큰 흐림이 없다', () => {
+  const LAYER = /(-?\d+(?:\.\d+)?)(?:px)?\s+(-?\d+(?:\.\d+)?)(?:px)?\s+(\d+(?:\.\d+)?)(?:px)?/g;
+  const blurs = (markup: string) =>
+    [...markup.matchAll(/box-shadow:([^;"]+)/g)].flatMap((m) => [...m[1].matchAll(LAYER)].map((x) => Number(x[3])));
+  const render = (node: React.ReactNode) =>
+    renderToStaticMarkup(<TDSMobileProvider userAgent={userAgent}>{node}</TDSMobileProvider>);
+
+  it('계측기 자기검증 — 부푼 면(24px)은 잡고 링(0)은 통과시킨다', () => {
+    expect(blurs('<div style="box-shadow:10px 10px 24px rgba(94,122,90,.18), 0 0 0 2px #fff">')).toEqual([24, 0]);
+  });
+
+  it('잔디 칸 — 오늘 링까지 blur 0', () => {
+    const cell = (date: string, level: number) => ({ date, totalSeconds: 0, level, manual: false });
+    const b = blurs(render(<GrassGrid weeks={[[cell('2026-09-23', 2), cell('2026-09-22', 0)]]} today="2026-09-23" />));
+
+    expect(b.length).toBeGreaterThan(0);
+    expect(b.filter((x) => x >= 8)).toEqual([]);
+  });
+
+  /** 반복 요소 전부 — 독서 날짜 줄 · 펼친 책 줄 · 눌린 묶음 · 공부 날짜 줄 · 잔디 칸. */
+  const repeated = () =>
+    render(
+      <>
+        <MonthlyRecords
+          months={[
+            {
+              month: '2026-09',
+              totalSeconds: 3_600,
+              days: [{ date: '2026-09-02', totalSeconds: 3_600, books: [bk('사피엔스', 3_600, 'x.jpg')], manuallyFilled: false }],
+            },
+          ]}
+        />
+        <DayRow day={day({ books: [bk('사피엔스', 3_000), bk('데미안', 2_400)] })} expanded onToggle={() => {}} />
+        <StudyMonthlyRecords months={[{ month: '2026-09', totalSeconds: 3_600, days: [{ date: '2026-09-02', totalSeconds: 3_600 }] }]} />
+        <GrassGrid weeks={[[{ date: '2026-09-23', totalSeconds: 0, level: 0, manual: false }]]} today="2026-09-23" />
+      </>,
+    );
+
+  it('날짜 줄(독서·공부) · 펼친 책 줄 · 눌린 묶음 — 7px(눌린 면) 이하만', () => {
+    const markup = repeated();
+    const b = blurs(markup);
+
+    expect(markup).toContain('>09-02<'); // 두 목록이 다 그려졌다(공부 줄도 같은 날짜)
+    expect(markup.split('>09-02<').length - 1).toBe(2);
+    expect(b.length).toBeGreaterThan(0);
+    expect(b.filter((x) => x >= 8)).toEqual([]);
+  });
+
+  /**
+   * 위 계측기는 <b>리터럴 길이</b>만 센다 — `var(--puffShadow)`처럼 변수로 큰 흐림(10/24px)을 들이면 숫자가
+   * 마크업에 없어 통과해 버린다(리뷰 적발). 부푼 그림자 변수가 반복 요소에 실리면 안 된다는 것을 따로 못 박는다.
+   * 쟁반의 `var(--dentShadow`는 이 문자열과 겹치지 않는다. 이 마크업에 `var(--puffShadow`가 실릴 수 있는 자리는
+   * 없어야 정상이다 — 섹션 카드(잔디 카드)는 여기 렌더하지 않았다.
+   */
+  it('반복 요소엔 부푼 그림자 변수도 없다 — 변수로 들인 큰 흐림은 위 계측기가 못 본다', () => {
+    const markup = repeated();
+
+    expect(markup).toContain('box-shadow:var(--dentShadow'); // 변수 그림자가 이 마크업에 실리는 경로 자체는 살아 있다
+    expect(markup).not.toContain('var(--puffShadow');
   });
 });
