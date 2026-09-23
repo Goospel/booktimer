@@ -2069,7 +2069,7 @@ export function GuideHero({ onStart, onDismiss }: { onStart: () => void; onDismi
         }}
       >
         {/* 오버라인 — 카드가 평소 「오늘 읽은 시간」을 놓는 자리다. 자간을 벌려 머리말로 읽히게 한다. */}
-        <span style={{ display: 'block', fontSize: 12, letterSpacing: 3, color: sage }}>처음이신가요?</span>
+        <span style={{ display: 'block', fontSize: 14, letterSpacing: 3, color: sage }}>처음이신가요?</span>
         {/* 카드의 주인공 자리 — 세리프로 히어로의 수(오늘 읽은 시간)와 같은 무게를 받는다. */}
         <span style={{ display: 'block', marginTop: 6, fontSize: 26, ...SERIF_VALUE }}>앱 사용법 보기 ›</span>
         <span
@@ -2429,7 +2429,7 @@ export function BottomTabBar({
           </svg>
         </span>
         {/* 전부 700이면 굵기가 아무 말도 안 한다 — 고른 칸만 굵다(비선택 400은 body 상속과 같다). */}
-        <span style={{ fontSize: 11, fontWeight: selected ? 700 : 400, lineHeight: 1.2 }}>{label}</span>
+        <span style={{ fontSize: 13, fontWeight: selected ? 700 : 400, lineHeight: 1.2 }}>{label}</span>
       </button>
     );
   });

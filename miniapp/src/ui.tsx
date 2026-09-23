@@ -17,11 +17,11 @@ import type { ContributionDay, UserRow } from './api';
  * 조용히 원위치한다(그게 위 Grey900 폴백이 아무 일도 못 한 이유이기도 하다).
  */
 const INK: Record<string, string> = {
-  grey600: 'var(--adaptiveGrey600, #6F6A5E)',
-  grey700: 'var(--adaptiveGrey700, #57534A)',
-  grey800: 'var(--adaptiveGrey800, #2C2A24)',
-  blue500: 'var(--adaptiveBlue500, #6E8A6A)',
-  blue700: 'var(--adaptiveBlue700, #4F6B4C)',
+  grey600: 'var(--adaptiveGrey600, #4E5A4B)',
+  grey700: 'var(--adaptiveGrey700, #3A4637)',
+  grey800: 'var(--adaptiveGrey800, #232C21)',
+  blue500: 'var(--adaptiveBlue500, #5B7F55)',
+  blue700: 'var(--adaptiveBlue700, #3F5A3C)',
   red500: 'var(--adaptiveRed500, #F04452)',
 };
 
@@ -48,11 +48,11 @@ export function Text({ color, ...rest }: ComponentProps<typeof TdsText>) {
  * 리터럴은 fallback으로 남아 독서 렌더는 픽셀 하나 안 바뀐다.
  */
 export const LEVEL_COLORS = [
-  'var(--grass0, #EAE4D7)',
-  'var(--grass1, #C3D9B0)',
-  'var(--grass2, #94BE7F)',
-  'var(--grass3, #5E9250)',
-  'var(--grass4, #35662F)',
+  'var(--grass0, #E3E9E0)',
+  'var(--grass1, #C9DAC4)',
+  'var(--grass2, #A3C09B)',
+  'var(--grass3, #6E9565)',
+  'var(--grass4, #3F5A3C)',
 ];
 
 /** 수동 기록 칸의 테두리 — 웹 `--neutral-3`. 격자와 범례가 같은 값을 봐야 범례가 거짓말을 안 한다. */
@@ -297,20 +297,49 @@ export const PENCIL_FRAME =
   "url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='300' height='300'%3E%3Cfilter id='a' x='-20%25' y='-20%25' width='140%25' height='140%25'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.5' numOctaves='4' seed='5' result='g'/%3E%3CfeColorMatrix in='g' type='matrix' values='0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0.55 0 0 0 0.62' result='m'/%3E%3CfeComposite in='SourceGraphic' in2='m' operator='in'/%3E%3C/filter%3E%3Cfilter id='b' x='-20%25' y='-20%25' width='140%25' height='140%25'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.5' numOctaves='4' seed='23' result='g'/%3E%3CfeColorMatrix in='g' type='matrix' values='0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0.5 0 0 0 0.25' result='m'/%3E%3CfeComposite in='SourceGraphic' in2='m' operator='in'/%3E%3C/filter%3E%3Crect x='1.6' y='1.6' width='296.8' height='296.8' rx='7' fill='none' stroke='%2355504A' stroke-width='1.9' filter='url(%23a)'/%3E%3Crect x='2.4' y='2.4' width='295.2' height='295.2' rx='7' fill='none' stroke='%236B655C' stroke-width='1.4' filter='url(%23b)'/%3E%3C/svg%3E\") 8 / 8px stretch";
 
 /**
- * 카드 테두리를 연필선으로. `border`는 1px 그대로 두고 `border-image`의 `/ 8px`가 그림 폭을 정한다 —
- * 레이아웃이 1px도 안 밀리므로 `padding`을 건드릴 필요가 없다.
- * `borderRadius`는 border-image 렌더링에는 무시되지만 배경 클리핑에는 그대로 먹으므로 남긴다.
+ * Soft 부푼 면 — 카드의 기본 표면. 선이 아니라 면의 부풂(밝은 쪽 하이라이트 + 어두운 쪽 그림자)으로
+ * 바탕과 갈린다.
+ *
+ * <p>⚠️ 그림자 값은 **CSS 변수 경유**다(`global.css`의 `--puffShadow`). 리터럴로 적으면 밤(독서등)·공부
+ * 모드가 인라인을 이기려고 자리마다 `!important` 규칙을 둬야 한다 — 연필선이 겪은 고질의 재판이고,
+ * 낮의 흰 하이라이트가 밤 카드에 그대로 새어 어두운 화면에 흰 테가 뜬다. 변수면 `body` 클래스 한 벌이
+ * 값만 갈아 끼운다(`LEVEL_COLORS`·`--accentPill`과 같은 수법). 폴백은 낮 값이다.
+ *
+ * <p>인라인 상수인 이유: 하니스가 `renderToStaticMarkup`이라 CSS 클래스는 계측이 안 된다.
+ * ⚠️ 이 그림자를 애니메이션하지 않는다 — 값이 변하면 프레임마다 재페인트다(T-176).
  */
-export const sectionStyle = {
-  marginTop: 20,
-  padding: 16,
-  borderRadius: 12,
-  // 리터럴이 아니라 토큰이라야 독서등이 이 카드도 함께 밤으로 데려간다 — 화면 안의 다른 카드는
-  // 전부 이미 토큰을 쓰고 있었고, 여기 하나가 그 체계의 유일한 구멍이었다.
-  background: 'var(--adaptiveGrey100, #FCFAF5)',
-  border: '1px solid transparent',
-  borderImage: PENCIL_FRAME,
+export const PUFF = {
+  background: 'var(--adaptiveGrey100, #F9FBF7)',
+  boxShadow: 'var(--puffShadow, 10px 10px 24px rgba(94,122,90,.18), -8px -8px 20px rgba(255,255,255,.95))',
+  borderRadius: 26,
 } as const;
+
+/** Soft 눌린 면 — 트랙·입력·눌린 묶음. 그림자가 안쪽(inset)이라 면이 바탕 아래로 파인다. */
+export const DENT = {
+  background: 'var(--softDent, #E6ECE3)',
+  boxShadow: 'var(--dentShadow, inset 3px 3px 7px rgba(94,122,90,.2), inset -3px -3px 7px rgba(255,255,255,.9))',
+  borderRadius: 20,
+} as const;
+
+/** 보조 손잡이 — 규칙 1 「보조 버튼은 1.5px 테두리」. 카드 위에 선다. */
+export const SOFT_OUTLINE = {
+  border: '1.5px solid var(--adaptiveBlue700, #3F5A3C)',
+  borderRadius: 18,
+  background: 'var(--adaptiveGrey100, #F9FBF7)',
+  color: 'var(--adaptiveBlue700, #3F5A3C)',
+} as const;
+
+/** 시트 안 행 버튼 — 시트 바닥과 같은 색이라 선이 있어야 누르는 줄로 읽힌다. */
+export const SOFT_ROW = {
+  border: '1.5px solid var(--adaptiveGrey200, #D6DFD2)',
+  borderRadius: 14,
+  background: 'var(--adaptiveGrey100, #F9FBF7)',
+} as const;
+
+/**
+ * 섹션 카드 — 부푼 면 그대로. 배경이 리터럴이 아니라 토큰이라야 독서등이 이 카드도 함께 밤으로 데려간다.
+ */
+export const sectionStyle = { marginTop: 20, padding: 18, ...PUFF } as const;
 
 /**
  * 섹션 머리 아래 실선 — 시안(턴2)이 카드 안 머리에 그은 그 선이다. 그은 자리는 <b>넷</b>이다:
@@ -324,7 +353,7 @@ export const sectionStyle = {
  * 밤(독서등)에 카드지와 함께 어두워져 선이 통째로 사라진다. 낮 계산값(≈`#E3E1DC`)이 이 토큰과 한 톤
  * 안이라 <b>낮의 그림은 그대로 두면서 밤만 산다</b> — 「새 색을 만들지 않는다」는 이 파일의 원칙과 같은 방향.
  */
-export const SECTION_RULE = '1px solid var(--adaptiveGrey200, #E4DDD0)';
+export const SECTION_RULE = '1px solid var(--adaptiveGrey200, #D6DFD2)';
 
 /**
  * 값(수)·성취 이름을 세리프로 — 웹이 이미 쓰는 축을 미니앱에도 놓는다.
@@ -463,9 +492,9 @@ export function Sheet({
           overflowY: 'auto',
           // 홈 인디케이터 위로 마지막 줄이 올라오게 — 바닥 여백만 safe-area를 탄다.
           padding: '20px 20px calc(20px + env(safe-area-inset-bottom))',
-          borderRadius: '16px 16px 0 0',
-          background: '#FCFAF5',
-          boxShadow: '0 -4px 20px rgba(0, 0, 0, 0.14)',
+          borderRadius: '26px 26px 0 0',
+          background: 'var(--adaptiveGrey100, #F9FBF7)',
+          boxShadow: '0 -8px 24px rgba(94, 122, 90, 0.18)',
         }}
       >
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 }}>
@@ -693,9 +722,9 @@ export function UnreadBadge({ count, unit }: { count: number; unit: '대화' | '
         minWidth: 18,
         padding: '1px 6px',
         borderRadius: 999,
-        background: 'var(--adaptiveBlue500, #6E8A6A)',
+        background: 'var(--adaptiveBlue500, #5B7F55)',
         color: '#FFFDF8',
-        fontSize: 12,
+        fontSize: 13,
         lineHeight: '16px',
         textAlign: 'center',
       }}

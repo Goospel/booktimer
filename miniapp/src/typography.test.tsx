@@ -88,9 +88,14 @@ describe('굵기는 자리로 정해지지 않는다', () => {
  * 두 체급이 산다. 값 하나하나를 눈으로 지키는 대신 <b>계단을 벗어난 값이 있는가</b>를 묻는다 —
  * 오늘 이 가드가 `10`·`12.5`·`13.5`를 찾아냈다.
  */
-const SCALE = [11, 12, 13, 14, 15, 16, 17, 19, 20, 24, 26, 54];
+const SCALE = [13, 14, 15, 16, 17, 18, 19, 20, 21, 24, 26, 28, 62];
 
 describe('인라인 크기도 같은 계단 위에 온다', () => {
+  // Soft 재테마(2026-09-23) — 규칙 1 「최소 13px」. 누가 「배지니까」 11·12를 계단에 되넣는 돌연변이를 잡는다.
+  it('계단의 바닥은 13이다', () => {
+    expect(Math.min(...SCALE)).toBeGreaterThanOrEqual(13);
+  });
+
   it('계단 밖의 fontSize 리터럴이 없다', () => {
     const offenders: string[] = [];
     for (const file of sourceFiles(fileURLToPath(new URL('.', import.meta.url)))) {
@@ -109,24 +114,25 @@ describe('인라인 크기도 같은 계단 위에 온다', () => {
   });
 });
 
-describe('계단이 시안 눈금으로 돌아온다', () => {
-  // 옛 값들은 **개구 보정**이었다 — 같은 px에서 손글씨가 본문용 한글 폰트보다 낮고 좁아 계단 전체가
-  // 한 칸씩 올라가 있었다. 본문이 고운돋움으로 바뀌며 그 보정의 근거가 사라져 시안 눈금으로 되돌린다.
-  it('본문·보조 토큰이 시안 값이다', () => {
-    expect(css).toMatch(/--tds-t-st11-text-fontSize:\s*14px/); // 본문 (개구 보정 15 → 14)
-    expect(css).toMatch(/--tds-t-st12-text-fontSize:\s*12px/); // 보조·타임스탬프
-    expect(css).toMatch(/--tds-t-st13-text-fontSize:\s*11px/); // 배지·칩
+describe('계단이 Soft 눈금이다 — 본문 16 · 보조 14 · 최소 13', () => {
+  // Soft 재테마(2026-09-23, 연령 반영) — 12px 흐린 글자가 40대 이상에게 얇았다. 계단 전체를 한 칸씩 올린다.
+  it('본문·보조 토큰이 Soft 값이다', () => {
+    expect(css).toMatch(/--tds-t-st11-text-fontSize:\s*16px/); // 본문
+    expect(css).toMatch(/--tds-t-st12-text-fontSize:\s*14px/); // 보조·타임스탬프
+    expect(css).toMatch(/--tds-t-st13-text-fontSize:\s*13px/); // 배지·칩 (탭 라벨과 같은 바닥)
   });
 
   it('제목은 본문과의 간격으로 위계를 만든다 — 히어로만 크게 벌린다', () => {
-    expect(css).toMatch(/--tds-t-st10-text-fontSize:\s*17px/); // 섹션 제목 (시안 16.5 → 올림)
-    expect(css).toMatch(/--tds-t-t3-text-fontSize:\s*26px/); //  화면 제목
-    expect(css).toMatch(/--tds-t-t2-text-fontSize:\s*54px/); //  홈 히어로 (44 → 54)
+    expect(css).toMatch(/--tds-t-st10-text-fontSize:\s*18px/); // 섹션 제목
+    expect(css).toMatch(/--tds-t-t3-text-fontSize:\s*28px/); //  화면 제목
+    expect(css).toMatch(/--tds-t-t2-text-fontSize:\s*62px/); //  홈 히어로 (h:mm:ss가 카드 폭 안에 남는 값)
   });
 
-  it('줄높이를 쌍으로 움직인다 — 내릴 때도 같이 내려야 줄간이 안 뜬다', () => {
-    expect(css).toMatch(/--tds-t-st11-text-lineHeight:\s*22px/);
-    expect(css).toMatch(/--tds-t-t2-text-lineHeight:\s*59px/);
+  it('줄높이를 쌍으로 움직인다 — 올릴 때도 같이 올려야 줄이 안 붙는다', () => {
+    expect(css).toMatch(/--tds-t-st11-text-lineHeight:\s*24px/);
+    expect(css).toMatch(/--tds-t-st12-text-lineHeight:\s*21px/);
+    expect(css).toMatch(/--tds-t-st13-text-lineHeight:\s*18px/);
+    expect(css).toMatch(/--tds-t-t2-text-lineHeight:\s*66px/);
   });
 });
 

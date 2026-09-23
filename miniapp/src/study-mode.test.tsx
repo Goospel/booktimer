@@ -192,7 +192,7 @@ describe('공부 모드 색 — css에 실재하는가', () => {
     const root = css.slice(css.indexOf('html:root {'), css.indexOf('}', css.indexOf('html:root {')));
     const study = css.slice(css.indexOf(`body.${STUDY_CLASS} {`), css.indexOf('}', css.indexOf(`body.${STUDY_CLASS} {`)));
 
-    expect(root).toContain(`${HERO_CARD_BG_VAR}: #FCFAF5`); // 독서 = 지금까지의 종이색 그대로(회귀 0)
+    expect(root).toContain(`${HERO_CARD_BG_VAR}: #F9FBF7`); // 독서 = Soft 부푼 면(시안 .puff)
     expect(study).toContain(`${HERO_CARD_BG_VAR}: #EFF3F6`); // 공부 = 명도 유지·색상만 한랭한 「푸른 종이」
   });
 
@@ -208,17 +208,22 @@ describe('공부 모드 색 — css에 실재하는가', () => {
    * 이상 마크업엔 리터럴이 늘 실린다. 그래서 <b>선언 자체</b>를 잰다(히어로 카드 틴트와 같은 처방).
    */
   /**
-   * 채움 주 버튼(`FilledButton`)은 공부 모드에서도 진한 채움이어야 한다 — 공부 primary 재색칠 규칙
-   * (`body.study-mode … #3182f6`)이 명시도가 더 높아 채움을 연한 파랑으로 덮고, 종이색 글자가 그 위에서
-   * 거의 안 읽혔다(목 모드 실측 2026-09-13: 회당 시간 시트 「저장」 computed `rgba(95, 126, 150, 0.16)`).
-   * 같은 명시도의 공부 전용 채움 규칙이 <b>그 뒤에</b> 있어야 이긴다 — 순서까지 잰다.
+   * TDS 버튼은 공부 모드 전용 규칙을 두지 않는다 — 버튼 재색칠이 전부 토큰 경유라 `body.study-mode`의
+   * 토큰 스왑이 저절로 닿는다(Soft 재테마 2026-09-23). 옛날엔 리터럴 규칙 3개가 따로 있었고, 그중
+   * primary 규칙이 명시도로 채움 버튼까지 덮어 「저장」이 연한 파랑 위 종이색 글자가 됐었다(2026-09-13).
+   * 리터럴 규칙이 되살아나면 토큰 스왑을 가려 같은 사고가 재발하므로 <b>0개</b>를 잰다.
    */
-  it('공부 모드의 채움 버튼 규칙이 primary 재색칠보다 뒤에 있다 — 앞이면 연한 채움에 진다', () => {
-    const primary = css.indexOf("body.study-mode .tds-mobile-button[style*='--button-background-color:#3182f6']");
-    const filled = css.indexOf("body.study-mode .tds-mobile-button[style*='--btn-filled']");
-    expect(primary).toBeGreaterThan(-1);
-    expect(filled).toBeGreaterThan(primary);
-    expect(css.slice(filled, css.indexOf('}', filled))).toContain('background-color: var(--adaptiveBlue700');
+  it('공부 모드 전용 TDS 버튼 규칙이 없다 — 리터럴 규칙은 토큰 스왑을 가린다', () => {
+    const live = css.replace(/\/\*[\s\S]*?\*\//g, '');
+    expect(live).toContain('.tds-mobile-button['); // 버튼 규칙 자체는 있다(추출이 공허하지 않음)
+    expect(live).not.toMatch(/body\.study-mode\s+\.tds-mobile-button/);
+  });
+
+  it('공부 블록이 Soft 그림자·옅은 타일 토큰을 파랑으로 갈아 끼운다', () => {
+    const study = css.slice(css.indexOf(`body.${STUDY_CLASS} {`), css.indexOf('}', css.indexOf(`body.${STUDY_CLASS} {`)));
+    expect(study).toMatch(/--puffShadow:[^;]*rgba\(80,\s*105,\s*125/);
+    expect(study).toMatch(/--dentShadow:[^;]*rgba\(80,\s*105,\s*125/);
+    expect(study).toContain('--adaptiveBlue50: #D6E0E7');
   });
 
   it('강조 알약 토큰이 공부 블록에도 있다 — 빠지면 fallback 세이지가 그대로 뜬다', () => {
@@ -238,11 +243,11 @@ describe('공부 모드 색 — css에 실재하는가', () => {
     const root = css.slice(css.indexOf('html:root {'), css.indexOf('}', css.indexOf('html:root {')));
 
     for (const decl of [
-      '--grass0: #EAE4D7',
-      '--grass1: #C3D9B0',
-      '--grass2: #94BE7F',
-      '--grass3: #5E9250',
-      '--grass4: #35662F',
+      '--grass0: #E3E9E0',
+      '--grass1: #C9DAC4',
+      '--grass2: #A3C09B',
+      '--grass3: #6E9565',
+      '--grass4: #3F5A3C',
     ]) {
       expect(root).toContain(decl);
     }

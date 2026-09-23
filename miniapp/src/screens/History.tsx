@@ -73,7 +73,7 @@ export function GrassPanel({ graph }: { graph: ContributionGraph }) {
           {months.map(({ label, left }) => (
             <span
               key={label}
-              style={{ position: 'absolute', left, fontSize: 11, color: '#6F6A5E', whiteSpace: 'nowrap' }}
+              style={{ position: 'absolute', left, fontSize: 13, color: '#6F6A5E', whiteSpace: 'nowrap' }}
             >
               {label}
             </span>
@@ -471,7 +471,7 @@ function CoverPile({ books }: { books: BookRead[] }) {
             justifyContent: 'center',
             background: 'var(--adaptiveGrey200, #E4DDD0)',
             color: 'var(--adaptiveGrey700, #57534A)',
-            fontSize: 12,
+            fontSize: 14,
           }}
         >
           +{more}

@@ -387,7 +387,7 @@ export function LockedFeedBody({ newsOpen }: { newsOpen: boolean }) {
 function TrialStat({ label, value }: { label: string; value: string }) {
   return (
     <div style={{ flex: 1, minWidth: 0 }}>
-      <div style={{ fontSize: 12, color: 'var(--adaptiveGrey600, #6F6A5E)' }}>{label}</div>
+      <div style={{ fontSize: 14, color: 'var(--adaptiveGrey600, #6F6A5E)' }}>{label}</div>
       <div style={{ ...SERIF_VALUE, fontSize: 19, marginTop: 2 }}>{value}</div>
     </div>
   );
@@ -489,7 +489,7 @@ export function GuestHome({
       >
         {/* 오버라인 — 로그인 홈과 <b>같은 글자</b>다(`heroOverline`). 로그인하면 이 줄만 그대로 남는다. */}
         <div>
-          <span style={{ fontSize: 12, letterSpacing: 3, color: 'var(--adaptiveBlue700, #4F6B4C)' }}>
+          <span style={{ fontSize: 14, letterSpacing: 3, color: 'var(--adaptiveBlue700, #4F6B4C)' }}>
             {heroOverline('reading', false)}
           </span>
         </div>

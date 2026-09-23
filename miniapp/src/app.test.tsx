@@ -1538,12 +1538,12 @@ describe('탭바 위계 (시안 4c)', () => {
     expect(tabCell(markup, '서재')).toContain('--adaptiveGrey600');
   });
 
-  it('라벨은 11px이고 굵기는 고른 칸만 700이다 — 전부 700이면 굵기가 아무 말도 안 한다', () => {
+  it('라벨은 13px이고 굵기는 고른 칸만 700이다 — 전부 700이면 굵기가 아무 말도 안 한다', () => {
     const markup = tabBar('home');
 
-    expect(tabCell(markup, '홈')).toContain('font-size:11px');
+    expect(tabCell(markup, '홈')).toContain('font-size:13px');
     expect(tabCell(markup, '홈')).toContain('font-weight:700');
-    expect(tabCell(markup, '서재')).toContain('font-size:11px');
+    expect(tabCell(markup, '서재')).toContain('font-size:13px');
     expect(tabCell(markup, '서재')).toContain('font-weight:400');
   });
 

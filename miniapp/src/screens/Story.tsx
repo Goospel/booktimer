@@ -1097,7 +1097,7 @@ export function MarginCard({
             {clamped ? '더보기' : '접기'}
           </button>
         )}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 7, fontSize: 11, color: ROW_SUB }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 7, fontSize: 13, color: ROW_SUB }}>
           <span>{relativeTime(entry.createdAt, now)}</span>
           {/* 칩은 이제 <b>상태 표시 전용</b>이다 — 켜고 끄는 일은 ⋯ 시트로 옮겼다(2026-08-22). */}
           {shared && onOpenMenu !== undefined && <span style={sharedChip}>모두의 여백</span>}
@@ -1212,7 +1212,7 @@ const moreLine = {
   border: 'none',
   background: 'transparent',
   color: 'var(--adaptiveBlue700, #4F6B4C)',
-  fontSize: 12,
+  fontSize: 14,
   fontWeight: 700,
   textAlign: 'left',
   cursor: 'pointer',
@@ -1311,7 +1311,7 @@ const authorLine = {
   margin: '0 0 4px',
   padding: 0,
   color: 'var(--adaptiveBlue700, #4F6B4C)',
-  fontSize: 12,
+  fontSize: 14,
   fontWeight: 700,
   textAlign: 'left',
 } as const;
@@ -1511,7 +1511,7 @@ const shareRow = {
 /** 컴포저 라벨·카운터 — 배경 위에 얹히므로 색은 상속받고 농도만 낮춘다(팔레트 6색 어디서나 읽힌다). */
 const composerLabel = {
   margin: 0,
-  fontSize: 12,
+  fontSize: 14,
   opacity: 0.6,
   color: 'inherit',
 } as const;
