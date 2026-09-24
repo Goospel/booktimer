@@ -615,7 +615,7 @@ describe('기록 Soft (시안 Soft-History)', () => {
 
     for (const tile of [days, total]) {
       expect(tile).toContain('var(--adaptiveGrey100');
-      expect(tile).toContain('5px 5px 12px');
+      expect(tile).toContain('var(--tileShadow)'); // 시안의 5px 그림자 — 틴트가 토큰으로 모였다(톤 조율 A)
     }
   });
 
@@ -660,12 +660,12 @@ describe('기록 Soft (시안 Soft-History)', () => {
     expect(markup.split('var(--dentShadow').length - 1).toBe(2);
   });
 
-  it('하루 막대는 16px 트랙 위 세이지 그라데이션이다 — 색은 토큰이라 공부 모드에서 파랑이 된다', () => {
+  it('하루 막대는 16px 트랙 위 세이지 단색이다 — 색은 토큰이라 공부 모드에서 파랑이 된다', () => {
     const markup = render(<DayRow day={day({ totalSeconds: 1_800, goalSeconds: 3_600 })} expanded={false} onToggle={() => {}} />);
 
     expect(markup).toContain('height:16px;border-radius:999px;background:var(--adaptiveGrey100');
     expect(markup).toContain(
-      'width:50%;height:12px;border-radius:999px;background:linear-gradient(90deg, var(--adaptiveBlue400, #8FB087), var(--adaptiveBlue500, #5B7F55))',
+      'width:50%;height:12px;border-radius:999px;background:var(--adaptiveBlue500, #5B7F55)"',
     );
   });
 
@@ -694,7 +694,7 @@ describe('그림자 예산 — 반복 요소엔 큰 흐림이 없다', () => {
     renderToStaticMarkup(<TDSMobileProvider userAgent={userAgent}>{node}</TDSMobileProvider>);
 
   it('계측기 자기검증 — 부푼 면(24px)은 잡고 링(0)은 통과시킨다', () => {
-    expect(blurs('<div style="box-shadow:10px 10px 24px rgba(94,122,90,.18), 0 0 0 2px #fff">')).toEqual([24, 0]);
+    expect(blurs('<div style="box-shadow:10px 10px 24px rgba(112,96,64,.15), 0 0 0 2px #fff">')).toEqual([24, 0]);
   });
 
   it('잔디 칸 — 오늘 링까지 blur 0', () => {

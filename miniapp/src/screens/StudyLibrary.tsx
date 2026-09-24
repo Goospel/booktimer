@@ -123,7 +123,7 @@ function handleRowStyle(tone: 'tint' | 'card'): CSSProperties {
   // 독서 서재(PR-3)의 「관리」와 같은 옷이다. 모드색은 토큰 경유라 공부 모드에선 저절로 파랑이다.
   const surface: CSSProperties =
     tone === 'tint'
-      ? { border: 'none', borderRadius: 18, background: 'var(--adaptiveBlue50, #DCE8D6)', color: 'var(--adaptiveBlue700, #3F5A3C)' }
+      ? { border: 'none', borderRadius: 18, background: 'var(--adaptiveBlue50, #E1E8D4)', color: 'var(--adaptiveBlue700, #3F5A3C)' }
       : SOFT_OUTLINE;
   return {
     ...surface,
@@ -355,15 +355,15 @@ export function StudyShelf({
               type="button"
               disabled={busy}
               onClick={() => onReadCount(selected, selected.readCount + 1)}
-              // Soft(PR-4): 독서 서재 「여백에 글쓰기」(PR-3)와 같은 채움 — 연필선 대신 부푼 그림자,
-              // 글자는 `--filledInk`. 채움 개수 가드(typography.test D5)가 세는 키를 그대로 쓴다.
+              // Soft(PR-4): 독서 서재 「여백에 글쓰기」(PR-3)와 같은 채움 — 옅은 모드색 타일 + 부푼 그림자 + 진한
+              // 모드색 글자(톤 조율 A). 채움 개수 가드(typography.test D5)가 세는 키(부푼 그림자)를 그대로 쓴다.
               style={{
                 flex: 2,
                 height: HANDLE_ROW_HEIGHT,
                 border: 'none',
                 borderRadius: 18,
-                background: 'var(--adaptiveBlue700, #3F5A3C)',
-                color: 'var(--filledInk, #FFFFFF)',
+                background: 'var(--adaptiveBlue50, #E1E8D4)',
+                color: 'var(--adaptiveBlue700, #3F5A3C)',
                 boxShadow: 'var(--puffShadow)',
                 fontSize: 15,
                 fontWeight: 700,
@@ -491,7 +491,7 @@ function StudySheetRow({
         width: '100%',
         marginBottom: 8,
         padding: '15px 14px',
-        color: danger ? '#A32D2D' : 'var(--adaptiveGrey800, #232C21)',
+        color: danger ? '#A32D2D' : 'var(--adaptiveGrey800, #2A2921)',
         fontSize: 15,
         textAlign: 'left',
         cursor: 'pointer',

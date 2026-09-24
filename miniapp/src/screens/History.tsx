@@ -92,7 +92,7 @@ export function GrassPanel({ graph }: { graph: ContributionGraph }) {
           {months.map(({ label, left }) => (
             <span
               key={label}
-              style={{ position: 'absolute', left, fontSize: 14, color: 'var(--adaptiveGrey600, #4E5A4B)', whiteSpace: 'nowrap' }}
+              style={{ position: 'absolute', left, fontSize: 14, color: 'var(--adaptiveGrey600, #5B5A4D)', whiteSpace: 'nowrap' }}
             >
               {label}
             </span>
@@ -180,13 +180,13 @@ export function StatStrip({
 const STAT_TILE_BASE: CSSProperties = { padding: '10px 14px', borderRadius: 20 };
 const STAT_TILE_BUTTER: CSSProperties = {
   ...STAT_TILE_BASE,
-  background: 'var(--butterBg, #F2E8C6)',
-  boxShadow: 'inset 0 1px 0 rgba(255, 255, 255, 0.7), 5px 5px 12px rgba(160, 140, 70, 0.18)',
+  background: 'var(--butterBg, #F1E6C3)',
+  boxShadow: 'inset 0 1px 0 rgba(255, 255, 255, 0.7), 5px 5px 12px rgba(150, 125, 60, 0.14)',
 };
 const STAT_TILE: CSSProperties = {
   ...STAT_TILE_BASE,
-  background: 'var(--adaptiveGrey100, #F9FBF7)',
-  boxShadow: '5px 5px 12px rgba(94, 122, 90, 0.16), -4px -4px 10px rgba(255, 255, 255, 0.95)',
+  background: 'var(--adaptiveGrey100, #FBF9F4)',
+  boxShadow: 'var(--tileShadow), -4px -4px 10px rgba(255, 255, 255, 0.9)',
 };
 
 const WEEKDAYS = ['일', '월', '화', '수', '목', '금', '토'];
@@ -397,18 +397,18 @@ const ROW_GRID: CSSProperties = {
  * 하루 막대 — 트랙(카드 면, 16px 알약) 위에 2px 띄워 앉은 세이지 그라데이션(시안 Soft-History). 폭은
  * {@link barPercent} 그대로다.
  *
- * <p>양 끝 색이 <b>토큰</b>이다(시안은 `#8FB087 → #5B7F55` 리터럴): 공부 기록이 같은 막대를 쓰는데 `body.study-mode`가
- * 이 두 토큰을 파랑 사다리로 갈아 끼운다 — 리터럴이면 공부 화면의 이 막대만 세이지로 남는다. 옛 막대가
+ * <p>단색 <b>토큰</b>이다(톤 조율 A — 시안의 그라데이션은 재료를 하나 더 얹었다): 공부 기록이 같은 막대를 쓰는데 `body.study-mode`가
+ * 이 토큰을 파랑으로 갈아 끼운다 — 리터럴이면 공부 화면의 이 막대만 세이지로 남는다. 옛 막대가
  * `LEVEL_COLORS[2]`를 쓰던 이유와 같다.
  */
 export const BAR_TRACK: CSSProperties = {
   height: 16,
   borderRadius: 999,
-  background: 'var(--adaptiveGrey100, #F9FBF7)',
+  background: 'var(--adaptiveGrey100, #FBF9F4)',
   padding: 2,
   boxSizing: 'border-box',
 };
-export const BAR_FILL = 'linear-gradient(90deg, var(--adaptiveBlue400, #8FB087), var(--adaptiveBlue500, #5B7F55))';
+export const BAR_FILL = 'var(--adaptiveBlue500, #5B7F55)';
 
 /** 트랙 위 막대 한 줄 — `barPercent`가 낸 퍼센트를 받는다. 0%면 빈 트랙만 남는다. */
 export function DayBar({ percent }: { percent: number }) {
@@ -534,7 +534,7 @@ const PILE_CARD: CSSProperties = {
   position: 'relative',
   display: 'flex',
   borderRadius: 4,
-  boxShadow: '0 0 0 1.5px var(--softDent, #E6ECE3)',
+  boxShadow: '0 0 0 1.5px var(--softDent, #EAE5D9)',
 };
 
 /**

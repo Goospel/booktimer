@@ -595,9 +595,9 @@ export function Shelf({
                 fontWeight: current ? 700 : 400,
                 boxShadow: current ? '0 1px 3px rgba(0, 0, 0, 0.08)' : undefined,
                 cursor: 'pointer',
-                // 카드 면·잉크 토큰 — 옛 크림 `#FCFAF5` 리터럴은 Soft 카드 면(#F9FBF7)과 한 톤 어긋났다.
-                background: current ? 'var(--adaptiveGrey100, #F9FBF7)' : 'transparent',
-                color: current ? 'var(--adaptiveGrey800, #232C21)' : 'var(--adaptiveGrey700, #3A4637)',
+                // 카드 면·잉크 토큰 — 옛 크림 `#FCFAF5` 리터럴은 Soft 카드 면(#FBF9F4)과 한 톤 어긋났다.
+                background: current ? 'var(--adaptiveGrey100, #FBF9F4)' : 'transparent',
+                color: current ? 'var(--adaptiveGrey800, #2A2921)' : 'var(--adaptiveGrey700, #43423A)',
               }}
             >
               {/* 이름만 적는다 — 권수는 「펼쳐보기」 시트 제목(`읽는 중 N권`)이 이미 말한다. 세 칸에
@@ -664,7 +664,7 @@ export function Shelf({
                   height: HANDLE_ROW_HEIGHT,
                   border: 'none',
                   borderRadius: 18,
-                  background: 'var(--adaptiveBlue50, #DCE8D6)',
+                  background: 'var(--adaptiveBlue50, #E1E8D4)',
                   color: 'var(--adaptiveBlue700, #3F5A3C)',
                   fontSize: 16,
                   fontWeight: 700,
@@ -689,16 +689,17 @@ export function Shelf({
                         flex: 2,
                         height: HANDLE_ROW_HEIGHT,
                         // 시안 2c — 이 화면의 주 동작 하나라 **채움**이다. Soft(PR-3): 연필 프레임 대신
-                        // 부푼 그림자 — TDS 채움 버튼 규칙(global.css `--btn-filled`)과 같은 옷이다. 글자는
-                        // `--filledInk`(낮 흰색 · 밤 어두운 잉크)라 채움색이 밤에 밝아져도 읽힌다.
+                        // 부푼 그림자 — TDS 채움 버튼 규칙(global.css `--btn-filled`)과 같은 옷이다. 톤 조율 A:
+                        // 진한 채움 → 옅은 세이지 타일 + 진한 글자(진한 덩어리는 탭바 원 하나). 옆 「관리」와는
+                        // 면(부푼 타일)과 선(1.5px 실선)으로 갈린다.
                         // ⚠️ 설계 D5의 `FilledButton` 교체는 **안 따랐다**: TDS Button이
                         // `--button-min-height: 56px`를 박아 이 38px 손잡이 줄에서 혼자 56px로 솟는다(실측).
                         // 채움 개수 계측은 `typography.test`가 **두 형태를 함께 세는** 방식으로 받는다 —
-                        // 그 가드가 세는 키 `background: 'var(--adaptiveBlue700`을 그대로 쓴다.
+                        // 그 가드가 세는 키 `boxShadow: 'var(--puffShadow)'`를 그대로 쓴다(톤 조율 A에서 배경 키 대신).
                         border: 'none',
                         borderRadius: 18,
-                        background: 'var(--adaptiveBlue700, #3F5A3C)',
-                        color: 'var(--filledInk, #FFFFFF)',
+                        background: 'var(--adaptiveBlue50, #E1E8D4)',
+                        color: 'var(--adaptiveBlue700, #3F5A3C)',
                         boxShadow: 'var(--puffShadow)',
                         fontSize: 15,
                         fontWeight: 700,
@@ -824,7 +825,7 @@ export function BookGrid({
                 display: 'flex',
                 justifyContent: 'center',
                 // 지금 고른 책만 테두리로 — 격자에서 "내가 보던 그 책"을 잃지 않게.
-                outline: book.id === selectedId ? '2px solid #6E8A6A' : undefined,
+                outline: book.id === selectedId ? '2px solid var(--adaptiveBlue500, #5B7F55)' : undefined,
                 outlineOffset: 2,
                 borderRadius: 4,
               }}
@@ -844,8 +845,8 @@ export function BookGrid({
                       width: 10,
                       height: 10,
                       borderRadius: '50%',
-                      background: 'var(--adaptiveBlue500, #6E8A6A)',
-                      border: '2px solid #FCFAF5',
+                      background: 'var(--adaptiveBlue500, #5B7F55)',
+                      border: '2px solid var(--adaptiveGrey100, #FBF9F4)',
                     }}
                   />
                 )}
@@ -1004,7 +1005,7 @@ function SheetRow({
         width: '100%',
         marginBottom: 8,
         padding: '15px 14px',
-        color: danger ? '#A32D2D' : 'var(--adaptiveGrey800, #232C21)',
+        color: danger ? '#A32D2D' : 'var(--adaptiveGrey800, #2A2921)',
         fontSize: 15,
         textAlign: 'left',
         cursor: 'pointer',
@@ -1190,8 +1191,9 @@ export function SearchResultRow({
         minWidth: 0,
         marginTop: badge === null ? 8 : 0,
         borderRadius: 12,
-        // 담긴 책은 캔버스보다 한 톤 가라앉힌다 — 카드지(#FCFAF5)보다 어두워야 「지나간 칸」으로 읽힌다.
-        background: row.owned ? '#EFE9DC' : 'var(--adaptiveGrey100, #FCFAF5)',
+        // 담긴 책은 한 톤 가라앉힌다 — 면(`--adaptiveGrey100`)보다 어두워야 「지나간 칸」으로 읽힌다. Soft에서 그
+        // 「가라앉은 바탕」은 눌린 면 색(`--softDent`)이다(옛 베이지 #EFE9DC 자리 — 공부 모드·밤도 토큰이 데려간다).
+        background: row.owned ? 'var(--softDent, #EAE5D9)' : 'var(--adaptiveGrey100, #FBF9F4)',
       }}
     >
       {/* 표지만 흐리고 도장은 또렷해야 하므로 흐림을 안쪽 겹에 건다(바깥에 걸면 도장까지 바랜다). */}
@@ -1201,7 +1203,7 @@ export function SearchResultRow({
         </span>
         {row.owned && (
           <span style={ownedStampStyle}>
-            <OwnedCheck color="#FCFAF5" />
+            <OwnedCheck color="var(--adaptiveGrey100, #FBF9F4)" />
           </span>
         )}
       </span>
@@ -1218,7 +1220,7 @@ export function SearchResultRow({
         </div>
         {row.owned && (
           <span style={ownedChipStyle}>
-            <OwnedCheck color="#4F6B4C" />
+            <OwnedCheck color="var(--adaptiveBlue700, #3F5A3C)" />
             서재에 있어요
           </span>
         )}
@@ -1382,14 +1384,15 @@ function authorLine(row: SearchRow): string {
 
 /** 담김 체크 — 기본 이모지를 쓰지 않기로 해서(2026-08-18) 선 하나로 그린다. 뜻은 옆 글자가 진다. */
 function OwnedCheck({ color }: { color: string }) {
+  // 색은 `style.color` → `currentColor`로 흘린다 — SVG 표현 속성(`stroke="var(--x)"`)은 CSS 변수를 못 푼다.
   return (
-    <svg width="11" height="11" viewBox="0 0 12 12" fill="none" aria-hidden="true">
-      <path d="M2 6.4 L4.6 9 L10 3" stroke={color} strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" />
+    <svg width="11" height="11" viewBox="0 0 12 12" fill="none" aria-hidden="true" style={{ color }}>
+      <path d="M2 6.4 L4.6 9 L10 3" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" />
     </svg>
   );
 }
 
-/** 표지 귀퉁이의 도장. 테두리가 눕힌 종이색이라 표지에 찍혀 파인 것처럼 보인다. */
+/** 표지 귀퉁이의 도장. 테두리가 행 바탕(눌린 면)과 같은 색이라 표지에 찍혀 파인 것처럼 보인다. */
 const ownedStampStyle = {
   position: 'absolute',
   right: -5,
@@ -1397,14 +1400,14 @@ const ownedStampStyle = {
   width: 20,
   height: 20,
   borderRadius: '50%',
-  background: '#6E8A6A', // 웹 --accent
-  border: '1.5px solid #EFE9DC',
+  background: 'var(--adaptiveBlue500, #5B7F55)', // 모드 강조색(공부 모드면 파랑)
+  border: '1.5px solid var(--softDent, #EAE5D9)', // 담긴 행 바탕과 같은 토큰
   display: 'flex',
   alignItems: 'center',
   justifyContent: 'center',
 } as const;
 
-/** 「서재에 있어요」 칩 — 세이지 연한 채움. 연필 프레임은 쓰지 않는다(좁은 요소에서 그림이 깨진다). */
+/** 「서재에 있어요」 칩 — 모드색 옅은 채움 + 한 톤 진한 테두리 + 진한 잉크. 전부 토큰이라 공부 모드가 데려간다. */
 const ownedChipStyle = {
   display: 'inline-flex',
   alignItems: 'center',
@@ -1412,9 +1415,9 @@ const ownedChipStyle = {
   marginTop: 6,
   padding: '1px 8px 2px',
   borderRadius: 8,
-  border: '1px solid rgba(110, 138, 106, 0.5)',
-  background: 'rgba(110, 138, 106, 0.18)',
-  color: '#4F6B4C', // 웹 --accent-hover. 연한 채움 위에서 읽히는 유일한 톤
+  border: '1px solid var(--adaptiveBlue300, #A9BD99)',
+  background: 'var(--accentPill, rgba(91, 127, 85, 0.16))',
+  color: 'var(--adaptiveBlue700, #3F5A3C)', // 옅은 채움 위에서 읽히는 진한 잉크
   fontSize: 13,
   lineHeight: 1.5,
 } as const;

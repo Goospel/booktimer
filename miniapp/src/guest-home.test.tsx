@@ -441,14 +441,15 @@ describe('게스트 홈 — 잠긴 탭', () => {
     expect(shell(null, 'history')).toContain('기록은 계정이 있어야 열려요');
   });
 
-  it('내가 선 칸은 흐리지 않다 — 잠금 표시가 「여기 있다」를 덮으면 길을 잃는다', () => {
+  it('내가 선 칸은 선택 표시로 서고 자물쇠를 단다 — 잠금 표시가 「여기 있다」를 덮지 않는다', () => {
     const markup = shell(null, 'library');
     const at = markup.indexOf('title="서재"');
     const cell = markup.slice(markup.lastIndexOf('<button', at), markup.indexOf('</button>', at));
 
     expect(cell).toContain('aria-current="page"');
     expect(cell).toContain('aria-disabled="true"');
-    expect(cell).toContain('opacity:1');
+    expect(cell).toContain('--adaptiveBlue700'); // 선택 잉크 — 흐림으로 지우지 않는다
+    expect(cell).toContain('data-lock-badge=""'); // 게스트 셸도 같은 탭바 — 잠김은 배지로 말한다
   });
 
   it('잠긴 화면에도 「둘러보는 중」이 남는다 — 로그인 홈과 헷갈리지 않게', () => {

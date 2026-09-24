@@ -17,9 +17,9 @@ import type { ContributionDay, UserRow } from './api';
  * 조용히 원위치한다(그게 위 Grey900 폴백이 아무 일도 못 한 이유이기도 하다).
  */
 const INK: Record<string, string> = {
-  grey600: 'var(--adaptiveGrey600, #4E5A4B)',
-  grey700: 'var(--adaptiveGrey700, #3A4637)',
-  grey800: 'var(--adaptiveGrey800, #232C21)',
+  grey600: 'var(--adaptiveGrey600, #5B5A4D)',
+  grey700: 'var(--adaptiveGrey700, #43423A)',
+  grey800: 'var(--adaptiveGrey800, #2A2921)',
   blue500: 'var(--adaptiveBlue500, #5B7F55)',
   blue700: 'var(--adaptiveBlue700, #3F5A3C)',
   red500: 'var(--adaptiveRed500, #F04452)',
@@ -48,9 +48,9 @@ export function Text({ color, ...rest }: ComponentProps<typeof TdsText>) {
  * 리터럴은 fallback으로 남아 독서 렌더는 픽셀 하나 안 바뀐다.
  */
 export const LEVEL_COLORS = [
-  'var(--grass0, #E3E9E0)',
-  'var(--grass1, #C9DAC4)',
-  'var(--grass2, #A3C09B)',
+  'var(--grass0, #E7E2D5)',
+  'var(--grass1, #CFD9C0)',
+  'var(--grass2, #A9BD99)',
   'var(--grass3, #6E9565)',
   'var(--grass4, #3F5A3C)',
 ];
@@ -59,7 +59,7 @@ export const LEVEL_COLORS = [
 export const MANUAL_OUTLINE = '1px solid #9A9486';
 
 /** 잔디 오늘 칸 링 — 범례 「오늘」 스와치도 같은 값을 둘러야 범례가 거짓말을 안 한다. */
-export const TODAY_RING = '0 0 0 2px var(--adaptiveGrey100, #F9FBF7), 0 0 0 4.5px var(--adaptiveBlue700, #3F5A3C)';
+export const TODAY_RING = '0 0 0 2px var(--adaptiveGrey100, #FBF9F4), 0 0 0 4.5px var(--adaptiveBlue700, #3F5A3C)';
 
 /** 주 컬럼 사이 간격 — 격자와 월 라벨 배치가 이 값을 공유해야 라벨이 그 열 위에 선다. */
 export const GRASS_GAP = 3;
@@ -195,7 +195,7 @@ export function Avatar({ nickname, size = 72 }: { nickname: string; size?: numbe
         fontSize: Math.round(size * 0.375),
         background: coverColor(nickname),
         color: COVER_FG,
-        ...HANDWRITING, // 장식 — 본문이 고운돋움으로 넘어가도 이니셜은 손글씨로 남는다
+        ...SERIF_VALUE, // 이니셜은 값·인용 축(세리프)이다 — 손글씨는 톤 조율 A에서 걷었다
       }}
     >
       {initialOf(nickname)}
@@ -204,14 +204,14 @@ export function Avatar({ nickname, size = 72 }: { nickname: string; size?: numbe
 }
 
 /** 무표지 책의 자리 표지 — `BookOption`엔 표지 주소가 없어 첫 글자 + 제목색 상자로 대신한다. */
-export function CoverInitial({ title, width = 32 }: { title: string; width?: number }) {
+export function CoverInitial({ title, width = 32, radius = 4 }: { title: string; width?: number; radius?: number }) {
   return (
     <div
       aria-hidden="true"
       style={{
         width,
         height: Math.round(width * 1.4),
-        borderRadius: 4,
+        borderRadius: radius,
         flex: '0 0 auto',
         display: 'flex',
         alignItems: 'center',
@@ -219,7 +219,7 @@ export function CoverInitial({ title, width = 32 }: { title: string; width?: num
         fontSize: Math.round(width * 0.5),
         background: coverColor(title),
         color: COVER_FG,
-        ...HANDWRITING, // 장식 — 표지 이니셜은 손글씨로 남는다(본문은 고운돋움)
+        ...SERIF_VALUE, // 표지 이니셜 — 아바타 이니셜과 한 몸(세리프)
       }}
     >
       {initialOf(title)}
@@ -261,20 +261,23 @@ export function BookCover({
   url,
   title,
   width = 40,
+  radius = 4,
   eager = false,
 }: {
   url: string | null;
   /** 있으면 자리 채움이 첫 글자 + 제목색이 된다. 없으면 무채색 상자. */
   title?: string;
   width?: number;
+  /** 모서리 — 기본 4. 홈·서재 캐러셀만 8(고른 칸의 후광과 동심이 되게). */
+  radius?: number;
   eager?: boolean;
 }) {
   const [failedUrl, setFailedUrl] = useState<string | null>(null);
-  const box = { width, height: Math.round(width * 1.4), borderRadius: 4, flex: '0 0 auto' } as const;
+  const box = { width, height: Math.round(width * 1.4), borderRadius: radius, flex: '0 0 auto' } as const;
   const src = coverSource(url, failedUrl);
 
   if (src === null) {
-    if (title !== undefined) return <CoverInitial title={title} width={width} />;
+    if (title !== undefined) return <CoverInitial title={title} width={width} radius={radius} />;
     return <div aria-hidden="true" style={{ ...box, background: 'var(--adaptiveGrey200, #E4DDD0)' }} />;
   }
   return (
@@ -289,33 +292,6 @@ export function BookCover({
 }
 
 /**
- * 섹션 블록 — 구분 없이 나열되던 목록에 카드 경계를 준다(홈·소셜의 카드 위계).
- * 크림 캔버스(--bg) 위 카드지(--card-bg)는 명도차가 작아 배경만으로는 경계가 안 보인다 → 보더를 함께 쓰는
- * 웹 카드 문법을 그대로 옮겼다.
- */
-/**
- * 연필 테두리 프레임 — 필터를 넣은 SVG를 data URI로 박아 `border-image`로 쓴다.
- *
- * <p>인라인 `<svg>`의 filter를 참조하지 않는 이유: 그러면 필터 정의가 DOM 어딘가에 상주해야 하고
- * 요소마다 매번 변위를 계산한다. data URI는 이미지 디코드 때 1회만 계산돼 비트맵으로 캐시된다 —
- * 카드가 수십 개 깔리는 화면(책방 격자)에서 이 차이가 실기기 페인트 비용으로 돌아온다(T-176 계열).
- *
- * <p>`8 / 8px`는 slice(타일에서 잘라낼 폭) / width(화면에 그릴 폭)다. width는 요소의 실제 `border-width`와
- * **독립**이라, border는 1px로 두고 그림만 8px로 그려 레이아웃을 1px도 밀지 않는다.
- *
- * <p>⚠️ 선을 휘게 하는 필터(feDisplacementMap)를 쓰지 않는다. border-image는 300px 타일을 요소 폭에
- * 맞춰 늘이고 줄이는데, 좁은 버튼에서는 3배 넘게 압축된다 — 굴곡이 있으면 파장도 같은 배율로 짧아져
- * 변위가 선 두께를 넘어서고, 그 순간 선은 휘는 게 아니라 가장자리가 깎여 「픽셀이 깨진 선」이 된다(실측 반려).
- * 연필선의 정체는 흔들림이 아니라 **흑연이 종이 결에 걸려 생기는 농도 얼룩**이라, 고주파 노이즈를
- * 선의 알파에 곱해 진하기만 들쑓날롭하게 만든다. 고주파 입자는 압축돼도 고와질 뿐이라 지글거리지 않는다.
- *
- * <p>⚠️ repeat은 `stretch`다. `round`(타일 반복)를 쓰면 농도 얼룩이 타일 경계에서 어긋나 이음매마다
- * 줄이 보인다(feTurbulence에 stitchTiles를 안 쓴다).
- */
-export const PENCIL_FRAME =
-  "url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='300' height='300'%3E%3Cfilter id='a' x='-20%25' y='-20%25' width='140%25' height='140%25'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.5' numOctaves='4' seed='5' result='g'/%3E%3CfeColorMatrix in='g' type='matrix' values='0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0.55 0 0 0 0.62' result='m'/%3E%3CfeComposite in='SourceGraphic' in2='m' operator='in'/%3E%3C/filter%3E%3Cfilter id='b' x='-20%25' y='-20%25' width='140%25' height='140%25'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.5' numOctaves='4' seed='23' result='g'/%3E%3CfeColorMatrix in='g' type='matrix' values='0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0.5 0 0 0 0.25' result='m'/%3E%3CfeComposite in='SourceGraphic' in2='m' operator='in'/%3E%3C/filter%3E%3Crect x='1.6' y='1.6' width='296.8' height='296.8' rx='7' fill='none' stroke='%2355504A' stroke-width='1.9' filter='url(%23a)'/%3E%3Crect x='2.4' y='2.4' width='295.2' height='295.2' rx='7' fill='none' stroke='%236B655C' stroke-width='1.4' filter='url(%23b)'/%3E%3C/svg%3E\") 8 / 8px stretch";
-
-/**
  * Soft 부푼 면 — 카드의 기본 표면. 선이 아니라 면의 부풂(밝은 쪽 하이라이트 + 어두운 쪽 그림자)으로
  * 바탕과 갈린다.
  *
@@ -328,15 +304,15 @@ export const PENCIL_FRAME =
  * ⚠️ 이 그림자를 애니메이션하지 않는다 — 값이 변하면 프레임마다 재페인트다(T-176).
  */
 export const PUFF = {
-  background: 'var(--adaptiveGrey100, #F9FBF7)',
-  boxShadow: 'var(--puffShadow, 10px 10px 24px rgba(94,122,90,.18), -8px -8px 20px rgba(255,255,255,.95))',
+  background: 'var(--adaptiveGrey100, #FBF9F4)',
+  boxShadow: 'var(--puffShadow, 10px 10px 24px rgba(112,96,64,.15), -8px -8px 20px rgba(255,255,255,.9))',
   borderRadius: 26,
 } as const;
 
 /** Soft 눌린 면 — 트랙·입력·눌린 묶음. 그림자가 안쪽(inset)이라 면이 바탕 아래로 파인다. */
 export const DENT = {
-  background: 'var(--softDent, #E6ECE3)',
-  boxShadow: 'var(--dentShadow, inset 3px 3px 7px rgba(94,122,90,.2), inset -3px -3px 7px rgba(255,255,255,.9))',
+  background: 'var(--softDent, #EAE5D9)',
+  boxShadow: 'var(--dentShadow, inset 3px 3px 7px rgba(112,96,64,.16), inset -3px -3px 7px rgba(255,255,255,.85))',
   borderRadius: 20,
 } as const;
 
@@ -344,15 +320,15 @@ export const DENT = {
 export const SOFT_OUTLINE = {
   border: '1.5px solid var(--adaptiveBlue700, #3F5A3C)',
   borderRadius: 18,
-  background: 'var(--adaptiveGrey100, #F9FBF7)',
+  background: 'var(--adaptiveGrey100, #FBF9F4)',
   color: 'var(--adaptiveBlue700, #3F5A3C)',
 } as const;
 
 /** 시트 안 행 버튼 — 시트 바닥과 같은 색이라 선이 있어야 누르는 줄로 읽힌다. */
 export const SOFT_ROW = {
-  border: '1.5px solid var(--adaptiveGrey200, #D6DFD2)',
+  border: '1.5px solid var(--adaptiveGrey200, #DED8CA)',
   borderRadius: 14,
-  background: 'var(--adaptiveGrey100, #F9FBF7)',
+  background: 'var(--adaptiveGrey100, #FBF9F4)',
 } as const;
 
 /**
@@ -391,7 +367,7 @@ export function GoalMedal({ size = 132 }: { size?: number }) {
           <stop offset="1" stopColor="#D9BF6A" />
         </radialGradient>
       </defs>
-      <ellipse cx="60" cy="124" rx="34" ry="5" fill="rgba(94,122,90,0.22)" />
+      <ellipse cx="60" cy="124" rx="34" ry="5" fill="rgba(112,96,64,0.2)" />
       <path d="M40 86 L30 122 L44 114 L50 126 L58 92 Z" fill="#6E9565" />
       <path d="M80 86 L90 122 L76 114 L70 126 L62 92 Z" fill="#3F5A3C" />
       <circle cx="60" cy="56" r="46" fill={`url(#${id})`} />
@@ -400,8 +376,8 @@ export function GoalMedal({ size = 132 }: { size?: number }) {
       {/* 새싹 — 24 격자의 (12,14)를 코인 중심(60,56)에 맞춰 3배로 키운다. */}
       <g transform="translate(24 14) scale(3)" stroke="#3F5A3C" strokeWidth="1.1" strokeLinecap="round" strokeLinejoin="round">
         <path d={SPROUT_PATHS[0]} fill="none" />
-        <path d={SPROUT_PATHS[1]} fill="#8FB087" />
-        <path d={SPROUT_PATHS[2]} fill="#A9C7A1" />
+        <path d={SPROUT_PATHS[1]} fill="#8FA986" />
+        <path d={SPROUT_PATHS[2]} fill="#B5C6A5" />
       </g>
     </svg>
   );
@@ -424,7 +400,7 @@ export const sectionStyle = { marginTop: 20, padding: 18, ...PUFF } as const;
  * 밤(독서등)에 카드지와 함께 어두워져 선이 통째로 사라진다. 낮 계산값(≈`#E3E1DC`)이 이 토큰과 한 톤
  * 안이라 <b>낮의 그림은 그대로 두면서 밤만 산다</b> — 「새 색을 만들지 않는다」는 이 파일의 원칙과 같은 방향.
  */
-export const SECTION_RULE = '1px solid var(--adaptiveGrey200, #D6DFD2)';
+export const SECTION_RULE = '1px solid var(--adaptiveGrey200, #DED8CA)';
 
 /**
  * 값(수)·성취 이름을 세리프로 — 웹이 이미 쓰는 축을 미니앱에도 놓는다.
@@ -438,7 +414,7 @@ export const SECTION_RULE = '1px solid var(--adaptiveGrey200, #D6DFD2)';
  * 폰트를 불러만 놓고 화면 제목 한 곳에서만 썼다. 손글씨 옆의 세리프는 「적어 둔 값」으로 읽혀,
  * 크기를 덜 키우고도 눈에 먼저 든다.
  *
- * <p>클래스가 아니라 <b>인라인 스타일 상수</b>인 이유는 {@link PENCIL_FRAME}·{@link sectionStyle}과 같다 —
+ * <p>클래스가 아니라 <b>인라인 스타일 상수</b>인 이유는 {@link PUFF}·{@link sectionStyle}과 같다 —
  * 이 저장소의 테스트 하니스는 `renderToStaticMarkup` 정적 렌더라 <b>css를 적용하지 않는다</b>.
  * 인라인이라야 「이 값이 세리프로 오는가」를 마크업에서 계측할 수 있다.
  *
@@ -452,25 +428,10 @@ export const SERIF_VALUE = {
    * 700을 적고 있었고 한 곳(`Profile`의 통계 수치)만 빠져 있었는데, 오늘은 그게 안 보인다:
    * `@import`가 `Gowun+Batang:wght@700` 단일이라 400 요청도 700 face로 매칭되기 때문이다.
    * 즉 **잠재 취약점**이다 — @import에 웨이트 축이 붙거나 폴백으로 떨어지는 순간 그 숫자만 얇아진다.
-   * 여기 두면 그 자리가 상수를 쓰는 것만으로 닫힌다(장식 쪽 HANDWRITING과 같은 꼴).
+   * 여기 두면 그 자리가 상수를 쓰는 것만으로 닫힌다.
    */
   fontWeight: 700,
   fontVariantNumeric: 'tabular-nums',
-} as const;
-
-/**
- * 손글씨(장식) — <b>표지 이니셜 · placeholder · 여백 인용문</b>만. 기능 글자에 쓰지 않는다.
- *
- * <p>한때 이 서체가 `html body` 스택 맨 앞이라 <b>앱 전체가 손글씨</b>였고, 그래서 장식 자리들은
- * 아무것도 지정하지 않아도 손글씨였다 — 즉 <b>상속에 기대고 있었다</b>. 본문이 고운돋움으로 넘어가는
- * 순간 그 자리들이 통째로 조용히 사라지므로(레포 전체에서 Gaegu를 명시한 tsx가 0건이었다),
- * 기본값 전환과 <b>같은 변경 안에서</b> 명시 opt-in으로 뒤집는다.
- *
- * <p>굵기 700인 이유: 개구는 300·400·700만 있고 400은 획이 흐물해 장식으로도 약하다.
- */
-export const HANDWRITING = {
-  fontFamily: "'Gaegu', sans-serif",
-  fontWeight: 700,
 } as const;
 
 /**
@@ -546,7 +507,8 @@ export function Sheet({
       <div
         className="sheet-dim"
         onClick={onDimClose}
-        style={{ position: 'fixed', inset: 0, zIndex: 200, background: 'rgba(0, 0, 0, 0.45)' }}
+        // 딤은 순검정이 아니라 잉크(#1E1E18)를 깐다 — 따뜻한 바탕 위에 순검정을 덮으면 화면이 잿빛으로 식는다(톤 조율 A).
+        style={{ position: 'fixed', inset: 0, zIndex: 200, background: 'rgba(30, 30, 24, 0.45)' }}
       />
       <div
         className="sheet-panel"
@@ -564,8 +526,8 @@ export function Sheet({
           // 홈 인디케이터 위로 마지막 줄이 올라오게 — 바닥 여백만 safe-area를 탄다.
           padding: '20px 20px calc(20px + env(safe-area-inset-bottom))',
           borderRadius: '26px 26px 0 0',
-          background: 'var(--adaptiveGrey100, #F9FBF7)',
-          boxShadow: '0 -8px 24px rgba(94, 122, 90, 0.18)',
+          background: 'var(--adaptiveGrey100, #FBF9F4)',
+          boxShadow: '0 -8px 24px rgba(112, 96, 64, 0.15)',
         }}
       >
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 }}>
@@ -771,11 +733,19 @@ const searchHandleStyle = {
 /** 돋보기 — 기본 이모지를 쓰지 않기로 해서(2026-08-18) 선으로 그린다({@link OwnedCheck}과 같은 방식). */
 function SearchGlass({ dim }: { dim: boolean }) {
   // 검색어가 없으면 흐린다 — 옛 버튼의 `disabled`가 하던 「아직 누를 때가 아니다」를 색이 잇는다.
-  const color = dim ? 'rgba(79,107,76,0.35)' : '#4F6B4C';
+  // 색은 토큰(`style.color` → `currentColor` — SVG 표현 속성은 CSS 변수를 못 푼다)이라 공부 모드가 데려간다.
+  // 흐림은 옛 35% 알파 세이지와 같은 정도를 불투명도로 준다(정적 값 — 애니메이션 없음).
   return (
-    <svg width="23" height="23" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-      <circle cx="10.5" cy="10.5" r="6.6" stroke={color} strokeWidth="1.9" />
-      <path d="M15.6 15.6 L20 20" stroke={color} strokeWidth="1.9" strokeLinecap="round" />
+    <svg
+      width="23"
+      height="23"
+      viewBox="0 0 24 24"
+      fill="none"
+      aria-hidden="true"
+      style={{ color: 'var(--adaptiveBlue700, #3F5A3C)', opacity: dim ? 0.35 : 1 }}
+    >
+      <circle cx="10.5" cy="10.5" r="6.6" stroke="currentColor" strokeWidth="1.9" />
+      <path d="M15.6 15.6 L20 20" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" />
     </svg>
   );
 }

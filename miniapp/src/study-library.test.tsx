@@ -382,11 +382,11 @@ describe('Soft 표면 — 공부 서재 (PR-4)', () => {
     return at < 0 ? '' : html.slice(html.lastIndexOf('<button', at), at + 1);
   };
 
-  it('「회독 +1」은 채움이다 — 모드색 채움 + 부푼 그림자 + 채움 잉크', () => {
+  it('「회독 +1」은 주 동작이다 — 옅은 모드색 타일 + 부푼 그림자 + 진한 모드색 글자(톤 조율 A)', () => {
     const tag = button(shelf([studyBook(1, '기본서', 3)], 1), '회독 +1');
     expect(tag).not.toBe('');
-    expect(tag).toContain('background:var(--adaptiveBlue700');
-    expect(tag).toContain('color:var(--filledInk');
+    expect(tag).toContain('background:var(--adaptiveBlue50,'); // 경계 `,` — `--adaptiveBlue500`에도 맞지 않게(리뷰 M7)
+    expect(tag).toContain('color:var(--adaptiveBlue700');
     expect(tag).toContain('box-shadow:var(--puffShadow');
     expect(tag).not.toContain('border-image');
   });
@@ -401,7 +401,7 @@ describe('Soft 표면 — 공부 서재 (PR-4)', () => {
   it('「검색해서 담기」는 옅은 모드색 채움이다 — 테두리 없이 면으로 선다', () => {
     const tag = button(shelf([], undefined), '검색해서 담기');
     expect(tag).not.toBe('');
-    expect(tag).toContain('background:var(--adaptiveBlue50');
+    expect(tag).toContain('background:var(--adaptiveBlue50,');
     expect(tag).not.toContain('border-image');
   });
 

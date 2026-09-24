@@ -69,11 +69,9 @@ describe('공부 기록 화면', () => {
   });
 
   it('하루 막대 3줄이 전부 토큰을 탄다 — 픽스처의 날 수만큼', () => {
-    // Soft PR-3: 막대가 트랙 위 그라데이션이 됐다. 양 끝 색이 둘 다 토큰이라야 공부 모드에서 파랑이 된다
-    // (시안 값 `#8FB087 → #5B7F55`를 리터럴로 적으면 이 자리만 세이지로 남는다).
-    const bars = markup.match(
-      /height:12px;border-radius:999px;background:linear-gradient\(90deg, var\(--adaptiveBlue400, #8FB087\), var\(--adaptiveBlue500, #5B7F55\)\)/g,
-    );
+    // 톤 조율 A: 막대가 단색이 됐다. 색이 토큰이라야 공부 모드에서 파랑이 된다
+    // (시안 값 `#5B7F55`를 리터럴로 적으면 이 자리만 세이지로 남는다).
+    const bars = markup.match(/height:12px;border-radius:999px;background:var\(--adaptiveBlue500, #5B7F55\)"/g);
     expect(bars).toHaveLength(3);
   });
 

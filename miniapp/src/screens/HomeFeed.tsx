@@ -6,7 +6,7 @@ import { fetchHomeFeed } from '../api';
 import { CACHE_FEED, cacheGet, cachePut } from '../cache';
 import { elapsedSeconds, formatDate, formatDuration, objectParticle, relativeTime } from '../format';
 import { openExternal } from '../toss';
-import { BookCover, HANDWRITING, SECTION_RULE, SERIF_VALUE, Text, sectionStyle } from '../ui';
+import { BookCover, SECTION_RULE, SERIF_VALUE, Text, sectionStyle } from '../ui';
 
 /**
  * 홈 피드 박스 — 사람 · 「소식」 · 「여백」 · 「책 뉴스」 탭. 잔디 미리보기가 서 있던 자리를 물려받았다.
@@ -250,8 +250,8 @@ const pillStyle = (active: boolean) =>
     padding: '6px 14px',
     border: 0,
     borderRadius: 999,
-    background: active ? 'var(--accentPill, rgba(91,127,85,.2))' : 'transparent',
-    color: active ? 'var(--adaptiveBlue700, #3F5A3C)' : 'var(--adaptiveGrey600, #4E5A4B)',
+    background: active ? 'var(--accentPill, rgba(91,127,85,.16))' : 'transparent',
+    color: active ? 'var(--adaptiveBlue700, #3F5A3C)' : 'var(--adaptiveGrey600, #5B5A4D)',
     fontSize: 14,
     fontWeight: active ? 700 : 400,
     cursor: 'pointer',
@@ -450,8 +450,8 @@ function socialRow(
               // 「남의 말」로 읽힌다.
               borderLeft: '2px solid var(--adaptiveBlue200, #B6C9AE)',
               wordBreak: 'keep-all',
-              // 여백 인용은 장식이다 — 남이 손으로 적은 글이라 손글씨로 남긴다.
-              ...HANDWRITING,
+              // 여백 인용은 인용 축(세리프)이다 — 남이 적어 둔 글이라 기능 글자와 갈린다.
+              ...SERIF_VALUE,
             }}
           >
             {event.excerpt}

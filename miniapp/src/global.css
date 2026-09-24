@@ -9,9 +9,10 @@
  */
 
 /* 웹폰트 — 웹 app.css와 본문·세리프를 같은 패밀리로 맞춘다(감성 동기화의 절반은 폰트다).
-   ⚠️ 손글씨(Gaegu)만은 여기 전용이다 — 웹은 2026-09-03부터 받지 않는다(app.css 상단 주석).
-   미니앱은 표지 이니셜·여백 인용 같은 '장식 opt-in' 자리가 남아 있어 계속 받는다. */
-@import url('https://fonts.googleapis.com/css2?family=Gaegu:wght@300;400;700&family=Gowun+Batang:wght@700&family=Gowun+Dodum&display=swap');
+   **두 벌뿐이다**: 고운돋움(본문) + 고운바탕(값·제목·인용·이니셜). 손글씨(개구)는 톤 조율 A(2026-09-24)에서
+   걷었다 — 부푼 면 위에서 「어린이 앱 글씨」로 읽혀 두 고운 서체와 따로 놀았다(웹은 2026-09-03에 먼저 걷었다).
+   되살아나면 warm-palette.test가 잡는다. */
+@import url('https://fonts.googleapis.com/css2?family=Gowun+Batang:wght@700&family=Gowun+Dodum&display=swap');
 
 html,
 body {
@@ -26,14 +27,14 @@ body {
  * color: #212529; font-family: 'Toss Product Sans' … }`)과 정면으로 다툰다. TDS는 이 스타일을 **런타임에,
  * 우리 css보다 뒤에** 주입하므로 같은 명시도(`body`, 0-0-1)로는 순서에서 진다 — 그래서 `html body`(0-0-2)다.
  *
- * 바탕(#EEF2EB)과 `--adaptiveBackground`(부푼 면 #F9FBF7)가 다른 게 의도다 — 탭바·시트·섹션 카드가
+ * 바탕(#F3EFE5)과 `--adaptiveBackground`(부푼 면 #FBF9F4)가 다른 게 의도다 — 탭바·시트·섹션 카드가
  * 바탕 위에 한 톤 밝게 떠야 Soft 위계가 나온다(면 구분의 나머지는 `--puffShadow`가 맡는다).
  *
  * 폰트는 여기 한 곳이면 화면 전체에 흐른다 — TDS Text는 family를 따로 안 잡고, 폼 요소는 TDS의
  * `input, select, textarea, button { font-family: inherit }`이 body 값을 그대로 물려준다.
  */
 html body {
-  background: #EEF2EB; /* Soft 바탕 (시안 body) */
+  background: #F3EFE5; /* 따뜻한 오트 바탕 (톤 조율 A — 표지·아바타의 황갈색과 온도를 맞춘다) */
   /*
    * 본문 잉크 — 이 줄이 없던 동안 낮 모드 화면 전역이 브랜드 잉크가 아니라 TDS 리셋의 `#212529`(푸른기
    * 도는 차콜)였다. TDS `Text`는 색을 `var(--tds-paragraph-color, var(--adaptiveGrey900))`로 그리는데
@@ -44,21 +45,20 @@ html body {
    * `transition: … color 0.45s`가 매 로드마다 발화하는 일도 사라진다. 그 전환이 시작값(UA 기본 검정)에서
    * 출발하는 탓에, 백그라운드 탭에서 재면 「화면 전역이 rgb(0,0,0)」으로 얼어붙어 보였다(T-207).
    */
-  color: var(--adaptiveGrey800, #232C21); /* 본문 잉크 */
+  color: var(--adaptiveGrey800, #2A2921); /* 본문 잉크 */
   /*
    * 서체 축 — **기능 글자가 기본, 장식이 opt-in**이다(「또렷한 연필」 개편, 2026-08-24).
    *
-   * 한때 개구(Gaegu)가 맨 앞이라 앱 전체가 손글씨였다. 라벨·버튼·탭까지 손글씨면 읽는 속도가 떨어지고
+   * 한때 개구(손글씨)가 맨 앞이라 앱 전체가 손글씨였다. 라벨·버튼·탭까지 손글씨면 읽는 속도가 떨어지고
    * 강조에 쓸 축도 남지 않는다 — 손글씨는 실질 굵기가 하나뿐이라 굵기로 더 말할 수 없기 때문이다.
-   * 그래서 기능 글자를 고운돋움으로 옮기고, 손글씨는 **장식 자리에서만 명시로** 부른다
-   * (`ui.tsx`의 `HANDWRITING` — 표지 이니셜·placeholder·여백 인용).
+   * 그래서 기능 글자를 고운돋움으로 옮겼고, 손글씨는 장식 자리에만 남겼다가 톤 조율 A(2026-09-24)에서
+   * 그 자리까지 고운바탕(`ui.tsx`의 `SERIF_VALUE`)으로 넘겼다 — 표지 이니셜·placeholder·여백 인용.
    *
    * ⚠️ 방향이 뒤집히면(장식이 기본 · 기능이 opt-in) **지정 안 한 다음 화면이 다시 손글씨로 태어난다.**
    * 기본값이 다수(기능)를 맡고 소수(장식)가 손드는 쪽만 안정적이다.
    *
-   * ⚠️ **Gaegu를 폴백으로도 안 남긴다.** 남기면 고운돋움이 못 그리는 글리프만 손글씨로 떨어져 한 단어
-   * 안에서 서체가 갈린다 — 시스템 한글 폰트로 떨어지는 쪽이 덜 이상하다. 위 `@import`의 Gaegu는
-   * 지우지 않는다(장식이 그 웹폰트를 쓴다).
+   * ⚠️ **손글씨를 폴백으로도 안 남긴다.** 남기면 고운돋움이 못 그리는 글리프만 손글씨로 떨어져 한 단어
+   * 안에서 서체가 갈린다 — 시스템 한글 폰트로 떨어지는 쪽이 덜 이상하다.
    */
   font-family: 'Gowun Dodum', 'Toss Product Sans', -apple-system, 'Apple SD Gothic Neo', 'Malgun Gothic',
     sans-serif;
@@ -92,56 +92,52 @@ html body {
  * danger 계열(red)은 웹 --danger(#dc2626)와 TDS red가 사실상 같아 건드리지 않는다.
  */
 html:root {
-  /* 연필 테두리 프레임 — 웹 app.css --pencil-frame과 같은 SVG.
-     ui.tsx의 PENCIL_FRAME과도 같은 값이다(카드는 인라인 스타일이라 그쪽에 상수로 둔다). */
-  --pencil-frame: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='300' height='300'%3E%3Cfilter id='a' x='-20%25' y='-20%25' width='140%25' height='140%25'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.5' numOctaves='4' seed='5' result='g'/%3E%3CfeColorMatrix in='g' type='matrix' values='0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0.55 0 0 0 0.62' result='m'/%3E%3CfeComposite in='SourceGraphic' in2='m' operator='in'/%3E%3C/filter%3E%3Cfilter id='b' x='-20%25' y='-20%25' width='140%25' height='140%25'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.5' numOctaves='4' seed='23' result='g'/%3E%3CfeColorMatrix in='g' type='matrix' values='0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0.5 0 0 0 0.25' result='m'/%3E%3CfeComposite in='SourceGraphic' in2='m' operator='in'/%3E%3C/filter%3E%3Crect x='1.6' y='1.6' width='296.8' height='296.8' rx='7' fill='none' stroke='%2355504A' stroke-width='1.9' filter='url(%23a)'/%3E%3Crect x='2.4' y='2.4' width='295.2' height='295.2' rx='7' fill='none' stroke='%236B655C' stroke-width='1.4' filter='url(%23b)'/%3E%3C/svg%3E");
-  --pencil-frame-soft: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='300' height='300'%3E%3Cfilter id='a' x='-20%25' y='-20%25' width='140%25' height='140%25'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.5' numOctaves='4' seed='13' result='g'/%3E%3CfeColorMatrix in='g' type='matrix' values='0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0.5 0 0 0 0.55' result='m'/%3E%3CfeComposite in='SourceGraphic' in2='m' operator='in'/%3E%3C/filter%3E%3Crect x='1.7' y='1.7' width='296.6' height='296.6' rx='7' fill='none' stroke='%238C857A' stroke-width='1.6' filter='url(%23a)'/%3E%3C/svg%3E");
-  /* 낮 원본을 가리키는 별명 — 독서등이 `main`에서 야간판으로 갈아 끼운 뒤 히어로만 낮으로
-     되돌릴 때 쓴다. 여기서 값이 확정돼 통째로 상속되므로, 거대한 data URI를 두 번 적지 않는다. */
-  --pencil-frame-soft-day: var(--pencil-frame-soft);
-
-  /* 연필 테두리 야간판 — 낮의 스트로크(#8C857A)는 밤 카드 위에서 사라진다. 굵기·결은 그대로 두고
-     색만 밝은 회갈색으로 올려, 밤에도 「연필로 그은 상자」라는 브랜드가 남게 한다. */
-  --pencil-frame-night: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='300' height='300'%3E%3Cfilter id='a' x='-20%25' y='-20%25' width='140%25' height='140%25'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.5' numOctaves='4' seed='13' result='g'/%3E%3CfeColorMatrix in='g' type='matrix' values='0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0.5 0 0 0 0.55' result='m'/%3E%3CfeComposite in='SourceGraphic' in2='m' operator='in'/%3E%3C/filter%3E%3Crect x='1.7' y='1.7' width='296.6' height='296.6' rx='7' fill='none' stroke='%23837765' stroke-width='1.6' filter='url(%23a)'/%3E%3C/svg%3E");
-
-  /* 블루 → Soft 세이지 (시안 값 · 대비는 soft-contrast.test.ts가 잰다) */
-  --adaptiveBlue50: #DCE8D6; /* 옅은 세이지 타일·알약 */
-  --adaptiveBlue100: #C9DAC4;
-  --adaptiveBlue200: #A9C7A1;
-  --adaptiveBlue300: #A3C09B;
-  --adaptiveBlue400: #8FB087;
+  /* 블루 → Soft 세이지 (톤 조율 A 「따뜻한 Soft」 2026-09-24 — 옅은 쪽에 노란기를 섞어 오트 바탕과 온도를
+     맞췄다. 500·700은 그대로. 대비는 soft-contrast.test.ts가 잰다) */
+  --adaptiveBlue50: #E1E8D4; /* 옅은 세이지 타일·알약 · 채움(주 동작) 버튼 바탕 */
+  --adaptiveBlue100: #CFD9C0;
+  --adaptiveBlue200: #B5C6A5;
+  --adaptiveBlue300: #A9BD99;
+  --adaptiveBlue400: #8FA986;
   --adaptiveBlue500: #5B7F55; /* 측정 점·막대 끝 */
   --adaptiveBlue600: #4D6E49;
   --adaptiveBlue700: #3F5A3C; /* 주색 — 카드 위 글자 7.36 · 흰 글자 7.67 */
   --adaptiveBlue800: #334A31;
   --adaptiveBlue900: #283B27;
-  --adaptiveDisabledBlue500: #A9C7A1;
+  --adaptiveDisabledBlue500: #B5C6A5;
   /* 강조 반투명 두 겹 — 탭바 가운데 원의 링과 「고른 칸」 알약, 그리고 홈 모드 토글이 함께 쓴다.
      리터럴로 흩어져 있던 값을 토큰으로 모은 이유는 공부 모드다: 여기가 단일 출처라야
      `body.study-mode` 한 블록으로 세 자리가 같이 파랑이 된다(안 그러면 두 곳만 바뀐다). */
-  --accentRing: rgba(91, 127, 85, .25);
-  --accentPill: rgba(91, 127, 85, .2);
+  --accentRing: rgba(91, 127, 85, .22);
+  --accentPill: rgba(91, 127, 85, .16);
   /* 잔디 농도 0~4 — 시안 범례 5칸. 0단은 링 없이 카드와의 명도차만. 공부 모드가 1~4를 파랑 사다리로 덮는다 */
-  --grass0: #E3E9E0;
-  --grass1: #C9DAC4;
-  --grass2: #A3C09B;
+  --grass0: #E7E2D5;
+  --grass1: #CFD9C0;
+  --grass2: #A9BD99;
   --grass3: #6E9565;
   --grass4: #3F5A3C;
-  /* 표면 → Soft 부푼 면 (시안 .puff / .dent) */
-  --adaptiveBackground: #F9FBF7; /* 탭바·시트 표면 */
-  --adaptiveGrey100: #F9FBF7; /* 섹션·행 fill — 바탕 위 부푼 면 */
-  --softDent: #E6ECE3; /* 눌린 바탕(트랙·입력) */
+  /* 표면 → Soft 부푼 면 (시안 .puff / .dent · 톤 조율 A의 따뜻한 오트) */
+  --adaptiveBackground: #FBF9F4; /* 탭바·시트 표면 */
+  --adaptiveGrey100: #FBF9F4; /* 섹션·행 fill — 바탕 위 부푼 면 */
+  --softDent: #EAE5D9; /* 눌린 바탕(트랙·입력) */
   /*
    * 부풂/눌림 그림자 — `ui.tsx`의 PUFF·DENT가 인라인에서 `var()`로 읽는다. 값이 변수라야 밤(독서등)·공부가
    * 이 두 줄만 갈아 끼운다(리터럴이면 자리마다 `!important` 규칙이 필요해진다 — 연필선이 겪은 고질).
    * 값이 고정이라 페이지 래스터에 한 번 그려지고 끝이다 — 애니메이션하지 않는다(T-176).
+   *
+   * 틴트는 따뜻한 갈색이다(톤 조율 A) — 바탕이 오트인데 그림자만 세이지 회색이면 면 가장자리가 초록빛으로
+   * 번진다. 흰 하이라이트는 .95 → .9로 눌러 번들거림을 줄였다. 공부 모드도 이 값을 그대로 쓴다.
    */
-  --puffShadow: 10px 10px 24px rgba(94, 122, 90, .18), -8px -8px 20px rgba(255, 255, 255, .95);
-  --dentShadow: inset 3px 3px 7px rgba(94, 122, 90, .2), inset -3px -3px 7px rgba(255, 255, 255, .9);
-  /* 정보색(남은 시간·연속) — 모드색이 아니라 공부 모드에서도 안 바뀐다. 7.07:1 */
-  --butterBg: #F2E8C6;
+  --puffShadow: 10px 10px 24px rgba(112, 96, 64, .15), -8px -8px 20px rgba(255, 255, 255, .9);
+  --dentShadow: inset 3px 3px 7px rgba(112, 96, 64, .16), inset -3px -3px 7px rgba(255, 255, 255, .85);
+  /* 히어로 2열 타일·기록 스탯 타일의 작은 부풂 — 인라인 리터럴 틴트가 흩어져 있던 것을 여기로 모았다(톤 조율 A).
+     버터 타일은 정보색이라 자기 틴트(`rgba(150, 125, 60, .14)`)를 인라인에 따로 둔다. */
+  --tileShadow: 5px 5px 12px rgba(112, 96, 64, .14);
+  /* 정보색(남은 시간·연속) — 모드색이 아니라 공부 모드에서도 안 바뀐다. 6.95:1 */
+  --butterBg: #F1E6C3;
   --butterInk: #5A4A14;
-  /* 채움 주 버튼 글자 — 밤엔 어두운 잉크로 갈린다 */
+  /* 진한 세이지 원 위 획 — 체크 배지·달성 체크. 밤엔 어두운 잉크로 갈린다.
+     (채움 버튼 글자였는데 톤 조율 A에서 채움 버튼이 옅은 타일 + 진한 글자가 되며 그 몫은 사라졌다.) */
   --filledInk: #FFFFFF;
   /*
    * 히어로 카드 <b>한 장만</b>의 배경 — grey100(전 화면 공용)에서 이 자리만 떼어낸 토큰이다.
@@ -150,8 +146,8 @@ html:root {
    * 화면에 파랑이 사실상 없었다. 화면 최대 카드가 <b>면으로</b> 말하면 진행도·목표 유무와 무관하게 보인다.
    * 낮 기본값은 grey100과 같은 부푼 면이다.
    */
-  --heroCardBg: #F9FBF7;
-  --adaptiveGrey200: #D6DFD2; /* 표지 placeholder·연보더·헤더 밑선 */
+  --heroCardBg: #FBF9F4;
+  --adaptiveGrey200: #DED8CA; /* 표지 placeholder·연보더·헤더 밑선 */
   /*
    * 입력칸 힌트 — TDS `TextField`가 `--text-field-box-placeholder-color: var(--adaptiveGrey500)`로 쓴다.
    *
@@ -167,11 +163,11 @@ html:root {
    * 획을 메우던 보정이었고, 본문이 고운돋움으로 넘어가며 그 근거가 사라졌다 — 힌트임은 옅기 하나로
    * 충분히 말한다(그 판단은 2026-08-21 시안 비교 A안 그대로다).
    */
-  --adaptiveGrey500: rgba(35, 44, 33, 0.5); /* 입력칸 힌트 — 잉크(#232C21)를 옅게 */
-  --adaptiveGrey600: #4E5A4B; /* 흐린 글자 — 카드 6.98 · 바탕 6.42 · 눌린 트랙 6.05 */
-  --adaptiveGrey700: #3A4637; /* 보조 본문 */
-  --adaptiveGrey800: #232C21; /* 본문 잉크 */
-  --adaptiveGrey900: #1B221A; /* 낮에도 정의 — 미정의면 fallback 리터럴로 떨어진다 */
+  --adaptiveGrey500: rgba(42, 41, 33, 0.5); /* 입력칸 힌트 — 잉크(#2A2921)를 옅게 */
+  --adaptiveGrey600: #5B5A4D; /* 흐린 글자 — 카드 6.62 · 눌린 트랙 5.54(최저) */
+  --adaptiveGrey700: #43423A; /* 보조 본문 */
+  --adaptiveGrey800: #2A2921; /* 본문 잉크 */
+  --adaptiveGrey900: #1E1E18; /* 낮에도 정의 — 미정의면 fallback 리터럴로 떨어진다 */
 
   /*
    * 타이포 스케일 — **Soft 눈금**이다(연령 반영 재테마, 2026-09-23).
@@ -228,7 +224,7 @@ html:root {
   --button-loader-color: var(--adaptiveBlue500, #5B7F55) !important;
   --button-border-radius: 18px !important;
   border: 0 !important;
-  background-color: var(--adaptiveBlue50, #DCE8D6) !important;
+  background-color: var(--adaptiveBlue50, #E1E8D4) !important;
 }
 
 /* weak — 앱 버튼 대부분이 이 variant다(연한 채움 + 색 글자 한 세트로 움직인다). */
@@ -241,7 +237,7 @@ html:root {
      "히어로 안이냐 밖이냐"를 선택자로 가려낼 필요가 없다(파일 끝 독서등 절). */
   --button-color: var(--brandButtonInk, #3F5A3C) !important;
   --button-dimmer-pressed-background-color: var(--adaptiveBlue500, #5B7F55) !important;
-  --button-dimmer-loading-background-color: var(--accentRing, rgba(91, 127, 85, .25)) !important;
+  --button-dimmer-loading-background-color: var(--accentRing, rgba(91, 127, 85, .22)) !important;
   --button-gradient-color: transparent !important;
   --button-loader-color: var(--adaptiveBlue500, #5B7F55) !important;
   --button-border-radius: 18px !important;
@@ -256,10 +252,15 @@ html:root {
  * 위 둘과 합쳐 위계가 3단이 된다: **채움**(화면의 주 동작, 부푼 그림자) > primary(옅은 세이지 — 시트·확인
  * 흐름의 긍정 동작) > weak(1.5px 실선 — 보조). 채움이 화면마다 여럿이면 그 축이 곧 무너지므로 개수를 소스로 센다.
  *
+ * 톤 조율 A(2026-09-24): 바탕을 진한 세이지에서 **옅은 세이지 타일 + 진한 글자**로 내렸다. 진한 덩어리는 탭바
+ * 가운데 원 하나만 남긴다 — 한 화면에 진한 초록이 여럿이면 눈이 어디부터 볼지 흔들렸다(사용자 「쨍하다」).
+ * primary와 같은 바탕이지만 **부푼 그림자**가 위계를 가른다(누를 수 있는 면이 떠 있다).
+ *
  * ⚠️ **이 규칙은 primary 재색칠보다 반드시 뒤에 온다.** `FilledButton`도 TDS primary variant라 인라인에
  * `--button-background-color:#3182f6`을 그대로 들고 있어 **위 primary 규칙과 둘 다 매칭**된다. 두 선택자는
- * 명시도가 같고 선언도 `!important` 동급이라 **나중 규칙이 이긴다** — 순서가 곧 결과다. 위로 옮기면
- * 채움 버튼이 조용히 연한 세이지로 돌아간다.
+ * 명시도가 같고 선언도 `!important` 동급이라 **나중 규칙이 이긴다** — 순서가 곧 결과다. 톤 조율 A 이후 두 규칙은
+ * 바탕(옅은 세이지)과 글자색이 같아서, 위로 옮기면 달라지는 것은 **모서리가 primary의 18로 떨어지는 것**과 로딩 점
+ * 색(700 → 500)뿐이다 — 부푼 그림자는 primary 규칙에 선언이 없어 순서와 무관하게 남는다.
  *
  * ⚠️ 키가 **hex가 아니라 프로퍼티 이름**인 것이 요점이다. 위 두 규칙은 인라인 hex 값을 키로 쓰는 탓에
  * 콜론 뒤 공백 직렬화 차이(`: #3182f6` / `:#3182f6`)까지 선택자를 두 벌 적어야 했는데, 이름만 보면 그
@@ -269,10 +270,10 @@ html:root {
 .tds-mobile-button[style*='--btn-filled'] {
   --button-background-color: transparent !important;
   --button-gradient-color: transparent !important;
-  --button-color: var(--filledInk, #FFFFFF) !important; /* 진한 채움 위 흰 글자 7.67 — 밤엔 어두운 잉크 */
-  --button-loader-color: var(--filledInk, #FFFFFF) !important;
+  --button-color: var(--adaptiveBlue700, #3F5A3C) !important; /* 옅은 타일 위 6.10 — 밤엔 밝은 세이지로 갈린다 */
+  --button-loader-color: var(--adaptiveBlue700, #3F5A3C) !important;
   --button-border-radius: 20px !important;
-  background-color: var(--adaptiveBlue700, #3F5A3C) !important;
+  background-color: var(--adaptiveBlue50, #E1E8D4) !important;
   box-shadow: var(--puffShadow) !important;
   border: 0 !important;
 }
@@ -290,14 +291,13 @@ html:root {
 /*
  * ⚠️ 카드 표면을 **인라인 색 값으로 싸잡아 잡지 않는다** (2026-08-18 실측).
  *
- * 한때 `[style*='#FCFAF5'], [style*='rgb(252, 250, 245)'] { border-image: … }` 식으로 카드지 색을
- * 선택자 키로 써서 연필 테두리를 일괄로 얹었다. TDS Button 재색칠과 같은 수법이라 통할 줄 알았는데,
- * Button은 그 색이 **버튼에만** 쓰이는 반면 카드지 색은 카드·목록 행·배지가 전부 공유한다 —
- * 기록 화면의 날짜 줄 하나하나에까지 테두리가 둘러쳐지고 오른쪽 시간 텍스트가 선에 잘렸다.
+ * 한때 카드지 색(`[style*='#FCFAF5']`)을 선택자 키로 써서 (옛) 연필 테두리를 일괄로 얹었다. TDS Button
+ * 재색칠과 같은 수법이라 통할 줄 알았는데, Button은 그 색이 **버튼에만** 쓰이는 반면 카드지 색은 카드·목록
+ * 행·배지가 전부 공유한다 — 기록 화면의 날짜 줄 하나하나에까지 테두리가 둘러쳐지고 텍스트가 선에 잘렸다.
  *
- * 그래서 연필 테두리는 **쓰는 자리에서 명시적으로** 얹는다: 공통 카드는 `ui.tsx`의 `sectionStyle`,
- * 그 밖의 카드·버튼은 각 화면에서 `borderImage: PENCIL_FRAME`을 직접 준다. 한 줄 더 쓰는 대신
- * "어디에 테두리가 생기는지"가 코드에 보인다.
+ * 그래서 표면(Soft의 부푼 면·눌린 면·실선)은 **쓰는 자리에서 명시적으로** 얹는다: `ui.tsx`의 `PUFF`·
+ * `DENT`·`SOFT_OUTLINE`·`SOFT_ROW`·`sectionStyle`을 펼쳐 쓴다. 한 줄 더 쓰는 대신 "어디에 무엇이
+ * 생기는지"가 코드에 보이고, 그림자 예산 가드(soft-surface.test)가 그 자리를 셀 수 있다.
  */
 
 /*
@@ -394,7 +394,7 @@ html strong {
  * 프레임마다 표지를 다시 래스터화한다 — 실기기가 먼저 무너졌던 그 자리다(T-176). 정적 그라데이션
  * 한 겹은 페이지 래스터에 한 번 그려지고 끝이라 스크롤해도 재계산이 없다.
  *
- * 색: 잘려 나간 삼각형이 바탕(#EEF2EB), 접혀 드러난 뒷면이 그보다 어두운 면(#D6DFD2),
+ * 색: 잘려 나간 삼각형이 바탕(#F3EFE5), 접혀 드러난 뒷면이 그보다 어두운 면(#DED8CA),
  * 그 사이 얇은 띠가 접힌 선이다. `border-radius`의 12px는 행의 모서리 반경과 같아야 물린다.
  */
 .book-owned::after {
@@ -405,7 +405,7 @@ html strong {
   width: 20px;
   height: 20px;
   border-radius: 0 12px 0 6px;
-  background: linear-gradient(225deg, #EEF2EB 0 50%, rgba(85, 80, 74, 0.18) 50% 58%, #D6DFD2 58%);
+  background: linear-gradient(225deg, #F3EFE5 0 50%, rgba(85, 80, 74, 0.18) 50% 58%, #DED8CA 58%);
 }
 
 /*
@@ -431,18 +431,24 @@ html strong {
  * 콜론 뒤 공백 차이에 걸리지 않는다.
  */
 .goal-wheels [style*='--wheel-top-shadow-gradient'] {
-  /* #F9FBF7 = 카드 면(`--adaptiveGrey100`). 휠을 그 면으로 사라지게 하는 마스크라 둘이 같아야 한다 —
+  /* #FBF9F4 = 카드 면(`--adaptiveGrey100`). 휠을 그 면으로 사라지게 하는 마스크라 둘이 같아야 한다 —
      어긋나면 휠 위아래로 띠가 진다(goal.test.tsx가 둘을 묶어 둔다). Soft PR-3에서 캔버스색 → 카드 면색:
      목표 화면 휠이 부푼 카드 위로 올라갔고, 회당 시간 시트 휠은 원래 시트 패널(같은 토큰) 위에 서 있었다. */
+  /* 안개는 선택 띠 가장자리에서 **투명으로 끊는다**(Soft PR-5 리뷰). TDS 휠은 안개 42% · 가운데 칸 16% · 아래 안개
+     앞 2px로 짜여(높이 180 → 75.6 / 28.8 / 2 / 75.6) 우리 44px 띠(68~112)보다 칸이 좁다. 그대로 두면 안개 끝이 띠 위
+     7.6px · 아래 5.6px를 면색 .45로 덮어 띠 안에 밝은 줄 두 개가 선다. 두 값은 Goal·회당 시간 시트의 높이 180 · 띠 44에서
+     나온다 — goal.test.tsx가 그 두 입력에서 다시 계산해 이 값과 대조한다(어느 쪽을 바꿔도 빨강). */
   --wheel-top-shadow-gradient: linear-gradient(
     to bottom,
-    rgba(249, 251, 247, 0.95) 0%,
-    rgba(249, 251, 247, 0.45) 100%
+    rgba(251, 249, 244, 0.95) 0%,
+    rgba(251, 249, 244, 0.45) calc(100% - 7.6px),
+    rgba(251, 249, 244, 0) calc(100% - 7.6px)
   ) !important;
   --wheel-bottom-shadow-gradient: linear-gradient(
     to bottom,
-    rgba(249, 251, 247, 0.45) 0%,
-    rgba(249, 251, 247, 0.95) 100%
+    rgba(251, 249, 244, 0) 5.6px,
+    rgba(251, 249, 244, 0.45) 5.6px,
+    rgba(251, 249, 244, 0.95) 100%
   ) !important;
 }
 
@@ -496,7 +502,11 @@ html strong {
  * `box-shadow`가 실기기를 무너뜨린 자리). 여기 그림자는 값이 고정돼 페이지 래스터에 한 번 그려진다.
  */
 body.reading-lamp {
-  background: #1F251E; /* 세이지 기운의 밤 — 바탕 #EEF2EB의 짝 */
+  background: #26231D; /* 갈색 밤 — 바탕 #F3EFE5의 짝(톤 조율 A: 전등 아래 느낌이 산다) */
+  /* `main` 밖(탭바·안내 스트립·시작 토스트)의 부푼 그림자 — 그 요소들은 낮 면 그대로 밝게 서지만(끄는 원이
+     어둠에 잠기지 않게), 낮 그림자의 흰 .95 하이라이트는 밤 캔버스 위에서 흰 테가 된다. 어두운 쪽만 남긴다.
+     `main`·`.lamp-page`는 아래에서 자기 값을 재선언하므로 이 값은 그 안에 닿지 않는다(soft-surface.test). */
+  --puffShadow: 6px 8px 20px rgba(0, 0, 0, .45);
 }
 
 /*
@@ -520,28 +530,26 @@ body.reading-lamp::after {
  * `var(--adaptive*)`를 소비하고 있어서, 토큰만 갈아 끼우면 컴포넌트를 하나도 안 건드린다.
  */
 body.reading-lamp main {
-  /* TDS 버튼·손잡이의 연필 테두리는 `var(--pencil-frame-soft)`로 그리므로 변수로 갈린다(PR-5 철거 전까지). */
-  --pencil-frame-soft: var(--pencil-frame-night);
   /* 브랜드 버튼 글자 — 낮의 어두운 세이지(#3F5A3C)는 밤 위에서 안 읽힌다. 위 TDS 재색칠
      규칙이 이 변수를 읽으므로, `:not()` 곡예 없이 상속만으로 히어로 안팎이 갈린다. */
   --brandButtonInk: #A6C09C;
-  --filledInk: #1F251E; /* 밤 채움 버튼(#A6C09C) 위 7.93 */
+  --filledInk: #26231D; /* 밤 세이지 원(#A6C09C) 위 획 */
 
   --adaptiveBlue50: #34412F;
   --adaptiveBlue500: #8FB087;
   --adaptiveBlue600: #9BB893;
   --adaptiveBlue700: #A6C09C;
 
-  --adaptiveBackground: #2A3128;
-  --adaptiveGrey100: #2A3128; /* 밤의 면 — 바탕과 1.17, 면 구분은 그림자가 맡는다 */
-  --softDent: #232A22;
-  --adaptiveGrey200: #3A443A;
+  --adaptiveBackground: #322E27;
+  --adaptiveGrey100: #322E27; /* 밤의 면 — 면 구분은 그림자가 맡는다 */
+  --softDent: #2A2721;
+  --adaptiveGrey200: #453F36;
   /* 흐린 글자 — 판정 기준은 바탕이 아니라 **카드**다(더 밝은 쪽이라 대비가 더 빡빡하다).
      옛 밤의 첫 시도 #9A9080은 카드 위 4.44:1로 떨어졌었다 — 지금은 soft-contrast.test.ts가 잰다. */
-  --adaptiveGrey600: #A8B4A3; /* 카드 6.20 · 바탕 7.25 */
-  --adaptiveGrey700: #C2CCBE;
-  --adaptiveGrey800: #DCE4D6; /* 본문 잉크 — 카드 10.27 */
-  --adaptiveGrey900: #E8EEE3;
+  --adaptiveGrey600: #B0A99B; /* 카드 5.78 — soft-contrast.test.ts가 잰다 */
+  --adaptiveGrey700: #CBC4B5;
+  --adaptiveGrey800: #E6E0D3; /* 본문 잉크 */
+  --adaptiveGrey900: #F0EBE0;
   /*
    * 밤의 부풂 — 흰 빛은 어두운 바탕에서 성립하지 않는다(낮 값 그대로면 어두운 화면에 흰 테가 뜬다).
    * 어두운 쪽 그림자 + 1px 상단 인셋 하이라이트만으로 부풂을 말한다. 카드 인라인이 `var()`라 여기서 갈린다 —
@@ -550,7 +558,7 @@ body.reading-lamp main {
   --puffShadow: 8px 8px 20px rgba(0, 0, 0, .45), inset 0 1px 0 rgba(255, 255, 255, .06);
   --dentShadow: inset 3px 3px 7px rgba(0, 0, 0, .5), inset -2px -2px 6px rgba(255, 255, 255, .04);
 
-  color: #DCE4D6;
+  color: #E6E0D3;
 }
 
 /*
@@ -561,29 +569,28 @@ body.reading-lamp main {
  * 켤지 말지는 위 `body` 클래스가 정한다. 낮에는 이 블록이 아예 안 걸리므로 카드는 평소 그대로다.
  */
 body.reading-lamp .lamp-page {
-  --pencil-frame-soft: var(--pencil-frame-soft-day); /* 카드 안 손잡이(목표·광고 버튼)도 낮으로 */
   --brandButtonInk: #3F5A3C;
   --filledInk: #FFFFFF;
 
-  --adaptiveBlue50: #DCE8D6;
+  --adaptiveBlue50: #E1E8D4;
   --adaptiveBlue500: #5B7F55;
   --adaptiveBlue600: #4D6E49;
   --adaptiveBlue700: #3F5A3C;
 
-  --adaptiveBackground: #F9FBF7;
-  --adaptiveGrey100: #F9FBF7; /* 등불 밑 페이지는 낮 표면 */
-  --softDent: #E6ECE3;
-  --adaptiveGrey200: #D6DFD2;
-  --adaptiveGrey600: #4E5A4B;
-  --adaptiveGrey700: #3A4637;
-  --adaptiveGrey800: #232C21;
-  --adaptiveGrey900: #1B221A;
+  --adaptiveBackground: #FBF9F4;
+  --adaptiveGrey100: #FBF9F4; /* 등불 밑 페이지는 낮 표면 */
+  --softDent: #EAE5D9;
+  --adaptiveGrey200: #DED8CA;
+  --adaptiveGrey600: #5B5A4D;
+  --adaptiveGrey700: #43423A;
+  --adaptiveGrey800: #2A2921;
+  --adaptiveGrey900: #1E1E18;
   /* 카드 안 타일·트랙은 낮의 부풂·눌림을 본다(밤 그림자가 상속되면 낮 면 위에 검은 번짐이 진다) */
-  --puffShadow: 10px 10px 24px rgba(94, 122, 90, .18), -8px -8px 20px rgba(255, 255, 255, .95);
-  --dentShadow: inset 3px 3px 7px rgba(94, 122, 90, .2), inset -3px -3px 7px rgba(255, 255, 255, .9);
+  --puffShadow: 10px 10px 24px rgba(112, 96, 64, .15), -8px -8px 20px rgba(255, 255, 255, .9);
+  --dentShadow: inset 3px 3px 7px rgba(112, 96, 64, .16), inset -3px -3px 7px rgba(255, 255, 255, .85);
 
-  background: #F9FBF7 !important; /* 인라인 `var(--adaptiveGrey100)`은 자기 요소의 재정의를 못 본다 */
-  color: #232C21;
+  background: #FBF9F4 !important; /* 인라인 `var(--adaptiveGrey100)`은 자기 요소의 재정의를 못 본다 */
+  color: #2A2921;
   /* 값이 고정된 그림자 한 겹 — 페이지 래스터에 한 번 그려지고 끝이라 스크롤해도 재계산이 없다.
      `!important`인 이유(Soft PR-2): 히어로가 인라인 `box-shadow: var(--puffShadow)`를 싣는데, ⓐ 인라인이 이
      글로우를 덮고 ⓑ 위에서 `--puffShadow`를 카드 안 타일용 낮값으로 재선언하므로 히어로 자신도 흰 .95
@@ -623,17 +630,16 @@ body.study-mode {
   --brandButtonInk: #47657C;
   --accentRing: rgba(95, 126, 150, .25);
   --accentPill: rgba(95, 126, 150, .18);
-  /* 히어로 카드 틴트 — 명도는 종이 그대로 두고 색상만 한랭하게 민 「푸른 종이」다(연필 테두리·질감 불변).
+  /* 히어로 카드 틴트 — 채도를 낮춘 청회색(톤 조율 A). 옛 `푸른 종이`는 따뜻한 바탕 위에서 거꾸로 온도 충돌을 냈다.
      전환 트랜지션은 기존 `.lamp-page`의 background-color 트랜지션에 그대로 편승한다(추가 코드 0). */
-  --heroCardBg: #EFF3F6;
+  --heroCardBg: #ECEFEE;
   /* 잔디 — 세이지 4단과 같은 명도의 파랑 사다리 짝수 칸(200·400·600·800). 0단(빈 칸)은 종이색 그대로 */
   --grass1: #AFC4D2;
   --grass2: #83A0B4;
   --grass3: #536F85;
   --grass4: #3A5266;
-  /* Soft 그림자 — 틴트만 파랑. 버터(정보색)는 모드색이 아니라 안 바꾼다. */
-  --puffShadow: 10px 10px 24px rgba(80, 105, 125, .18), -8px -8px 20px rgba(255, 255, 255, .95);
-  --dentShadow: inset 3px 3px 7px rgba(80, 105, 125, .2), inset -3px -3px 7px rgba(255, 255, 255, .9);
+  /* 그림자는 재선언하지 않는다 — 낮의 따뜻한 틴트를 그대로 물려받는다(톤 조율 A). 파랑 틴트 그림자는 오트
+     바탕 위에서 면 가장자리를 차갑게 번지게 했다. 파랑은 잉크·원·토글 글자·옅은 타일에만 둔다. */
 }
 
 /* 공부 모드 전용 TDS 버튼 규칙은 없다 — 버튼 재색칠이 전부 토큰 경유라 위 스왑이 저절로 닿는다

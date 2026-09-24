@@ -98,8 +98,25 @@ await settle(1200)
 await page.evaluate(() => window.scrollTo(0, 0))
 await shot('01-home')
 
-// 02 홈 아래 — 「소식」·「책 뉴스」 피드 박스. 폴드 아래라 끝까지 내려 찍는다.
-await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight))
+// 02 홈 아래 — 「소식」·「여백」·「책 뉴스」 피드 박스.
+// 끝까지 내려 찍지 않는다 — Soft 재테마로 박스가 커져 맨 아래에서 찍으면 **탭 줄이 반쯤 잘렸다**(2026-09-23
+// 리뷰: 02와 그걸 얹은 10 가운데 폰). 03·06처럼 기준선을 둔다: 탭 줄 윗선을 화면 16px 아래에 세우고, 박스 바닥이
+// 탭바 위에 있는지 확인한다(가리면 여기서 죽는다 — 조용히 잘린 그림을 내지 않는다).
+await page.evaluate(() => {
+    const label = (b) => (b.textContent ?? '').trim()
+    const tabs = ['소식', '여백', '책 뉴스'].map((t) => [...document.querySelectorAll('button')].find((b) => label(b) === t))
+    if (tabs.some((b) => !b)) throw new Error('피드 탭 줄을 못 찾았다') // 문구가 바뀌면 엉뚱한 그림 대신 여기서 죽는다
+    const row = tabs[0].parentElement
+    const box = row.closest('section')
+    const nav = document.querySelector('nav[aria-label="메인 탭"]')
+    if (!box || !nav) throw new Error('피드 박스 또는 탭바를 못 찾았다')
+    window.scrollTo(0, 0)
+    window.scrollTo(0, row.getBoundingClientRect().top - 16)
+    if (row.getBoundingClientRect().top < 0) throw new Error('피드 탭 줄이 화면 위로 잘린다')
+    if (box.getBoundingClientRect().bottom > nav.getBoundingClientRect().top) {
+        throw new Error('피드 박스 바닥이 탭바에 가린다')
+    }
+})
 await settle()
 await shot('02-feed')
 
@@ -183,8 +200,18 @@ await page.evaluate(() => {
     if (!handle) throw new Error('회당 시간 손잡이를 못 찾았다')
     const card = document.querySelector('.lamp-page')
     if (!card) throw new Error('타이머 카드(.lamp-page)를 못 찾았다')
+    const nav = document.querySelector('nav[aria-label="메인 탭"]')
+    if (!nav) throw new Error('탭바를 못 찾았다')
     window.scrollTo(0, 0)
-    window.scrollTo(0, card.getBoundingClientRect().top - 16)
+    // 카드를 위에 붙이되, 그러면 손잡이가 탭바에 깔릴 때는 **손잡이 쪽을 지킨다**(탭바 16px 위에 세운다).
+    // Soft 재테마(2026-09-23)로 탭바가 64로 커지고 카드들이 부풀어 카드 기준만으론 손잡이가 탭바 뒤로
+    // 들어갔다(실측 375×618: 카드 위 104 → 손잡이 아래 703, 탭바 542) — 둘 다 담을 수 없으면 이 컷의 주제가 이긴다.
+    const cardTop = card.getBoundingClientRect().top
+    const handleFit = handle.getBoundingClientRect().bottom - (nav.getBoundingClientRect().top - 16)
+    window.scrollTo(0, Math.max(cardTop - 16, handleFit))
+    if (handle.getBoundingClientRect().bottom > nav.getBoundingClientRect().top - 8) {
+        throw new Error('회당 시간 손잡이가 탭바에 가린다') // 조용히 가린 그림을 내지 않는다
+    }
 })
 await settle()
 await shot('06-study-home')
@@ -221,38 +248,36 @@ const [home, feed, history] = await Promise.all(['01-home', '02-feed', '04-histo
 const banner = `
 <!doctype html><meta charset="utf-8">
 <style>
-  @import url('https://fonts.googleapis.com/css2?family=Gaegu:wght@400;700&display=swap');
+  @import url('https://fonts.googleapis.com/css2?family=Gowun+Batang:wght@700&family=Gowun+Dodum&display=swap');
   * { margin: 0; box-sizing: border-box; }
   body {
     width: ${LANDSCAPE.w}px; height: ${LANDSCAPE.h}px; overflow: hidden;
     /*
-     * ⚠️ 종이색은 앱을 따라간다 — 배너는 앱 컷 3장을 얹은 합성물이라 여기만 옛 값이면 폰 안팎이
-     * 다른 톤으로 갈린다. 「거친 종이」 테마의 최종 종이색(#F7F2E8, T-193에서 #F3EEE4를 밝힌 값).
+     * ⚠️ 바탕색은 앱을 따라간다 — 배너는 앱 컷 3장을 얹은 합성물이라 여기만 옛 값이면 폰 안팎이
+     * 다른 톤으로 갈린다. 톤 조율 A(2026-09-24)의 캔버스 #F3EFE5 · 본문 잉크 #2A2921 · 보조 잉크
+     * #43423A · 선 #DED8CA · 면 #FBF9F4(global.css html:root와 같은 값 — 한쪽만 고치지 않는다).
      *
-     * ⚠️ **서체는 더 이상 앱 본문과 같지 않다 — 그리고 그게 의도다.** ③(전면 재테마)이 본문을
-     * 고운돋움으로 뒤집었지만, 배너 카피는 <b>앱 UI가 아니라 브랜딩 문구</b>다. ③의 축
-     * (기능=고운돋움 / 장식=손글씨)에서 이 자리는 장식 쪽이라 개구로 남긴다 — 폰 그림 안은
-     * 고운돋움, 그 옆 카피는 손글씨인 이 대비가 앱의 두 축을 그대로 보여 준다.
-     * (옛 주석은 「앱 본문과 같은 Gaegu」라고 근거를 달았는데 ③ 이후 그 문장이 거짓이 됐다.)
+     * 서체도 앱을 따라간다 — 제목은 고운바탕(앱의 화면 제목·값 축), 본문은 고운돋움. 한때 여기만 손글씨
+     * (개구)였는데, 톤 조율 A가 앱에서 손글씨를 걷으며 「글꼴 두 벌」로 정리했다 — 폰 그림 옆 카피만 셋째
+     * 서체면 사용자가 「글꼴이 서로 안 어울린다」고 한 그 조합이 스토어에 그대로 남는다.
      */
-    background: #F7F2E8; color: #2C2A24;
-    font-family: 'Gaegu', 'Malgun Gothic', sans-serif;
+    background: #F3EFE5; color: #2A2921;
+    font-family: 'Gowun Dodum', 'Malgun Gothic', sans-serif;
     display: flex; align-items: center;
   }
   /*
-   * Gaegu는 x-height가 작아 같은 px에서 눈에 띄게 작고 가늘다 — 제목은 58 → 66으로 올리고
-   * 본문은 굵기만 700으로 세운다. (옛 주석은 이 보정을 「앱 global.css의 112.5%·700 보정과 같은
-   * 이유」라고 설명했는데, ③-A가 그 둘을 **걷어내** 참조가 사라졌다. 여기 보정은 위 실측만으로 선다.) ⚠️ 본문을 25px 위로
-   * 올리면 자폭이 넓어 480px 안에서 되접히고, 되접힌 줄이 폰 그림 위로 넘어간다(실측).
+   * 크기는 480px 칸(왼쪽 여백 80 포함) 안에서 줄이 되접히지 않는 값이다 — 되접힌 줄은 폰 그림 위로 넘어간다.
+   * 고운 서체는 개구보다 자폭이 넓어 옛 값(66 · 25)이면 본문 둘째 줄이 넘친다. 고운돋움은 400 단일 웨이트라
+   * 본문 굵기는 400이다(700은 합성 볼드 — global.css 주석).
    */
   .copy { flex: 0 0 auto; padding-left: 80px; width: 480px; }
-  .copy h1 { font-size: 66px; font-weight: 700; line-height: 1.26; letter-spacing: -1px; }
-  .copy p  { margin-top: 24px; font-size: 25px; font-weight: 700; line-height: 1.6; color: #57534A; }
+  .copy h1 { font-family: 'Gowun Batang', serif; font-size: 60px; font-weight: 700; line-height: 1.3; letter-spacing: -1px; }
+  .copy p  { margin-top: 24px; font-size: 21px; line-height: 1.7; color: #43423A; }
   .phones { position: relative; flex: 1; height: 100%; }
   .phone {
     position: absolute; width: 300px; border-radius: 24px; overflow: hidden;
-    border: 1px solid #E4DDD0; background: #FCFAF5;
-    box-shadow: 0 18px 44px rgba(44, 42, 36, 0.16);
+    border: 1px solid #DED8CA; background: #FBF9F4;
+    box-shadow: 0 18px 44px rgba(112, 96, 64, 0.18); /* 앱 --puffShadow와 같은 갈색 틴트 */
   }
   .phone img { display: block; width: 100%; }
   /* 계단으로 어긋나게 + 캔버스 아래로 흘려 보낸다 — 잘린 변이 "아래에서 올라온다"로 읽힌다(README). */

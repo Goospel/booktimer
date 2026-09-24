@@ -10,7 +10,7 @@ import { History } from './screens/History';
 import { ReadingNowCard } from './screens/Home';
 import { StatItem } from './screens/Profile';
 import { graph, userAgent } from './test-fixtures';
-import { Avatar, CoverInitial, FilledButton, HANDWRITING, SectionTitle, Text } from './ui';
+import { Avatar, CoverInitial, FilledButton, SectionTitle, Text } from './ui';
 
 /**
  * 타이포그래피 위계 — <b>개구(Gaegu)로 갈아탄 뒤 크기·강조가 무너진 자리</b>를 못 박는다(#857 후속).
@@ -33,6 +33,25 @@ const cssCode = css.replace(/\/\*[\s\S]*?\*\//g, '');
 /** 주석을 걷어낸 css — 이 레포 주석엔 `button { font: 400 … }` 처럼 중괄호가 들어 있어, 규칙 구조를
  *  볼 땐 먼저 지워야 한다(안 지우면 `[^}]*`가 주석 속 `}`에서 멈춘다). */
 const rules = css.replace(/\/\*[\s\S]*?\*\//g, '');
+
+/**
+ * `...SERIF_VALUE`를 펼쳐 쓰는 자리 수(파일별) — 손글씨에서 넘어온 7자리가 여기 섞여 있다:
+ * ui.tsx 2(아바타·표지 이니셜) · Home.tsx 중 1(「책 없이」) · HomeFeed.tsx 중 1(피드 인용) · Story.tsx 3(여백 인용·본문·작성 칸).
+ * 나머지는 값(시계·카운트·통계) 자리다.
+ */
+const SERIF_SPREADS = {
+  'App.tsx': 2,
+  'GuestHome.tsx': 5,
+  'History.tsx': 7,
+  'Home.tsx': 7,
+  'HomeFeed.tsx': 3,
+  'Library.tsx': 1,
+  'Profile.tsx': 1,
+  'Story.tsx': 3,
+  'StudyCalendar.tsx': 2,
+  'StudyHistory.tsx': 1,
+  'ui.tsx': 2,
+};
 
 function render(node: ReactNode): string {
   return renderToStaticMarkup(<TDSMobileProvider userAgent={userAgent}>{node}</TDSMobileProvider>);
@@ -137,10 +156,10 @@ describe('계단이 Soft 눈금이다 — 본문 16 · 보조 14 · 최소 13', 
 });
 
 /**
- * 서체 축 — 기능 글자는 고운돋움, 장식만 손글씨다. 이 방향이 뒤집히면(장식이 기본, 기능이 opt-in)
- * <b>지정 안 한 다음 화면이 다시 손글씨로 태어난다</b> — 그래서 기본값이 다수를 맡는다.
+ * 서체 축 — 기능 글자는 고운돋움, 값·인용·이니셜은 고운바탕이다. 두 벌뿐이다(톤 조율 A, 2026-09-24):
+ * 손글씨(개구)는 부푼 면 위에서 「어린이 앱 글씨」로 읽혀 걷었다. 부재 가드는 `warm-palette.test`.
  */
-describe('서체 축은 기능=돋움 · 장식=손글씨다', () => {
+describe('서체 축은 기능=돋움 · 값·인용=바탕이다', () => {
   it('본문 스택이 고운돋움으로 시작한다 — 맨 앞이 아니면 영영 안 잡힌다', () => {
     expect(rules).toMatch(/html\s+body\s*\{[^}]*font-family:\s*'Gowun Dodum'/);
   });
@@ -153,7 +172,6 @@ describe('서체 축은 기능=돋움 · 장식=손글씨다', () => {
     //    그러면 아래 `not.toContain`이 무조건 통과한다(T-205와 같은 부류의 공허함).
     expect(body).not.toBe('');
     expect(body).not.toContain('Gaegu');
-    expect(css).toContain('family=Gaegu'); // @import는 남는다 — 장식이 쓴다
   });
 
   it('개구 보정을 걷는다 — 죽은 스위치를 남기면 미래의 rem 한 줄에 유령 배율이 깨어난다', () => {
@@ -164,61 +182,49 @@ describe('서체 축은 기능=돋움 · 장식=손글씨다', () => {
   });
 
   /**
-   * 장식이 <b>상속에서 명시로</b> 넘어왔는지 — 이 전환의 가장 조용한 실패 자리다. 옛 앱은 body가
-   * 손글씨라 표지 이니셜·placeholder가 <b>아무것도 지정하지 않고도</b> 손글씨였다(레포 전체에서 Gaegu를
-   * 명시한 tsx가 0건이었다). 기본값만 뒤집고 opt-in을 빠뜨리면 장식이 통째로, 에러 없이 사라진다.
+   * 이니셜은 상속이 아니라 <b>명시</b>로 온다 — 본문(돋움)을 물려받으면 표지 자리 글자가 라벨처럼 읽힌다.
+   * 손글씨를 걷을 때 이 자리를 빈손으로 두지 않고 값·인용 축(세리프)으로 옮겼다(톤 조율 A).
    */
-  it('표지 이니셜이 손글씨로 남는다 — 상속이 끊긴 자리라 명시가 없으면 조용히 사라진다', () => {
+  it('표지 이니셜이 세리프 700이다 — 명시가 없으면 조용히 본문 서체로 떨어진다', () => {
     const markup = render(<CoverInitial title="데미안" />);
 
-    expect(markup).toContain('Gaegu');
+    expect(markup).toContain('Gowun Batang');
+    expect(markup).toContain('font-weight:700');
   });
 
   it('아바타 이니셜도 같다 — 표지와 한 몸이라 한쪽만 남으면 화면에 서체가 둘이 된다', () => {
-    expect(render(<Avatar nickname="구스펠" />)).toContain('Gaegu');
-  });
-
-  it('굵기까지 장식 값이다 — 개구 400은 획이 흐물해 장식으로도 약하다(상수 주석이 그렇게 말한다)', () => {
-    expect(HANDWRITING.fontWeight).toBe(700);
-    expect(render(<CoverInitial title="데미안" />)).toContain('700');
+    expect(render(<Avatar nickname="구스펠" />)).toContain('Gowun Batang');
   });
 
   /**
-   * 나머지 장식 자리 — 캐러셀 placeholder · 피드 인용 · 여백 카드(인용/본문) · 작성 화면 입력칸.
-   * 렌더로도 잡히지만 <b>어디서 손글씨를 부르는가</b>를 한 줄로 세는 편이 「빠뜨린 자리」에 답이 된다.
-   *
-   * <p>핸드오프가 이름을 대 가며 개구로 지정한 자리들이라, 여기서 빠지면 이 변경의 존재 이유 절반이
-   * 서사로만 남는다(리뷰 지적 — 초판은 이 자리들이 돌연변이에서 <b>살아남았다</b>).
-   *
-   * <p>⚠️ 세는 단위가 <b>파일이 아니라 자리</b>다. 파일 집합으로 세면 한 파일 안의 여러 자리 중 하나가
-   * 빠져도 그 파일은 여전히 목록에 남아 통과한다 — 실제로 `Story.tsx`의 본문 opt-in을 지운 돌연변이가
-   * 집합 방식에서 살아남았다. 숫자가 바뀌면 테스트도 바뀌어야 하는 것이 의도다: 장식 자리를 늘리는 건
-   * 「기본값(기능 서체)에서 예외를 하나 더 판다」는 뜻이라 눈에 띄어야 한다.
+   * 세리프를 <b>펼쳐 쓰는 자리 수</b>를 파일별로 잠근다(리뷰 Md·Me·Mf) — 손글씨에서 넘어온 7자리(아바타 · 표지 이니셜 ·
+   * 홈 「책 없이」 · 피드 인용 · 여백 카드 인용·본문 · 작성 입력칸) 가운데 렌더 단언이 닿는 건 셋뿐이라, 나머지를 지우면
+   * 그 자리만 조용히 본문 서체(고운돋움)로 떨어진다. 옛 「장식 자리 수」와 같은 방식이다: <b>세는 단위가 파일이 아니라
+   * 자리</b>이고, 값 자리(시계·카운트)까지 함께 세므로 세리프 자리를 늘리거나 줄이면 이 표도 같이 바꿔야 한다 — 의도다.
    */
-  it('장식 자리 수가 그대로다 — 하나라도 빠지면 그 자리만 조용히 기능 서체가 된다', () => {
+  it('세리프를 펼쳐 쓰는 자리 수가 그대로다 — 하나라도 빠지면 그 자리만 조용히 본문 서체가 된다', () => {
     const callers: Record<string, number> = {};
     for (const file of sourceFiles(fileURLToPath(new URL('.', import.meta.url)))) {
-      const hits = readFileSync(file, 'utf8').match(/\.\.\.HANDWRITING/g);
+      const hits = readFileSync(file, 'utf8').match(/\.\.\.SERIF_VALUE\b/g);
       if (hits !== null) callers[file.split(/[\\/]/).pop()!] = hits.length;
     }
 
-    // Story가 셋인 이유: 여백 카드의 인용·본문, 그리고 작성 화면 입력칸(`composerField`).
-    expect(callers).toEqual({ 'Home.tsx': 1, 'HomeFeed.tsx': 1, 'Story.tsx': 3, 'ui.tsx': 2 });
+    expect(callers).toEqual(SERIF_SPREADS);
   });
 
   /**
    * 여백 <b>작성 화면</b>이 특히 중요하다 — 코드가 스스로 「쓰는 동안 보이는 것이 곧 카드」라고
-   * 선언한 미리보기 자리다. 한때 `fontFamily: 'inherit'`로 body를 따랐고 그때는 body가 손글씨라
-   * 우연히 맞았는데, 축이 뒤집히며 그 우연이 사라졌다(리뷰 지적 — 초판이 빠뜨린 자리).
+   * 선언한 미리보기 자리다. 한때 `fontFamily: 'inherit'`로 body를 따랐는데, 그러면 카드(인용 = 세리프)와
+   * 쓰는 글씨가 갈린다.
    */
-  it('작성 화면 입력칸도 손글씨다 — 쓰는 글씨와 저장된 글씨가 다르면 미리보기가 아니다', () => {
+  it('작성 화면 입력칸도 카드와 같은 세리프다 — 쓰는 글씨와 저장된 글씨가 다르면 미리보기가 아니다', () => {
     const src = readFileSync(new URL('./screens/Story.tsx', import.meta.url), 'utf8');
     const at = src.indexOf('const composerField');
     // ⚠️ 주석을 걷고 본다 — 이 자리의 경위를 설명하는 주석이 옛 선언을 그대로 인용하고 있어,
     //    안 걷으면 부재 단언이 **주석에 걸려** 영영 실패한다(T-205의 거울상).
     const field = src.slice(at, src.indexOf('}) as const;', at)).replace(/^\s*\/\/.*$/gm, '');
 
-    expect(field).toContain('...HANDWRITING');
+    expect(field).toContain('...SERIF_VALUE');
     expect(field).not.toContain("fontFamily: 'inherit'");
   });
 });
@@ -244,10 +250,11 @@ describe('채움 주 버튼', () => {
 
   /**
    * ⚠️ <b>순서가 곧 결과다.</b> `FilledButton`도 TDS primary variant라 인라인에 primary hex를 그대로
-   * 들고 있어 두 규칙에 <b>동시 매칭</b>된다. 명시도·`!important`가 동급이라 나중 규칙이 이기므로,
-   * 마커 규칙이 primary 재색칠보다 앞서면 채움 버튼이 조용히 연한 세이지로 돌아간다.
+   * 들고 있어 두 규칙에 <b>동시 매칭</b>된다. 명시도·`!important`가 동급이라 나중 규칙이 이긴다.
+   * 톤 조율 A 이후 두 규칙은 바탕(옅은 세이지)과 글자색이 같아서, 순서가 가르는 것은 <b>모서리 20 대 18</b>과
+   * 로딩 점 색(700 대 500)뿐이다 — 그림자는 primary 규칙에 선언이 없어 순서와 무관하게 남는다.
    */
-  it('마커 규칙이 primary 재색칠보다 뒤에 온다 — 앞서면 채움이 조용히 연한 세이지가 된다', () => {
+  it('마커 규칙이 primary 재색칠보다 뒤에 온다 — 앞서면 채움 버튼 모서리가 primary의 18로 떨어진다', () => {
     const primary = rules.indexOf("--button-background-color:#3182f6");
     const filled = rules.indexOf("[style*='--btn-filled']");
 
@@ -470,12 +477,21 @@ describe('목표 휠 선택 행 (시안 2e)', () => {
  *
  * <p>`App.tsx`도 센다 — 탭바 가운데 원이 홈의 채움 자리다(설계 D5: 「홈은 탭바 원이 그 역할」).
  * 초판은 `screens/`만 훑어 그 자리가 계측 밖이었다.
+ *
+ * <p>⚠️ <b>톤 조율 A(2026-09-24) — 「채움」은 이제 색이 아니라 역할이다.</b> 진한 채움은 탭바 원 하나만
+ * 남기고, 서재 「여백에 글쓰기」·공부 서재 「회독 +1」·`FilledButton`은 <b>옅은 타일 + 부푼 그림자 + 진한
+ * 글자</b>가 됐다. 배경만 세면 채움이 0이 되어 이 가드가 영영 초록이다 — 그래서 셋째 지표로 맨 버튼의
+ * <b>부푼 그림자</b>(`boxShadow: 'var(--puffShadow)'` — 옆 「검색해서 담기」의 옅은 타일엔 없다)를 센다.
+ * 화면당 주 동작이 하나라는 불변식은 그대로다.
+ *
+ * <p>⚠️ 이 불변식은 <b>세 그물이 합쳐서</b> 지킨다 — 여기 채움 지표(형태) · `soft-surface.test`의 그림자 예산표(큰 흐림이
+ * 서는 파일별 개수) · 같은 파일의 PUFF 사용처표. 하나만 느슨해져도 「부푼 그림자를 단 두 번째 주 동작」이 다른 키로 샌다.
  */
 describe('채움 주 버튼 개수 (설계 D5)', () => {
   /** 주석을 걷는다 — 주석이 지표 문자열을 인용하면 거짓 실패한다(설계 D5가 요구한 절차). */
   const codeOnly = (src: string) => src.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/.*/g, '');
 
-  const FILLED = /<FilledButton|background: 'var\(--adaptiveBlue700/g;
+  const FILLED = /<FilledButton|background: 'var\(--adaptiveBlue700|boxShadow: 'var\(--puffShadow\)'/g;
 
   const read = (rel: string) => codeOnly(readFileSync(new URL(rel, import.meta.url), 'utf8'));
 

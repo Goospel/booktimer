@@ -32,7 +32,7 @@ import { StudyLibrary } from './screens/StudyLibrary';
 import { BookMargin, BookMarginAll, StoryComposer } from './screens/Story';
 import { showInterstitialAd, subscribeNativeBack, trackEvent, trackScreen } from './toss';
 import { flushTrial } from './trial';
-import { CoverInitial, ErrorMessage, Loading, PENCIL_FRAME, SERIF_VALUE, Screen, Sheet } from './ui';
+import { CoverInitial, ErrorMessage, Loading, PUFF, SERIF_VALUE, Screen, Sheet } from './ui';
 
 /**
  * 메인 탭 — 이 순서가 곧 탭바 순서다(index↔화면 대응의 단일 출처).
@@ -57,8 +57,20 @@ export const TABS = [
   { key: 'history', label: '기록', icon: 'M4 20.5V12M9.3 20.5V5M14.7 20.5v-6M20 20.5V9' },
 ] as const;
 
-/** 탭바 한 칸의 최소 높이 — 손가락 최소치(44px)를 넘기고, 본문 하단 여백도 이 값에서 계산한다. */
-export const TAB_BAR_HEIGHT = 56;
+/**
+ * 탭바 한 칸의 최소 높이 — 손가락 최소치(44px)를 넘기고, 본문 하단 여백도 이 값에서 계산한다.
+ *
+ * <p>64인 이유(Soft PR-5): 라벨 13 + 아이콘 알약 28 + 간격 2에 위아래 숨 여백, 그리고 가운데 원 54 + 측정 중
+ * 링 3px 양쪽 = 60이 알약(`overflow: hidden`) 안에 잘리지 않고 들어간다. 토스트·스트립·코치마크·본문 여백이
+ * 전부 이 상수에서 좌표를 파생하므로 여기 한 곳만 바꾼다.
+ */
+export const TAB_BAR_HEIGHT = 64;
+
+/** 탭바 가운데 타이머 원 지름(Soft 시안) — 측정 중 링 3px 양쪽을 더해도 {@link TAB_BAR_HEIGHT} 안이어야 한다. */
+export const TIMER_CIRCLE_SIZE = 54;
+
+/** 잠긴 탭 배지·게스트 잠금 카드가 함께 쓰는 자물쇠(24 viewBox 스트로크). */
+export const LOCK_ICON = 'M7.6 10.4V7.9a4.4 4.4 0 0 1 8.8 0v2.5M6.2 10.4h11.6v9.1H6.2z';
 
 /** 떠 있는 탭바의 좌우 여백 — 화면 가장자리에서 이만큼 떨어져야 "부착"이 아니라 "플로팅"으로 읽힌다. */
 export const TAB_BAR_MARGIN = 16;
@@ -306,16 +318,19 @@ export function timerActionView(active: boolean, mode: TimerMode = 'reading'): {
     ? {
         label: '측정 끝내기',
         background: 'var(--adaptiveRed500, #F04452)',
-        ring: '0 0 0 3px rgba(240,68,82,.2)',
+        // Soft — 색은 빨강 그대로(위험 = 빨강 규약), 형태만 **눌린 원**이다(「지금 눌려 있다 = 재는 중」).
+        // 안쪽 그림자는 검정 알파라 모드색이 끼어들 자리가 없다.
+        ring: 'inset 3px 3px 7px rgba(0,0,0,.18), 0 0 0 3px rgba(240,68,82,.2)',
         icon: STOP_ICON,
       }
     : {
         // 시안의 「독서 시작하기 / 공부 시작하기」가 실물에서 서는 자리 — 이 앱엔 시작 버튼 글자가 없고
         // 원 하나뿐이라, 무엇을 재기 시작하는지는 이 라벨과 시작 토스트가 말한다.
         label: mode === 'study' ? '공부 측정 시작' : '독서 측정 시작',
-        background: 'var(--adaptiveBlue700, #4F6B4C)',
-        // 링·배경 둘 다 토큰이라 공부 모드 색 전환이 css 한 벌로 따라온다(빨강 링은 모드 무관 — danger).
-        ring: '0 0 0 3px var(--accentRing, rgba(110,138,106,.25))',
+        background: 'var(--adaptiveBlue700, #3F5A3C)',
+        // Soft 부푼 원 — 떨어지는 그림자 + 흰 반대쪽 빛 + 윗면 하이라이트(정적). 떨어지는 그림자 색은 시안
+        // 리터럴(세이지) 대신 `--accentRing`이라 공부 모드에서 파랑 원 밑에 세이지가 남지 않는다.
+        ring: '4px 4px 10px var(--accentRing, rgba(91,127,85,.22)), -3px -3px 8px rgba(255,255,255,.9), inset 0 2px 0 rgba(255,255,255,.22)',
         icon: PLAY_ICON,
       };
 }
@@ -1967,9 +1982,8 @@ export function MainTabs({
             bottom: `calc(12px + env(safe-area-inset-bottom) + ${TAB_BAR_HEIGHT}px + 8px)`,
             zIndex: TAB_BAR_Z_INDEX,
             padding: '4px 14px',
-            background: 'var(--adaptiveBackground, #FCFAF5)',
-            borderRadius: 12,
-            boxShadow: '0 4px 16px rgba(0, 0, 0, 0.12)',
+            ...PUFF,
+            borderRadius: 20,
           }}
         >
           <ErrorMessage message={actionError} />
@@ -1988,12 +2002,11 @@ export function MainTabs({
             bottom: `calc(12px + env(safe-area-inset-bottom) + ${TAB_BAR_HEIGHT}px + 8px)`,
             zIndex: TAB_BAR_Z_INDEX,
             padding: '8px 14px',
-            background: 'var(--adaptiveGrey100, #FCFAF5)',
-            color: 'var(--adaptiveGrey600, #6F6A5E)',
-            borderRadius: 12,
+            ...PUFF,
+            borderRadius: 20,
+            color: 'var(--adaptiveGrey600, #5B5A4D)',
             fontSize: 14,
             textAlign: 'center',
-            boxShadow: '0 4px 16px rgba(0, 0, 0, 0.12)',
           }}
         >
           {TAB_LOCK_HINT}
@@ -2198,7 +2211,7 @@ function MiniCover({ book, width }: { book: BookOption | null; width: number }) 
           width,
           height: Math.round(width * 1.4),
           borderRadius: 4,
-          border: '1.5px dashed #B8B29F',
+          border: '1.5px dashed #7C8A78', // 홈 「책 없이」 카드(Home NoBookCard)와 같은 Soft 점선색
           boxSizing: 'border-box',
         }}
       />
@@ -2244,11 +2257,8 @@ export function StartToast({ toast, onChange }: { toast: StartToastState; onChan
         alignItems: 'center',
         gap: 10,
         padding: '10px 12px',
-        background: 'var(--adaptiveBackground, #FCFAF5)',
-        borderRadius: 12,
-        border: '1px solid transparent',
-        borderImage: PENCIL_FRAME,
-        boxShadow: '0 4px 16px rgba(0, 0, 0, 0.14)',
+        ...PUFF,
+        borderRadius: 20,
       }}
     >
       {/* 표지 자리와 [바꾸기]는 이제 두 모드의 장치다 — 공부에도 고를 책과 바꿀 문이 생겼다.
@@ -2267,8 +2277,8 @@ export function StartToast({ toast, onChange }: { toast: StartToastState; onChan
           border: 0,
           borderRadius: 8,
           // 모드 토큰을 탄다 — 리터럴로 두면 공부 모드에 독서 세이지가 샌다(독서는 알파 .16→.18, 육안 무차이).
-          background: 'var(--accentPill, rgba(110, 138, 106, 0.16))',
-          color: 'var(--adaptiveBlue700, #4F6B4C)',
+          background: 'var(--accentPill, rgba(91, 127, 85, 0.16))',
+          color: 'var(--adaptiveBlue700, #3F5A3C)',
           fontSize: 13,
           fontWeight: 700,
           cursor: 'pointer',
@@ -2325,7 +2335,7 @@ export function ChangeBookSheet({
           border: 'none',
           borderRadius: 10,
           // 모드 토큰(위 [바꾸기]와 같은 사정) — 독서는 알파 .14→.18로 2% 진해진다(의도된 예외).
-          background: current ? 'var(--accentPill, rgba(110, 138, 106, 0.14))' : 'transparent',
+          background: current ? 'var(--accentPill, rgba(91, 127, 85, 0.16))' : 'transparent',
           cursor: 'pointer',
         }}
       >
@@ -2421,29 +2431,27 @@ export function BottomTabBar({
           padding: 0,
           border: 'none',
           background: 'transparent',
-          // 시안 4c — 고른 칸은 세이지 700이다(500은 옆 라벨 회색과 대비가 약했다).
-          color: selected ? 'var(--adaptiveBlue700, #4F6B4C)' : 'var(--adaptiveGrey600, #6F6A5E)',
-          // 잠긴 칸은 흐려진다 — 눌러 보기 전에 눈으로 먼저 알아야 한다. 단 **내가 선 칸은 빼고**:
-          // 게스트가 잠긴 탭을 열면 그 칸이 선택 표시로 서는데, 흐림은 「여기 못 간다」는 말이라
-          // 이미 와 있는 칸에 붙으면 거짓이 된다.
-          opacity: shut && !selected ? 0.35 : 1,
+          // 고른 칸은 세이지 700, 나머지는 흐린 글자색 — 잠긴 칸도 **흐리게 지우지 않는다**(Soft 규칙 1).
+          // 옛 `opacity .35`는 40대 이상에게 「없는 칸」으로 읽혔다. 잠김은 아래 자물쇠 배지가 말한다.
+          color: selected ? 'var(--adaptiveBlue700, #3F5A3C)' : 'var(--adaptiveGrey600, #5B5A4D)',
           cursor: 'pointer',
         }}
       >
-        {/* 시안 4c — 고른 칸의 아이콘만 알약을 입는다. 색약에게도 「여기」가 형태로 보이게.
-            안 고른 칸도 <b>같은 38×26 span</b>을 쓰고 배경만 비운다 — 알약이 있다가 없으면 칸마다
+        {/* 고른 칸의 아이콘만 알약을 입는다(Soft 시안 40×28 완전한 알약). 색약에게도 「여기」가 형태로 보이게.
+            안 고른 칸도 <b>같은 40×28 span</b>을 쓰고 배경만 비운다 — 알약이 있다가 없으면 칸마다
             아이콘 위치가 달라져 탭을 옮길 때 레이아웃이 튄다. 반투명 세이지를 쓰는 것은 의도다
-            (불투명 토큰보다 밤 테마에서 잘 적응한다). */}
+            (불투명 토큰보다 밤 테마에서 잘 적응한다). 자물쇠 배지의 기준 상자이기도 하다(relative). */}
         <span
           style={{
+            position: 'relative',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
-            width: 38,
-            height: 26,
-            borderRadius: 13,
+            width: 40,
+            height: 28,
+            borderRadius: 999,
             // 토큰 경유 — 공부 모드에서 이 알약도 저절로 파랑이 된다(리터럴이면 세이지로 남는다).
-            background: selected ? 'var(--accentPill, rgba(110,138,106,.18))' : 'transparent',
+            background: selected ? 'var(--accentPill, rgba(91,127,85,.16))' : 'transparent',
           }}
         >
           <svg
@@ -2460,6 +2468,29 @@ export function BottomTabBar({
           >
             <path d={icon} />
           </svg>
+          {/* 잠긴 칸 — 아이콘 우하단에 16px 자물쇠 배지. 바탕은 탭바 면색이라 아이콘 모서리를 도려내듯 앉는다.
+              색은 칸의 글자색(currentColor)을 따른다 — 게스트가 잠긴 탭에 서 있으면 선택 잉크로. */}
+          {shut && (
+            <span
+              data-lock-badge=""
+              style={{
+                position: 'absolute',
+                right: 1,
+                bottom: -3,
+                width: 16,
+                height: 16,
+                borderRadius: '50%',
+                background: 'var(--adaptiveGrey100, #FBF9F4)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+              }}
+            >
+              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                <path d={LOCK_ICON} />
+              </svg>
+            </span>
+          )}
         </span>
         {/* 전부 700이면 굵기가 아무 말도 안 한다 — 고른 칸만 굵다(비선택 400은 body 상속과 같다). */}
         <span style={{ fontSize: 13, fontWeight: selected ? 700 : 400, lineHeight: 1.2 }}>{label}</span>
@@ -2480,10 +2511,11 @@ export function BottomTabBar({
         bottom: 'calc(12px + env(safe-area-inset-bottom))',
         zIndex: TAB_BAR_Z_INDEX,
         display: 'flex',
-        overflow: 'hidden', // 모서리 밖으로 새는 탭 눌림 효과를 알약 안에 가둔다
-        background: 'var(--adaptiveBackground, #FCFAF5)',
-        borderRadius: 28,
-        boxShadow: '0 4px 16px rgba(0, 0, 0, 0.12)',
+        overflow: 'hidden', // 모서리 밖으로 새는 탭 눌림 효과를 알약 안에 가둔다(자기 그림자는 안 잘린다)
+        // Soft — 탭바 자체가 부푼 알약이다. `<main>` 밖이라 독서등의 토큰 스왑이 안 닿으므로, 밤 캔버스 위
+        // 그림자는 `body.reading-lamp`가 따로 준다(global.css — 낮 흰 빛이 밤에 흰 테로 뜨지 않게).
+        ...PUFF,
+        borderRadius: 999,
       }}
     >
       {cells}
@@ -2494,9 +2526,9 @@ export function BottomTabBar({
 /**
  * 탭바 가운데의 측정 액션 — 채운 원이라 스트로크 아이콘들 사이에서 **동작**으로 읽힌다.
  *
- * <p>라벨 글자는 없다(원 44px과 11px 라벨은 56px 높이에 함께 못 선다) — 상태는 `aria-label`이 말한다.
- * 원이 셀(69×56) 안에 들어가므로 알약의 `overflow: hidden`에 잘리지 않는다(돌출형 아님) —
- * 46px + 링 3px = 52px라 시안 4c로 키운 뒤에도 세로·가로 모두 여유가 남는다.
+ * <p>라벨 글자는 없다(원과 라벨은 한 칸 높이에 함께 못 선다) — 상태는 `aria-label`이 말한다.
+ * 원이 셀(≈69×64) 안에 들어가므로 알약의 `overflow: hidden`에 잘리지 않는다(돌출형 아님) —
+ * Soft 54px + 측정 중 링 3px 양쪽 = 60px ≤ {@link TAB_BAR_HEIGHT}(app.test가 잰다).
  */
 function TimerActionButton({
   active,
@@ -2530,11 +2562,11 @@ function TimerActionButton({
     >
       <span
         style={{
-          width: 46,
-          height: 46,
+          width: TIMER_CIRCLE_SIZE,
+          height: TIMER_CIRCLE_SIZE,
           borderRadius: '50%',
           background: view.background,
-          // 시안 4c의 링 — **고정값 단층**이다. 애니메이션을 걸지 않는다: T-176이 발광
+          // 원의 그림자 — **고정값**이다. 애니메이션을 걸지 않는다: T-176이 발광
           // `box-shadow` 무한 애니메이션으로 표지를 초당 60번 재래스터화한 자리와 같은 종류이고,
           // 데스크톱·목 모드는 그 클래스를 원리상 못 잡는다. 값은 상태 전환 때만 바뀐다.
           boxShadow: view.ring,

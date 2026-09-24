@@ -7,6 +7,7 @@ import appSource from './App.tsx?raw';
 
 import type { BookOption } from './api';
 import { ChangeBookSheet, START_TOAST_MS, StartToast, startToastMessage, startToastVisible } from './App';
+import { tagWith } from './soft-guard';
 import { userAgent } from './test-fixtures';
 
 /**
@@ -118,6 +119,14 @@ describe('토스트 렌더 (StartToast)', () => {
 
     expect(markup).not.toContain('animation');
     expect(markup).not.toContain('transition');
+  });
+
+  it('부푼 면(r20)으로 뜬다 — 연필선이 아니라 변수 경유 그림자가 탭바 위 층을 가른다(Soft PR-5)', () => {
+    const card = tagWith(toast(book(1, '데미안')), 'role="status"');
+
+    expect(card).toContain('box-shadow:var(--puffShadow'); // 그림자가 실재한다(아래 부재 단언이 공허하지 않음)
+    expect(card).toContain('border-radius:20px');
+    expect(card).not.toMatch(/border-image/i);
   });
 
   it('스크린리더에 알린다 — 5초 뒤 사라지는 안내라 놓치면 되돌릴 길이 없다', () => {

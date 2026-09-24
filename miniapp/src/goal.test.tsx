@@ -154,6 +154,34 @@ describe('목표 화면 렌더', () => {
     expect(card).toContain('var(--puffShadow');
   });
 
+  /**
+   * 안개가 선택 띠를 덮지 않는다(Soft PR-5 리뷰 10) — TDS 휠은 안개를 높이의 42%로, 가운데 칸을 16%로 잡고
+   * 아래 안개 앞에 2px을 둔다(`@toss/tds-mobile` Wheel 실측). 우리 띠는 44px라 그 칸(28.8px)보다 커서, 안개 끝이
+   * 띠 위 7.6px · 아래 5.6px를 카드 면색 .45로 덮어 **띠 안에 밝은 줄 두 개**가 섰다(스토어 05에 육안으로 보였다).
+   * 안개는 띠 가장자리에서 투명으로 끊겨야 한다 — 그 자리를 두 화면의 높이·띠 값에서 계산해 css와 대조한다.
+   */
+  it('안개는 선택 띠 가장자리에서 투명으로 끊긴다 — 띠 안에 밝은 줄이 서지 않는다', () => {
+    const css = readFileSync(new URL('./global.css', import.meta.url), 'utf8');
+    const geometry = (file: string) => {
+      const src = readFileSync(new URL(file, import.meta.url), 'utf8');
+      const h = Number(src.match(/className="goal-wheels"[\s\S]*?height:\s*(\d+)/)?.[1]);
+      const band = Number(src.match(/data-wheel-band=""[\s\S]*?height:\s*(\d+)/)?.[1]);
+      return { h, band };
+    };
+    const g = geometry('./screens/Goal.tsx');
+    expect(g).toEqual({ h: 180, band: 44 }); // 입력값이 읽혔다
+    expect(geometry('./screens/SessionGoalSheet.tsx')).toEqual(g); // 두 화면이 같은 기하라 한 css 규칙이 맞는다
+
+    const round = (n: number) => Math.round(n * 10) / 10;
+    const topOverlap = round(0.42 * g.h - (g.h / 2 - g.band / 2)); // 7.6
+    const bottomOverlap = round(g.h / 2 + g.band / 2 - (0.58 * g.h + 2)); // 5.6
+    const top = css.match(/--wheel-top-shadow-gradient:\s*linear-gradient\(([\s\S]*?)\)\s*!important/)?.[1] ?? '';
+    const bottom = css.match(/--wheel-bottom-shadow-gradient:\s*linear-gradient\(([\s\S]*?)\)\s*!important/)?.[1] ?? '';
+    expect(top).toContain('rgba('); // 규칙이 잡혔다
+    expect(top.replace(/\s+/g, ' ')).toContain(`0) calc(100% - ${topOverlap}px)`);
+    expect(bottom.replace(/\s+/g, ' ')).toMatch(new RegExp(`0\\) ${bottomOverlap}px`));
+  });
+
   it('안개 색 = 카드 면 색 — 전역 토큰 `--adaptiveGrey100`의 RGB와 안개 rgba가 같다', () => {
     const css = readFileSync(new URL('./global.css', import.meta.url), 'utf8');
     const hex = css.match(/html:root\s*\{[^}]*--adaptiveGrey100:\s*#([0-9A-Fa-f]{6})/)?.[1] ?? '';
@@ -321,7 +349,7 @@ describe('목표 위계 (시안 2e)', () => {
     // 44->30 · 세이지->회갈색 · r10->r0이 <b>전부 생존</b>했다. 「어떤 밴드인가」까지 잠근다.
     const tag = markup.slice(markup.lastIndexOf('<', at), markup.indexOf('>', at));
     expect(tag).toContain('height:44px');
-    expect(tag).toContain('--adaptiveBlue50');
+    expect(tag).toContain('var(--adaptiveBlue50,'); // 경계 `,` — `--adaptiveBlue500`에도 맞지 않게
     expect(tag).toContain('border-radius:10px');
   });
 

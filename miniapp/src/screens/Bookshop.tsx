@@ -334,7 +334,7 @@ export function BookshopHeader({
         marginBottom: 16,
         padding: '0 14px',
         // 글자는 흐린 잉크로 둔다 — 생김새가 검색바라 문구가 입력 자리의 안내(placeholder)로 읽혀야 한다.
-        color: 'var(--adaptiveGrey600, #4E5A4B)',
+        color: 'var(--adaptiveGrey600, #5B5A4D)',
         fontSize: 15,
         cursor: 'pointer',
       }}

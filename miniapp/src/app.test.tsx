@@ -15,8 +15,10 @@ import {
   COACHMARK_FLOW,
   LAMP_CLASS,
   STUDY_TABS,
+  StartToast,
   TABS,
   TIMER_ACTION_SLOT,
+  TIMER_CIRCLE_SIZE,
   TabBarCoachmark,
   chatEntryOf,
   closeCompose,
@@ -46,6 +48,8 @@ import type { BookOption, DashboardResponse, StudyHistoryResponse } from './api'
 import { ApiError, IDLE_STUDY, NetworkError, UnauthorizedError } from './api';
 import { CACHE_STUDY_HISTORY, cacheClear, cachePut } from './cache';
 import { coachmarkSeen, dismissCoachmark, resetCoachmarks } from './coachmark';
+import { tagWith } from './soft-guard';
+import { stripComments } from './source-scan';
 import { graph, stubLocalStorage, userAgent } from './test-fixtures';
 
 beforeEach(stubLocalStorage); // 홈 탭이 렌더 중에 알림 동의 캐시를 읽는다
@@ -246,9 +250,9 @@ describe('하단 탭바', () => {
   it('액션은 채운 원이다 — 탭 아이콘들 사이에서 동작으로 읽히는 유일한 형태다', () => {
     const cell = actionCell(bar('home'), '독서 측정 시작');
 
-    expect(cell).toContain('width:46px;height:46px'); // 시안 4c에서 44 -> 46
+    expect(cell).toContain(`width:${TIMER_CIRCLE_SIZE}px;height:${TIMER_CIRCLE_SIZE}px`); // Soft 시안 54
     expect(cell).toContain('border-radius:50%');
-    expect(cell).toContain('#4F6B4C'); // 시작 = 브랜드 세이지(4c에서 500 -> 700)
+    expect(cell).toContain('#3F5A3C'); // 시작 = 브랜드 세이지 700(Soft 값)
   });
 
   it('측정 중이면 빨간 ■로 바뀐다 — 시작과 끝내기가 한 자리에서 갈린다', () => {
@@ -266,14 +270,17 @@ describe('하단 탭바', () => {
   it('선택 탭 색 폴백이 웹 세이지다 — 변수가 안 잡히는 순간 토스 블루로 되돌아가는 걸 막는다', () => {
     // 시안 4c에서 한 단 진해졌다(500 -> 700). 이 단언이 지키는 것은 「어느 칸인가」가 아니라
     // **폴백이 세이지인가**이므로 램프의 칸이 바뀌어도 의도는 그대로다.
-    expect(bar('home')).toContain('var(--adaptiveBlue700, #4F6B4C)');
+    expect(bar('home')).toContain('var(--adaptiveBlue700, #3F5A3C)');
     expect(bar('home')).not.toContain('#3182f6');
   });
 
   it('바닥에 붙지 않고 떠 있다 — 토스 브랜딩 가이드가 요구하는 플로팅 형태(심사 반려 2)', () => {
     // T-144: 단일 속성 한 조각은 TDS 주입 CSS와 겹쳐 공허해진다 — 인접 속성을 이어 붙인 조합을 키로 쓴다.
     expect(bar('home')).toContain(`left:${TAB_BAR_MARGIN}px;right:${TAB_BAR_MARGIN}px;bottom:calc(12px + env(safe-area-inset-bottom))`);
-    expect(bar('home')).toMatch(/border-radius:28px;box-shadow:0 4px 16px/);
+    // Soft — 알약 자체가 부푼 면이다. 그림자는 변수 경유라 밤·공부가 값만 갈아 끼운다(리터럴이면 밤에 흰 테).
+    const nav = tagWith(bar('home'), '<nav');
+    expect(nav).toContain('border-radius:999px');
+    expect(nav).toContain('box-shadow:var(--puffShadow');
     expect(bar('home')).not.toContain('border-top'); // 전폭 부착 형태의 서명
   });
 
@@ -329,7 +336,7 @@ describe('액션 버튼 시각 (timerActionView)', () => {
     const view = timerActionView(false);
 
     expect(view.label).toBe('독서 측정 시작');
-    expect(view.background).toContain('#4F6B4C'); // 4c에서 세이지 500 -> 700
+    expect(view.background).toContain('#3F5A3C'); // 세이지 700 폴백(Soft 값)
   });
 
   it('측정 중이면 빨강 ■ 「측정 끝내기」 — 옛 홈 danger 버튼의 색 연속성', () => {
@@ -944,10 +951,31 @@ describe('하단 탭바 — 측정 중 잠금', () => {
   });
 
   /**
-   * 내가 <b>서 있는</b> 잠긴 칸은 흐리지 않는다 — 게스트가 잠긴 탭을 열면(잠금 카드가 뜬다) 그 칸이
-   * 선택 표시로 서야 한다. 흐림은 「여기 못 간다」는 말인데, 이미 와 있는 칸에 그 말을 붙이면 거짓이다.
+   * 잠김은 <b>흐림이 아니라 자물쇠 배지</b>로 말한다(Soft 규칙 1 — 40대 이상에게 .35 흐림은 「없는 칸」으로
+   * 읽힌다). 라벨·아이콘은 평소 색 그대로 또렷하고, 아이콘 알약 우하단에 16px 자물쇠가 붙는다.
    */
-  it('잠긴 칸이라도 내가 선 칸은 흐리지 않는다', () => {
+  it('잠긴 칸은 흐리지 않고 자물쇠 배지를 단다 — 셋 다, 그리고 그 셋만', () => {
+    const markup = locked();
+
+    expect(markup.match(/data-lock-badge=""/g)).toHaveLength(3);
+    for (const label of ['서재', '책방', '기록']) {
+      const shut = cell(markup, `title="${label}"`);
+      expect(shut).toContain('data-lock-badge=""');
+      expect(shut).toContain('--adaptiveGrey600'); // 글자는 평소 흐린 글자색 그대로(지우지 않는다)
+    }
+    expect(cell(markup, 'title="홈"')).toContain('aria-current="page"'); // 홈 칸이 잡혔다
+    expect(cell(markup, 'title="홈"')).not.toContain('data-lock-badge');
+    // 흐림 값이 무엇이든(.35만이 아니라 .5·0.6…) 탭바 어디에도 소수 opacity가 없다. 원의 `opacity:1`은
+    // 소수점이 없어 안 걸린다(busy가 아닐 때) — 리뷰가 오탐 없음을 확인한 식이다.
+    expect(markup.match(/opacity:0?[.][0-9]+/g) ?? []).toEqual([]);
+  });
+
+  /**
+   * 내가 <b>서 있는</b> 잠긴 칸도 선택 표시로 선다 — 게스트가 잠긴 탭을 열면(잠금 카드가 뜬다) 그 칸이
+   * 「여기」를 말해야 한다. 자물쇠는 사실(그 화면은 잠겨 있다)이라 그대로 붙는다 — 옛 흐림과 달리 「여기 못
+   * 간다」가 아니라 「잠긴 곳」이라는 말이라 서 있는 칸에 붙어도 거짓이 아니다.
+   */
+  it('잠긴 칸이라도 내가 선 칸은 선택 표시로 선다', () => {
     const markup = renderToStaticMarkup(
       <TDSMobileProvider userAgent={userAgent}>
         <BottomTabBar
@@ -963,9 +991,9 @@ describe('하단 탭바 — 측정 중 잠금', () => {
     const here = cell(markup, 'title="서재"');
     expect(here).toContain('aria-current="page"');
     expect(here).toContain('aria-disabled="true"');
-    expect(here).toContain('opacity:1');
-    // 안 선 잠긴 칸은 그대로 흐리다 — 위 예외가 잠금 표시를 통째로 걷어낸 것이 아님을 잰다.
-    expect(cell(markup, 'title="책방"')).toContain('opacity:0.35');
+    expect(here).toContain('--adaptiveBlue700'); // 선택 잉크
+    expect(here).toContain('data-lock-badge=""');
+    expect(cell(markup, 'title="책방"')).toContain('data-lock-badge=""');
   });
 
   it('측정 중이 아니면 아무 칸도 잠기지 않는다 — 위 부정 단언의 짝', () => {
@@ -979,7 +1007,10 @@ describe('하단 탭바 — 측정 중 잠금', () => {
       </TDSMobileProvider>,
     );
 
+    // 양성 먼저(T-149) — 칸들이 실제로 그려졌다. 아래 부재 단언이 빈 마크업에서 공허하게 통과하지 않게.
+    for (const label of ['서재', '책방', '기록']) expect(open).toContain(`title="${label}"`);
     expect(open).not.toContain('aria-disabled="true"');
+    expect(open).not.toContain('data-lock-badge'); // 위 잠금 렌더엔 3개 — 배지가 잠금을 따라간다
   });
 });
 
@@ -1517,18 +1548,17 @@ describe('탭바 위계 (시안 4c)', () => {
   it('고른 칸의 아이콘만 알약을 입는다 — 색약에게도 「여기」가 형태로 보인다', () => {
     const on = tabCell(tabBar('home'), '홈');
 
-    expect(on).toContain('width:38px');
-    expect(on).toContain('height:26px');
-    expect(on).toContain('border-radius:13px');
-    expect(on).toContain('rgba(110,138,106,.18)');
+    // Soft 시안 — 40×28 완전한 알약(r999). 폴백은 Soft 알약 값(반투명 유지 — 밤 적응).
+    expect(on).toContain('width:40px;height:28px');
+    expect(on).toContain('border-radius:999px');
+    expect(on).toContain('rgba(91,127,85,.16)'); // 톤 조율 A의 --accentPill 낮 값
   });
 
-  it('안 고른 칸도 같은 38×26 span을 쓴다 — 배경만 없다(있다가 없으면 레이아웃이 튄다)', () => {
+  it('안 고른 칸도 같은 40×28 span을 쓴다 — 배경만 없다(있다가 없으면 레이아웃이 튄다)', () => {
     const off = tabCell(tabBar('home'), '서재');
 
-    expect(off).toContain('width:38px');
-    expect(off).toContain('height:26px');
-    expect(off).not.toContain('rgba(110,138,106,.18)');
+    expect(off).toContain('width:40px;height:28px');
+    expect(off).not.toContain('rgba(91,127,85,.2)');
   });
 
   it('고른 칸 색은 세이지 700이다 — 500은 라벨 회색과 대비가 약했다(시안값)', () => {
@@ -1560,14 +1590,44 @@ describe('탭바 위계 (시안 4c)', () => {
    * 애니메이션으로 표지를 초당 60번 재래스터화한 자리와 같은 종류이고, 데스크톱·목 모드는
    * 그 클래스를 원리상 못 잡는다.
    */
-  it('가운데 원은 46px에 링을 두른다 — 스트로크 아이콘들 사이에서 동작으로 떠 보인다', () => {
+  it('가운데 원은 54px 부푼 원이다 — 스트로크 아이콘들 사이에서 동작으로 떠 보인다', () => {
     const cell = centerCell(tabBar('home'));
 
-    expect(cell).toContain('width:46px');
-    expect(cell).toContain('height:46px');
-    // 링은 이제 토큰 경유다(`--accentRing`) — 공부 모드가 css 한 벌로 이 링까지 파랑으로 바꾼다.
-    // 리터럴 단언에서 옮겨 온 것이라 회귀가 아니라 **계측 대상이 바뀐** 자리다.
-    expect(cell).toContain('box-shadow:0 0 0 3px var(--accentRing');
+    expect(TIMER_CIRCLE_SIZE).toBe(54); // Soft 시안 값
+    expect(cell).toContain(`width:${TIMER_CIRCLE_SIZE}px`);
+    expect(cell).toContain(`height:${TIMER_CIRCLE_SIZE}px`);
+    // 떨어지는 그림자는 토큰 경유다(`--accentRing`) — 공부 모드가 css 한 벌로 이 그림자까지 파랑으로 바꾼다.
+    // 시안 리터럴(rgba(63,90,60,.35))을 쓰면 공부 모드 파랑 원 밑에 세이지 그림자가 남는다.
+    expect(cell).toContain('box-shadow:4px 4px 10px var(--accentRing');
+    expect(cell).toContain('inset 0 2px 0'); // 윗면 하이라이트 — 부풂의 나머지 반
+  });
+
+  it('원은 탭바 높이 안에 들어간다 — 알약이 overflow:hidden이라 넘치면 잘린다', () => {
+    expect(TIMER_CIRCLE_SIZE + 3 * 2).toBeLessThanOrEqual(TAB_BAR_HEIGHT); // 원 + 측정 중 링 3px 양쪽
+  });
+
+  /**
+   * 탭바 위에 서는 fixed 요소들(에러·잠금 안내 스트립 · 시작 토스트 · 코치마크 말풍선 · 게스트 안내)은 전부
+   * `TAB_BAR_HEIGHT`에서 좌표를 파생한다 — 탭바 높이를 바꾸면 따라와야 한다(U-9). 넷은 상태 뒤에 숨어 정적
+   * 렌더로 못 꺼내므로 소스로 잰다: `safe-area-inset-bottom`을 쓰는 `bottom:` 값은 탭바 자신(띄운 높이) 아니면
+   * `${TAB_BAR_HEIGHT}px`를 담아야 한다. 진짜 실패: 한 자리에 `56px`을 박아 탭바와 겹치는 것.
+   */
+  it('탭바 위 fixed 요소의 bottom은 전부 TAB_BAR_HEIGHT에서 파생한다', () => {
+    const bottoms = (file: string) =>
+      [...stripComments(readFileSync(new URL(file, import.meta.url), 'utf8')).matchAll(/bottom:\s*(`[^`]*`|'[^']*')/g)]
+        .map((m) => m[1])
+        .filter((v) => v.includes('safe-area-inset-bottom'));
+    const app = bottoms('./App.tsx');
+    const guest = bottoms('./screens/GuestHome.tsx');
+    // 자리 수를 못 박는다 — 에러·잠금·토스트·코치마크 + 탭바 자신 = 5 / 게스트 안내 1. 줄면 스캔이 빗나간 것이다.
+    expect(app).toHaveLength(5);
+    expect(guest).toHaveLength(1);
+    const NAV = "'calc(12px + env(safe-area-inset-bottom))'";
+    expect(app.filter((v) => v === NAV)).toHaveLength(1);
+    for (const v of [...app.filter((x) => x !== NAV), ...guest]) expect(v).toContain('+ ${TAB_BAR_HEIGHT}px +');
+    // 렌더까지 닿는지 — 정적으로 꺼낼 수 있는 토스트 하나로 실제 값을 본다
+    const toast = renderToStaticMarkup(<StartToast toast={{ book: null, changed: false }} onChange={() => {}} />);
+    expect(toast).toContain(`bottom:calc(12px + env(safe-area-inset-bottom) + ${TAB_BAR_HEIGHT}px + 8px)`);
   });
 
   it('가운데 원 배경도 세이지 700이다 — 고른 칸과 같은 잉크라야 한 팔레트로 읽힌다', () => {
@@ -1581,8 +1641,28 @@ describe('탭바 위계 (시안 4c)', () => {
    * 박았더니 <b>빨간 정지 버튼에 초록 후광</b>이 남았다(독립 리뷰 적발). 쌍으로 두면 구조적으로 못 어긋난다.
    */
   it('링도 상태를 따라간다 — 측정 중엔 빨강 계열이라야 정지 버튼에 초록 후광이 안 남는다', () => {
-    expect(timerActionView(false).ring).toContain('110,138,106'); // 대기 = 세이지
+    expect(timerActionView(false).ring).toContain('--accentRing'); // 대기 = 모드색(독서 세이지 · 공부 파랑)
     expect(timerActionView(true).ring).toContain('240,68,82'); // 측정 중 = 빨강
+  });
+
+  /**
+   * 측정 중 원 — 색은 빨강 그대로(위험 = 빨강 규약), <b>형태만</b> 눌린 원(inset)으로 바뀐다(Soft 설계 결정).
+   * 진짜 실패: 세이지·모드색이 빨강 자리를 삼켜 「끝내기」가 「시작」처럼 보이는 것.
+   */
+  it('측정 중 원은 빨간 채로 눌린다 — 모드색이 빨강을 삼키지 않는다', () => {
+    const view = timerActionView(true);
+
+    expect(view.background).toContain('#F04452');
+    expect(view.ring).toMatch(/^inset /);
+    expect(view.ring).toContain('rgba(240,68,82,.2)');
+    for (const mode of ['reading', 'study'] as const) {
+      const active = timerActionView(true, mode);
+      expect(active.background).not.toMatch(/adaptiveBlue|accent/);
+      expect(active.ring).not.toMatch(/adaptiveBlue|accent|255,\s*255,\s*255/);
+    }
+    // 측정 중 원은 **모드와 무관하게 한 벌**이다 — 위 금지 목록은 토큰 이름만 봐서, 공부 모드에서만 파랑
+    // 리터럴(`#47657C`·`rgba(95,126,150,.25)`)을 끼우면 못 잡았다(리뷰 돌연변이 2종 생존). 통째 비교로 닫는다.
+    expect(timerActionView(true, 'study')).toEqual(timerActionView(true, 'reading'));
   });
 
   it('측정 중 원은 빨간 링을 두른다 — 렌더까지 실제로 닿는지 본다(단위값만 맞고 안 쓰이면 소용없다)', () => {
@@ -1595,8 +1675,9 @@ describe('탭바 위계 (시안 4c)', () => {
 
     expect(at).toBeGreaterThan(-1);
     const cell = markup.slice(at, markup.indexOf('</button>', at));
-    expect(cell).toContain('box-shadow:0 0 0 3px rgba(240,68,82,.2)');
-    expect(cell).not.toContain('110,138,106');
+    expect(cell).toContain('box-shadow:inset 3px 3px 7px rgba(0,0,0,.18), 0 0 0 3px rgba(240,68,82,.2)');
+    expect(cell).toContain('#F04452');
+    expect(cell).not.toContain('--accentRing'); // 위 대기 원엔 있다 — 빨간 원에 모드색 후광이 안 남는다
   });
 });
 
