@@ -176,7 +176,7 @@ export function StatStrip({
   );
 }
 
-/** 스탯 타일 공통 꼴 + 윗변 1px 빛(부푼 면의 흰 하이라이트를 타일 크기로 줄인 것 — 홈 2열 타일과 같은 값). */
+/** 스탯 타일 공통 꼴 + 윗변 1px 빛(부푼 면의 흰 하이라이트를 타일 크기로 줄인 것 — 홈 남은 시간 타일과 같은 값). */
 const STAT_TILE_BASE: CSSProperties = { padding: '10px 14px', borderRadius: 20 };
 const STAT_TILE_BUTTER: CSSProperties = {
   ...STAT_TILE_BASE,

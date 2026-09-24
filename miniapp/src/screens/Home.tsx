@@ -63,7 +63,7 @@ export const DOT_OFF = 'var(--adaptiveGrey200, #DED8CA)';
  */
 const GAUGE_FILL = 'var(--adaptiveBlue500, #5B7F55)';
 
-/** 히어로 2열 타일의 공통 모양 — 색·그림자 틴트만 타일마다 갈린다(시안 Soft-Home). */
+/** 히어로 타일의 모양(시안 Soft-Home) — 지금은 남은 시간 타일 하나가 가로(row)로 펼쳐 쓴다. */
 const TILE = { display: 'flex', flexDirection: 'column', gap: 4, padding: '12px 14px', borderRadius: 20 } as const;
 /** 타일 윗변의 1px 빛 — 부푼 면의 흰 하이라이트를 타일 크기에 맞게 줄인 것이다. */
 const TILE_HIGHLIGHT = 'inset 0 1px 0 rgba(255, 255, 255, 0.7)';
@@ -1610,7 +1610,7 @@ export function Home({
                 />
               </div>
               {/*
-                2열 통계 — 「남은 시간 | 하루 목표」. 옛 자리는 "남은시간 : 15:00 ⓘ" 대시 밑줄 한 줄이
+                보조 줄 — 남은 시간 타일 + 목표 캡션. 옛 자리는 "남은시간 : 15:00 ⓘ" 대시 밑줄 한 줄이
                 전부였고, 그 한 줄이 **설명과 이동을 겸했다**(UX 감사 3e). 여기서 역할을 가른다:
                 ⓘ = 설명(툴팁) · 「바꾸기 ›」 = 이동.
 
@@ -1636,42 +1636,42 @@ export function Home({
                   boxShadow: `${TILE_HIGHLIGHT}, 5px 5px 12px rgba(150, 125, 60, 0.14)`,
                 }}
               >
-                  {/* ⓘ는 라벨에 붙는다 — 값이 아니라 「남은 시간」이라는 개념을 설명하는 손잡이다. */}
-                  <button
-                    type="button"
-                    onClick={() => setShowNote((open) => !open)}
-                    aria-expanded={showNote}
-                    style={{
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: 4,
-                      padding: 0,
-                      border: 0,
-                      background: 'transparent',
-                      color: 'var(--butterInk, #5A4A14)',
-                      fontFamily: 'inherit',
-                      fontSize: 15,
-                      cursor: 'pointer',
-                    }}
+                {/* ⓘ는 라벨에 붙는다 — 값이 아니라 「남은 시간」이라는 개념을 설명하는 손잡이다. */}
+                <button
+                  type="button"
+                  onClick={() => setShowNote((open) => !open)}
+                  aria-expanded={showNote}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 4,
+                    padding: 0,
+                    border: 0,
+                    background: 'transparent',
+                    color: 'var(--butterInk, #5A4A14)',
+                    fontFamily: 'inherit',
+                    fontSize: 15,
+                    cursor: 'pointer',
+                  }}
+                >
+                  남은 시간
+                  {/* 색은 속성이 아니라 style로 준다 — 프레젠테이션 속성엔 `var()`가 안 먹는다(토큰이
+                      죽으면 독서등에서 이 아이콘만 낮 색으로 남는다). */}
+                  <svg
+                    width="15"
+                    height="15"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    strokeWidth="2"
+                    strokeLinecap="round"
+                    style={{ stroke: 'var(--butterInk, #5A4A14)', flex: 'none' }}
                   >
-                    남은 시간
-                    {/* 색은 속성이 아니라 style로 준다 — 프레젠테이션 속성엔 `var()`가 안 먹는다(토큰이
-                        죽으면 독서등에서 이 아이콘만 낮 색으로 남는다). */}
-                    <svg
-                      width="15"
-                      height="15"
-                      viewBox="0 0 24 24"
-                      fill="none"
-                      strokeWidth="2"
-                      strokeLinecap="round"
-                      style={{ stroke: 'var(--butterInk, #5A4A14)', flex: 'none' }}
-                    >
-                      <circle cx="12" cy="12" r="9" />
-                      <path d="M12 11v5M12 7.5v.5" />
-                    </svg>
-                  </button>
-                  <div style={{ ...SERIF_VALUE, fontSize: 24 }}>{formatClock(remaining)}</div>
-                </div>
+                    <circle cx="12" cy="12" r="9" />
+                    <path d="M12 11v5M12 7.5v.5" />
+                  </svg>
+                </button>
+                <div style={{ ...SERIF_VALUE, fontSize: 24 }}>{formatClock(remaining)}</div>
+              </div>
               {showNote && (
                 <RemainingNote
                   goalSeconds={goal}
@@ -1736,6 +1736,9 @@ export function Home({
                     type="button"
                     onClick={onGoGoal}
                     disabled={goalAdPending}
+                    // 보이는 「바꾸기」는 옆 캡션에 기대는 한 단어라 버튼만 훑는 스크린리더엔 뜻이 없다. 대기 중엔
+                    // 이름을 덮지 않아 「준비 중…」이 그대로 이름이 된다.
+                    aria-label={goalAdPending ? undefined : goal > 0 ? '하루 목표 바꾸기' : '하루 목표 정하기'}
                     style={{
                       display: 'inline-flex',
                       alignItems: 'center',
