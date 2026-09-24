@@ -43,7 +43,7 @@ const SERIF_SPREADS = {
   'App.tsx': 2,
   'GuestHome.tsx': 5,
   'History.tsx': 7,
-  'Home.tsx': 7,
+  'Home.tsx': 6, // 2026-09-24 하루 목표 세리프 값이 회색 캡션으로 내려가 한 자리 줄었다
   'HomeFeed.tsx': 3,
   'Library.tsx': 1,
   'Profile.tsx': 1,

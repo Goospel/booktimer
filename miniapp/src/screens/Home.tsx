@@ -75,7 +75,7 @@ const TILE_HIGHLIGHT = 'inset 0 1px 0 rgba(255, 255, 255, 0.7)';
 export const HERO_CARD_BG_VAR = '--heroCardBg';
 
 /**
- * 진한 세이지 — 통계 행의 ⓘ와 「변경 ›」 알약이 쓰는 손잡이 색(웹 `--accent-hover`).
+ * 진한 세이지 — 통계 행의 ⓘ와 캡션 줄 「바꾸기 ›」가 쓰는 손잡이 색(웹 `--accent-hover`).
  *
  * <p>리터럴 `#4F6B4C`이 아니라 **토큰 경유**인 이유는 독서등(밤)이다 — 다만 **지금 이 자리에선
  * 픽셀이 같다**: 히어로 카드는 `LAMP_PAGE_CLASS`를 달고 있고 `global.css`의
@@ -860,7 +860,7 @@ export function goalHandleLabel(goalSeconds: number, adPending = false): string 
 
 /**
  * 목표 손잡이 — 이제 서는 자리는 **하나**다: 목표가 0이라 게이지 줄이 통째로 안 그려질 때의 히어로 카드 안.
- * 평상시 자리(「남은시간」 상자 안)는 히어로 통계 행의 「변경 ›」 알약이 가져갔다 — 같은 일을 하는 문이
+ * 평상시 자리(「남은시간」 상자 안)는 히어로 캡션 줄의 「바꾸기 ›」가 가져갔다 — 같은 일을 하는 문이
  * 둘이면 어느 쪽이 진짜인지 사용자가 고민한다.
  *
  * <p>**자작 칩이 아니라 TDS `Button`이다**(2026-08-14 실기기 제보). 작고 테두리 없는 인라인 칩이라
@@ -889,14 +889,14 @@ function GoalHandle({
  *
  * <p>**역할이 하나다: 설명.** 한때 이 상자는 설명과 이동(목표 바꾸기)을 겸했고, 그 문은 "남은시간 :
  * 15:00 ⓘ" 라는 대시 밑줄 한 줄 뒤에 숨어 있었다 — ⓘ는 설명으로 읽히지 이동으로 읽히지 않는다
- * (UX 감사 3e). 이동은 「하루 목표」 열의 「변경 ›」 알약이 가져가고, 여기 남는 건 규칙 설명뿐이다.
+ * (UX 감사 3e). 이동은 목표 캡션 줄의 「바꾸기 ›」가 가져가고, 여기 남는 건 규칙 설명뿐이다.
  *
  * <p>**이월 규칙은 빚이 없어도 말한다** — 규칙을 가장 먼저 알아야 할 사람은 아직 못 채운 적 없는
  * 사람이다. 반면 내역 세 줄(목표 + 밀린 = 남은시간)은 밀린 게 있을 때만 온다: 빚이 0이면 그 합은
  * 바로 위 통계 행이 이미 말한 값의 되풀이이고, 「밀린 시간 0분」은 없는 빚을 상기시키는 줄이다.
  *
- * <p>**광고 손잡이는 여전히 여기 산다** — 시안 4a가 자리를 말하지 않은 유일한 요소라, 「변경 ›」이
- * 목표 손잡이를 가져갈 때 함께 쓸려 나갈 뻔했다. 죄책감(밀린 시간)이 뜬 이 상자가 그 버튼의 집이다.
+ * <p>**광고 손잡이는 여전히 여기 산다** — 시안 4a가 자리를 말하지 않은 유일한 요소라, 목표 문이
+ * 이 상자 밖으로 옮겨 갈 때 함께 쓸려 나갈 뻔했다. 죄책감(밀린 시간)이 뜬 이 상자가 그 버튼의 집이다.
  * 상자는 표시만 맡고 배선은 `children`으로 받는다: 광고의 busy·전면광고 대기 같은 상태를 상자가
  * 알기 시작하면 표시와 배선이 한 덩어리가 된다.
  *
@@ -933,12 +933,13 @@ export function RemainingNote({
 
   return (
     <div style={{ position: 'relative', marginTop: 14, textAlign: 'left' }}>
-      {/* 캐럿 — 이 상자가 어느 손잡이에서 나왔는지를 그림으로 말한다. 왼쪽 열(남은 시간 · ⓘ)의
-          가운데를 가리키므로 두 열이 `flex: 1`인 한 25%가 곧 그 지점이다(값 길이에 안 흔들린다). */}
+      {/* 캐럿 — 이 상자가 어느 손잡이에서 나왔는지를 그림으로 말한다. 「남은 시간」 라벨 밑 고정 자리다(타일
+          패딩 14 + 라벨 글자 중간 부근). 옛 25%는 두 열 중 왼쪽 열의 가운데였는데 타일이 하나가 되며 뜻을 잃었다.
+          폰트 폴백으로 라벨 폭이 ±10px 흔들려도 라벨 밑에 있으면 족하다. */}
       <div
         style={{
           position: 'absolute',
-          left: 'calc(25% - 5px)',
+          left: 41,
           top: -6,
           width: 10,
           height: 10,
@@ -1611,16 +1612,30 @@ export function Home({
               {/*
                 2열 통계 — 「남은 시간 | 하루 목표」. 옛 자리는 "남은시간 : 15:00 ⓘ" 대시 밑줄 한 줄이
                 전부였고, 그 한 줄이 **설명과 이동을 겸했다**(UX 감사 3e). 여기서 역할을 가른다:
-                ⓘ = 설명(툴팁) · 「변경 ›」 = 이동.
+                ⓘ = 설명(툴팁) · 「바꾸기 ›」 = 이동.
+
+                2026-09-24 — 2열 「남은 시간 | 하루 목표」를 남은 시간 타일 하나 + 목표 캡션 한 줄로 바꿨다. 목표는
+                게이지의 분모라 남은 시간과 같은 체급(세리프 24)일 이유가 없고, 두 열에선 「01:00:00」 + 알약이 149px
+                열에 안 들어 알약이 떨어지며 두 상자를 137px로 부풀렸다(사용자 지적 · 설계 B안).
 
                 주의 — **목표가 있으면 남은 시간이 0이어도 그린다.** 옛 배치는 `remaining > 0`으로 이 줄을
                 잠갔는데, 그러면 **목표를 다 채운 사람은 홈에서 목표를 바꿀 길이 통째로 사라졌다** —
                 카드 안 `GoalHandle`은 목표가 0일 때만 서기 때문이다. 달성이 문을 닫아선 안 된다.
               */}
-              {/* 두 타일 — 「남은 시간」은 버터(모드 무관 정보색), 「하루 목표」는 옅은 세이지(모드색). 타일 그림자는
-                  화면당 이 둘뿐이라 큰 흐림 예산 안이다(설계 §6). */}
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: 12, marginTop: 16 }}>
-                <div style={{ ...TILE, background: 'var(--butterBg, #F1E6C3)', boxShadow: `${TILE_HIGHLIGHT}, 5px 5px 12px rgba(150, 125, 60, 0.14)` }}>
+              {/* 남은 시간 타일 — 버터(모드 무관 정보색), 가로 한 줄(라벨 왼쪽 · 값 오른쪽). 타일 그림자는 화면당
+                  이것 하나다(설계 §6 예산). */}
+              <div
+                style={{
+                  ...TILE,
+                  flexDirection: 'row',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  gap: 8,
+                  marginTop: 16,
+                  background: 'var(--butterBg, #F1E6C3)',
+                  boxShadow: `${TILE_HIGHLIGHT}, 5px 5px 12px rgba(150, 125, 60, 0.14)`,
+                }}
+              >
                   {/* ⓘ는 라벨에 붙는다 — 값이 아니라 「남은 시간」이라는 개념을 설명하는 손잡이다. */}
                   <button
                     type="button"
@@ -1657,50 +1672,6 @@ export function Home({
                   </button>
                   <div style={{ ...SERIF_VALUE, fontSize: 24 }}>{formatClock(remaining)}</div>
                 </div>
-                <div
-                  style={{
-                    ...TILE,
-                    flexDirection: 'row',
-                    alignItems: 'center',
-                    justifyContent: 'space-between',
-                    // 목표가 1시간을 넘거나(「1:00:00」) 좁은 폰이면 값과 손잡이가 한 줄에 안 든다 — 손잡이가 아래로 내려선다.
-                    flexWrap: 'wrap',
-                    gap: 6,
-                    paddingRight: 10,
-                    background: 'var(--adaptiveBlue50, #E1E8D4)',
-                    boxShadow: `${TILE_HIGHLIGHT}, var(--tileShadow)`,
-                  }}
-                >
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: 4, minWidth: 0 }}>
-                    <span style={{ fontSize: 15, color: 'var(--adaptiveBlue900, #283B27)' }}>하루 목표</span>
-                    <span style={{ ...SERIF_VALUE, fontSize: 24 }}>{formatClock(goal)}</span>
-                  </div>
-                  {/* 목표로 가는 명시적 문 — 1.5px 실선 보조 손잡이(규칙 1). 전면광고 로드에 1~2초가 걸려
-                      그동안 라벨이 그대로면 눌러도 아무 일 없는 것처럼 보인다 — 대기 사실이 목표값보다 우선이다. */}
-                  <button
-                    type="button"
-                    onClick={onGoGoal}
-                    disabled={goalAdPending}
-                    style={{
-                      ...SOFT_OUTLINE,
-                      flex: 'none',
-                      minHeight: 44,
-                      padding: '0 12px',
-                      fontFamily: 'inherit',
-                      fontSize: 15,
-                      fontWeight: 700,
-                      cursor: 'pointer',
-                    }}
-                  >
-                    {goalAdPending ? '준비 중…' : goal > 0 ? '변경' : '정하기'}
-                  </button>
-                </div>
-              </div>
-              {overflow > 0 && (
-                <Text typography="st12" color="grey600" style={{ display: 'block', marginTop: 8 }}>
-                  +{formatDuration(overflow)} 더 읽었어요
-                </Text>
-              )}
               {showNote && (
                 <RemainingNote
                   goalSeconds={goal}
@@ -1709,7 +1680,7 @@ export function Home({
                   remainingSeconds={remaining}
                   carryover={dashboard.carryover}
                 >
-                  {/* 목표 손잡이는 위 「변경」 손잡이가 가져갔다 — 같은 일을 하는 문이 한 상자에 둘이면
+                  {/* 목표 손잡이는 아래 캡션 줄 「바꾸기」가 가져갔다 — 같은 일을 하는 문이 한 상자에 둘이면
                       어느 쪽이 진짜인지 사용자가 고민한다.
                       광고는 죄책감이 뜬 이 자리에만 나타난다. 문구에 "광고"를 명시해 광고 위장 금지 조항을 지킨다. */}
                   {showWaiverButton(dashboard.carriedDebtSeconds, dashboard.debtWaiverAvailable, REWARD_AD_GROUP_ID) && (
@@ -1731,6 +1702,80 @@ export function Home({
                   )}
                 </RemainingNote>
               )}
+              {/* 목표 캡션 줄 — 목표는 게이지의 분모라 세리프 값이 아니라 회색 말 한 줄이고, 손잡이도 알약이 아니라
+                  글자다(사용자 지적 2026-09-24: 강조될 필요 없는 요소가 UI를 엉성하게 했다). 초과분은 같은 줄 오른쪽. */}
+              <div
+                data-goal-caption=""
+                style={{
+                  display: 'flex',
+                  flexWrap: 'wrap', // 좁은 폰 + 긴 목표 + 초과분이 겹치면 초과분이 다음 줄로 — 넘치는 것보다 낫다
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  gap: '4px 8px',
+                  marginTop: 10,
+                  padding: '0 6px',
+                  minHeight: 24,
+                }}
+              >
+                <div
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 6,
+                    fontSize: 14,
+                    color: 'var(--adaptiveGrey600, #5B5A4D)',
+                    whiteSpace: 'nowrap',
+                  }}
+                >
+                  {/* 한 텍스트 노드로 — 「0초」가 아니라 「없음」: 목표 0 + 밀린 시간이면 이 줄이 선다(웹은 0 저장이 된다). */}
+                  {`하루 목표 ${goal > 0 ? formatDuration(goal) : '없음'}`}
+                  <span aria-hidden="true">·</span>
+                  {/* 전면광고 로드에 1~2초가 걸려 그동안 글자가 그대로면 눌러도 아무 일 없는 것처럼 보인다 — 대기 사실이
+                      목표값보다 우선이다. 줄 높이 24는 지키고 손가락 몫 44는 음수 여백 + 패딩으로 든다. */}
+                  <button
+                    type="button"
+                    onClick={onGoGoal}
+                    disabled={goalAdPending}
+                    style={{
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: 1,
+                      minHeight: 44,
+                      padding: '10px 6px',
+                      margin: '-10px -6px',
+                      border: 0,
+                      background: 'transparent',
+                      fontFamily: 'inherit',
+                      fontSize: 14,
+                      fontWeight: goalAdPending ? 400 : 700,
+                      color: goalAdPending ? 'var(--adaptiveGrey600, #5B5A4D)' : 'var(--adaptiveBlue700, #3F5A3C)',
+                      cursor: 'pointer',
+                    }}
+                  >
+                    {goalAdPending ? '준비 중…' : goal > 0 ? '바꾸기' : '정하기'}
+                    {!goalAdPending && (
+                      <svg
+                        width="14"
+                        height="14"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        strokeWidth="2.2"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        aria-hidden="true"
+                        style={{ stroke: 'currentColor', flex: 'none' }}
+                      >
+                        <path d="M9 6l6 6-6 6" />
+                      </svg>
+                    )}
+                  </button>
+                </div>
+                {overflow > 0 && (
+                  <Text typography="st12" color="grey600">
+                    +{formatDuration(overflow)} 더 읽었어요
+                  </Text>
+                )}
+              </div>
             </div>
           ) : (
             // 목표 0 — 게이지 줄이 통째로 없어 상자로 갈 길이 없다. 목표를 정하러 가는 유일한 손잡이가 여기 남는다.

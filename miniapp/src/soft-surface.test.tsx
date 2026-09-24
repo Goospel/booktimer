@@ -185,7 +185,7 @@ describe('그림자 예산 — 큰 흐림은 허용표 자리에만', () => {
     'App.tsx': 1, // 탭바 가운데 타이머 원(시작 상태 4px 4px 10px)
     'coachmark.tsx': 1, // 코치마크 말풍선
     'History.tsx': 2, // 스탯 타일 둘(연속 · 부푼 축소판 — 한 상수를 두 타일이 씀)
-    'Home.tsx': 2, // 히어로 2열 타일(남은 시간 · 하루 목표)
+    'Home.tsx': 1, // 히어로 남은 시간 타일(하루 목표는 2026-09-24 캡션 줄로 내려가 그림자가 없다)
     'Library.tsx': 1, // 서재 「여백에 글쓰기」 채움 버튼(var(--puffShadow))
     'StudyLibrary.tsx': 1, // 공부 서재 「회독 +1」 채움 버튼(var(--puffShadow))
     'ui.tsx': 2, // PUFF 상수 정의 · 시트 패널
