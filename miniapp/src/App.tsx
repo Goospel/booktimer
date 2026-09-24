@@ -1413,7 +1413,7 @@ export function App() {
       onTimerChange={applyTimer}
       onStartTimer={startTimer}
       onGraphChange={applyGraph}
-      // 홈 목표 손잡이(「변경 ›」·GoalHandle)는 독서 히어로에만 선다 — 공부 하루 목표는 회당 시간으로 대체됐다.
+      // 홈 목표 손잡이(캡션 줄 「바꾸기 ›」·GoalHandle)는 독서 히어로에만 선다 — 공부 하루 목표는 회당 시간으로 대체됐다.
       onGoGoal={goToGoal}
       goalAdPending={goalAdPending}
       onGoSettings={() => setView('settings')}
@@ -2088,7 +2088,7 @@ export function MainTabs({
  * 여기서는 <b>속만</b> 채우므로, 안내를 닫아도 카드가 제자리에서 타이머로 돌아올 뿐 화면이 밀리지 않는다.
  *
  * <p>⚠️ 첫 측정이 멀어지지 않는다 — 이 앱에서 측정을 여닫는 자리는 <b>탭바 가운데 원</b>이고 이 카드는
- * 원래부터 버튼이 아니었다. 카드 안 손잡이(ⓘ·「변경 ›」·「목표 정하기」)는 안내가 떠 있는 동안만 물러난다.
+ * 원래부터 버튼이 아니었다. 카드 안 손잡이(ⓘ·「바꾸기 ›」·「목표 정하기」)는 안내가 떠 있는 동안만 물러난다.
  *
  * <p>큰 버튼과 ✕는 <b>형제</b>다(중첩 아님) — 버튼 안의 버튼은 잘못된 DOM이라 React가 경고한다.
  * ✕가 뒤에 그려져 겹치는 자리에서 위에 얹히므로 z 층을 따로 쌓지 않는다.

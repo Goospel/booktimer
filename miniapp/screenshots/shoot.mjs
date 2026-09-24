@@ -168,12 +168,14 @@ await shot('04-history')
 // 한 줄을 누른 뒤 「하루 목표 바꾸기」를 또 눌렀는데, 그 줄이 2열 스탯 행 + 「변경 ›」 알약으로
 // 갈리면서 두 단계가 한 단계가 됐다(그리고 라벨도 「남은 시간」으로 띄어쓰기가 생겼다).
 // 목표가 0이면 알약 문구가 「정하기 ›」라 둘 다 받는다 — 목 픽스처는 목표 30분이라 「변경 ›」이다.
+// → 2026-09-24: 2열이 「남은 시간 타일 + 목표 캡션 줄」로 바뀌며 알약이 캡션 줄의 글자 「바꾸기 ›」가 됐다.
+//   캡션 줄 표식(`data-goal-caption`)으로 잡고, 목표 0 경로(카드 안 「목표 정하기」)는 문구로 받는다.
 await tab('홈')
 await page.evaluate(() => window.scrollTo(0, 0))
 await page.evaluate(() => {
-    const b = [...document.querySelectorAll('button')].find((x) =>
-        /변경|정하기/.test(x.textContent ?? ''),
-    )
+    const b =
+        document.querySelector('[data-goal-caption] button') ??
+        [...document.querySelectorAll('button')].find((x) => /정하기/.test(x.textContent ?? ''))
     if (!b) throw new Error('목표 진입 알약을 못 찾았다') // 문구가 바뀌면 엉뚱한 그림 대신 여기서 죽는다
     b.click()
 })

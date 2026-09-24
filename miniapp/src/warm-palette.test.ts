@@ -113,7 +113,7 @@ describe('톤 조율 A — 토큰 정의와 폴백', () => {
   const root = css.slice(css.indexOf('html:root {'), css.indexOf('}', css.indexOf('html:root {')));
 
   /**
-   * `--tileShadow`는 폴백 없이 `var()`로만 읽힌다(홈 2열 타일 · 기록 스탯 타일). 정의가 빠지면 선언이 무효가 돼
+   * `--tileShadow`는 폴백 없이 `var()`로만 읽힌다(기록 스탯 타일 「읽은 날」·「총 시간」 — 홈 하루 목표 타일은 2026-09-24 캡션으로 걷혀 이제 안 쓴다). 정의가 빠지면 선언이 무효가 돼
    * 타일 네 곳의 그림자가 <b>조용히</b> 사라진다(리뷰 M5 — 정의를 지워도 초록이었다).
    */
   it('--tileShadow가 html:root에 정의돼 있고 작은 부풂(5px 5px 12px)이다', () => {

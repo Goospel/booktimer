@@ -76,8 +76,11 @@ const supportedMock = vi.mocked(notificationAgreementSupported);
 const requestAgreementMock = vi.mocked(requestNotificationAgreement);
 
 const BUTTON_LABEL = '광고 보고 밀린 하루 지우기';
-/** 목표 진입 알약 — ⓘ(설명)와 갈라선 「이동」 쪽 손잡이(감사 3e → 시안 4a). */
-const GOAL_PILL = '>변경<'; // 버튼 글자 그대로 — 부분 문자열 「변경」은 다른 문구에도 걸린다
+/**
+ * 목표 손잡이 — ⓘ(설명)와 갈라선 「이동」 쪽 손잡이(감사 3e → 시안 4a). 2026-09-24 알약 「변경」에서 캡션 줄의
+ * 글자 「바꾸기 ›」로 강등됐다(목표는 게이지 분모라 남은 시간과 같은 체급일 이유가 없다 — 사용자 지적).
+ */
+const GOAL_PILL = '>바꾸기<'; // 버튼 글자 그대로(뒤에 › svg가 붙어 `>바꾸기<svg`) — 부분 문자열은 「하루 목표 바꾸기」에도 걸린다
 /** ⓘ 툴팁이 말하는 이월 규칙 — 접혔는지 펼쳤는지를 이 문구로 잰다. */
 const CARRYOVER_NOTE = '내일 남은 시간에 더해져요';
 /** 이월을 끈 사용자가 듣는 말 — 위 문구는 그 사람에게 **거짓**이라 갈라 말한다. */
@@ -386,13 +389,17 @@ describe('히어로 프레이밍 (렌더)', () => {
     expect(markup).toContain('45:00'); // 3600 − 900
   });
 
-  it('보조 줄이 2열 통계다 — 「남은 시간 | 하루 목표」가 나란히 선다', () => {
+  /**
+   * 목표는 게이지의 분모다 — 남은 시간(매 세션 줄고 광고 손잡이의 입구)과 같은 세리프 24로 나란히 서면 「둘 다
+   * 중요」로 읽힌다(사용자 지적 2026-09-24). 남은 시간만 타일로 남고 목표는 캡션 한 줄로 내려간다.
+   */
+  it('보조 줄은 남은 시간 타일 하나 + 목표 캡션이다 — 목표값은 시계가 아니라 말로 작게 선다', () => {
     const markup = renderHome({ remainingSeconds: 900, todayGoalSeconds: 3600 });
 
     expect(markup).toContain('남은 시간');
-    expect(markup).toContain('하루 목표');
     expect(markup).toContain('15:00'); // 남은 시간
-    expect(markup).toContain('01:00:00'); // 하루 목표
+    expect(markup).toContain('하루 목표 1시간'); // 캡션 — 한 텍스트 노드(`<!-- -->`로 안 쪼개진다)
+    expect(markup).not.toContain('01:00:00'); // 세리프 시계로 선 옛 목표 타일
     expect(markup).not.toContain('남은시간 : '); // 대시 밑줄 한 줄이던 옛 자리
     expect(markup).not.toContain('목표까지'); // 목표만 재던 더 옛 라벨
   });
@@ -475,14 +482,15 @@ describe('새싹 표식 (SproutMark)', () => {
 });
 
 /**
- * 목표 진입 — 「변경 ›」 알약이 목표 화면으로 가는 <b>명시적</b> 문이다(감사 3e → 시안 4a).
+ * 목표 진입 — 캡션 줄의 글자 손잡이 「바꾸기 ›」가 목표 화면으로 가는 <b>명시적</b> 문이다(감사 3e → 시안 4a →
+ * 2026-09-24 알약 「변경」에서 글자로 강등).
  *
  * <p>옛 배치는 "남은시간 : 15:00 ⓘ" 한 줄이 <b>설명과 이동을 겸했다</b> — ⓘ는 설명으로 읽히지
  * 이동으로 읽히지 않아, 홈에서 목표를 바꾸는 길이 사실상 숨어 있었다. 역할을 둘로 가른다:
- * <b>ⓘ = 설명(툴팁) · 「변경 ›」 = 이동</b>.
+ * <b>ⓘ = 설명(툴팁) · 「바꾸기 ›」 = 이동</b>.
  */
-describe('목표 진입 알약 (변경 ›)', () => {
-  it('하루 목표 값 아래 선다 — 목표를 바꾸는 문이라고 스스로 말한다', () => {
+describe('목표 손잡이 (바꾸기 ›)', () => {
+  it('하루 목표 캡션 뒤에 선다 — 목표를 바꾸는 문이라고 스스로 말한다', () => {
     const markup = renderHome({ todayGoalSeconds: 3600 });
 
     expect(markup).toContain(GOAL_PILL);
@@ -507,14 +515,34 @@ describe('목표 진입 알약 (변경 ›)', () => {
   /**
    * 목표 0인데 통계 행이 뜨는 유일한 칸 — 게이지 최대치는 「목표 + 밀린」이라 목표가 0이어도
    * 밀린 시간이 있으면 `progress !== null`이 된다(미니앱 목표 화면은 0 저장을 막지만 웹은 된다).
-   * 그때 「하루 목표 00:00」 옆에 「변경 ›」이 서면 <b>없는 값을 바꾸라는 말</b>이 된다 —
+   * 그때 「하루 목표 0초 · 바꾸기 ›」가 서면 <b>없는 값을 바꾸라는 말</b>이 된다 —
    * 옛 경로의 `GoalHandle`이 그 상태에서 「목표 정하기」였던 것과 말을 맞춘다.
    */
-  it('바꿀 목표가 없으면 「정하기」라 말한다 — 00:00을 「변경」하라는 건 말이 안 된다', () => {
+  it('바꿀 목표가 없으면 「없음 · 정하기」라 말한다 — 없는 목표를 바꾸라는 건 말이 안 된다', () => {
     const markup = renderHome({ todayGoalSeconds: 0, carriedDebtSeconds: 1800, carryover: true });
 
     expect(markup).toContain('>정하기<');
     expect(markup).not.toContain(GOAL_PILL);
+    expect(markup).toContain('하루 목표 없음'); // 「0초」가 아니다 — formatDuration(0)은 「0초」다
+  });
+
+  /**
+   * 스크린리더엔 무엇을 바꾸는지까지 말한다 — 보이는 글자 「바꾸기」는 옆 캡션에 기대는 한 단어라, 버튼만
+   * 훑는 탐색에선 뜻이 없다. 대기 중엔 이름을 덮지 않아 「준비 중…」이 그대로 이름이 된다.
+   */
+  it('손잡이 이름은 「하루 목표 바꾸기/정하기」, 대기 중엔 「준비 중…」 그대로다', () => {
+    const handleTag = (markup: string) => {
+      const at = markup.indexOf('<button', markup.indexOf('data-goal-caption'));
+      return markup.slice(at, markup.indexOf('>', at) + 1);
+    };
+    const pending = handleTag(renderHome({ todayGoalSeconds: 3600 }, { goalAdPending: true }));
+
+    expect(handleTag(renderHome({ todayGoalSeconds: 3600 }))).toContain('aria-label="하루 목표 바꾸기"');
+    expect(handleTag(renderHome({ todayGoalSeconds: 0, carriedDebtSeconds: 1800, carryover: true }))).toContain(
+      'aria-label="하루 목표 정하기"',
+    );
+    expect(pending).toContain('disabled=""'); // 같은 손잡이를 잡았다는 양성 확인
+    expect(pending).not.toContain('aria-label');
   });
 });
 
@@ -533,8 +561,22 @@ describe('광고 손잡이 배선 (수익 경로)', () => {
   /** JSX 주석(`{/* … *\/}`)·블록 주석·줄 주석을 걷어낸 홈 소스 — 「살아 있는 코드」만 남긴다. */
   const homeCode = homeSource.replace(/\{?\/\*[\s\S]*?\*\/\}?/g, '').replace(/^\s*\/\/.*$/gm, '');
 
+  // 식의 맨 앞(`{` 바로 뒤)에 고정한다 — 고정하지 않으면 `{false && showWaiverButton(…) && (<Button`처럼
+  // 앞에 덧댄 조건이 광고를 영영 닫아도 통과했다(리뷰 돌연변이 M9 생존).
   it('노출 술어가 광고 버튼을 직접 연다 — 게이트를 떼면 부채 없는 사람에게도 광고가 뜬다', () => {
-    expect(homeCode).toMatch(/showWaiverButton\([\s\S]{0,200}?\)\s*&&\s*\(\s*<Button/);
+    expect(homeCode).toMatch(/\{\s*showWaiverButton\([\s\S]{0,200}?\)\s*&&\s*\(\s*<Button/);
+  });
+
+  // 캡션 손잡이는 렌더로는 클릭·비활성 배선을 못 잰다(T-149) — 소스로 잠근다. 비활성이 빠지면 전면광고 로드 중
+  // 연타로 광고가 두 장 쌓이고, onClick이 빠지면 목표로 가는 평상시의 문이 조용히 죽는다(리뷰 M1·M4).
+  it('캡션 손잡이가 목표 이동을 부른다', () => {
+    const cap = homeCode.indexOf('data-goal-caption');
+    const at = homeCode.indexOf('<button', cap);
+    const btn = homeCode.slice(at, homeCode.indexOf('style={{', at));
+
+    expect(cap).toBeGreaterThan(-1);
+    expect(btn).toMatch(/onClick=\{onGoGoal\}/);
+    expect(btn).toMatch(/disabled=\{goalAdPending\}/);
   });
 
   it('그 버튼이 ⓘ 툴팁 안에 산다 — 밖으로 나오면 죄책감 없는 화면에 광고가 상주한다', () => {
@@ -560,12 +602,23 @@ describe('광고 손잡이 배선 (수익 경로)', () => {
   it('툴팁의 문은 showNote 하나다 — 조건을 덧대면 빚이 남은 채로 광고가 닫히는 창이 생긴다', () => {
     expect(homeCode).toMatch(/\{\s*showNote\s*&&\s*\(\s*<RemainingNote/);
   });
+
+  // 상자는 ⓘ가 붙은 남은 시간 타일 바로 밑에 펼쳐진다 — 캡션 줄 뒤에 서면 캐럿과 ⓘ 사이에 목표 줄이 끼어
+  // 「어느 손잡이에서 나왔나」가 흐려진다. 펼친 상태는 정적 렌더로 못 가니 소스 순서로 잰다(T-149).
+  it('툴팁은 목표 캡션 줄보다 앞에 선다 — 남은 시간 타일 바로 밑', () => {
+    const note = homeCode.indexOf('<RemainingNote');
+    const caption = homeCode.indexOf('data-goal-caption');
+
+    expect(note).toBeGreaterThan(-1);
+    expect(caption).toBeGreaterThan(-1);
+    expect(note).toBeLessThan(caption);
+  });
 });
 
 /**
  * ⓘ 툴팁 — 「남은 시간」 라벨 옆 ⓘ를 탭하면 통계 행 아래로 펼쳐진다. 역할은 **설명 하나**다:
  * 못 채운 시간이 어떻게 되는지를 말하고, 밀린 게 있으면 내역으로 합을 밝힌다.
- * 목표 손잡이는 통계 행의 「변경 ›」이 가져갔고, **광고 버튼만 이 상자에 남았다**.
+ * 목표 손잡이는 캡션 줄의 「바꾸기 ›」가 가져갔고, **광고 버튼만 이 상자에 남았다**.
  *
  * <p>광고 손잡이는 `children`으로 받는다 — 상자는 표시만 하고 배선(광고·busy)은 홈이 그대로 들고
  * 있어야 조건 술어(`showWaiverButton`)와 상자가 서로를 모른 채 각자 계측된다. 그 둘을 **홈이 잇는지**는
@@ -608,6 +661,14 @@ describe('ⓘ 이월 설명 툴팁', () => {
     expect(off).not.toContain(CARRYOVER_NOTE);
   });
 
+  // 타일이 하나(가로 전폭)가 되며 옛 캐럿 25%(왼쪽 열 가운데)는 뜻을 잃었다 — 「남은 시간」 라벨 밑 고정 px.
+  it('캐럿은 「남은 시간」 라벨 밑 고정 자리다 — 열 비율이 아니다', () => {
+    const markup = note(1800, 0, 900);
+
+    expect(markup).toContain('left:41px');
+    expect(markup).not.toContain('calc(25%');
+  });
+
   it('밀린 게 없으면 내역 줄이 없다 — 목표·남은 시간은 바로 위 통계 행이 이미 말한다', () => {
     const markup = note(1800, 0, 900);
 
@@ -633,11 +694,11 @@ describe('ⓘ 이월 설명 툴팁', () => {
   });
 
   /**
-   * 광고 손잡이가 사는 자리 — 시안 4a가 말하지 않은 자리라 여기서 못 박는다. 「변경 ›」이 목표 손잡이를
-   * 가져갔다고 <b>광고까지 함께 사라지면 수익 경로가 끊긴다</b>. 죄책감(밀린 시간)이 뜬 이 상자가
+   * 광고 손잡이가 사는 자리 — 시안 4a가 말하지 않은 자리라 여기서 못 박는다. 목표 손잡이가 상자 밖으로
+   * 옮겨 갔다고 <b>광고까지 함께 사라지면 수익 경로가 끊긴다</b>. 죄책감(밀린 시간)이 뜬 이 상자가
    * 그 버튼의 유일한 집이다.
    */
-  it('손잡이를 내역 아래에 담는다 — 「변경 ›」이 목표를 가져가도 광고는 이 상자에 남는다', () => {
+  it('손잡이를 내역 아래에 담는다 — 목표 손잡이가 상자 밖으로 가도 광고는 이 상자에 남는다', () => {
     const markup = note(1800, 600, 900, <button type="button">{BUTTON_LABEL}</button>);
 
     expect(markup).toContain(BUTTON_LABEL);
@@ -699,8 +760,10 @@ describe('목표 손잡이 (goalHandleLabel · 렌더)', () => {
   it('타이머 카드에서 손잡이가 빠졌다 — 카드는 숫자와 게이지만 남는다', () => {
     const markup = renderHome({ todayGoalSeconds: 1800 });
 
-    // 접힌 상자 안이라 첫 렌더에는 라벨 자체가 없다 — 카드에 남아 있으면 여기서 잡힌다.
-    expect(markup).not.toContain('하루 목표 바꾸기');
+    // TDS 버튼 라벨로 좁힌다 — 캡션 손잡이의 aria-label도 「하루 목표 바꾸기」라 마크업 전체로 재면 그것에 걸린다.
+    // 목표가 있을 때 카드에 `GoalHandle`(TDS 버튼)이 다시 서면 여기서 잡힌다(양성 쌍: 목표 0이면 「목표 정하기」가 선다 — 아래).
+    expect(markup).toContain('aria-label="하루 목표 바꾸기"'); // 문은 캡션 줄에 있다
+    expect(labelsOf(markup)).not.toContain('하루 목표 바꾸기');
   });
 
   // 실기기 제보(2026-08-14): 작은 칩이라 「딱 봐도 버튼」으로 안 읽혔다 — 같은 상자에 선 광고 버튼과
@@ -1863,16 +1926,17 @@ describe('홈 히어로 위계 (시안 2a)', () => {
     expect(tag).toContain('--adaptiveGrey600');
   });
 
-  it('2열 라벨은 15다 — 값(세리프 24)보다 또렷하게 작아야 라벨로 읽힌다', () => {
+  it('남은 시간 라벨은 15, 목표 캡션은 14다 — 캡션은 라벨보다도 한 단 낮은 보조 정보다', () => {
     const markup = renderHome();
 
     expect(tagBefore(markup, '남은 시간')).toContain('font-size:15px');
-    expect(tagBefore(markup, '하루 목표')).toContain('font-size:15px');
+    expect(tagBefore(markup, '하루 목표')).toContain('font-size:14px');
   });
 });
 
 /**
- * Soft 히어로(시안 Soft-Home) — 연필선 카드가 부푼 면이 되고, 게이지는 눌린 트랙, 「변경」은 1.5px 실선 손잡이다.
+ * Soft 히어로(시안 Soft-Home) — 연필선 카드가 부푼 면이 되고, 게이지는 눌린 트랙이다. 목표 손잡이는 한때 1.5px
+ * 실선 알약 「변경」이었다가 2026-09-24 캡션 줄의 테두리 없는 글자 「바꾸기 ›」가 됐다(아래 단언이 알약 복귀를 막는다).
  * 정적 렌더라 좌표는 못 재니 <b>그 모양을 만드는 인라인 값</b>을 자리마다 못 박는다.
  */
 describe('Soft 히어로 (PR-2)', () => {
@@ -1895,16 +1959,23 @@ describe('Soft 히어로 (PR-2)', () => {
     expect(tagWith(renderHome(), 'data-gauge-track')).toContain('var(--dentShadow');
   });
 
-  it('「변경」은 1.5px 실선 보조 손잡이이고 손가락 몫 44를 든다', () => {
+  /**
+   * 「바꾸기」는 테두리 없는 글자 손잡이다 — 알약으로 되돌아가면 목표 변경이 다시 「중요한 버튼」처럼 튄다
+   * (사용자 지적 2026-09-24). 줄 높이 24를 지키면서 손가락 몫 44는 패딩으로 든다.
+   */
+  it('「바꾸기」는 글자 손잡이이고 손가락 몫 44를 든다 — 실선 알약으로 되돌아가지 않는다', () => {
     const markup = renderHome();
     const at = markup.indexOf(GOAL_PILL);
     const tag = markup.slice(markup.lastIndexOf('<button', at), at);
 
-    expect(tag).toContain('1.5px solid var(--adaptiveBlue700');
+    expect(at).toBeGreaterThan(-1);
     expect(tag).toContain('min-height:44px');
+    expect(tag).toContain('color:var(--adaptiveBlue700');
+    expect(tag).toContain('border:0');
+    expect(tag).not.toContain('1.5px solid');
   });
 
-  it('남은 시간 타일은 버터, 하루 목표 타일은 옅은 세이지다 — 정보색과 모드색이 갈린다', () => {
+  it('남은 시간 타일은 버터다 — 정보색', () => {
     const markup = renderHome();
 
     expect(markup).toContain('background:var(--butterBg');

@@ -461,19 +461,19 @@ describe('홈 — 공부 모드 렌더', () => {
   });
 
   /**
-   * 하루 목표 폐기(2026-09-13, Q6) — 게이지·「목표 정하기」·「변경 ›」·새싹이 공부 히어로에서 전부 빠진다.
+   * 하루 목표 폐기(2026-09-13, Q6) — 게이지·「목표 정하기」·목표 캡션 줄·새싹이 공부 히어로에서 전부 빠진다.
    *
    * <p>픽스처가 <b>옛 서버 필드(`goalSeconds`)를 일부러 싣는다</b> — 서버는 2026-09-14(#1132)에 이 필드를
    * 걷었지만, 화면이 같은 이름을 다시 읽기 시작하면(달성 = 새싹) 여기서 죽어야 한다. 짝(양성 대조)은 같은 부품을
    * 그리는 독서 렌더(아래 「독서 모드 회귀 가드」의 「하루 목표」)와 독서 새싹 테스트(`home.test.tsx`)다.
    */
-  it('공부 히어로엔 하루 목표 흔적이 없다 — 게이지·목표 정하기·변경 ›·새싹 0건, 오늘 공부한 시간은 그대로', () => {
+  it('공부 히어로엔 하루 목표 흔적이 없다 — 게이지·목표 정하기·목표 캡션 줄·새싹 0건, 오늘 공부한 시간은 그대로', () => {
     const legacy = { ...IDLE_STUDY, todaySeconds: 1_800, goalSeconds: 1_800 } as StudyState;
     for (const study of [legacy, { ...IDLE_STUDY, todaySeconds: 0, goalSeconds: 0 } as StudyState]) {
       const markup = renderHome('study', {}, study);
       expect(markup).not.toContain('하루 목표');
       expect(markup).not.toContain('목표 정하기');
-      expect(markup).not.toContain('변경 ›');
+      expect(markup).not.toContain('data-goal-caption');
       expect(markup).not.toContain('남은 시간');
       expect(markup).not.toContain('data-sprout');
       expect(markup).not.toContain('오늘 목표 달성');
@@ -677,6 +677,7 @@ describe('홈 — 독서 모드 회귀 가드', () => {
     expect(markup).toContain('오늘 읽은 시간');
     expect(markup).toContain('무엇으로 측정할까요?');
     expect(markup).toContain('하루 목표');
+    expect(markup).toContain('data-goal-caption'); // 공부 히어로 부재 단언의 양성 쌍
   });
 
   it('독서 모드에선 축하 배너가 그대로 뜬다 — 위 게이트가 배너를 통째로 죽이지 않았다', () => {
