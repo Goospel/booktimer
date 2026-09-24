@@ -486,8 +486,8 @@ export function RoomView({
                   maxWidth: '78%',
                   padding: '8px 12px',
                   borderRadius: 14,
-                  background: m.mine ? 'var(--adaptiveBlue50, #DCE8D6)' : 'var(--softDent, #E6ECE3)',
-                  color: 'var(--adaptiveGrey800, #232C21)',
+                  background: m.mine ? 'var(--adaptiveBlue50, #E1E8D4)' : 'var(--softDent, #EAE5D9)',
+                  color: 'var(--adaptiveGrey800, #2A2921)',
                   fontSize: 15,
                   lineHeight: 1.45,
                   whiteSpace: 'pre-wrap',
@@ -526,12 +526,12 @@ export function RoomView({
             flex: 1,
             padding: 10,
             border: 'none',
-            color: 'var(--adaptiveGrey800, #232C21)',
+            color: 'var(--adaptiveGrey800, #2A2921)',
             fontSize: 15,
             resize: 'none',
             ...(writable
               ? {}
-              : { background: 'var(--adaptiveGrey200, #D6DFD2)', boxShadow: 'none', color: 'var(--adaptiveGrey600, #4E5A4B)' }),
+              : { background: 'var(--adaptiveGrey200, #DED8CA)', boxShadow: 'none', color: 'var(--adaptiveGrey600, #5B5A4D)' }),
           }}
         />
         <Button size="medium" disabled={!writable || loading || busy || draft.trim() === ''} onClick={onSend}>

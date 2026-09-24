@@ -214,8 +214,10 @@ describe('홈 렌더 배선', () => {
     expect(renderHome()).not.toContain(BUTTON_LABEL);
   });
 
-  it('진행률 게이지가 세이지 그라데이션으로 찬다 — 다른 초록이 섞이면 화면에 색이 둘이 된다', () => {
-    expect(renderHome()).toContain('linear-gradient(90deg, #8FB087, #5B7F55)');
+  it('진행률 게이지가 세이지 단색으로 찬다 — 그라데이션은 재료를 하나 더 얹는다(톤 조율 A)', () => {
+    // 게이지 막대만 집는다 — 같은 토큰을 캐러셀 점(DOT_ON)도 쓰므로 토큰 문자열만으로는 게이지를 못 가린다.
+    expect(renderHome()).toMatch(/width:calc\(\(100% - 6px\)[^"]*background:var\(--adaptiveBlue500, #5B7F55\)"/);
+    expect(renderHome()).not.toContain('linear-gradient(90deg');
     expect(renderHome()).not.toContain('#2F8F6B');
   });
 });
@@ -1231,8 +1233,8 @@ describe('표지 캐러셀', () => {
   });
 
   it('트랙 세로 여백이 선택 표지의 확대분을 담는다 — 안 담으면 커진 표지가 트랙 밖으로 삐져나간다', () => {
-    // 확대분 + 고른 칸의 3px 링도 1.1배로 커진다(링 윗변이 스크롤 영역에 잘리지 않게).
-    expect(TRACK_V_PAD).toBeGreaterThanOrEqual((COVER_HEIGHT * 1.1 - COVER_HEIGHT) / 2 + 3 * 1.1);
+    // 확대분 + 고른 칸의 후광(틈 3 + 테 3 = 6px)도 1.1배로 커진다(후광 윗변이 스크롤 영역에 잘리지 않게).
+    expect(TRACK_V_PAD).toBeGreaterThanOrEqual((COVER_HEIGHT * 1.1 - COVER_HEIGHT) / 2 + 6 * 1.1);
   });
 
   it('표지 높이는 표지 컴포넌트와 같은 식 — 어긋나면 여백 계산이 실제 표지를 못 따라간다', () => {
@@ -1909,24 +1911,57 @@ describe('Soft 히어로 (PR-2)', () => {
     expect(markup).toContain('color:var(--butterInk');
   });
 
-  it('캐러셀의 고른 칸은 3px 링 + 체크 배지로 선다(흐림으로 지우지 않는다)', () => {
+  /**
+   * 「후광」(선택 표시 H안, 2026-09-24) — 진한 3px 액자가 부드러운 화면에서 혼자 딱딱하게 튀어(사용자) 카드색 틈 3px +
+   * 중간 세이지(Blue500) 테 3px로 바꿨다. 잔디 「오늘」 링(`TODAY_RING`)과 같은 「틈 + 세이지」 문법이다.
+   *
+   * <p>⚠️ 옛 단언 `'0 0 0 3px'`는 새 문자열의 <b>틈</b>(카드색 3px)에도 들어 있어 우연히 통과한다 — 판별하는 조각으로 잰다.
+   */
+  it('캐러셀의 고른 칸은 후광(카드색 틈 3 + 세이지 테 3) + 체크 배지로 선다(흐림으로 지우지 않는다)', () => {
     const books = [book(1, '데미안'), book(2, '사피엔스')];
     const markup = renderHome({ readingBooks: books }, { selectedBookId: 1 });
     const at = markup.indexOf('aria-current="true"');
     const cell = markup.slice(markup.lastIndexOf('<button', at), markup.indexOf('</button>', at));
+    const button = cell.slice(0, cell.indexOf('>') + 1);
 
-    expect(cell).toContain('0 0 0 3px');
+    expect(button).toContain('box-shadow:0 0 0 3px var(--adaptiveGrey100, #FBF9F4), 0 0 0 6px var(--adaptiveBlue500, #5B7F55)');
+    expect(button).toContain('border-radius:8px'); // 후광이 둥글게 흐르려면 칸 모서리도 둥글어야 한다
     expect(cell).toContain('data-check-badge');
     expect(markup).toContain('opacity:0.7'); // 안 고른 칸은 .7 — .45는 40대 이상에게 지워진 것으로 읽혔다
   });
 
-  it('모드 세그먼트는 15이고, 고른 쪽이 진한 채움이다', () => {
+  it('체크 배지는 밝은 원 + 세이지 테 + 세이지 체크다 — 진한 채움은 탭바 원 하나다(선택 표시 H안)', () => {
+    const markup = renderHome({ readingBooks: [book(1, '데미안'), book(2, '사피엔스')] }, { selectedBookId: 1 });
+    const at = markup.indexOf('data-check-badge');
+    const badge = markup.slice(markup.lastIndexOf('<span', at), markup.indexOf('</span>', at));
+
+    // 양성 먼저 — 배지 조각을 제대로 잘랐는지(아래 부재 단언이 공허하지 않은지) 같은 렌더에서 확인한다(T-149).
+    expect(badge).toContain('background:var(--adaptiveGrey100');
+    expect(badge).toContain('border:2px solid var(--adaptiveBlue500');
+    expect(badge).toContain('stroke:var(--adaptiveBlue700');
+    expect(badge).not.toContain('background:var(--adaptiveBlue700');
+    expect(badge).not.toContain('--filledInk');
+  });
+
+  it('캐러셀 표지는 모서리 8이다 — 안쪽이 4로 각지면 후광이 둥글게 흐르지 않는다', () => {
+    const markup = renderHome({ readingBooks: [book(1, '데미안'), book(2, '사피엔스')] }, { selectedBookId: 1 });
+    const at = markup.indexOf('data-cover-title="사피엔스"'); // 안 고른 칸도 같은 모서리 — 스와이프 중 모양이 튀지 않게
+    const cell = markup.slice(at, markup.indexOf('</button>', at));
+
+    expect(cell).toContain('>사</div>'); // 자리 표지(CoverInitial)까지 잘렸다
+    expect(cell.slice(cell.indexOf('>') + 1)).toContain('border-radius:8px');
+  });
+
+  it('모드 세그먼트는 15이고, 고른 쪽은 밝은 칸 + 진한 글자다 — 홈의 진한 채움은 탭바 원 하나다(톤 조율 A)', () => {
     const markup = renderHome();
     const at = markup.indexOf('aria-pressed="true"');
     const tag = markup.slice(at, markup.indexOf('>', at));
 
     expect(tag).toContain('font-size:15px');
-    expect(tag).toContain('background:var(--adaptiveBlue700');
+    expect(tag).toContain('background:var(--adaptiveGrey100');
+    expect(tag).toContain('color:var(--adaptiveBlue700');
+    expect(tag).toContain('box-shadow:'); // 작은 부풂 — 고른 칸이 트랙 위로 떠야 「고른 쪽」이 읽힌다
+    expect(tag).not.toContain('background:var(--adaptiveBlue700');
   });
 });
 
@@ -1988,7 +2023,7 @@ describe('목표 달성 메달 (PR-2)', () => {
     const tag = markup.slice(markup.lastIndexOf('<button', at), at);
 
     // 맨 <button>이라 `--btn-filled` 마커는 원래 붙을 수 없다 — 부재가 아니라 옅은 세이지 바탕을 양성으로 본다.
-    expect(tag).toContain('background:var(--adaptiveBlue50');
+    expect(tag).toContain('background:var(--adaptiveBlue50,'); // 경계 `,` — Blue500에 안 맞게
   });
 
   /**

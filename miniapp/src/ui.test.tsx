@@ -1,5 +1,6 @@
 import { TDSMobileProvider } from '@toss/tds-mobile';
 import { readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
 import type { ReactNode } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
@@ -13,13 +14,13 @@ import {
   COVER_PALETTE,
   ErrorMessage,
   GrassGrid,
-  PENCIL_FRAME,
   Screen,
   Sheet,
   coverColor,
   coverSource,
   initialOf,
 } from './ui';
+import { sourceFiles, stripComments } from './source-scan';
 import { graph, stubLocalStorage, userAgent } from './test-fixtures';
 
 // 홈이 렌더 중에 알림 동의 캐시를 읽는다. 여기선 describe 본문에서도 홈을 그리므로(수집 시점) 모듈 최상단에서 심는다.
@@ -162,7 +163,7 @@ describe('잔디 렌더', () => {
     // 웹 app.css --grass-0..4 와 같은 값(잔디 색의 단일 출처는 웹 브랜드 팔레트다).
     // 토큰 경유 — 공부 모드가 `body.study-mode`에서 이 토큰을 파랑 사다리로 갈아 끼운다.
     // 리터럴은 fallback으로 남아 독서 렌더의 색은 한 픽셀도 안 바뀐다.
-    const colors = ['#E3E9E0', '#C9DAC4', '#A3C09B', '#6E9565', '#3F5A3C']; // Soft 범례 5칸
+    const colors = ['#E7E2D5', '#CFD9C0', '#A9BD99', '#6E9565', '#3F5A3C']; // Soft 범례 5칸(톤 조율 A)
     colors.forEach((color, i) => {
       expect(markup).toContain(`background:var(--grass${i}, ${color})`);
     });
@@ -260,7 +261,7 @@ describe('잔디 오늘 칸 링 (GrassGrid today)', () => {
 
   it('링은 blur 0 두 겹이다 — 흐린 그림자는 칸마다 재래스터를 부른다(§6 · 안드로이드 72%)', () => {
     expect(render('2026-09-23')).toContain(
-      'box-shadow:0 0 0 2px var(--adaptiveGrey100, #F9FBF7), 0 0 0 4.5px var(--adaptiveBlue700, #3F5A3C)',
+      'box-shadow:0 0 0 2px var(--adaptiveGrey100, #FBF9F4), 0 0 0 4.5px var(--adaptiveBlue700, #3F5A3C)',
     );
   });
 
@@ -373,34 +374,59 @@ describe('섹션 카드·화면 제목', () => {
 
   it('섹션은 바탕 위 부푼 면으로 뜬다 — 배경만으로는 옅은 톤끼리 경계가 안 보인다', () => {
     // 리터럴이 아니라 토큰이라야 독서등(밤)이 이 카드도 함께 데려간다.
-    expect(markup).toContain('background:var(--adaptiveGrey100, #F9FBF7)');
+    expect(markup).toContain('background:var(--adaptiveGrey100, #FBF9F4)');
     // 경계를 긋는 주체가 연필선(border-image)에서 부푼 그림자로 바뀌었다(Soft 재테마). 그림자가 통째로
     // 빠지면 옅은 카드가 옅은 바탕에 녹아 사라지므로, 그리는 수단이 실재하는지를 못 박는다.
     expect(markup).toContain('box-shadow:var(--puffShadow');
   });
 
-  it('연필 그림 폭을 border-width와 분리해 레이아웃을 밀지 않는다 (PR-5 철거 전까지 남은 자리)', () => {
-    // `8 / 8px`의 뒷값이 화면에 그릴 폭이고, 요소의 border는 1px 그대로다. 이 분리가 깨지면
-    // 테두리가 두꺼워진 만큼 카드가 커져 화면 전체가 밀린다.
-    expect(PENCIL_FRAME).toMatch(/\s8\s\/\s8px\sstretch$/);
+  /**
+   * 연필선 철거 가드(Soft PR-5) — Soft의 정체성은 선이 아니라 면의 부풂이다. 연필선이 한 자리라도 되살아나면
+   * 한 화면에 두 언어가 산다. 카멜(`borderImage`)·케밥(`border-image`)·상수·변수 이름을 다 본다 — 인라인은
+   * 카멜로, css는 케밥으로 적히므로 한쪽만 보면 다른 쪽이 샌다. 주석은 걷는다(경위 설명은 코드가 아니다).
+   */
+  it('연필선이 소스 어디에도 없다 — .tsx 전부와 global.css', () => {
+    const files = sourceFiles(fileURLToPath(new URL('.', import.meta.url)));
+    expect(files.length).toBeGreaterThan(10); // 스캔이 실제로 파일을 훑었다(0개 스캔은 공허한 초록)
+    expect(files.some((f) => f.endsWith('App.tsx'))).toBe(true);
+    // 정규식 양성 대조 — 카멜·케밥·상수·변수 네 꼴을 실제로 잡는다(식이 틀리면 아래 []가 공허한 초록이다)
+    const PENCIL = /border-?image|PENCIL_FRAME|pencil-frame/gi;
+    expect("borderImage: x; border-image: y; PENCIL_FRAME; var(--pencil-frame-soft)".match(PENCIL)).toEqual([
+      'borderImage',
+      'border-image',
+      'PENCIL_FRAME',
+      'pencil-frame',
+    ]);
+
+    const offenders = [
+      ...files.map((f) => [f, stripComments(readFileSync(f, 'utf8'))] as const),
+      ['global.css', readFileSync(new URL('./global.css', import.meta.url), 'utf8').replace(/\/\*[\s\S]*?\*\//g, '')] as const,
+    ].flatMap(([file, src]) =>
+      [...src.matchAll(PENCIL)].map((m) => `${file.split(/[\\/]/).pop()}: ${m[0]}`),
+    );
+    expect(offenders).toEqual([]);
   });
 
-  it('타일 반복(round)이 아니라 stretch다 — 농도 얼룩이 이음매마다 끊긴다', () => {
-    expect(PENCIL_FRAME).not.toMatch(/\sround$/);
-  });
+  /**
+   * 옛 「또렷한 연필」 팔레트의 **날 리터럴**이 렌더되는 자리에 남지 않는다(Soft PR-5 리뷰 9). 번들은 한 번에
+   * 나가므로 옛 베이지·세이지가 한 칸이라도 남으면 Soft 화면에 얼룩으로 뜬다. `var(--x, #옛값)`의 뒷값은 변수가
+   * 살아 있는 한 죽은 값이라 허용한다(설계 폴백 정책 6b). 여백 배경 6색(`STORY_BG_CODES`)·앱 아이콘은 내용의 색이라
+   * 이 목록에 없는 값이다.
+   */
+  it('옛 팔레트의 날 리터럴이 제품 .tsx에 없다 — var() 폴백 뒷값만 허용', () => {
+    const OLD = /#(?:6E8A6A|FCFAF5|EFE9DC|4F6B4C|F7F2E8|E4DDD0|6F6A5E|57534A|2C2A24|8C857A|B8B29F|E7EEE2|5F7B5B)\b|rgba?\(\s*(?:110\s*,\s*138\s*,\s*106|79\s*,\s*107\s*,\s*76)\b/gi;
+    const raw = (src: string) =>
+      [...src.matchAll(OLD)].filter((m) => !/var\(--[\w-]+,\s*$/.test(src.slice(Math.max(0, m.index - 40), m.index)));
+    // 양성·음성 대조 — 날 값은 잡고 폴백 뒷값은 놓아준다
+    expect(raw("a: '#EFE9DC', b: 'rgba(110, 138, 106, 0.5)'")).toHaveLength(2);
+    expect(raw("c: 'var(--adaptiveGrey100, #FCFAF5)'")).toHaveLength(0);
 
-  it('선을 휘게 하는 필터를 쓰지 않는다 — 굴곡은 stretch 압축을 만나면 지글거린다', () => {
-    // border-image는 300px 타일을 요소 폭에 맞춰 늘리고 줄인다. 좁은 버튼에서는 3배 넘게 압축되는데,
-    // 굴곡(feDisplacementMap)이 있으면 파장도 같은 배율로 짧아져 변위가 선 두께를 넘어선다 —
-    // 그 순간 선은 휘는 게 아니라 가장자리가 깎여 「픽셀이 깨진 선」으로 보인다(실측 반려).
-    expect(PENCIL_FRAME).not.toContain('feDisplacementMap');
-  });
-
-  it('연필의 정체는 흔들림이 아니라 농도다 — 진하기를 얼룩지게 하는 필터가 있다', () => {
-    // 고주파 노이즈를 선의 알파에 곱해, 흑연이 종이 결에 걸려 생기는 농도 변화를 만든다.
-    // 고주파 입자는 압축돼도 고와질 뿐이라 굴곡과 달리 지글거리지 않는다 — 위 테스트와 한 쌍이다.
-    expect(PENCIL_FRAME).toContain('feComposite');
-    expect(PENCIL_FRAME).toContain("operator='in'");
+    const files = sourceFiles(fileURLToPath(new URL('.', import.meta.url)));
+    expect(files.length).toBeGreaterThan(10);
+    const offenders = files.flatMap((f) =>
+      raw(stripComments(readFileSync(f, 'utf8'))).map((m) => `${f.split(/[\\/]/).pop()}: ${m[0]}`),
+    );
+    expect(offenders).toEqual([]);
   });
 
   it('화면 제목은 웹 브랜드와 같은 세리프(고운바탕)로 쓴다', () => {
@@ -431,7 +457,7 @@ describe('배경·color-scheme', () => {
 
   it('body에 Soft 바탕을 칠한다 — 투명이면 기기 다크 캔버스가 그대로 비친다', () => {
     // `html body`(0-0-2)여야 한다 — TDS가 나중에 주입하는 `body`(0-0-1) 규칙과 동률이면 순서로 진다.
-    expect(read('./global.css')).toMatch(/html\s+body\s*\{[^}]*background:\s*#EEF2EB/); // 시안 body
+    expect(read('./global.css')).toMatch(/html\s+body\s*\{[^}]*background:\s*#F3EFE5/); // 따뜻한 오트(톤 조율 A)
   });
 
   // 「목표 휠 페이드 = 캔버스색」 단언은 Soft PR-3에서 goal.test.tsx 「안개 색 = 카드 면 색」으로 옮겼다 —
@@ -473,18 +499,17 @@ describe('웹 브랜드 재테마 (global.css)', () => {
   });
 
   it('표면·잉크를 Soft 톤으로 갈아끼운다', () => {
-    expect(override).toMatch(/--adaptiveBackground:\s*#F9FBF7/); // 시안 .puff
-    expect(override).toMatch(/--adaptiveGrey100:\s*#F9FBF7/);
-    expect(override).toMatch(/--adaptiveGrey600:\s*#4E5A4B/); // 흐린 글자 — 카드 위 6.98:1
+    expect(override).toMatch(/--adaptiveBackground:\s*#FBF9F4/); // 따뜻한 부푼 면(톤 조율 A)
+    expect(override).toMatch(/--adaptiveGrey100:\s*#FBF9F4/);
+    expect(override).toMatch(/--adaptiveGrey600:\s*#5B5A4D/); // 흐린 글자 — 카드 위 6.62:1
   });
 
   it('본문 폰트를 고운돋움으로 잡고 실제로 받아온다 — 스택만 바꾸면 폰트가 없어 시스템 폰트로 떨어진다', () => {
     // TDS도 `body`에 폰트 스택을 주입하므로 여기도 `html body`(0-0-2)로 눌러야 한다.
-    // **기능 글자가 기본**이라 고운돋움이 맨 앞이다 — 손글씨는 장식 자리에서 명시로 opt-in 한다
-    // (`ui.tsx`의 HANDWRITING). 스택에 Gaegu를 폴백으로 남기지 않는 이유는 typography.test 참고.
+    // 글꼴은 두 벌이다 — 고운돋움(본문) + 고운바탕(값·제목). 손글씨는 톤 조율 A에서 걷었다(warm-palette.test).
     expect(css).toMatch(/html\s+body\s*\{[^}]*font-family:\s*'Gowun Dodum'/);
     expect(css).toContain('family=Gowun+Dodum');
-    expect(css).toContain('family=Gaegu'); // @import는 남긴다 — 장식이 그 웹폰트를 쓴다
+    expect(css).toContain('family=Gowun+Batang');
   });
 });
 
@@ -526,7 +551,7 @@ describe('TDS Button 재색칠 (global.css)', () => {
     expect(css).toMatch(/--button-background-color:\s*#3182f6/); // 선택자 키(토스 블루 인라인 값)
     // 채움을 투명으로 눕히지 않으면 TDS 내부 레이어가 테두리를 통째로 덮는다(실측).
     expect(css).toMatch(/--button-background-color:\s*transparent\s*!important/);
-    expect(css).toMatch(/background-color:\s*var\(--adaptiveBlue50,\s*#DCE8D6\)\s*!important/); // 옅은 세이지 타일
+    expect(css).toMatch(/background-color:\s*var\(--adaptiveBlue50,\s*#E1E8D4\)\s*!important/); // 옅은 세이지 타일
   });
 
   /**
@@ -575,9 +600,10 @@ describe('TDS Button 재색칠 (global.css)', () => {
     expect(block).toMatch(/border:\s*1\.5px solid var\(--adaptiveBlue700/);
   });
 
-  it('연필 프레임 두 종이 정의돼 있다 — 변수가 비면 border-image가 조용히 사라진다', () => {
-    expect(css).toMatch(/--pencil-frame:\s*url\("data:image\/svg\+xml/);
-    expect(css).toMatch(/--pencil-frame-soft:\s*url\("data:image\/svg\+xml/);
+  it('연필 프레임 변수는 하나도 정의돼 있지 않다 — Soft PR-5 철거(쓰는 곳이 0이면 정의도 0)', () => {
+    const live = css.replace(/\/\*[\s\S]*?\*\//g, '');
+    expect(live.match(/--puffShadow\s*:/g)?.length ?? 0).toBeGreaterThan(0); // 변수 정의를 세는 식이 실제로 잡는다
+    expect(live.match(/--pencil-frame[\w-]*\s*:/g)).toBeNull();
   });
 
   it('눌림·그라디언트·로더까지 같이 옮긴다 — 채움만 바꾸면 누를 때 파랑이 번쩍인다', () => {

@@ -478,7 +478,7 @@ describe('Soft 표면 — 대화 (PR-4)', () => {
   it('내 말풍선은 옅은 세이지, 남의 말풍선은 눌린 바탕이다', () => {
     const list = bubbles(roomView());
     expect(list).toHaveLength(2);
-    expect(list.find((b) => b.includes('data-bubble="mine"'))).toContain('background:var(--adaptiveBlue50');
+    expect(list.find((b) => b.includes('data-bubble="mine"'))).toContain('background:var(--adaptiveBlue50,');
     expect(list.find((b) => b.includes('data-bubble="theirs"'))).toContain('background:var(--softDent');
   });
 

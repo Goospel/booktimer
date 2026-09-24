@@ -632,6 +632,12 @@ describe('책 격자 (BookGrid)', () => {
     expect(grid(() => {})).toContain('align-items:start');
   });
 
+  it('고른 칸 테두리는 모드 토큰이다 — 옛 세이지 날 값이면 공부 모드에서 세이지로 남는다(Soft PR-5 리뷰 9)', () => {
+    const markup = grid(() => {});
+    expect(markup).toContain('outline:2px solid var(--adaptiveBlue500');
+    expect(markup).not.toContain('#6E8A6A');
+  });
+
   /**
    * 24시간 안에 새 글이 달린 책 — 표지가 발광한다(책방 격자 전용 선택 필드).
    * 서재는 `fresh`를 안 넘기므로 아무것도 달라지지 않아야 한다 — 그 회귀를 여기서 못 박는다.
@@ -1096,6 +1102,19 @@ describe('검색 결과 — 이미 서재에 있는 책', () => {
   });
 
   /**
+   * 담긴 행·도장·칩은 토큰 경유다(Soft PR-5 리뷰 9) — 옛 베이지(`#EFE9DC`)·세이지(`#6E8A6A`·`#4F6B4C`) 날 값이면
+   * Soft 화면에 얼룩으로 뜨고 공부 모드에서도 세이지로 남는다. 가라앉은 행 = 눌린 바탕(`--softDent`).
+   */
+  it('담긴 행은 눌린 바탕, 도장·칩은 모드 토큰이다', () => {
+    const markup = row(true);
+    expect(markup).toContain('background:var(--softDent'); // 담긴 행
+    expect(markup).toContain('background:var(--adaptiveBlue500'); // 도장
+    expect(markup).toContain('background:var(--accentPill'); // 칩
+    expect(markup).toContain('color:var(--adaptiveBlue700'); // 칩 글자 · 체크
+    expect(markup).not.toMatch(/#EFE9DC|#6E8A6A|#4F6B4C|110, 138, 106/i);
+  });
+
+  /**
    * 「여백 N」 배지 — 검색 행에서 <b>책축 여백</b>으로 가는 문(2026-08-22 책축 개방). 낯선 책에 닿는
    * 유일한 경로가 검색이라, 이 배지가 없으면 「이 책의 여백」 화면에 도달할 방법 자체가 없다.
    *
@@ -1411,8 +1430,9 @@ describe('서재 위계 (시안 2c)', () => {
     const tag = tagBefore(shelf([read()], { tab: 'READING', selectedId: 1 }), '여백에 글쓰기');
 
     expect(tag).not.toBe('');
-    expect(tag).toContain('--adaptiveBlue700');
-    expect(tag).toContain('var(--filledInk'); // 채움 위 글자 — 밤엔 어두운 잉크로 스왑된다(Soft PR-1 토큰)
+    // 경계 `,`까지 적는다 — `--adaptiveBlue50`만 적으면 `--adaptiveBlue500`(진한 점 색)에도 맞는다(리뷰 M6).
+    expect(tag).toContain('background:var(--adaptiveBlue50,'); // 옅은 타일 — 진한 채움은 탭바 원 하나다(톤 조율 A)
+    expect(tag).toContain('color:var(--adaptiveBlue700'); // 진한 글자 — 밤엔 밝은 세이지로 스왑된다
     expect(tag).toContain('var(--puffShadow'); // 채움은 부푼다(TDS 채움 버튼 규칙과 같은 그림자)
     expect(tag).toContain('font-size:15px'); // 시안 15.5 -> 계단 15(설계 D3 반올림)
   });
@@ -1440,7 +1460,7 @@ describe('서재 위계 (시안 2c)', () => {
   it('「검색해서 담기」는 옅은 세이지 채움(primary)이다 — 옛 세이지 틴트 리터럴은 새 팔레트를 못 탔다', () => {
     const tag = tagBefore(shelf([], { tab: 'READING', selectedId: null }), '검색해서 담기');
 
-    expect(tag).toContain('var(--adaptiveBlue50');
+    expect(tag).toContain('background:var(--adaptiveBlue50,'); // 경계 `,` — Blue500에 안 맞게
     expect(tag).toContain(`height:${HANDLE_ROW_HEIGHT}px`);
   });
 

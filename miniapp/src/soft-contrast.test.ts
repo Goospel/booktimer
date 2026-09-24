@@ -84,11 +84,28 @@ const PAIRS: [string, string][] = [
   ['--adaptiveGrey600', '--softDent'],
   ['--adaptiveGrey800', '--adaptiveGrey100'],
   ['--adaptiveBlue700', '--adaptiveGrey100'],
-  ['--filledInk', '--adaptiveBlue700'],
+  ['--filledInk', '--adaptiveBlue700'], // 체크 배지 — 진한 세이지 원 위 흰 획
   ['--butterInk', '--butterBg'],
   ['--brandButtonInk', '--adaptiveGrey100'],
   ['--brandButtonInk', '--adaptiveBlue50'], // primary 버튼 = 옅은 채움 위 잉크 — 공부 모드가 4.58로 문턱 바로 위다
 ];
+
+/**
+ * 채움(주 동작) 버튼 — 쌍을 <b>손으로 적지 않고 규칙에서 뽑는다</b>(리뷰 M9·M9b). 손으로 적은 쌍은 토큰끼리만 잴 뿐
+ * 규칙이 어떤 토큰을 쓰는지는 안 봐서, 규칙의 배경을 글자와 같은 blue700으로 바꿔도(대비 1.00) 초록이었다.
+ * `var(--X` 꼴이 아니면(리터럴로 박으면) 뽑기부터 실패한다 — 토큰 경유가 곧 밤·공부가 따라오는 조건이라 그것도 잠근다.
+ */
+const filledRule = block(".tds-mobile-button[style*='--btn-filled']");
+const FILLED_INK = /--button-color:\s*var\((--[\w-]+)/.exec(filledRule)?.[1];
+const FILLED_BG = /(?:^|[\s;{])background-color:\s*var\((--[\w-]+)/.exec(filledRule)?.[1];
+PAIRS.push([FILLED_INK ?? '(채움 글자 토큰 없음)', FILLED_BG ?? '(채움 바탕 토큰 없음)']);
+
+describe('채움 버튼 규칙에서 글자·바탕 토큰을 뽑는다', () => {
+  it('둘 다 var(--토큰)이다 — 뽑기가 비면 아래 대비 쌍이 엉뚱한 이름을 잰다', () => {
+    expect(FILLED_INK).toMatch(/^--/);
+    expect(FILLED_BG).toMatch(/^--/);
+  });
+});
 
 /**
  * 밤의 부풂에는 흰 외곽이 없다(설계 §3-3의 약속) — 낮 그림자의 흰 하이라이트(.95)가 밤에 새면 어두운 화면에

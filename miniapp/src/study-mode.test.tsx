@@ -192,8 +192,8 @@ describe('공부 모드 색 — css에 실재하는가', () => {
     const root = css.slice(css.indexOf('html:root {'), css.indexOf('}', css.indexOf('html:root {')));
     const study = css.slice(css.indexOf(`body.${STUDY_CLASS} {`), css.indexOf('}', css.indexOf(`body.${STUDY_CLASS} {`)));
 
-    expect(root).toContain(`${HERO_CARD_BG_VAR}: #F9FBF7`); // 독서 = Soft 부푼 면(시안 .puff)
-    expect(study).toContain(`${HERO_CARD_BG_VAR}: #EFF3F6`); // 공부 = 명도 유지·색상만 한랭한 「푸른 종이」
+    expect(root).toContain(`${HERO_CARD_BG_VAR}: #FBF9F4`); // 독서 = 따뜻한 부푼 면(톤 조율 A)
+    expect(study).toContain(`${HERO_CARD_BG_VAR}: #ECEFEE`); // 공부 = 채도 낮춘 청회색 — 따뜻한 바탕 위에서 안 튄다
   });
 
   it('히어로 카드가 그 토큰을 실제로 소비한다 — 선언만 있고 안 쓰면 화면은 안 바뀐다', () => {
@@ -219,11 +219,11 @@ describe('공부 모드 색 — css에 실재하는가', () => {
     expect(live).not.toMatch(/body\.study-mode\s+\.tds-mobile-button/);
   });
 
-  it('공부 블록이 Soft 그림자·옅은 타일 토큰을 파랑으로 갈아 끼운다', () => {
+  it('공부 블록은 옅은 타일만 파랑으로 갈고 그림자는 낮 값을 물려받는다 — 파랑 틴트 그림자는 따뜻한 바탕 위에서 튄다(톤 조율 A)', () => {
     const study = css.slice(css.indexOf(`body.${STUDY_CLASS} {`), css.indexOf('}', css.indexOf(`body.${STUDY_CLASS} {`)));
-    expect(study).toMatch(/--puffShadow:[^;]*rgba\(80,\s*105,\s*125/);
-    expect(study).toMatch(/--dentShadow:[^;]*rgba\(80,\s*105,\s*125/);
-    expect(study).toContain('--adaptiveBlue50: #D6E0E7');
+    expect(study).toContain('--adaptiveBlue50: #D6E0E7'); // 블록을 제대로 잘랐다(아래 부재 단언이 공허하지 않음)
+    expect(study).not.toMatch(/--puffShadow\s*:/);
+    expect(study).not.toMatch(/--dentShadow\s*:/);
   });
 
   it('강조 알약 토큰이 공부 블록에도 있다 — 빠지면 fallback 세이지가 그대로 뜬다', () => {
@@ -243,9 +243,9 @@ describe('공부 모드 색 — css에 실재하는가', () => {
     const root = css.slice(css.indexOf('html:root {'), css.indexOf('}', css.indexOf('html:root {')));
 
     for (const decl of [
-      '--grass0: #E3E9E0',
-      '--grass1: #C9DAC4',
-      '--grass2: #A3C09B',
+      '--grass0: #E7E2D5',
+      '--grass1: #CFD9C0',
+      '--grass2: #A9BD99',
       '--grass3: #6E9565',
       '--grass4: #3F5A3C',
     ]) {
@@ -716,7 +716,7 @@ describe('모드 토글', () => {
   });
 
   it('선택 세그먼트는 토큰을 탄다 — 공부 모드에서 저절로 파랑이 된다', () => {
-    expect(toggle('reading')).toContain('background:var(--adaptiveBlue700');
+    expect(toggle('reading')).toContain('color:var(--adaptiveBlue700');
   });
 
   it('측정 중이면 잠긴다 — 진짜 disabled가 아니라 aria-disabled라야 이유를 말할 기회가 남는다', () => {

@@ -3,6 +3,7 @@ import { useEffect, useRef, useState } from 'react';
 
 import {
   BottomTabBar,
+  LOCK_ICON,
   TABS,
   TAB_BAR_HEIGHT,
   TAB_BAR_MARGIN,
@@ -101,7 +102,6 @@ type LockedTab = Exclude<TabKey, 'home' | 'calendar'>;
 
 /** 24 격자 단색 스트로크 path — 탭 아이콘(`TABS.icon`)과 같은 문법이다(라이브러리 0·이모지 0). */
 const PERSON_ICON = 'M12 11.6a3.6 3.6 0 1 0 0-7.2 3.6 3.6 0 0 0 0 7.2ZM4.8 20c0-3.6 3.2-5.9 7.2-5.9s7.2 2.3 7.2 5.9';
-const LOCK_ICON = 'M7.6 10.4V7.9a4.4 4.4 0 0 1 8.8 0v2.5M6.2 10.4h11.6v9.1H6.2z';
 
 /**
  * 탭바 가운데 원이 체험 상태에 따라 무엇을 하나 — 순수 판정이라 정적 하니스가 잴 수 있다.
@@ -382,7 +382,7 @@ export function LockedFeedBody({ newsOpen }: { newsOpen: boolean }) {
 function TrialStat({ label, value }: { label: string; value: string }) {
   return (
     <div style={{ flex: 1, minWidth: 0 }}>
-      <div style={{ fontSize: 14, color: 'var(--adaptiveGrey600, #4E5A4B)' }}>{label}</div>
+      <div style={{ fontSize: 14, color: 'var(--adaptiveGrey600, #5B5A4D)' }}>{label}</div>
       <div style={{ ...SERIF_VALUE, fontSize: 21, marginTop: 2 }}>{value}</div>
     </div>
   );
@@ -404,9 +404,9 @@ function BookStack() {
       <defs>
         {book('stack-sand', '#F3EBDD', '#D8C6A6')}
         {book('stack-butter', '#F7EFCF', '#E2CE8B')}
-        {book('stack-mint', '#E3EFDF', '#A9C7A1')}
+        {book('stack-mint', '#E3EFDF', '#B5C6A5')}
       </defs>
-      <ellipse cx="60" cy="100" rx="48" ry="6" fill="rgba(94,122,90,0.2)" />
+      <ellipse cx="60" cy="100" rx="48" ry="6" fill="rgba(112,96,64,0.2)" />
       <rect x="10" y="68" width="100" height="28" rx="13" fill="url(#stack-sand)" />
       <rect x="90" y="73" width="14" height="18" rx="5" fill="#FFFFFF" opacity="0.75" />
       <ellipse cx="34" cy="74" rx="16" ry="3.5" fill="#FFFFFF" opacity="0.65" />
@@ -476,10 +476,10 @@ export function GuestHome({
           아바타 자리에 사람 아이콘이 서서 <b>그 아이콘이 곧 로그인 문</b>이 된다(로그아웃한 기존 사용자의 길). */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12, padding: '2px 2px 0' }}>
         <span style={{ flex: 1, minWidth: 0 }}>
-          <span style={{ display: 'block', ...SERIF_VALUE, fontSize: 28, color: 'var(--adaptiveGrey900, #1B221A)' }}>
+          <span style={{ display: 'block', ...SERIF_VALUE, fontSize: 28, color: 'var(--adaptiveGrey900, #1E1E18)' }}>
             북타이머
           </span>
-          <span style={{ display: 'block', marginTop: 2, fontSize: 15, color: 'var(--adaptiveGrey600, #4E5A4B)' }}>
+          <span style={{ display: 'block', marginTop: 2, fontSize: 15, color: 'var(--adaptiveGrey600, #5B5A4D)' }}>
             둘러보는 중
           </span>
         </span>
@@ -519,7 +519,7 @@ export function GuestHome({
 
       <div
         data-guest-hero=""
-        style={{ ...PUFF, borderRadius: 30, padding: '24px 20px', background: `var(${HERO_CARD_BG_VAR}, #F9FBF7)`, textAlign: 'center' }}
+        style={{ ...PUFF, borderRadius: 30, padding: '24px 20px', background: `var(${HERO_CARD_BG_VAR}, #FBF9F4)`, textAlign: 'center' }}
       >
         {phase !== 'done' && (
           <>
@@ -570,7 +570,7 @@ export function GuestHome({
             <span style={{ display: 'block', marginTop: 14, ...SERIF_VALUE, fontSize: 24 }}>
               {formatDuration(duration)} 읽었어요
             </span>
-            <span style={{ display: 'block', marginTop: 4, fontSize: 16, color: 'var(--adaptiveGrey700, #3A4637)' }}>
+            <span style={{ display: 'block', marginTop: 4, fontSize: 16, color: 'var(--adaptiveGrey700, #43423A)' }}>
               기록을 남기려면 계정이 필요해요.
             </span>
 
@@ -578,9 +578,9 @@ export function GuestHome({
                 아래 한 줄이 「시작하면 …이 돼요」로 그 사실을 말한다(없는 기록을 있다고 하지 않는다). */}
             <div style={{ ...DENT, display: 'flex', marginTop: 16, padding: '12px 6px' }}>
               <TrialStat label="오늘" value={formatDuration(duration)} />
-              <div style={{ width: 1, background: 'var(--adaptiveGrey200, #D6DFD2)' }} />
+              <div style={{ width: 1, background: 'var(--adaptiveGrey200, #DED8CA)' }} />
               <TrialStat label="연속" value="1일" />
-              <div style={{ width: 1, background: 'var(--adaptiveGrey200, #D6DFD2)' }} />
+              <div style={{ width: 1, background: 'var(--adaptiveGrey200, #DED8CA)' }} />
               <TrialStat label="목표" value="—" />
             </div>
 
@@ -595,9 +595,9 @@ export function GuestHome({
                     width: 26,
                     height: 26,
                     borderRadius: 8,
-                    background: i === 0 ? 'var(--adaptiveBlue500, #5B7F55)' : 'var(--grass0, #E3E9E0)',
+                    background: i === 0 ? 'var(--adaptiveBlue500, #5B7F55)' : 'var(--grass0, #E7E2D5)',
                     boxShadow:
-                      i === 0 ? '0 0 0 2px var(--adaptiveGrey100, #F9FBF7), 0 0 0 4.5px var(--adaptiveBlue700, #3F5A3C)' : undefined,
+                      i === 0 ? '0 0 0 2px var(--adaptiveGrey100, #FBF9F4), 0 0 0 4.5px var(--adaptiveBlue700, #3F5A3C)' : undefined,
                   }}
                 />
               ))}
@@ -614,7 +614,7 @@ export function GuestHome({
               {WHY_LOGIN.map((line) => (
                 <span
                   key={line}
-                  style={{ display: 'flex', alignItems: 'flex-start', gap: 8, fontSize: 15, lineHeight: 1.5, color: 'var(--adaptiveGrey700, #3A4637)', wordBreak: 'keep-all' }}
+                  style={{ display: 'flex', alignItems: 'flex-start', gap: 8, fontSize: 15, lineHeight: 1.5, color: 'var(--adaptiveGrey700, #43423A)', wordBreak: 'keep-all' }}
                 >
                   <CheckMark />
                   {line}
@@ -821,12 +821,11 @@ export function GuestShell({
             bottom: `calc(12px + env(safe-area-inset-bottom) + ${TAB_BAR_HEIGHT}px + 8px)`,
             zIndex: TAB_BAR_Z_INDEX,
             padding: '8px 14px',
-            background: 'var(--adaptiveGrey100, #FCFAF5)',
-            color: 'var(--adaptiveGrey600, #6F6A5E)',
-            borderRadius: 12,
+            ...PUFF,
+            borderRadius: 20,
+            color: 'var(--adaptiveGrey600, #5B5A4D)',
             fontSize: 14,
             textAlign: 'center',
-            boxShadow: '0 4px 16px rgba(0, 0, 0, 0.12)',
           }}
         >
           {TRIAL_DONE_HINT}

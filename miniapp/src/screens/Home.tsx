@@ -31,7 +31,6 @@ import {
   DENT,
   ErrorMessage,
   GoalMedal,
-  HANDWRITING,
   PUFF,
   SECTION_RULE,
   SERIF_VALUE,
@@ -56,13 +55,13 @@ const STUDY_AGREEMENT_KEY = 'booktimer.notificationAgreement.studyGoal';
  * 게스트 홈의 같은 점 줄도 이 둘을 쓴다(점 색이 두 화면에서 갈리지 않게).
  */
 export const DOT_ON = 'var(--adaptiveBlue500, #5B7F55)';
-export const DOT_OFF = 'var(--adaptiveGrey200, #D6DFD2)';
+export const DOT_OFF = 'var(--adaptiveGrey200, #DED8CA)';
 
 /**
- * 게이지 채움 — 시안 Soft-Home의 세이지 그라데이션(시작 blue400 → 끝 blue500). 트랙은 눌린 면(`DENT`)이다.
- * 옛 TDS `ProgressBar`는 색을 prop 하나로만 받아 그라데이션을 못 그려 자체 막대로 바꿨다.
+ * 게이지 채움 — 세이지 단색(톤 조율 A). 시안의 그라데이션은 재료를 하나 더 얹어 「쨍하다」의 한 몫이었다.
+ * 토큰이라 공부 모드에서 파랑이 된다. 트랙은 눌린 면(`DENT`)이다.
  */
-const GAUGE_FILL = 'linear-gradient(90deg, #8FB087, #5B7F55)';
+const GAUGE_FILL = 'var(--adaptiveBlue500, #5B7F55)';
 
 /** 히어로 2열 타일의 공통 모양 — 색·그림자 틴트만 타일마다 갈린다(시안 Soft-Home). */
 const TILE = { display: 'flex', flexDirection: 'column', gap: 4, padding: '12px 14px', borderRadius: 20 } as const;
@@ -152,9 +151,11 @@ export function ModeToggle({
           padding: '0 16px',
           border: 0,
           borderRadius: 999,
-          // 토큰이라 공부 모드에서 저절로 파랑이 된다 — 리터럴이면 세이지로 남는다(삼항인 이유는 위 ⚠️).
-          background: selected ? 'var(--adaptiveBlue700, #3F5A3C)' : 'transparent',
-          color: selected ? 'var(--filledInk, #FFFFFF)' : 'var(--adaptiveGrey700, #3A4637)',
+          // 고른 칸 = 카드색 + 진한 모드색 글자 + 작은 부풂(톤 조율 A). 진한 채움은 탭바 원 하나만 남긴다 —
+          // 홈 한 화면에 진한 덩어리가 넷이라 눈이 어디부터 볼지 흔들렸다. 글자색이 토큰이라 공부 모드에서 파랑이 된다.
+          background: selected ? 'var(--adaptiveGrey100, #FBF9F4)' : 'transparent',
+          color: selected ? 'var(--adaptiveBlue700, #3F5A3C)' : 'var(--adaptiveGrey700, #43423A)',
+          boxShadow: selected ? '2px 2px 6px rgba(112, 96, 64, 0.18), -2px -2px 5px rgba(255, 255, 255, 0.9)' : 'none',
           fontFamily: 'inherit',
           fontSize: 15,
           fontWeight: selected ? 700 : 400,
@@ -175,8 +176,8 @@ export function ModeToggle({
         gap: 4,
         padding: 3,
         borderRadius: 999,
-        background: 'var(--softDent, #E6ECE3)',
-        border: '1.5px solid var(--adaptiveGrey200, #D6DFD2)',
+        background: 'var(--softDent, #EAE5D9)',
+        border: '1.5px solid var(--adaptiveGrey200, #DED8CA)',
         opacity: locked ? 0.4 : 1,
       }}
     >
@@ -240,7 +241,7 @@ export function FirstSessionBanner({ show }: { show: boolean }) {
 
   return (
     <div
-      style={{ marginTop: 12, padding: 14, borderRadius: 20, background: 'var(--adaptiveBlue50, #DCE8D6)', textAlign: 'center' }}
+      style={{ marginTop: 12, padding: 14, borderRadius: 20, background: 'var(--adaptiveBlue50, #E1E8D4)', textAlign: 'center' }}
     >
       <Text typography="st11" style={{ display: 'block', wordBreak: 'keep-all' }}>
         <SproutMark size={14} /> 첫 독서 기록이 심어졌어요! 기록 탭에 첫 칸이 생겼어요.
@@ -278,7 +279,7 @@ export function GoalReachedView({
       <GoalMedal />
       <div style={{ textAlign: 'center', wordBreak: 'keep-all' }}>
         <span style={{ display: 'block', ...SERIF_VALUE, fontSize: 26 }}>오늘 목표를 채웠어요</span>
-        <span style={{ display: 'block', marginTop: 6, fontSize: 17, lineHeight: 1.5, color: 'var(--adaptiveGrey700, #3A4637)' }}>
+        <span style={{ display: 'block', marginTop: 6, fontSize: 17, lineHeight: 1.5, color: 'var(--adaptiveGrey700, #43423A)' }}>
           연속 {streak}일째예요.
           <br />
           {/* 길이가 사용자 값이라 조사를 고정할 수 없다 — 「30분이면」/「1시간 30초면」(게스트 「잔디 첫 칸」과 같은 처방). */}
@@ -294,7 +295,7 @@ export function GoalReachedView({
           gap: 12,
           padding: '12px 14px',
           borderRadius: 20,
-          background: 'var(--adaptiveBlue50, #DCE8D6)',
+          background: 'var(--adaptiveBlue50, #E1E8D4)',
         }}
       >
         <span style={{ fontSize: 15, color: 'var(--adaptiveBlue900, #283B27)' }}>오늘 읽은 시간</span>
@@ -311,7 +312,7 @@ export function GoalReachedView({
         <button
           type="button"
           onClick={onGoHistory}
-          style={{ ...button, border: 0, background: 'var(--adaptiveBlue50, #DCE8D6)', color: 'var(--adaptiveBlue700, #3F5A3C)' }}
+          style={{ ...button, border: 0, background: 'var(--adaptiveBlue50, #E1E8D4)', color: 'var(--adaptiveBlue700, #3F5A3C)' }}
         >
           기록 보기
         </button>
@@ -359,12 +360,24 @@ export const COVER_GAP = 16;
 /** 표지 한 장의 높이 — `BookCover`·`CoverInitial`이 쓰는 식(폭 × 1.4) 그대로여야 여백 계산이 실제 표지를 따라간다. */
 export const COVER_HEIGHT = Math.round(COVER_WIDTH * 1.4);
 
+/** 캐러셀 칸·표지 모서리 — 후광(`PICK_RING`)이 둥글게 흐르려면 안쪽 표지도 같이 둥글어야 한다(선택 표시 H안). */
+const CAROUSEL_RADIUS = 8;
+
+/**
+ * 고른 칸의 후광 — 카드색 틈 3px + 중간 세이지(Blue500) 테 3px, 둘 다 blur 0이라 옛 한 겹 링과 비용이 같다(T-176:
+ * 표지 이미지를 감싸는 요소라 흐린 그림자는 두르지 않는다). 옛 진한(700) 3px 링은 틈 없이 표지에 붙어 「액자」로
+ * 읽혔고 부드러운 화면에서 혼자 딱딱하게 튀었다(사용자, 2026-09-24). 잔디 「오늘」 링(`TODAY_RING`)과 같은
+ * 「틈 + 세이지」 문법이되, 92px 표지는 500으로 충분해(카드 대비 4.33 · 비텍스트 3:1 통과) 700을 쓰지 않는다.
+ * 토큰이라 공부 모드에서 파랑 후광이 된다.
+ */
+const PICK_RING = '0 0 0 3px var(--adaptiveGrey100, #FBF9F4), 0 0 0 6px var(--adaptiveBlue500, #5B7F55)';
+
 /**
  * 트랙 세로 여백 — 아래 선택 표지의 `scale(1.1)`이 위아래로 각각 높이의 **0.05**만큼 삐져나가므로
- * 그 몫(+ 선택 링 3px × 1.1 여유 4px)을 여백으로 미리 확보한다. 여기가 모자라면 커진 표지가 트랙을 세로로
- * 넘쳐 손가락에 위아래로 들썩이고, 링 윗변이 스크롤 영역에 잘린다.
+ * 그 몫(+ 후광 6px × 1.1 = 6.6 → 여유 7px)을 여백으로 미리 확보한다. 여기가 모자라면 커진 표지가 트랙을 세로로
+ * 넘쳐 손가락에 위아래로 들썩이고, 후광 윗변이 스크롤 영역에 잘린다.
  */
-export const TRACK_V_PAD = Math.ceil(COVER_HEIGHT * 0.05) + 4;
+export const TRACK_V_PAD = Math.ceil(COVER_HEIGHT * 0.05) + 7;
 
 /**
  * 첫·마지막 표지를 가운데까지 올려 주는 여백 — **트랙의 padding이 아니라 양끝 표지의 margin으로 준다.**
@@ -499,7 +512,11 @@ export const NO_BOOK_CARD: LeadCard = {
  * <p>`CoverInitial`을 쓰지 않는다: 색 상자 + 첫 글자라 실제 표지와 구분이 안 돼 특수 칸이 책처럼 보인다.
  * `boxSizing`이 없으면 테두리 2px이 칸을 불려 스냅 위치(`i × stride`)가 이 카드부터 어긋난다.
  */
-export function NoBookCard({ width = COVER_WIDTH, label = '책 없이' }: { width?: number; label?: string } = {}) {
+export function NoBookCard({
+  width = COVER_WIDTH,
+  label = '책 없이',
+  radius = 4,
+}: { width?: number; label?: string; /** 캐러셀만 8(후광과 동심) — 나머지 자리는 표지와 같은 4 */ radius?: number } = {}) {
   return (
     <div
       style={{
@@ -509,11 +526,11 @@ export function NoBookCard({ width = COVER_WIDTH, label = '책 없이' }: { widt
         boxSizing: 'border-box',
         // 시안 Soft-Home 「책 없이」 점선 — 옛 grey200 점선은 부푼 면 위에서 거의 안 보였다. 중간 명도라
         // 독서등(밤)의 「읽는 중」 카드 위에서도 보인다. 시안의 옅은 면(#F3F6F1)은 두지 않는다 — 밤 카드에
-        // 밝은 상자가 뜨고, 낮엔 카드색(#F9FBF7)과 거의 같아 투명과 구별되지 않는다. 굵기는 2px 그대로다
+        // 밝은 상자가 뜨고, 낮엔 카드색(#FBF9F4)과 거의 같아 투명과 구별되지 않는다. 굵기는 2px 그대로다
         // (Soft PR-3 서재 판정): 시안의 1.5px은 DPR 3 크롬에서 computed 1px로 떨어져 캔버스 위 「책 추가」 칸의
         // 점선이 흐려지고, 밤 카드 위에선 거의 사라졌다(목 모드 390×844@3 실측).
         border: '2px dashed #7C8A78',
-        borderRadius: 4,
+        borderRadius: radius,
         display: 'flex',
         flexDirection: 'column',
         alignItems: 'center',
@@ -522,8 +539,8 @@ export function NoBookCard({ width = COVER_WIDTH, label = '책 없이' }: { widt
       }}
     >
       {/* 점선 상자가 이미 「표지가 아님」을 말한다 — 시계 이모지는 그 위에 얹힌 군더더기였다(2026-08-18).
-          손글씨는 장식 자리의 명시 opt-in이다(본문은 고운돋움) — 표지 자리의 글자라 표지 이니셜과 한 몸이다. */}
-      <Text typography="st12" color="grey600" style={{ ...HANDWRITING }}>
+          세리프는 명시 opt-in이다(본문은 고운돋움) — 표지 자리의 글자라 표지 이니셜과 한 몸이다. */}
+      <Text typography="st12" color="grey600" style={{ ...SERIF_VALUE }}>
         {label}
       </Text>
     </div>
@@ -531,13 +548,13 @@ export function NoBookCard({ width = COVER_WIDTH, label = '책 없이' }: { widt
 }
 
 /**
- * 고른 칸의 체크 배지(시안 Soft-Home) — 표지 우상단 24px 원 + 흰 체크(이모지 대신 획 SVG).
+ * 고른 칸의 체크 배지 — 표지 우상단 22px 원(이모지 대신 획 SVG). 카드색 원 + 세이지(500) 테 + 진한 세이지(700) 체크다
+ * (선택 표시 H안, 2026-09-24): 옛 진한 원 + 흰 체크는 링과 함께 홈의 진한 덩어리를 셋으로 늘렸다 — 진한 채움은
+ * 탭바 원 하나다. 밝은 원이라 어두운 표지에선 원이, 밝은 표지에선 세이지 테가 배지를 살린다.
  *
  * <p>시안은 표지 밖으로 7px 삐져나가지만 여기선 <b>안쪽에</b> 둔다: 트랙이 가로 스크롤 컨테이너라 삐져나간
  * 배지는 세로 넘침이 돼 잘리고 트랙이 위아래로 들썩인다(`TRACK_V_PAD` 주석과 같은 사고).
  */
-const BADGE_FILL = 'var(--adaptiveBlue700, #3F5A3C)';
-
 function CheckBadge() {
   return (
     <span
@@ -545,22 +562,20 @@ function CheckBadge() {
       aria-hidden="true"
       style={{
         position: 'absolute',
-        top: 4,
-        right: 4,
+        top: 5,
+        right: 5,
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
-        width: 24,
-        height: 24,
+        width: 22,
+        height: 22,
         boxSizing: 'border-box',
         borderRadius: '50%',
-        // 상수 경유인 이유: 「채움 버튼 개수」 가드가 `background: '` + 진한 세이지 토큰 리터럴 꼴을 채움 버튼으로
-        // 센다 — 배지는 버튼이 아닌데 그 꼴로 적으면 홈의 두 번째 채움으로 오검출된다(모드 토글과 같은 사정).
-        background: BADGE_FILL,
-        border: '2px solid var(--adaptiveGrey100, #F9FBF7)',
+        background: 'var(--adaptiveGrey100, #FBF9F4)',
+        border: '2px solid var(--adaptiveBlue500, #5B7F55)',
       }}
     >
-      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" strokeWidth="3.5" strokeLinecap="round" strokeLinejoin="round" style={{ stroke: 'var(--filledInk, #FFFFFF)' }}>
+      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" strokeWidth="3.5" strokeLinecap="round" strokeLinejoin="round" style={{ stroke: 'var(--adaptiveBlue700, #3F5A3C)' }}>
         <path d="M5 12.5l4.5 4.5L19 7.5" />
       </svg>
     </span>
@@ -697,22 +712,21 @@ export function BookCarousel<T extends BookOption>({
                 border: 'none',
                 background: 'transparent',
                 cursor: 'pointer',
-                // 가운데 온 칸만 크게 + 링·체크 배지(시안 Soft-Home). 안 고른 칸은 .7 — .45로 흐리면 40대
+                // 가운데 온 칸만 크게 + 후광·체크 배지(선택 표시 H안). 안 고른 칸은 .7 — .45로 흐리면 40대
                 // 이상 눈엔 「없는 책」으로 읽혀 흐림으로 지우지 않는다.
                 position: 'relative',
                 transform: current ? 'scale(1.1)' : 'scale(1)',
                 opacity: current ? 1 : 0.7,
-                // 링은 blur 0 한 겹이라 싸다(표지는 이미지 — 흐린 그림자를 두르지 않는다, T-176).
-                boxShadow: current ? '0 0 0 3px var(--adaptiveBlue700, #3F5A3C)' : undefined,
-                borderRadius: 4,
+                boxShadow: current ? PICK_RING : undefined,
+                borderRadius: CAROUSEL_RADIUS,
                 transition: 'transform 0.2s ease, opacity 0.2s ease',
               }}
             >
               {item === null ? (
-                <NoBookCard label={leadCard?.label} />
+                <NoBookCard label={leadCard?.label} radius={CAROUSEL_RADIUS} />
               ) : (
                 // 표지 없음·로드 실패 분기는 BookCover가 든다 — title을 주면 첫 글자 + 제목색으로 떨어진다.
-                <BookCover url={item.coverUrl} title={item.title} width={COVER_WIDTH} eager />
+                <BookCover url={item.coverUrl} title={item.title} width={COVER_WIDTH} radius={CAROUSEL_RADIUS} eager />
               )}
               {current && <CheckBadge />}
             </button>
@@ -928,9 +942,9 @@ export function RemainingNote({
           top: -6,
           width: 10,
           height: 10,
-          background: 'var(--adaptiveBackground, #FCFAF5)',
-          borderLeft: '1px solid rgba(140, 133, 122, 0.6)',
-          borderTop: '1px solid rgba(140, 133, 122, 0.6)',
+          background: 'var(--adaptiveBackground, #FBF9F4)',
+          borderLeft: '1.5px solid var(--adaptiveGrey200, #DED8CA)',
+          borderTop: '1.5px solid var(--adaptiveGrey200, #DED8CA)',
           transform: 'rotate(45deg)',
         }}
       />
@@ -938,14 +952,12 @@ export function RemainingNote({
         style={{
           position: 'relative',
           padding: '9px 12px',
-          borderRadius: 10,
-          background: 'var(--adaptiveBackground, #FCFAF5)',
-          /* 연필선(시안의 `pfs`) — 그림자만으론 안 떨어진다. 이 상자의 배경은 히어로 카드지와 거의
-             같은 색이라 분리 신호가 알파 0.07 그림자 하나뿐이었고, 테두리 없는 카드 위에 윤곽선 있는
-             캐럿만 뜬 꼴이었다. 변수는 `.lamp-page`가 밤에도 낮 버전으로 고정한다. */
-          border: '1px solid transparent',
-          borderImage: 'var(--pencil-frame-soft) 8 / 8px stretch',
-          boxShadow: '0 2px 8px rgba(0, 0, 0, 0.07)',
+          borderRadius: 14,
+          background: 'var(--adaptiveBackground, #FBF9F4)',
+          /* 선이 있어야 떨어진다 — 이 상자의 배경은 히어로 카드 면과 같은 색이라 그림자만으론 경계가
+             안 선다(옛 연필선 자리). Soft 시트 행(`SOFT_ROW`)과 같은 옅은 1.5px 실선이고, 캐럿도 같은 선을
+             두른다. 히어로는 밤에도 `.lamp-page`가 낮 토큰을 재선언하므로 이 선도 낮 값으로 선다. */
+          border: '1.5px solid var(--adaptiveGrey200, #DED8CA)',
         }}
       >
         {/* ⓘ가 답해야 할 유일한 질문 — "못 채우면 어떻게 되나". 빚이 있든 없든 규칙은 같으므로 늘
@@ -1182,7 +1194,7 @@ export function AccountSection({
             // Soft(시안 Soft-Home)에서 28로 — 계단 t3(28)와 같은 칸이다.
             ...SERIF_VALUE,
             fontSize: 28,
-            color: 'var(--adaptiveGrey900, #1B221A)',
+            color: 'var(--adaptiveGrey900, #1E1E18)',
             overflow: 'hidden',
             textOverflow: 'ellipsis',
             whiteSpace: 'nowrap',
@@ -1193,7 +1205,7 @@ export function AccountSection({
         {loginId !== null && (
           <span
             data-handle={loginId}
-            style={{ display: 'block', marginTop: 2, fontSize: 15, color: 'var(--adaptiveGrey600, #4E5A4B)' }}
+            style={{ display: 'block', marginTop: 2, fontSize: 15, color: 'var(--adaptiveGrey600, #5B5A4D)' }}
           >
             @{loginId}
           </span>
@@ -1513,7 +1525,7 @@ export function Home({
           padding: 20,
           // 이 카드 <b>한 장만</b>의 토큰이다(grey100은 전 화면 공용이라 스왑하면 앱이 통째로 파래진다).
           // 공부 모드에서 화면 최대 면이 색으로 말하는 자리 — 값은 `global.css`가 정한다.
-          background: `var(${HERO_CARD_BG_VAR}, #F9FBF7)`,
+          background: `var(${HERO_CARD_BG_VAR}, #FBF9F4)`,
         }}
       >
         {/* 첫 사용 안내는 이 카드 <b>속을 통째로</b> 가져간다 — 처음 온 사람에게 이 박스는 타이머가
@@ -1538,7 +1550,7 @@ export function Home({
               동안엔 서지 않는다(안내 위에 다른 손잡이를 겹치지 않는다). */}
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
             {/* 머리말 — 흐린 잉크 16, 자간 없음(시안). 옛 자간 3 세이지 머리말은 가운데 정렬 카드의 것이었다. */}
-            <span style={{ minWidth: 0, fontSize: 16, color: 'var(--adaptiveGrey600, #4E5A4B)' }}>
+            <span style={{ minWidth: 0, fontSize: 16, color: 'var(--adaptiveGrey600, #5B5A4D)' }}>
               {/* 달성일 때만 새싹이 선다 — 평소 머리말은 글자 그대로여서 미달성 렌더가 안 흔들린다.
                   새싹은 독서 하루 목표의 것이다 — 공부 하루 목표는 폐기돼(2026-09-13, Q6) 공부엔 오지 않는다. */}
               {heroOverline(mode, mode === 'reading' && achieved) ?? (
@@ -1593,7 +1605,6 @@ export function Home({
                     width: `calc((100% - 6px) * ${progress})`, // 트랙 안쪽 폭(양옆 3px 뺀 값)의 비율
                     borderRadius: 999,
                     background: GAUGE_FILL,
-                    boxShadow: 'inset 0 2px 0 rgba(255, 255, 255, 0.35)',
                   }}
                 />
               </div>
@@ -1609,7 +1620,7 @@ export function Home({
               {/* 두 타일 — 「남은 시간」은 버터(모드 무관 정보색), 「하루 목표」는 옅은 세이지(모드색). 타일 그림자는
                   화면당 이 둘뿐이라 큰 흐림 예산 안이다(설계 §6). */}
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: 12, marginTop: 16 }}>
-                <div style={{ ...TILE, background: 'var(--butterBg, #F2E8C6)', boxShadow: `${TILE_HIGHLIGHT}, 5px 5px 12px rgba(160, 140, 70, 0.18)` }}>
+                <div style={{ ...TILE, background: 'var(--butterBg, #F1E6C3)', boxShadow: `${TILE_HIGHLIGHT}, 5px 5px 12px rgba(150, 125, 60, 0.14)` }}>
                   {/* ⓘ는 라벨에 붙는다 — 값이 아니라 「남은 시간」이라는 개념을 설명하는 손잡이다. */}
                   <button
                     type="button"
@@ -1656,8 +1667,8 @@ export function Home({
                     flexWrap: 'wrap',
                     gap: 6,
                     paddingRight: 10,
-                    background: 'var(--adaptiveBlue50, #DCE8D6)',
-                    boxShadow: `${TILE_HIGHLIGHT}, 5px 5px 12px rgba(94, 122, 90, 0.18)`,
+                    background: 'var(--adaptiveBlue50, #E1E8D4)',
+                    boxShadow: `${TILE_HIGHLIGHT}, var(--tileShadow)`,
                   }}
                 >
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 4, minWidth: 0 }}>

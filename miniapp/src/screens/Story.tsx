@@ -31,7 +31,7 @@ import {
   attachMarginBanner,
   marginBannerEnabled,
 } from '../toss';
-import { BookCover, ErrorMessage, HANDWRITING, Loading, PUFF, SECTION_RULE, Screen, Sheet, Text, UserList } from '../ui';
+import { BookCover, ErrorMessage, Loading, PUFF, SECTION_RULE, SERIF_VALUE, Screen, Sheet, Text, UserList } from '../ui';
 
 /**
  * 여백 — <b>책에 딸린 자리</b>와 거기 쌓이는 글 (2026-08-16 재설계).
@@ -495,7 +495,7 @@ export const tabStyle = (active: boolean) =>
     borderBottom: active ? '2px solid var(--adaptiveBlue700, #3F5A3C)' : '2px solid transparent',
     marginBottom: -1,
     background: 'transparent',
-    color: active ? 'var(--adaptiveBlue700, #3F5A3C)' : 'var(--adaptiveGrey600, #4E5A4B)',
+    color: active ? 'var(--adaptiveBlue700, #3F5A3C)' : 'var(--adaptiveGrey600, #5B5A4D)',
     fontSize: 14,
     fontWeight: 700,
     textAlign: 'center',
@@ -1060,9 +1060,9 @@ export function MarginCard({
               lineHeight: 1.55,
               whiteSpace: 'pre-wrap',
               wordBreak: 'keep-all',
-              // 장식 — 여백은 「연필로 적어 둔 것」이라 손글씨로 남는다(기능 글자는 고운돋움).
-              // 본문이 손글씨이던 시절엔 상속으로 그랬고, 축이 뒤집힌 뒤로는 여기서 명시한다.
-              ...HANDWRITING,
+              // 여백은 「적어 둔 것」이라 인용 축(세리프)이다 — 기능 글자(고운돋움)와 갈린다.
+              // 손글씨였다가 톤 조율 A(2026-09-24)에서 세리프로 옮겼다(부푼 면 위에서 어린이 앱 글씨로 읽혔다).
+              ...SERIF_VALUE,
             }}
           >
             {entry.quote}
@@ -1076,7 +1076,7 @@ export function MarginCard({
             lineHeight: 1.55,
             whiteSpace: 'pre-wrap',
             wordBreak: 'keep-all',
-            ...HANDWRITING, // 위와 같은 이유 — 사용자가 손으로 적은 글이다
+            ...SERIF_VALUE, // 위와 같은 이유 — 사용자가 적어 둔 글이다
             ...(clamped
               ? ({
                   display: '-webkit-box',
@@ -1439,7 +1439,7 @@ export function StoryComposer({
               borderRadius: 999,
               background: option.background,
               // 칸의 채움(`option.background`)은 내용의 색이라 그대로다 — 고름 표시만 토큰이다.
-              border: option.code === bgCode ? '2px solid var(--adaptiveBlue500, #5B7F55)' : '1px solid var(--adaptiveGrey200, #D6DFD2)',
+              border: option.code === bgCode ? '2px solid var(--adaptiveBlue500, #5B7F55)' : '1px solid var(--adaptiveGrey200, #DED8CA)',
               cursor: 'pointer',
             }}
           />
@@ -1525,11 +1525,10 @@ const composerField = (color: string) =>
     outline: 'none',
     background: 'transparent',
     color,
-    // ⚠️ 손글씨를 **명시**한다. 이 두 칸은 「쓰는 동안 보이는 것이 곧 카드」인 미리보기라(위 주석),
-    //    저장 뒤 `MarginCard`가 손글씨로 그리는데 여기만 기능 서체면 그 계약이 깨진다.
-    //    한때 `fontFamily: 'inherit'`로 body를 따랐고 그때는 body가 손글씨라 우연히 맞았다 —
-    //    서체 축이 뒤집히며(기능=고운돋움) 그 우연이 사라진 자리다.
-    ...HANDWRITING,
+    // ⚠️ 세리프를 **명시**한다. 이 두 칸은 「쓰는 동안 보이는 것이 곧 카드」인 미리보기라(위 주석),
+    //    저장 뒤 `MarginCard`가 세리프로 그리는데 여기만 기능 서체면 그 계약이 깨진다.
+    //    한때 `fontFamily: 'inherit'`로 body를 따랐다 — 그러면 카드와 쓰는 글씨가 갈린다.
+    ...SERIF_VALUE,
     lineHeight: 1.6,
     resize: 'vertical',
   }) as const;
