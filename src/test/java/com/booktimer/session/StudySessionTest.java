@@ -117,6 +117,33 @@ class StudySessionTest {
         assertThat(session.getBook()).isSameAs(book);
     }
 
+    // ── assignBook (끝난 세션의 책 정정 — 기록 화면) ────────────────────────────
+
+    @Test
+    @DisplayName("assignBook: 끝난 세션에 붙이고·바꾸고·뗀다(null 허용 — 공부엔 수동 기록이 없다)")
+    void assignBook_attachesReplacesAndDetachesOnEndedSession() {
+        StudySession session = ended();
+
+        session.assignBook(book);
+        assertThat(session.getBook()).isSameAs(book);
+
+        session.assignBook(other);
+        assertThat(session.getBook()).isSameAs(other);
+
+        session.assignBook(null);
+        assertThat(session.getBook()).isNull();
+    }
+
+    @Test
+    @DisplayName("assignBook: 진행 중 세션은 거부한다 — 재는 도중은 changeBook의 문이다")
+    void assignBook_rejectsActiveSession() {
+        StudySession active = StudySession.start(user, T0, book);
+
+        assertThatThrownBy(() -> active.assignBook(other))
+                .isInstanceOf(IllegalStateException.class);
+        assertThat(active.getBook()).isSameAs(book);
+    }
+
     // ── start ────────────────────────────────────────────────────────────────
 
     @Test

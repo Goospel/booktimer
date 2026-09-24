@@ -188,6 +188,50 @@ public class StudySessionService {
     }
 
     /**
+     * <b>끝난 측정의 책 정정</b> — 기록 화면에서 측정 한 건에 책을 붙이고·바꾸고·뗀다
+     * ({@code POST /api/study/sessions/{id}/book}). 자정 이음매를 양방향으로 걸어 분할 조각까지 함께 고치는
+     * 규칙은 독서 {@link ReadingSessionService#assignBook}과 같다(이음매 = 유저 TZ 자정, 이웃 = 고치기 전과
+     * 같은 라벨, 같은 책 재지정은 걷기 전에 끝). 공부엔 수동 기록·책 상태 전이가 없다.
+     *
+     * @param book 새 대상(호출부에서 소유 검증 완료, null = 떼기)
+     * @return 넘겨받은 그 세션
+     * @throws IllegalArgumentException 해당 사용자의 그 세션이 없는 경우(컨트롤러가 404로)
+     * @throws IllegalStateException    진행 중 세션인 경우(컨트롤러가 409로)
+     */
+    public StudySession assignBook(User user, Long sessionId, StudyBook book) {
+        StudySession session = studyRepository.findByIdAndUser(sessionId, user)
+                .orElseThrow(() -> new IllegalArgumentException("study session not found for user"));
+        StudyBook before = session.getBook();
+        if (ReadingSessionService.sameBook(before, book, StudyBook::getId)) {
+            return session;
+        }
+        session.assignBook(book);
+        studyRepository.save(session);
+        ZoneId zone = ZoneId.of(user.getTimezone());
+        for (StudySession cur = session; ReadingSessionService.isDayStart(cur.getStartedAt(), zone); ) {
+            Optional<StudySession> prev =
+                    studyRepository.findFirstByUserAndEndedAtAndIdNot(user, cur.getStartedAt(), cur.getId());
+            if (prev.isEmpty() || !ReadingSessionService.sameBook(prev.get().getBook(), before, StudyBook::getId)) {
+                break;
+            }
+            cur = prev.get();
+            cur.assignBook(book);
+            studyRepository.save(cur);
+        }
+        for (StudySession cur = session; ReadingSessionService.isDayStart(cur.getEndedAt(), zone); ) {
+            Optional<StudySession> next = studyRepository
+                    .findFirstByUserAndStartedAtAndEndedAtIsNotNullAndIdNot(user, cur.getEndedAt(), cur.getId());
+            if (next.isEmpty() || !ReadingSessionService.sameBook(next.get().getBook(), before, StudyBook::getId)) {
+                break;
+            }
+            cur = next.get();
+            cur.assignBook(book);
+            studyRepository.save(cur);
+        }
+        return session;
+    }
+
+    /**
      * <b>진행 중</b> 세션의 측정 대상 교체 — 세션은 멈추지 않으므로 잰 시간이 통째로 새 책에 붙는다.
      *
      * <p>요청에 세션 좌표가 없다(서버가 "내 진행 중 세션"을 찾는다) — 그래서 세션 IDOR이 구조적으로

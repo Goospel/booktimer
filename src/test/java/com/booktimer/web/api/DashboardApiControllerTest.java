@@ -485,6 +485,175 @@ class DashboardApiControllerTest {
                 .andExpect(status().isConflict());
     }
 
+    @Test
+    @DisplayName("POST /api/sessions/{id}/tag-book: 진행 중 세션이면 409(P17) — 재는 도중 대상은 active/book의 문이다")
+    void tagBook_activeSession_409() throws Exception {
+        User u = register("tagactive@a.com", "tagactive");
+        Book book = addBook(u, "책", BookStatus.READING);
+        ReadingSession active = sessionService.start(u, clock.instant(), null);
+
+        mockMvc.perform(post("/api/sessions/" + active.getId() + "/tag-book")
+                        .with(user("tagactive@a.com")).with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"bookId\":" + book.getId() + "}"))
+                .andExpect(status().isConflict());
+
+        assertThat(sessionRepository.findById(active.getId()).orElseThrow().getBook()).isNull();
+    }
+
+    // ── 8d-1. 끝난 측정의 책 정정 (기록 화면 붙이기·바꾸기·떼기) ─────────────────
+    //
+    // tag-book(stop 직후 1회성)·active/book(진행 중)과 다른 셋째 문이다. 키 없음({})과 명시적 null을
+    // 가른다 — 시트가 id 없는 객체를 넘기는 버그 하나로 과거 원장의 책이 조용히 떨어지면 안 된다.
+
+    private ReadingSession endedSession(User u, Book book) {
+        sessionService.start(u, clock.instant(), book);
+        return sessionService.stop(u, clock.instant());
+    }
+
+    private org.springframework.test.web.servlet.ResultActions assign(String login, Long sessionId, String body)
+            throws Exception {
+        return mockMvc.perform(post("/api/sessions/" + sessionId + "/book")
+                .with(user(login)).with(csrf())
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(body));
+    }
+
+    private Long bookIdOf(ReadingSession s) {
+        Book b = sessionRepository.findById(s.getId()).orElseThrow().getBook();
+        return b == null ? null : b.getId();
+    }
+
+    @Test
+    @DisplayName("POST /api/sessions/{id}/book: 책 없는 끝난 측정에 붙인다 → 200 + recentBookId가 그 책")
+    void assignBook_attachesToUntaggedEndedSession() throws Exception {
+        User u = register("asg1@a.com", "asg1");
+        Book book = addBook(u, "붙일 책", BookStatus.READING);
+        ReadingSession s = endedSession(u, null);
+
+        assign("asg1@a.com", s.getId(), "{\"bookId\":" + book.getId() + "}")
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.recentBookId").value(book.getId().intValue()));
+
+        assertThat(bookIdOf(s)).isEqualTo(book.getId());
+    }
+
+    @Test
+    @DisplayName("POST /api/sessions/{id}/book: 책 → 다른 책 → 200")
+    void assignBook_replacesBookOfEndedSession() throws Exception {
+        User u = register("asg2@a.com", "asg2");
+        Book first = addBook(u, "첫 책", BookStatus.READING);
+        Book other = addBook(u, "다른 책", BookStatus.READING);
+        ReadingSession s = endedSession(u, first);
+
+        assign("asg2@a.com", s.getId(), "{\"bookId\":" + other.getId() + "}")
+                .andExpect(status().isOk());
+
+        assertThat(bookIdOf(s)).isEqualTo(other.getId());
+    }
+
+    @Test
+    @DisplayName("POST /api/sessions/{id}/book: {\"bookId\":null} → 200, 책을 뗀다")
+    void assignBook_explicitNull_detaches() throws Exception {
+        User u = register("asg3@a.com", "asg3");
+        Book first = addBook(u, "첫 책", BookStatus.READING);
+        ReadingSession s = endedSession(u, first);
+
+        assign("asg3@a.com", s.getId(), "{\"bookId\":null}")
+                .andExpect(status().isOk());
+
+        assertThat(bookIdOf(s)).isNull();
+    }
+
+    @Test
+    @DisplayName("POST /api/sessions/{id}/book: {} 또는 비정수 bookId → 400, 세션 책 불변(떼기는 명시적이어야 한다)")
+    void assignBook_missingOrMalformedBookId_400() throws Exception {
+        User u = register("asg4@a.com", "asg4");
+        Book first = addBook(u, "첫 책", BookStatus.READING);
+        ReadingSession s = endedSession(u, first);
+
+        assign("asg4@a.com", s.getId(), "{}").andExpect(status().isBadRequest());
+        assign("asg4@a.com", s.getId(), "{\"bookId\":\"x\"}").andExpect(status().isBadRequest());
+
+        assertThat(bookIdOf(s)).isEqualTo(first.getId());
+    }
+
+    @Test
+    @DisplayName("POST /api/sessions/{id}/book: 남의 세션 → 404(IDOR 마스킹), 그 세션은 그대로")
+    void assignBook_othersSession_404() throws Exception {
+        User alice = register("asgalice@a.com", "asgalice");
+        User bob = register("asgbob@a.com", "asgbob");
+        ReadingSession aliceSession = endedSession(alice, null);
+        Book bobBook = addBook(bob, "밥책", BookStatus.READING);
+
+        assign("asgbob@a.com", aliceSession.getId(), "{\"bookId\":" + bobBook.getId() + "}")
+                .andExpect(status().isNotFound());
+
+        assertThat(bookIdOf(aliceSession)).isNull();
+    }
+
+    @Test
+    @DisplayName("POST /api/sessions/{id}/book: 남의 책·지워진 책 id → 404(책 IDOR)")
+    void assignBook_othersOrDeletedBook_404() throws Exception {
+        User alice = register("asgb1@a.com", "asgb1");
+        User bob = register("asgb2@a.com", "asgb2");
+        ReadingSession bobSession = endedSession(bob, null);
+        Book aliceBook = addBook(alice, "앨리스책", BookStatus.READING);
+        Book deleted = addBook(bob, "지운 책", BookStatus.READING);
+        Long deletedId = deleted.getId();
+        bookRepository.delete(deleted);
+        bookRepository.flush();
+
+        assign("asgb2@a.com", bobSession.getId(), "{\"bookId\":" + aliceBook.getId() + "}")
+                .andExpect(status().isNotFound());
+        assign("asgb2@a.com", bobSession.getId(), "{\"bookId\":" + deletedId + "}")
+                .andExpect(status().isNotFound());
+
+        assertThat(bookIdOf(bobSession)).isNull();
+    }
+
+    @Test
+    @DisplayName("POST /api/sessions/{id}/book: 진행 중 측정 → 409(그쪽은 active/book), 책 불변")
+    void assignBook_activeSession_409() throws Exception {
+        User u = register("asg5@a.com", "asg5");
+        Book book = addBook(u, "책", BookStatus.READING);
+        ReadingSession active = sessionService.start(u, clock.instant(), null);
+
+        assign("asg5@a.com", active.getId(), "{\"bookId\":" + book.getId() + "}")
+                .andExpect(status().isConflict());
+
+        assertThat(bookIdOf(active)).isNull();
+    }
+
+    @Test
+    @DisplayName("POST /api/sessions/{id}/book: 수동 기록에 null → 409(수동 기록은 책 필수), 책 불변")
+    void assignBook_manualEntryNull_409() throws Exception {
+        User u = register("asg6@a.com", "asg6");
+        Book book = addBook(u, "책", BookStatus.READING);
+        Instant start = today().atStartOfDay(ZoneId.of(SEOUL)).toInstant();
+        ReadingSession manual = sessionService.recordManual(u, start, start.plusSeconds(600), book);
+
+        assign("asg6@a.com", manual.getId(), "{\"bookId\":null}")
+                .andExpect(status().isConflict());
+
+        assertThat(bookIdOf(manual)).isEqualTo(book.getId());
+    }
+
+    @Test
+    @DisplayName("POST /api/sessions/{id}/book: 읽고싶음 책을 붙이면 응답 wantToReadBooks에서 빠지고 readingBooks에 선다")
+    void assignBook_wantToReadBook_movesToReadingBooksInResponse() throws Exception {
+        User u = register("asg7@a.com", "asg7");
+        Book picked = addBook(u, "고른 책", BookStatus.WANT_TO_READ);
+        Book stillWanted = addBook(u, "아직 읽고싶음", BookStatus.WANT_TO_READ); // 양성 대조군 — 목록이 채워지는지
+        ReadingSession s = endedSession(u, null);
+
+        assign("asg7@a.com", s.getId(), "{\"bookId\":" + picked.getId() + "}")
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.readingBooks[*].id", hasItem(picked.getId().intValue())))
+                .andExpect(jsonPath("$.wantToReadBooks[*].id", hasItem(stillWanted.getId().intValue())))
+                .andExpect(jsonPath("$.wantToReadBooks[*].id", not(hasItem(picked.getId().intValue()))));
+    }
+
     // ── 8d-2. 진행 중 세션의 대상 교체 (IDOR·무세션·양방향 전이) ──────────────
     //
     // tag-book과 달리 URL·body에 세션 좌표가 없다 — 서버가 "내 진행 중 세션"을 찾으므로 세션 IDOR이
@@ -601,7 +770,7 @@ class DashboardApiControllerTest {
                         .content("{\"bookId\":" + other.getId() + "}"))
                 .andExpect(status().isConflict());
 
-        // 끝난 기록의 대상은 그대로다 — 그쪽은 tag-book의 1회 규칙이 지킨다.
+        // 끝난 기록의 대상은 그대로다 — 끝난 기록의 정정은 별도의 문(POST /api/sessions/{id}/book)이다.
         assertThat(sessionRepository.findById(s.getId()).orElseThrow().getBook().getId())
                 .isEqualTo(started.getId());
     }

@@ -3,6 +3,7 @@ package com.booktimer.web.api;
 import com.booktimer.book.Book;
 import com.booktimer.book.BookRepository;
 import com.booktimer.book.BookStatus;
+import com.booktimer.session.ReadingSession;
 import com.booktimer.session.ReadingSessionService;
 import com.booktimer.timer.ReadingGoalChange;
 import com.booktimer.timer.ReadingGoalChangeRepository;
@@ -131,6 +132,29 @@ class HistoryApiControllerTest {
                         .value(today().format(DateTimeFormatter.ofPattern("yyyy-MM"))))
                 .andExpect(jsonPath("$.months[0].days[0].date")
                         .value(today().format(DateTimeFormatter.ISO_LOCAL_DATE)));
+    }
+
+    @Test
+    @DisplayName("각 날에 sessions가 실린다 — 펼친 줄의 [책 붙이기]/[바꾸기] 좌표가 그 세션 id다")
+    void getHistory_carriesSessionRowsWithIds() throws Exception {
+        User u = registrationService.register("histrows@booktimer.com", "rawpw1234", "세션줄", SEOUL, Role.USER, today());
+        Book book = bookRepository.save(
+                Book.register(u, "세션줄책", null, null, null, null, null, BookStatus.READING));
+        Instant start = today().atStartOfDay(ZoneId.of(SEOUL)).toInstant(); // 오늘 안(자정 분할 창 회피)
+        sessionService.start(u, start, book);
+        ReadingSession s = sessionService.stop(u, start.plusSeconds(600));
+
+        mockMvc.perform(get("/api/history")
+                        .accept(MediaType.APPLICATION_JSON)
+                        .with(user("histrows@booktimer.com")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.months[0].days[0].sessions[0].id").value(s.getId().intValue()))
+                .andExpect(jsonPath("$.months[0].days[0].sessions[0].start").value("00:00"))
+                .andExpect(jsonPath("$.months[0].days[0].sessions[0].end").value("00:10"))
+                .andExpect(jsonPath("$.months[0].days[0].sessions[0].seconds").value(600))
+                .andExpect(jsonPath("$.months[0].days[0].sessions[0].bookId").value(book.getId().intValue()))
+                .andExpect(jsonPath("$.months[0].days[0].sessions[0].bookTitle").value("세션줄책"))
+                .andExpect(jsonPath("$.months[0].days[0].sessions[0].manual").value(false));
     }
 
     @Test

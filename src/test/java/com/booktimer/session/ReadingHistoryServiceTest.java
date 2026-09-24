@@ -11,6 +11,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.test.util.ReflectionTestUtils;
 
 import java.time.Instant;
 import java.time.LocalDate;
@@ -48,18 +49,26 @@ class ReadingHistoryServiceTest {
         return User.of("reader@booktimer.com", "$2a$10$abcdefghijklmnopqrstuv", "책벌레", "Asia/Seoul", Role.USER);
     }
 
+    /** 저장된 것처럼 박는 id — {@code monthlyHistory}의 세션 줄({@code SessionRow.id})이 원시 long이다. */
+    private long nextId = 1L;
+
+    private <T> T withId(T entity) {
+        ReflectionTestUtils.setField(entity, "id", nextId++);
+        return entity;
+    }
+
     /** 시작·종료 시각을 주어 완료된 세션을 만든다. */
     private ReadingSession session(User user, Instant start, long durationSeconds) {
         ReadingSession s = ReadingSession.start(user, start);
         s.end(start.plusSeconds(durationSeconds));
-        return s;
+        return withId(s);
     }
 
     /** 특정 책에 연결된 완료 세션. */
     private ReadingSession sessionWithBook(User user, Instant start, long durationSeconds, Book book) {
         ReadingSession s = ReadingSession.start(user, start, book);
         s.end(start.plusSeconds(durationSeconds));
-        return s;
+        return withId(s);
     }
 
     @Test
@@ -334,6 +343,54 @@ class ReadingHistoryServiceTest {
 
         assertThat(day.date()).isEqualTo(LocalDate.of(2026, 6, 2));
         assertThat(day.goalSeconds()).isEqualTo(1800L); // UTC 06-01로 물었다면 폴백 3600이 나왔다
+    }
+
+    // --- 세션 줄(기록 화면 날짜 펼침 — 측정 한 건씩 + 책 정정 좌표) ---
+
+    @Test
+    @DisplayName("monthlyHistory: sessions가 실측 startedAt asc 뒤 수동 순으로 실린다(id·HH:mm·초·bookId·제목·manual) — 수동은 시각 null")
+    void monthlyHistory_carriesSessionRowsRealtimeAscThenManual() {
+        User user = seoulUser();
+        Book a = withId(Book.register(user, "책A", null, null, null, null, null, BookStatus.READING));
+        // 입력 순서를 섞는다 — 정렬은 서버(여기)가 정한다.
+        ReadingSession evening = sessionWithBook(user, Instant.parse("2026-06-01T12:00:00Z"), HOUR, a); // 21:00 KST
+        ReadingSession manual = withId(ReadingSession.manual(user,
+                Instant.parse("2026-05-31T15:00:00Z"), Instant.parse("2026-05-31T15:30:00Z"), a)); // 06-01 00:00 앵커
+        ReadingSession morning = session(user, Instant.parse("2026-06-01T00:00:00Z"), 1800L);          // 09:00 KST, 책 없음
+        when(sessionRepository.findByUserWithBook(user)).thenReturn(List.of(evening, manual, morning));
+
+        List<DailyReadingRecord.SessionRow> rows = service.monthlyHistory(user, NO_GOAL).get(0).days().get(0).sessions();
+
+        assertThat(rows).containsExactly(
+                new DailyReadingRecord.SessionRow(morning.getId(), "09:00", "09:30", 1800L, null, null, false),
+                new DailyReadingRecord.SessionRow(evening.getId(), "21:00", "22:00", HOUR, a.getId(), "책A", false),
+                // 수동 기록의 시각은 서버 앵커라 화면에 찍으면 거짓 — 시각은 비우고 맨 뒤에 선다.
+                new DailyReadingRecord.SessionRow(manual.getId(), null, null, 1800L, a.getId(), "책A", true));
+    }
+
+    @Test
+    @DisplayName("monthlyHistory: 세션 줄의 HH:mm은 유저 타임존이다(UTC 22:40 → KST 07:40)")
+    void monthlyHistory_sessionClockIsUserTimezone() {
+        User user = seoulUser();
+        when(sessionRepository.findByUserWithBook(user)).thenReturn(List.of(
+                session(user, Instant.parse("2026-06-01T22:40:00Z"), 600L)));
+
+        DailyReadingRecord day = service.monthlyHistory(user, NO_GOAL).get(0).days().get(0);
+
+        assertThat(day.date()).isEqualTo(LocalDate.of(2026, 6, 2));
+        assertThat(day.sessions()).extracting(DailyReadingRecord.SessionRow::start, DailyReadingRecord.SessionRow::end)
+                .containsExactly(tuple("07:40", "07:50"));
+    }
+
+    @Test
+    @DisplayName("dailyHistory: sessions는 빈 목록 — 잔디·부채·책 상세는 세션 줄을 만들지 않는다(id 없는 픽스처로도 안 터진다)")
+    void dailyHistory_doesNotBuildSessionRows() {
+        User user = seoulUser();
+        ReadingSession unsaved = ReadingSession.start(user, Instant.parse("2026-06-01T01:00:00Z")); // id=null
+        unsaved.end(Instant.parse("2026-06-01T02:00:00Z"));
+        when(sessionRepository.findByUserWithBook(user)).thenReturn(List.of(unsaved));
+
+        assertThat(service.dailyHistory(user).get(0).sessions()).isEmpty();
     }
 
     @Test

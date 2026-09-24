@@ -12,6 +12,8 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.test.util.ReflectionTestUtils;
+import com.booktimer.book.StudyBook;
 
 import java.time.Duration;
 import java.time.Instant;
@@ -21,6 +23,7 @@ import java.time.ZoneId;
 import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.tuple;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.when;
 
@@ -53,9 +56,17 @@ class StudyHistoryServiceTest {
         return LocalDate.parse(isoDate).atTime(12, 0).atZone(SEOUL).toInstant();
     }
 
+    /** 저장된 것처럼 박는 id — 세션 줄({@code SessionRow.id})이 원시 long이다. */
+    private long nextId = 1L;
+
     private StudySession completed(User owner, Instant startedAt, Duration length) {
-        StudySession session = StudySession.start(owner, startedAt);
+        return completed(owner, startedAt, length, null);
+    }
+
+    private StudySession completed(User owner, Instant startedAt, Duration length, StudyBook book) {
+        StudySession session = StudySession.start(owner, startedAt, book);
         session.end(startedAt.plus(length));
+        ReflectionTestUtils.setField(session, "id", nextId++);
         return session;
     }
 
@@ -105,10 +116,26 @@ class StudyHistoryServiceTest {
         assertThat(history.months()).extracting(Month::month)
                 .containsExactly(YearMonth.of(2026, 9), YearMonth.of(2026, 8));
         assertThat(history.months().get(0).totalSeconds()).isEqualTo(3600);
-        assertThat(history.months().get(0).days())
-                .containsExactly(new Day(LocalDate.parse("2026-09-01"), 3600));
-        assertThat(history.months().get(1).days())
-                .containsExactly(new Day(LocalDate.parse("2026-08-30"), 900));
+        assertThat(history.months().get(0).days()).extracting(Day::date, Day::totalSeconds)
+                .containsExactly(tuple(LocalDate.parse("2026-09-01"), 3600L));
+        assertThat(history.months().get(1).days()).extracting(Day::date, Day::totalSeconds)
+                .containsExactly(tuple(LocalDate.parse("2026-08-30"), 900L));
+    }
+
+    @Test
+    @DisplayName("history: 날마다 측정 한 건씩 sessions에 실린다 — startedAt asc, 유저 TZ HH:mm, 책 id·제목, manual=false")
+    void history_carriesSessionRowsPerDay() {
+        StudyBook book = StudyBook.register(user, "정보처리기사 실기", "저자", null, null, null, null);
+        ReflectionTestUtils.setField(book, "id", 42L);
+        StudySession late = completed(user, noonKst("2026-09-01").plus(Duration.ofHours(3)), Duration.ofMinutes(40), book);
+        StudySession early = completed(user, noonKst("2026-09-01"), Duration.ofMinutes(20));
+        given(late, early); // 입력은 늦은 것 먼저 — 정렬은 서비스가 한다
+
+        Day day = service.history(user, noonKst("2026-09-02")).months().get(0).days().get(0);
+
+        assertThat(day.sessions()).containsExactly(
+                new DailyReadingRecord.SessionRow(early.getId(), "12:00", "12:20", 1200L, null, null, false),
+                new DailyReadingRecord.SessionRow(late.getId(), "15:00", "15:40", 2400L, 42L, "정보처리기사 실기", false));
     }
 
     /**
