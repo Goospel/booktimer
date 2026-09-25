@@ -120,8 +120,9 @@ describe('StudyBookSheet — 힌트 · assign · 오류 (R2)', () => {
             .toBe('책을 고르면 책만 바뀌어요 — 공부 측정은 「공부 측정 시작」을 눌러야 시작돼요.');
     });
 
-    test('tag 힌트는 중립 문구 — 「나중에 정해도」가 없다', () => {
-        expect(mountSheet({ mode: 'tag' }).find('.book-sheet-hint').text()).toBe('방금 잰 시간을 책에 붙여요.');
+    test('tag 힌트는 건너뛰어도 「공부 기록」에서 붙일 수 있다고 말한다', () => {
+        expect(mountSheet({ mode: 'tag' }).find('.book-sheet-hint').text())
+            .toBe('방금 잰 시간을 책에 붙여요. 건너뛰어도 「공부 기록」에서 붙일 수 있어요.');
     });
 
     test('assign: 책 없는 측정 / 책 있는 측정의 제목이 갈리고, CTA 「책 없이 두기」 → none', async () => {

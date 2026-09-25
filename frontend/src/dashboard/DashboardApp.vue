@@ -375,7 +375,7 @@ async function tagBook(bookId: number) {
             headers: { 'Content-Type': 'application/json', 'X-CSRF-TOKEN': getCsrfToken() },
             body: JSON.stringify({ bookId }),
         })
-        // 실패에 시트를 닫지 않는다 — stop 응답이 준 세션 좌표를 쥔 곳이 이 시트뿐이라 닫으면 미태깅으로 굳는다.
+        // 실패에 시트를 닫지 않는다 — 이 화면에서 그 세션을 다시 여는 곳은 이 시트뿐이다(닫으면 재진입은 「독서 기록」).
         if (!res.ok) { sheetError.value = '책을 연결하지 못했어요'; return }
         closeSheet()
         // tag-book 응답엔 상태가 없다 — 읽고싶음 책을 붙이면 서버에선 읽는 중이 됐고 recentBookId도 바뀌었다(P10).
@@ -454,7 +454,7 @@ async function studyTagBook(bookId: number) {
         })
         // 여기엔 404 자동 복구(시트 닫기 + 재조회)를 두지 않는다 — start·change와 갈리는 자리다.
         // 이 시트가 그 세션을 태깅할 홈의 **유일한 진입점**이라(세션 id는 stop 응답에만 실린다) 닫으면
-        // 미태깅으로 굳는다. 열어 둬야 사용자가 다른 책을 골라 성공할 수 있다 — 그래서 오류도 시트 안에(P7).
+        // 재진입은 「공부 기록」뿐이다. 열어 둬야 사용자가 여기서 바로 다른 책을 골라 성공할 수 있다 — 그래서 오류도 시트 안에(P7).
         if (!res.ok) { sheetError.value = '책을 연결하지 못했어요'; return }
         study.value = studyStateOf(await res.json())
         closeStudySheet()

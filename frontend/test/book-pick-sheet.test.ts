@@ -249,11 +249,12 @@ describe('BookPickSheet — start·tag 힌트 (R2 P13·P14)', () => {
         expect(w.find('.book-sheet-hint').text()).toBe('책을 고르면 책만 바뀌어요 — 측정은 「측정 시작」을 눌러야 시작돼요.');
     });
 
-    // 「나중에 정해도 괜찮아요」는 나중에 정할 자리가 없던 때의 거짓말이다. 기록에서 붙이는 안내는
-    // 그 기능이 실리는 PR-3에서 — 그 사이 운영 화면이 없는 기능을 약속하지 않게 중립 문구로 둔다.
-    test('tag 힌트는 중립 문구 — 「나중에 정해도」가 없다', async () => {
+    // 「나중에 정해도 괜찮아요」는 나중에 정할 자리가 없던 때의 거짓말이었다. 이제 그 자리가 있다 —
+    // 기록 화면(사이드 레일 「독서 기록」)에서 측정 한 건씩 붙인다(R2 PR-3, 기능과 같은 PR에 실린 문구).
+    test('tag 힌트는 건너뛰어도 「독서 기록」에서 붙일 수 있다고 말한다', async () => {
         const w = make({ mode: 'tag' });
         await flushPromises();
-        expect(w.find('.book-sheet-hint').text()).toBe('방금 측정한 독서에 책을 연결해요.');
+        expect(w.find('.book-sheet-hint').text())
+            .toBe('방금 측정한 독서에 책을 연결해요. 건너뛰어도 「독서 기록」에서 붙일 수 있어요.');
     });
 });

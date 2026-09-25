@@ -284,7 +284,7 @@ describe('DashboardApp — 종료 후 태깅 실패·성공 (R2 P7·P10)', () =>
         await openSheetFrom(w, '측정 종료');
     }
 
-    // 이 시트는 그 세션을 붙일 지금의 유일한 진입점이다 — 실패에 닫으면 미태깅으로 굳는다.
+    // 이 화면에서 그 세션을 다시 여는 곳은 이 시트뿐이다 — 실패에 닫으면 재진입은 「독서 기록」/「공부 기록」.
     test('tag-book이 실패하면 시트를 연 채 시트 안에서 말한다(딤 뒤 페이지 알림이 아니라)', async () => {
         const w = await mountR2({ tagStatus: 404 });
         await stopToTagSheet(w);

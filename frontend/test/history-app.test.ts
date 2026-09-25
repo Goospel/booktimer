@@ -176,3 +176,185 @@ describe('MonthlyRecords 월 네비 경계', () => {
         expect(document.body.classList.contains('history-wide')).toBe(true);
     });
 });
+
+// ── R2 PR-3 — 날짜를 펼치면 측정 한 건씩, 그 줄에서 책을 붙이거나 바꾼다 ──────────────────────
+// 계측기 메모
+//  · 통과가 확정하는 것: sessions가 있는 날만 펼침 버튼이 서고, 줄마다 시각(수동은 「직접 기록」)·시간(60초 미만은
+//    「1분 미만」)·제목(없으면 「책 없음」)·버튼(책 없으면 「책 붙이기」, 있으면 「바꾸기」)을 그린다. 누른 줄의
+//    **id로** POST /api/sessions/{id}/book에 X-CSRF-TOKEN을 달아 보내고 /api/history를 다시 받는다.
+//  · 실패가 배제하는 것: 옛 응답(sessions 없음)에서 빈 펼침 · 수동 기록에 거짓 시각(00:00) · 줄 뒤섞임(다른 id로 전송) ·
+//    수동 기록에 「책 없이 두기」(서버 409) · 실패를 삼키고 시트 닫기.
+const S_BLANK = { id: 11, start: '07:40', end: '08:20', seconds: 2400, bookId: null, bookTitle: null, manual: false };
+const S_SHORT = { id: 12, start: '21:00', end: '21:00', seconds: 30, bookId: 3, bookTitle: '클린 코드', manual: false };
+const S_MANUAL = { id: 13, start: null, end: null, seconds: 1800, bookId: 3, bookTitle: '클린 코드', manual: true };
+
+const SESSION_MONTHS = [
+    {
+        month: '2026-06',
+        totalSeconds: 4230,
+        days: [
+            { date: '2026-06-20', totalSeconds: 4230, books: [{ title: '클린 코드', coverUrl: null, seconds: 1830 }],
+              manuallyFilled: true, sessions: [S_BLANK, S_SHORT, S_MANUAL] },
+            // 옛 응답 모양 — sessions 키가 없다(서버 배포 전 캐시·다른 경로). 펼침이 없어야 한다.
+            { date: '2026-06-19', totalSeconds: 3600, books: [], manuallyFilled: false },
+        ],
+    },
+];
+
+async function expand(wrapper: ReturnType<typeof mount>) {
+    await wrapper.find('.record-toggle').trigger('click');
+    return wrapper.findAll('.record-session');
+}
+
+describe('MonthlyRecords — 측정 한 건 줄 (R2 PR-3)', () => {
+    test('sessions 있는 날만 펼침 버튼(aria-expanded)이 서고, 없는 날은 옛 모양 그대로', () => {
+        const w = mount(MonthlyRecords, { props: { months: SESSION_MONTHS } });
+        const toggles = w.findAll('.record-toggle');
+        expect(toggles).toHaveLength(1);
+        // 클래스만 세면 없는 날도 <button>(눌러도 아무 일 없는 포커스 가능 버튼)으로 그려지는 회귀를 놓친다.
+        expect(w.findAll('.record-head').map((h) => h.element.tagName)).toEqual(['BUTTON', 'DIV']);
+        expect(toggles[0].attributes('aria-expanded')).toBe('false');
+        expect(toggles[0].text()).toContain('2026-06-20');
+        expect(w.text()).toContain('2026-06-19');           // 펼침이 없는 날도 그린다(양성)
+        expect(w.findAll('.record-session')).toHaveLength(0); // 접힌 채로 시작
+    });
+
+    test('펼치면 줄마다 시각·시간·제목·버튼 — 서버가 준 순서 그대로', async () => {
+        const w = mount(MonthlyRecords, { props: { months: SESSION_MONTHS } });
+        const rows = await expand(w);
+        expect(w.find('.record-toggle').attributes('aria-expanded')).toBe('true');
+        expect(rows).toHaveLength(3);
+
+        expect(rows[0].text()).toContain('07:40–08:20');
+        expect(rows[0].text()).toContain('40분');
+        expect(rows[0].text()).toContain('책 없음');
+        expect(rows[0].find('button').text()).toBe('책 붙이기');
+
+        expect(rows[1].text()).toContain('1분 미만');
+        expect(rows[1].text()).toContain('클린 코드');
+        expect(rows[1].find('button').text()).toBe('바꾸기');
+    });
+
+    test('수동 기록 줄은 시각 대신 「직접 기록」 — 서버 앵커 시각을 찍지 않는다', async () => {
+        const w = mount(MonthlyRecords, { props: { months: SESSION_MONTHS } });
+        const rows = await expand(w);
+        expect(rows[2].text()).toContain('직접 기록');
+        expect(rows[2].text()).toContain('30분');
+        expect(rows[2].text()).not.toContain('null');
+        expect(rows[2].text()).not.toContain('–');
+    });
+
+    test('줄 버튼은 **그 줄**을 assign으로 올린다', async () => {
+        const w = mount(MonthlyRecords, { props: { months: SESSION_MONTHS } });
+        const rows = await expand(w);
+        await rows[1].find('button').trigger('click');
+        await rows[0].find('button').trigger('click');
+        expect(w.emitted('assign')).toEqual([[S_SHORT], [S_BLANK]]);
+    });
+
+    test('다시 누르면 접힌다', async () => {
+        const w = mount(MonthlyRecords, { props: { months: SESSION_MONTHS } });
+        await expand(w);
+        await w.find('.record-toggle').trigger('click');
+        expect(w.find('.record-toggle').attributes('aria-expanded')).toBe('false');
+        expect(w.findAll('.record-session')).toHaveLength(0);
+    });
+});
+
+describe('HistoryApp — 기록에서 책 붙이기·바꾸기 (R2 PR-3)', () => {
+    const SHELF_BOOKS = {
+        searchEnabled: false,
+        books: [{ id: 5, title: '데미안', author: null, coverUrl: null, isbn13: null, status: 'READING', statusLabel: '읽는 중' }],
+    };
+    let posts: { url: string; body: unknown; headers: Record<string, string> }[] = [];
+    let postOk = true;
+    let postHold: Promise<void> | null = null; // 있으면 POST 응답을 그때까지 붙잡는다(경주 재현용)
+
+    function route(url: string, opts?: { method?: string; body?: string; headers?: Record<string, string> }) {
+        if (opts?.method === 'POST') {
+            posts.push({ url, body: JSON.parse(opts.body ?? 'null'), headers: opts.headers ?? {} });
+            const ok = postOk;
+            return (postHold ?? Promise.resolve()).then(() => ({ ok, status: ok ? 200 : 409, json: async () => ({}) }));
+        }
+        if (url.includes('/api/books')) return Promise.resolve({ ok: true, status: 200, json: async () => SHELF_BOOKS });
+        return Promise.resolve({ ok: true, status: 200, json: async () => ({ ...MOCK_RESPONSE, months: SESSION_MONTHS }) });
+    }
+    const historyCalls = () => (fetch as ReturnType<typeof vi.fn>).mock.calls.filter((c) => String(c[0]) === '/api/history').length;
+
+    beforeEach(() => {
+        posts = [];
+        postOk = true;
+        postHold = null;
+        vi.stubGlobal('fetch', vi.fn(route));
+        const meta = document.createElement('meta');
+        meta.name = '_csrf';
+        meta.content = 'tok-123';
+        document.head.appendChild(meta);
+    });
+    afterEach(() => { document.head.querySelectorAll('meta[name="_csrf"]').forEach((m) => m.remove()); });
+
+    async function openSheetFor(rowIndex: number) {
+        const w = mount(HistoryApp, { attachTo: document.body });
+        await vi.waitFor(() => expect(w.find('.record-toggle').exists()).toBe(true));
+        const rows = await expand(w);
+        await rows[rowIndex].find('button').trigger('click');
+        await vi.waitFor(() => expect(w.find('.book-sheet-book').exists()).toBe(true));
+        return w;
+    }
+
+    test('[책 붙이기] → assign 시트 → 고른 책 id를 그 측정에 POST(+CSRF) → /api/history 재조회 → 시트 닫힘', async () => {
+        const w = await openSheetFor(0);
+        expect(w.find('.book-sheet-title').text()).toBe('이 측정은 무슨 책이었나요?');
+        expect(historyCalls()).toBe(1);
+
+        await w.find('.book-sheet-book').trigger('click');
+        await vi.waitFor(() => expect(historyCalls()).toBe(2));
+        expect(posts).toEqual([{ url: '/api/sessions/11/book', body: { bookId: 5 }, headers: expect.objectContaining({ 'X-CSRF-TOKEN': 'tok-123' }) }]);
+        await vi.waitFor(() => expect(w.find('.book-sheet-panel').exists()).toBe(false));
+    });
+
+    test('실측 줄 [바꾸기] 시트의 「책 없이 두기」 → {bookId: null}', async () => {
+        const w = await openSheetFor(1);
+        expect(w.find('.book-sheet-title').text()).toBe('다른 책으로 바꿀까요?');
+        const cta = w.find('.book-sheet-cta');
+        expect(cta.text()).toBe('책 없이 두기');
+        await cta.trigger('click');
+        await vi.waitFor(() => expect(posts).toHaveLength(1));
+        expect(posts[0].url).toBe('/api/sessions/12/book');
+        expect(posts[0].body).toEqual({ bookId: null });
+    });
+
+    test('수동 기록 줄의 시트엔 「책 없이 두기」가 없다(수동 기록은 책 필수)', async () => {
+        const w = await openSheetFor(2);
+        expect(w.find('.book-sheet-book').exists()).toBe(true); // 시트는 떴다(양성)
+        expect(w.find('.book-sheet-cta').exists()).toBe(false);
+    });
+
+    test('POST 실패면 시트가 열린 채 시트 안에서 말하고, 재조회하지 않는다', async () => {
+        postOk = false;
+        const w = await openSheetFor(0);
+        await w.find('.book-sheet-book').trigger('click');
+        await vi.waitFor(() => expect(w.find('.book-sheet-error').exists()).toBe(true));
+        expect(w.find('.book-sheet-error').text()).toBe('책을 붙이지 못했어요');
+        expect(w.find('.book-sheet-panel').exists()).toBe(true);
+        expect(historyCalls()).toBe(1);
+    });
+
+    // F3 — 보낸 뒤 시트를 닫고 다른 줄을 열면, 먼저 보낸 요청의 결과가 새 시트에 붙으면 안 된다.
+    test('먼저 보낸 요청이 실패해도 새로 연 다른 줄의 시트엔 오류를 붙이지 않고 닫지도 않는다', async () => {
+        postOk = false;
+        let release!: () => void;
+        postHold = new Promise<void>((r) => { release = r; });
+        const w = await openSheetFor(0);
+        await w.find('.book-sheet-book').trigger('click');
+        await vi.waitFor(() => expect(posts).toHaveLength(1));
+        await w.find('.book-sheet-close').trigger('click');
+        await w.findAll('.record-session')[1].find('button').trigger('click');
+        expect(w.find('.book-sheet-title').text()).toBe('다른 책으로 바꿀까요?');
+        release();
+        await new Promise((r) => setTimeout(r, 0));
+        await w.vm.$nextTick();
+        expect(w.find('.book-sheet-panel').exists()).toBe(true);
+        expect(w.find('.book-sheet-error').exists()).toBe(false);
+    });
+});
