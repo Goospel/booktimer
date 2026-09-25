@@ -46,8 +46,9 @@ $checker = Join-Path $cwd 'scripts\rebuild-troubleshooting-index.ps1'
 if (-not (Test-Path $checker)) { exit 0 }  # 검사기 없으면 비치명 통과
 
 # git·검사기 출력(UTF-8)을 CP949 로 디코딩하면 [BLOCKED] 메시지의 한글·—·✗ 가 깨진다 — 끝에서 원래 값 복원.
-$prevOutEnc = [Console]::OutputEncoding
-[Console]::OutputEncoding = [Text.Encoding]::UTF8
+# 콘솔 없는 프로세스에선 대입이 예외(핸들이 잘못됨)를 던진다 — 삼키지 않으면 exit 1 로 게이트 전체가 빠진다.
+$prevOutEnc = $null
+try { $prevOutEnc = [Console]::OutputEncoding; [Console]::OutputEncoding = [Text.Encoding]::UTF8 } catch {}
 try {
 
 # ── 1. 옛 형식 차단 ─────────────────────────────────────────────────────────
@@ -84,4 +85,4 @@ if ($code -ne 0) {
 & git -C $cwd add -- $rel 2>$null | Out-Null
 exit 0
 
-} finally { [Console]::OutputEncoding = $prevOutEnc }
+} finally { if ($prevOutEnc) { try { [Console]::OutputEncoding = $prevOutEnc } catch {} } }

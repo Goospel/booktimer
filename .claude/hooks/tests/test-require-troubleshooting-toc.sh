@@ -78,6 +78,26 @@ printf 'x\n' > "$d/other.txt"; git -C "$d" add other.txt
 check "[REQ-13 ctrl] not staged -> exit 0" "0" "$(run_hook "$C" "$d")"
 check "[REQ-13 ctrl] not staged -> staged hub unchanged" "no" "$(staged_hub_has "$d" 'T-002')"
 
+# ── REQ-13: [Console]::OutputEncoding setter throws (no console: FreeConsole -> "handle is invalid")
+#    -> gate still runs (exit 0 + hub regenerated), not an uncaught exit 1 that skips the whole gate.
+#    PowerShell allocates a hidden console before any native command, so `git` is shadowed by a
+#    function (fixed staged list) to keep the process console-less up to the setter. ──
+NOCON=$(mktemp -d); TMPS+=("$NOCON")
+cat > "$NOCON/run.ps1" <<'EOF'
+param([string]$Hook)
+function global:git { if ($args -contains '--name-only') { 'claude-docs/troubleshooting/T-002.md' } }
+Add-Type -Namespace W -Name K -MemberDefinition '[DllImport("kernel32.dll")] public static extern bool FreeConsole();'
+[void][W.K]::FreeConsole()
+try { & $Hook; exit $LASTEXITCODE } catch { [Console]::Error.WriteLine("UNCAUGHT: $($_.Exception.Message)"); exit 1 }
+EOF
+d=$(setup_repo)
+item T-002 '둘째' > "$d/claude-docs/troubleshooting/T-002.md"
+got=$(printf '{"tool_input":{"command":"%s"},"cwd":"%s"}' "$C" "$(cygpath -w "$d" | sed 's/\\/\\\\/g')" \
+    | timeout 90 powershell.exe -NoProfile -File "$(cygpath -w "$NOCON/run.ps1")" -Hook "$(cygpath -w "$PWD/$HOOK")" >/dev/null 2>"$ERRF"; echo $?)
+check "[REQ-13] setter throws (no console) -> exit 0" "0" "$got"
+grep -qF '[T-002](troubleshooting/T-002.md)' "$d/claude-docs/troubleshooting.md" && r=yes || r=no
+check "[REQ-13] setter throws (no console) -> checker ran, hub lists T-002" "yes" "$r"
+
 # ── REQ-14: T file without summary -> exit 2, checker output passed on ──
 d=$(setup_repo)
 printf -- '---\npromoted: x\n---\n\n# T-002 · 둘째\n' > "$d/claude-docs/troubleshooting/T-002.md"
