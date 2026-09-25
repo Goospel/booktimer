@@ -133,7 +133,13 @@ foreach ($row in $rows) {
     }
     $rowDate = $m.Groups['date'].Value; $id = $m.Groups['id'].Value; $tag = $m.Groups['tag'].Value
     $text = [regex]::Replace($m.Groups['text'].Value, '\s*\|\s*$', '')
-    if ($text.EndsWith(')')) { $text = $text.Substring(0, $text.Length - 1) }
+    # 끝 `)` 는 바깥 `(`(정규식이 먹은 것)의 짝일 때만 뗀다 — 깊이 1에서 훑어 처음 0이 되는 곳이 마지막 글자일 때.
+    # 바깥 괄호가 먼저 닫혔거나(`(**제목**) / … T-093(설명)`) 안 닫힌 행(T-176·T-250)의 끝 `)` 는 본문 괄호다.
+    $depth = 1; $close = -1
+    for ($k = 0; $k -lt $text.Length -and $close -lt 0; $k++) {
+        if ($text[$k] -eq '(') { $depth++ } elseif ($text[$k] -eq ')') { $depth--; if ($depth -eq 0) { $close = $k } }
+    }
+    if ($close -ge 0 -and $close -eq $text.Length - 1) { $text = $text.Substring(0, $close) }
     $text = $text.Replace('\|', '|')
 
     $it = $items[$id]

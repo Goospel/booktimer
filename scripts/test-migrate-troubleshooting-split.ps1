@@ -122,7 +122,9 @@ $fixture = @(
   ']둘째 줄 이어짐) |',
   '',
   '| 2026-06-10 | T-002 (둘째 누적 갱신 메모) |',
-  '| 2026-06-12 | T-007 (**괄호 닫힌 제목**) / **1회차** / 증상: 제목 뒤에서 괄호가 닫힘 |'
+  '| 2026-06-12 | T-007 (**괄호 닫힌 제목**) / **1회차** / 증상: 제목 뒤에서 괄호가 닫힘 |',
+  '| 2026-06-13 | T-008 (**먼저 닫힌 바깥**) / 관련: T-093(본문 괄호) |',
+  '| 2026-06-14 | T-005 (안 닫힌 바깥 신규(단 본문 괄호) |'
 )
 
 $tmp = Join-Path ([IO.Path]::GetTempPath()) ('mts-' + [Guid]::NewGuid().ToString('N').Substring(0, 8))
@@ -138,8 +140,8 @@ try {
   function Fx([string]$id) { $p = Join-Path $tsDir "$id.md"; if (Test-Path $p) { Read-Text $p } else { '' } }
 
   Write-Host "`n[REQ-02] 헤딩 섹션이 본문 원문 그대로 파일이 된다"
-  Assert-That 'REQ-02 · 스크립트 exit 0 + 마커 MIGRATE: OK files=7 tails=7 residual=1' `
-    ($run.Code -eq 0 -and $run.Out.Contains('MIGRATE: OK files=7 tails=7 residual=1')) "실제($($run.Code)): $($run.Out.Trim())"
+  Assert-That 'REQ-02 · 스크립트 exit 0 + 마커 MIGRATE: OK files=8 tails=8 residual=1' `
+    ($run.Code -eq 0 -and $run.Out.Contains('MIGRATE: OK files=8 tails=8 residual=1')) "실제($($run.Code)): $($run.Out.Trim())"
   $exp001 = @(
     '---', 'summary: 첫째 제목', 'date: 2026-06-01',
     'legacy: 2026-09-25 단일 파일 이관 · 헤딩형(4필드 이전 형식)', '---', '',
@@ -180,6 +182,11 @@ try {
     '# T-007 · 괄호 닫힌 제목', '',
     '**1회차** / 증상: 제목 뒤에서 괄호가 닫힘', '') -join "`n"
   Assert-That 'REQ-03 · T-007(`(**제목**) / …` 변형) 전문 일치 — summary=볼드 제목만' ((Fx 'T-007') -ceq $exp007) "실제:`n$(Fx 'T-007')"
+  # 끝 `)` 는 바깥 `(` 의 짝일 때만 뗀다 — 바깥 괄호가 먼저 닫혔거나(T-008) 아예 안 닫힌 행(T-005 꼬리)의 끝 `)` 는 본문이다.
+  $t8 = Fx 'T-008'
+  Assert-That 'REQ-03 · T-008(바깥 괄호가 먼저 닫힘) 본문 끝 `)` 보존' ($t8.Contains("`n`n관련: T-093(본문 괄호)`n")) "실제:`n$t8"
+  Assert-That 'REQ-03 · T-005 꼬리(바깥 괄호 안 닫힘) 끝 `)` 보존' `
+    ($t5.Contains("`n- **누적 갱신** (2026-06-14): 안 닫힌 바깥 신규(단 본문 괄호)`n")) "실제:`n$t5"
 
   Write-Host "`n[REQ-04] 보강·확장·회차 행은 그 번호 파일 끝의 줄이 된다"
   Assert-That 'REQ-04 · T-002(신규 2 + 보강 2) 전문 일치 — 누적 갱신 2 + 2회차·3회차, 원문 순서' ((Fx 'T-002') -ceq $exp002) "실제:`n$(Fx 'T-002')"
@@ -220,11 +227,11 @@ try {
   Assert-That 'REQ-08 · 목차가 검사기로 채워졌다(T-006 줄, 최신이 위)' `
     ($hub.Contains("- [T-007](troubleshooting/T-007.md) · 괄호 닫힌 제목`n- [T-006](troubleshooting/T-006.md) · 끊긴 행`n- [T-005](troubleshooting/T-005.md) · 닫는 괄호 없음`n")) "허브:`n$hub"
   $c = Invoke-Check $root
-  Assert-That 'REQ-08 · 검사기 -Check = OK (7 entries)' ($c.Code -eq 0 -and $c.Out.Contains('INDEX-CHECK: OK (7 entries)')) "실제($($c.Code)): $($c.Out.Trim())"
+  Assert-That 'REQ-08 · 검사기 -Check = OK (8 entries)' ($c.Code -eq 0 -and $c.Out.Contains('INDEX-CHECK: OK (8 entries)')) "실제($($c.Code)): $($c.Out.Trim())"
   $outs = @(Get-ChildItem $tsDir -Filter '*.md' -File -ErrorAction SilentlyContinue | ForEach-Object FullName) +
           @((Join-Path $root 'troubleshooting.md'), (Join-Path $root 'troubleshooting-tracker.md'))
   $bad = @($outs | Where-Object { (Has-Bom $_) -or (Has-Cr $_) })
-  Assert-That "REQ-08 · 산출물 $($outs.Count)개 전부 BOM 없음·CR 0" ($outs.Count -eq 9 -and $bad.Count -eq 0) "위반: $($bad -join ', ')"
+  Assert-That "REQ-08 · 산출물 $($outs.Count)개 전부 BOM 없음·CR 0" ($outs.Count -eq 10 -and $bad.Count -eq 0) "위반: $($bad -join ', ')"
   function Hash-All { ($outs | ForEach-Object { if (Test-Path $_) { (Get-FileHash $_ -Algorithm SHA256).Hash } else { 'missing' } }) -join ',' }
   $hash1 = Hash-All
   $r = Invoke-Migrate $fx $root
@@ -268,9 +275,16 @@ try {
     foreach ($row in $rows) {
       $m = $rowRx.Match($row)
       if (-not $m.Success) { continue }
+      # 끝 `)` 는 떼지 않는다 — 그것이 바깥 괄호인지는 스크립트가 정할 일이고, 참조 파서가 같은 규칙을 베끼면
+      # 오류도 같이 통과한다(실제로 9개 파일의 본문 `)` 손실을 놓쳤다). 판정은 아래 Pat-Text 가 양쪽을 다 허용한다.
       $t = [regex]::Replace($m.Groups[5].Value, '\s*\|\s*$', '')
-      if ($t.EndsWith(')')) { $t = $t.Substring(0, $t.Length - 1) }
       $parsed += [pscustomobject]@{ Date = $m.Groups[1].Value; Id = $m.Groups[2].Value; Tag = $m.Groups[3].Value; Text = $t.Replace('\|', '|') }
+    }
+
+    # 산출 본문 = 원문, 또는 산출 본문 + `)` = 원문(바깥 괄호를 뗀 경우). 어느 쪽이 맞는지는 판정하지 않는다
+    # — 본문 `)` 보존은 픽스처 T-008·T-005 와 REQ-09 실데이터 리터럴 단언이 잠근다.
+    function Pat-Text([string]$t) {
+      if ($t.EndsWith(')')) { [regex]::Escape($t.Substring(0, $t.Length - 1)) + '\)?' } else { [regex]::Escape($t) }
     }
 
     # 왕복 검사기: 문제 목록을 돌려준다(0건 = 손실 없음). 양성 대조에도 같은 함수를 쓴다.
@@ -297,12 +311,12 @@ try {
         if ($isItem) {
           $bm = [regex]::Match($p.Text, '^\*\*(.+?)\*\*\)?\s*/\s*')
           $body = if ($bm.Success) { $p.Text.Substring($bm.Length) } else { $p.Text }
-          $ok = $ft.Contains("`ndate: $($p.Date)`n") -and ([regex]::Matches($ft, [regex]::Escape("`n$body`n")).Count -eq 1)
+          $ok = $ft.Contains("`ndate: $($p.Date)`n") -and ([regex]::Matches($ft, '\n' + (Pat-Text $body) + '\n').Count -eq 1)
           if ($bm.Success) { $ok = $ok -and $ft.Contains("`nsummary: $($bm.Groups[1].Value)`n") }
           if (-not $ok) { $probs += "T-$($p.Id) ($($p.Date)) 표 행형 본문 불일치" }
         } else {
           $label = if (-not $p.Tag) { [regex]::Escape('누적 갱신') } elseif ($p.Tag -eq '확장') { '확장' } else { '\d+회차' }
-          $rx = "\n- \*\*$label\*\* \($($p.Date)\): " + [regex]::Escape($p.Text) + '\n'
+          $rx = "\n- \*\*$label\*\* \($($p.Date)\): " + (Pat-Text $p.Text) + '\n'
           if ([regex]::Matches($ft, $rx).Count -ne 1) { $probs += "T-$($p.Id) ($($p.Date)) 꼬리 줄 대응 실패" }
         }
       }
@@ -315,6 +329,14 @@ try {
     Assert-That 'REQ-09 · 실데이터 이관 exit 0' ($run.Code -eq 0) "실제($($run.Code)): $($run.Out.Trim())"
     $probs = Test-RoundTrip $realDir (Join-Path $real 'troubleshooting-tracker.md')
     Assert-That "REQ-09 · 왕복 문제 0건 (헤딩 $($sections.Count) · 표 행 $($parsed.Count))" ($probs.Count -eq 0) (($probs | Select-Object -First 10) -join ' / ')
+    # 본문 괄호로 끝나는 실데이터 9행 — 원문 끝 리터럴(`)` 포함)이 산출물 줄 끝에 그대로 있어야 한다.
+    $parenEnds = [ordered]@{
+      '051' = '복원(#346이 누적표에만 추가)'; '176' = 'T-053·T-054 재발)'; '221' = '바로 T-210 처리분이었다)'
+      '223' = '파일 경유 작업의 다른 함정)'; '227' = '「빨간불」이면 이쪽)'; '228' = '나는 같은 계열)'
+      '229' = '읽히는 짝 함정)'; '230' = '「되돌리면 다시 실패」를 실측했다)'; '250' = '**반대 방향** 사례)'
+    }
+    $lost = @($parenEnds.Keys | Where-Object { -not (Read-Text (Join-Path $realDir "T-$_.md")).Contains($parenEnds[$_] + "`n") })
+    Assert-That "REQ-09 · 본문 괄호로 끝나는 9행의 끝 ``)`` 보존 (손실 $($lost.Count): $($lost -join ','))" ($lost.Count -eq 0)
     # 양성 대조(V-2): 글자 1개 변조 · 파일 1개 삭제를 같은 검사기가 잡는가.
     # (산출물이 없으면 — 돌연변이가 스크립트를 죽였을 때 — 조작만 건너뛰고 단언은 그대로 세어 실행 건수를 지킨다.)
     $victim = Join-Path $realDir 'T-150.md'; $exists = Test-Path $victim; $orig = Read-Bytes $victim
