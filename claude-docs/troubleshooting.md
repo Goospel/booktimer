@@ -26,25 +26,25 @@
 
 - [T-256](troubleshooting/T-256.md) · 「두 분기의 `<Profile>`은 서로 다른 JSX라 재마운트된다」가 틀렸다 — React는 키 없는 최상위 프래그먼트를 배열로 풀어 맞추므로 두 분기가 같은 fiber로 이어진다
 - [T-255](troubleshooting/T-255.md) · CI에 없는 테스트는 깨져도 신호가 0이다 — 로컬 수동 스위트가 3일간 전면 실패인 채 머지가 계속됐다
-- [T-254](troubleshooting/T-254.md) · 돌연변이 주입 스크립트가 gradle을 한 번도 안 돌리고 「전부 사살」을 보고했다 — 한 세션에서 두 사람이 같은 함정에 빠졌다
+- [T-254](troubleshooting/T-254.md) · 돌연변이 주입 스크립트가 gradle을 한 번도 안 돌리고 「전부 사살」을 보고했다 — 한 세션에서 두 사람이 같은 함정에 빠졌다 **→ hookify/warn-vitest-basic-reporter.md**
 - [T-253](troubleshooting/T-253.md) · 같은 파일을 연속으로 고치는 두 PR에서, 뒤 PR의 리베이스 충돌을 「들어오는 쪽」으로 풀면 앞 PR의 규칙과 그 규칙을 지키던 테스트가 한 헝크에서 함께 사라진다 — 스위트는 초록인 채로 방어만 되돌아간다
 - [T-252](troubleshooting/T-252.md) · 토스 심사가 「미니앱 최초 접속 시간 20초 초과」로 반려했다 — 공개 체크리스트에 없는 기준이고, 이번 번들에서 첫 화면에 새로 생긴 동작은 「게스트 홈이 열리자마자 나가는 타임아웃 없는 요청」 하나였다
 - [T-251](troubleshooting/T-251.md) · 브라우저 실측에서 서비스워커가 옛 번들을 먹여 「고친 게 안 먹었다」는 거짓 판정을 만든다 — 차단은 첫 이동이 아니라 매 이동에 건다
-- [T-250](troubleshooting/T-250.md) · `document.fonts.check`는 구글 폰트 한글에서 로드됐는데도 `false`를 준다 — 웹폰트 실적용은 폭 실측 + 음성 대조군으로 판정한다
+- [T-250](troubleshooting/T-250.md) · `document.fonts.check`는 구글 폰트 한글에서 로드됐는데도 `false`를 준다 — 웹폰트 실적용은 폭 실측 + 음성 대조군으로 판정한다 **→ skills/browser-verify/SKILL.md**
 - [T-249](troubleshooting/T-249.md) · `git add`와 `git commit`을 한 명령으로 붙이면 번들 게이트가 「Bundle is stale」로 오판 차단한다 — PreToolUse는 add 이전 상태만 본다
 - [T-248](troubleshooting/T-248.md) · 쉘 리다이렉트 토큰이 git 위치 인자로 읽혀 fail-closed 게이트가 멀쩡한 명령을 막는다 — `2>&1`이 `<branch>` 자리에 앉았다
 - [T-247](troubleshooting/T-247.md) · 하위 스코프에서 토큰을 다시 깔아도 이미 계산된 값은 안 바뀐다 — 상속 프로퍼티(`color`)와 `var()` 별칭은 「선언된 요소」에서 한 번 계산돼 내려온다
-- [T-246](troubleshooting/T-246.md) · 워크트리의 `frontend/node_modules`가 dependabot 전 설치본이라, 대시보드 한 줄을 고치고 번들을 재빌드하니 웹 섬 11개가 전부 옛 vue로 다시 만들어졌다 — 커밋 훅의 「재빌드 diff 0」 검사는 이걸 원리상 못 잡는다
+- [T-246](troubleshooting/T-246.md) · 워크트리의 `frontend/node_modules`가 dependabot 전 설치본이라, 대시보드 한 줄을 고치고 번들을 재빌드하니 웹 섬 11개가 전부 옛 vue로 다시 만들어졌다 — 커밋 훅의 「재빌드 diff 0」 검사는 이걸 원리상 못 잡는다 **→ hookify/warn-node-modules-junction.md**
 - [T-245](troubleshooting/T-245.md) · 엔티티 필드 삭제와 컬럼 drop을 같은 배포에 넣으면 블루/그린 교대 창 동안 옛 컨테이너가 없어진 컬럼을 SELECT해 인증 요청이 전부 500이 난다 — 이 레포는 V88 때 알고 피했는데, 그 지식이 changelog·마이그레이션 주석에만 있어 다음 설계가 다시 한 PR에 묶었다
-- [T-244](troubleshooting/T-244.md) · 워크트리 `node_modules` 정션이 가리키는 main 폴더에 옛 SDK가 남아, lock이 올라가도 미니앱 번들이 옛 SDK로 조용히 빌드될 뻔했다 — `deploy.sh`의 산출물 검사는 이걸 못 가른다
-- [T-243](troubleshooting/T-243.md) · CP949 stdin 회귀를 겨눈 훅 테스트가 한글을 넣고도 공허했다 — 깨짐은 한글 「길이」가 아니라 마지막 글자의 끝바이트로 갈리고, 「가」·「한글메모」 픽스처는 CP949로 읽어도 파싱이 안 깨진다
+- [T-244](troubleshooting/T-244.md) · 워크트리 `node_modules` 정션이 가리키는 main 폴더에 옛 SDK가 남아, lock이 올라가도 미니앱 번들이 옛 SDK로 조용히 빌드될 뻔했다 — `deploy.sh`의 산출물 검사는 이걸 못 가른다 **→ hookify/warn-node-modules-junction.md**
+- [T-243](troubleshooting/T-243.md) · CP949 stdin 회귀를 겨눈 훅 테스트가 한글을 넣고도 공허했다 — 깨짐은 한글 「길이」가 아니라 마지막 글자의 끝바이트로 갈리고, 「가」·「한글메모」 픽스처는 CP949로 읽어도 파싱이 안 깨진다 **→ hookify/warn-console-in-stdin.md**
 - [T-242](troubleshooting/T-242.md) · 다른 워크트리로 `cd`해서 커밋하면 커밋 게이트 훅이 조용히 통과한다 — 훅은 세션 cwd만 본다
 - [T-241](troubleshooting/T-241.md) · 선행 가드를 새로 끼우면 그 뒤 게이트를 겨눈 기존 테스트가 조용히 공허해진다 — 충돌도 실패도 없이 초록인 채, 자기 게이트에 닿지도 못한다
 - [T-240](troubleshooting/T-240.md) · 대기 루프의 종료 조건에 성공만 넣으면 실패에 침묵한다 — 그리고 그 침묵은 「아직 진행 중」과 구별되지 않는다
 - [T-239](troubleshooting/T-239.md) · 바쁘면 즉시 반환하는 함수를 `await` 하면 조용한 no-op이 된다 — 부르는 쪽은 「다 끝났다」로 읽고, 증상은 데이터 파괴로만 드러난다
 - [T-238](troubleshooting/T-238.md) · `@InjectMocks` 생성자 주입 서비스에 의존을 더하면 `@Mock` 한 줄이 없을 때 null이 주입되는데, 그 실패는 타깃 테스트만 돌리는 동안 영영 안 보인다
 - [T-237](troubleshooting/T-237.md) · `color-scheme: light`는 크롬 강제 다크를 못 막는다 — `only`가 붙어야 opt-out이고, 그 판정은 `getComputedStyle`이 아니라 화면 픽셀로만 갈린다
-- [T-236](troubleshooting/T-236.md) · `\uXXXX` 손 인코딩으로 쓴 한글은 한 음절만 어긋나도 에러 없이 통과한다 — 사용자 대면 랜딩 카피가 「쌓입니다」→「쌓팥니다」로 배포 직전까지 갔다
+- [T-236](troubleshooting/T-236.md) · `\uXXXX` 손 인코딩으로 쓴 한글은 한 음절만 어긋나도 에러 없이 통과한다 — 사용자 대면 랜딩 카피가 「쌓입니다」→「쌓팥니다」로 배포 직전까지 갔다 **→ CLAUDE.md**
 - [T-235](troubleshooting/T-235.md) · 커밋 테스트 게이트가 8분에 걸려 `.java`가 든 커밋이 전부 막혔다 — 훅 메시지의 「경합」 단정에 두 번 헛짚었고, 그다음엔 내가 1회 측정으로 「스위트가 예산 추월」이라 단정했다가 대조군에서 뒤집혔다
 - [T-234](troubleshooting/T-234.md) · 콘솔 MCP `miniapp_update_screenshots`는 성공해도 `{"miniAppId":…,"appName":null}`만 돌려주고, 직후 `miniapp_get`·`miniapp_meta_status`는 옛값을 보여 「안 됐다」로 읽힌다 — 재호출하면 앱정보 검토가 두 번 접수될 수 있다
 - [T-233](troubleshooting/T-233.md) · React 중복 key는 경고로 끝나지 않는다 — 형제 목록을 통째로 갈아끼울 때 중복 key의 첫 노드가 고아 DOM으로 남아, 다른 탭에 남의 행이 하나씩 쌓인다
@@ -62,7 +62,7 @@
 - [T-221](troubleshooting/T-221.md) · `git commit -F .commit-msg-tmp`가 이전 세션의 잔재 파일을 조용히 집어 옛 메시지로 커밋됐다 — 파일 경유 커밋은 「파일이 지금 내 것인가」를 묻지 않는다
 - [T-220](troubleshooting/T-220.md) · 자체 뒤로가기가 토스 네이티브 내비게이션 바의 뒤로가기와 중복 노출 — 비게임 출시 체크리스트의 「필수」 항목이라 판정 편차가 아니다. 그리고 그 「<」는 뒤로가기가 아니라 **종료 버튼**이었다
 - [T-219](troubleshooting/T-219.md) · TDS `Text`의 `style.textAlign`은 DOM에 안 실린다 — 공부 일정 달력의 요일 머리글이 칸 왼쪽에 붙어 날짜 열과 어긋났다
-- [T-218](troubleshooting/T-218.md) · 소스 문자열 단언은 「존재」가 아니라 「건수·전체 인자열」로 잡는다 — `toContain('식별자')`는 선언문에 걸려 배선을 통째로 지워도 초록이다(무계측 배선)
+- [T-218](troubleshooting/T-218.md) · 소스 문자열 단언은 「존재」가 아니라 「건수·전체 인자열」로 잡는다 — `toContain('식별자')`는 선언문에 걸려 배선을 통째로 지워도 초록이다(무계측 배선) **→ skills/browser-verify/SKILL.md**
 - [T-217](troubleshooting/T-217.md) · 표시값을 clamp된 파생 상태에서 역산하면 그 clamp가 표시값의 상한이 된다 — 측정 중엔 맞고 「멈추는 순간」에만 틀린다
 - [T-216](troubleshooting/T-216.md) · TDS `Text`의 `style.textAlign`은 DOM에 안 실린다 — 정렬이 조용히 왼쪽에 남고, 같은 함정이 5곳에 흩어져 있었다
 - [T-215](troubleshooting/T-215.md) · 닫은 항목의 옛 마커를 산문에 「인용」하면 그 이모지가 다음 감사의 집계에 그대로 잡힌다 — 설명이 계측 대상이 된다
@@ -71,7 +71,7 @@
 - [T-212](troubleshooting/T-212.md) · DOM을 뒤지는 계측기는 틀려도 초록이다 — 못 찾으면 「문제 없음」이 되고, 엉뚱한 걸 찾으면 그 값이 사실이 된다
 - [T-211](troubleshooting/T-211.md) · 주석이 「저쪽」을 근거로 들면, 저쪽이 움직여도 이쪽 값은 멀쩡하다 — 문장만 거짓이 되고 테스트는 전부 초록이다
 - [T-210](troubleshooting/T-210.md) · 한 브랜치가 changelog의 자기 행을 「추가 → 수정」하면 rebase가 그 행을 중복 생성한다 — `merge=union`이 시키는 대로 한 결과라 충돌도 테스트 실패도 없다
-- [T-209](troubleshooting/T-209.md) · 돌연변이 확인의 되돌리기를 `git checkout --`로 하면 미커밋 작업분이 통째로 사라진다 — 「돌연변이만 되돌린다」는 직관이 틀렸다
+- [T-209](troubleshooting/T-209.md) · 돌연변이 확인의 되돌리기를 `git checkout --`로 하면 미커밋 작업분이 통째로 사라진다 — 「돌연변이만 되돌린다」는 직관이 틀렸다 **→ hookify/warn-inplace-replace-crlf.md**
 - [T-208](troubleshooting/T-208.md) · `pr-merge.sh`를 못 쓰는 환경에서 auto-merge만 걸면 BEHIND 점검이 빠져 무한 대기 — T-111의 하드픽스가 `gh` CLI에 묶여 있어 원격(웹) 세션에선 증발한다
 - [T-207](troubleshooting/T-207.md) · 로드 때 발화하는 색 트랜지션 + 백그라운드 탭 = 화면 전역이 `rgb(0,0,0)`으로 얼어붙는다 — 그 검정은 UA 기본값이라 「TDS 전역이 안 붙었다」로 완벽히 위장한다
 - [T-206](troubleshooting/T-206.md) · PS 5.1은 네이티브 exe에 `2>$null`을 걸면 성공해도 `$LASTEXITCODE`를 -1로 만든다 — 성공을 실패로 읽어 분기가 통째로 죽는다(가짜 실패)
@@ -79,9 +79,9 @@
 - [T-204](troubleshooting/T-204.md) · Jackson 3은 `FAIL_ON_NULL_FOR_PRIMITIVES`가 기본 켜짐 — 요청 record에 선택적 `boolean`을 더하면 그 필드를 안 보내던 옛 클라가 통째로 500
 - [T-203](troubleshooting/T-203.md) · 규칙을 설명하는 주석이 그 규칙의 소스 계측을 깨뜨린다 — 좋은 주석일수록 위험하다
 - [T-202](troubleshooting/T-202.md) · 알라딘 API는 `link` 필드만 HTML 엔티티로 준다 — 그대로 저장하면 제휴 추적만 조용히 죽는다(화면 증상 0)
-- [T-201](troubleshooting/T-201.md) · 어제 「면역」이라고 승격한 `chrome-devtools` MCP가 프로필 잠금으로 통째로 안 붙는다 — 1순위 표면도 죽을 수 있다
+- [T-201](troubleshooting/T-201.md) · 어제 「면역」이라고 승격한 `chrome-devtools` MCP가 프로필 잠금으로 통째로 안 붙는다 — 1순위 표면도 죽을 수 있다 **→ skills/browser-verify/SKILL.md**
 - [T-200](troubleshooting/T-200.md) · `import.meta.url`의 `.pathname`은 Windows에서 드라이브가 두 번 붙는다 — CI가 리눅스라 「로컬만 red」로 조용히 남는다
-- [T-199](troubleshooting/T-199.md) · 스크린샷이 두 브라우저에서 다 막힐 때 세 번째 크롬이 있었다 — `chrome-devtools` MCP는 확장과 별개 CDP고, 기기 모드도 F12 없이 명령으로 걸린다
+- [T-199](troubleshooting/T-199.md) · 스크린샷이 두 브라우저에서 다 막힐 때 세 번째 크롬이 있었다 — `chrome-devtools` MCP는 확장과 별개 CDP고, 기기 모드도 F12 없이 명령으로 걸린다 **→ skills/browser-verify/SKILL.md**
 - [T-198](troubleshooting/T-198.md) · TDS `Text` 는 style 의 `text-align` 을 걸러 낸다 — 정렬이 에러 없이 죽는다
 - [T-197](troubleshooting/T-197.md) · 어제까지 되던 dev 포트가 「OS 예약」으로 안 뜬다 — Windows 동적 포트 예약은 부팅마다 달라진다
 - [T-196](troubleshooting/T-196.md) · 배경으로 밀린 탭은 CSS 트랜지션을 얼린다 — `getComputedStyle`이 「낡은 값」을 돌려줘 앱 결함으로 오인한다
@@ -96,19 +96,19 @@
 - [T-187](troubleshooting/T-187.md) · `bootRun` 중에 고친 정적 리소스(css·js)가 화면에 안 나온다 — 서버가 `build/resources/main` 복사본을 해시 URL로 서빙한다
 - [T-186](troubleshooting/T-186.md) · Windows aws CLI는 요청뿐 아니라 *응답*의 한글에도 죽는다 — `'cp949' codec can't encode`. 원격에서 base64로 싸서 받아라
 - [T-185](troubleshooting/T-185.md) · 심사 반려 사유가 이번 변경과 무관할 수 있다 — 코드를 고치기 전에 「직전 통과 버전 대비 diff」부터 뜬다
-- [T-184](troubleshooting/T-184.md) · 브라우저 자동화의 CDP 명령이 타임아웃 — 렌더러가 죽은 게 아니라 그 탭이 상한 것이다. 새 탭을 열면 즉시 풀린다
+- [T-184](troubleshooting/T-184.md) · 브라우저 자동화의 CDP 명령이 타임아웃 — 렌더러가 죽은 게 아니라 그 탭이 상한 것이다. 새 탭을 열면 즉시 풀린다 **→ skills/browser-verify/SKILL.md**
 - [T-183](troubleshooting/T-183.md) · 심사는 「진입 직후 들이대는 것」을 막는다 — 자동 노출을 없애도 게이트가 열린 인라인 안내가 같은 사유를 재발시킨다
 - [T-182](troubleshooting/T-182.md) · 오버레이(코치마크)는 정적 렌더 하니스가 원리상 못 보는 두 자리에서 깨진다 — ① 뜰 차례를 마운트 1회로 판정하면 나중에 온 차례를 놓치고 ② 늦게 로드된 콘텐츠가 대상을 화면 밖으로 밀어내면 딤만 깔린 검은 화면이 된다
 - [T-181](troubleshooting/T-181.md) · `indexOf(A) < indexOf(B)` 순서 단언은 A가 없으면 `-1`이라 저절로 참이다 — 구현 전 RED에서 조용히 통과한다
 - [T-180](troubleshooting/T-180.md) · 목 모드는 `fetch`를 아예 안 태운다 — 「요청이 몇 건 나가나」를 네트워크 탭으로 세면 항상 0건이라 그 게이트는 원리상 공허하다
-- [T-179](troubleshooting/T-179.md) · 데스크톱 크롬에서 DevTools 기기 모드(Ctrl+Shift+M)를 켠 탭은 CDP 입력만 30초 타임아웃으로 죽는다 — 스크린샷·read_page는 멀쩡해서 「내 코드가 안 먹는다」로 읽힌다
+- [T-179](troubleshooting/T-179.md) · 데스크톱 크롬에서 DevTools 기기 모드(Ctrl+Shift+M)를 켠 탭은 CDP 입력만 30초 타임아웃으로 죽는다 — 스크린샷·read_page는 멀쩡해서 「내 코드가 안 먹는다」로 읽힌다 **→ skills/browser-verify/SKILL.md**
 - [T-178](troubleshooting/T-178.md) · 격자 칸을 `<button>`으로 만들면, 그 칸이 줄 높이만큼 늘어날 때 내용이 세로 가운데로 밀린다 — 긴 제목 한 권이 그 줄의 나머지 표지를 통째로 내려앉힌다
 - [T-177](troubleshooting/T-177.md) · 맨 `<button>`의 UA 기본 글자색이 iOS에서는 시스템 블루다 — 데스크톱 크롬은 검정이라 목 모드로는 원리상 못 잡는다
 - [T-176](troubleshooting/T-176.md) · 비합성 CSS 속성을 무한 애니메이션하면 그 안의 이미지를 매 프레임 재래스터화한다 — 데스크톱·목 모드는 원리상 못 잡고 실기기에서만 드러난다
 - [T-175](troubleshooting/T-175.md) · 목 픽스처가 자기모순이면 검증자가 멀쩡한 구현을 의심하며 시간을 태운다 — 목은 «화면이 뜨는가»가 아니라 «서버가 낼 수 있는 상태인가»여야 한다
 - [T-174](troubleshooting/T-174.md) · 개명할 낱말이 다른 낱말의 부분문자열이면 일괄 치환은 조용히 남의 낱말을 깨뜨린다 — 「스토리」→「여백」이 「히스토리」를 「히여백」으로 만들었다
-- [T-173](troubleshooting/T-173.md) · hookify `warn-multibyte-grep` 룰이 줄바꿈을 건너뛰어 한 세션에 5번 오탐 — 경고가 소음이 되면 진짜 발동을 무시하게 된다
-- [T-172](troubleshooting/T-172.md) · `sed -i`를 `find -exec`로 돌리면 패턴이 안 맞는 파일까지 전부 다시 쓴다 — 줄끝이 조용히 뒤집힌다
+- [T-173](troubleshooting/T-173.md) · hookify `warn-multibyte-grep` 룰이 줄바꿈을 건너뛰어 한 세션에 5번 오탐 — 경고가 소음이 되면 진짜 발동을 무시하게 된다 **→ hookify/block-inline-korean-commit.md**
+- [T-172](troubleshooting/T-172.md) · `sed -i`를 `find -exec`로 돌리면 패턴이 안 맞는 파일까지 전부 다시 쓴다 — 줄끝이 조용히 뒤집힌다 **→ hookify/warn-inplace-replace-crlf.md**
 - [T-171](troubleshooting/T-171.md) · 새 불변식을 「그 값을 만드는 경로 한 곳」에만 걸면 조용히 거짓이 된다 — 예약이 안 걸린 가입 경로로 계정 탈취까지 갔다
 - [T-170](troubleshooting/T-170.md) · Flyway 버전 번호가 겹치면 그 스크립트만 실패하는 게 아니라 스키마 초기화가 통째로 거부된다 — 머지 전엔 어느 쪽에서도 안 보인다
 - [T-169](troubleshooting/T-169.md) · 마이그레이션에만 있는 제약은 메인 스위트에 존재하지 않는다 — 그 자리에 둔 테스트는 영영 초록이 안 된다
@@ -126,8 +126,8 @@
 - [T-157](troubleshooting/T-157.md) · TDS는 `colorPreference` 미지정 시 시스템 다크 모드를 따라간다 — 라이트 고정 디자인 앱에서 TDS 컴포넌트만 몰래 어두워진다
 - [T-156](troubleshooting/T-156.md) · TDS `Wheel`은 스스로 높이를 만들지 않는다 — 시트 밖 인라인으로 쓰면 부모에 명시 높이가 없을 때 항목이 한 줄에 겹친다
 - [T-155](troubleshooting/T-155.md) · AWS CLI에 MSYS 경로(`file:///c/...`)를 주면 `Unable to load paramfile`로 실패한다 — Git Bash 변수에 담긴 `/c/...`가 그대로 새어 나간다
-- [T-154](troubleshooting/T-154.md) · 클로드 내부 브라우저 패널이 닫혀 있으면 스크린샷·클릭만 타임아웃 난다 — 읽기 도구는 멀쩡해서 "확인했다"는 착각이 남는다
-- [T-153](troubleshooting/T-153.md) · `deploy.sh --expect`에 코드 조각을 주면 minify가 변형해 검증이 헛돈다 — 마커는 압축 불변 문자열 리터럴이어야 한다
+- [T-154](troubleshooting/T-154.md) · 클로드 내부 브라우저 패널이 닫혀 있으면 스크린샷·클릭만 타임아웃 난다 — 읽기 도구는 멀쩡해서 "확인했다"는 착각이 남는다 **→ skills/browser-verify/SKILL.md**
+- [T-153](troubleshooting/T-153.md) · `deploy.sh --expect`에 코드 조각을 주면 minify가 변형해 검증이 헛돈다 — 마커는 압축 불변 문자열 리터럴이어야 한다 **→ docs/claude-md-reference.md**
 - [T-152](troubleshooting/T-152.md) · 웹 미니앱은 샌드박스 핫 리로드가 원리상 불가능하다 — 샌드박스 dev 연결은 granite(RN) 전용이고 `web-framework`엔 dev 서버 자체가 없다
 - [T-151](troubleshooting/T-151.md) · Android 에뮬레이터 Quick Boot 스냅샷 꼬임 — `adb devices`가 20분+ `offline`이고 qemu만 CPU를 태운다
 - [T-150](troubleshooting/T-150.md) · `npm run build`가 완료 로그 없이 조용히 끝났는데 exit 0이라 옛 dist가 그대로 배포됐다 — 배포 전 검증 마커가 직전 번들에도 있어 신·구를 구별 못 했다
@@ -170,14 +170,14 @@
 - [T-113](troubleshooting/T-113.md) · 도메인 TLD 이전 후 `www.<신규>`를 ALB 301 규칙에서 빠뜨려 검색 유입자가 redirect_uri_mismatch + host-only 세션 분리
 - [T-112](troubleshooting/T-112.md) · Chrome MCP `resize_window`가 렌더 뷰포트(`innerWidth`)를 못 바꿔 모바일 미디어쿼리 검증이 막힌다 — 폭 N px iframe에 페이지를 로드해 우회
 - [T-111](troubleshooting/T-111.md) · "머지 전 브랜치 최신화 필수" 정책에서 BEHIND인 PR에 `--auto`만 걸면 영영 안 머지된다 — GitHub가 BEHIND 브랜치를 자동 갱신하지 않음
-- [T-110](troubleshooting/T-110.md) · 정션 둔 워크트리를 `git worktree remove --force`하면 정션 타깃(main node_modules)이 비워진다 — 정션 먼저 끊어라
+- [T-110](troubleshooting/T-110.md) · 정션 둔 워크트리를 `git worktree remove --force`하면 정션 타깃(main node_modules)이 비워진다 — 정션 먼저 끊어라 **→ hookify/warn-node-modules-junction.md**
 - [T-109](troubleshooting/T-109.md) · vitest include가 test/ 디렉토리만 잡아 src/ 곁 테스트가 조용히 미실행 — include에 src/** 추가
 - [T-108](troubleshooting/T-108.md) · `gradlew.bat`이 phantom-modified로 rebase를 막는다 — `.gitattributes eol=crlf`와 커밋된 블롭 EOL 불일치, `--assume-unchanged`로 우회
 - [T-107](troubleshooting/T-107.md) · `git add`와 `git commit`을 한 명령으로 묶으면 PreToolUse 자동수정 훅(목차·번들)이 skip된다 — add는 별도 호출로
 - [T-106](troubleshooting/T-106.md) · auto-merge `--delete-branch`는 비동기 머지라 원격 브랜치가 안 지워진다 — 머지 확인 후 gh API로 삭제
 - [T-105](troubleshooting/T-105.md) · 빈 워크트리 폴더가 `Device or resource busy`로 안 지워짐 — 죽은 세션 좀비 셸이 cwd 점유, cwd 검증 PID만 종료
 - [T-104](troubleshooting/T-104.md) · squash 머지가 브랜치 커밋 trailer를 메시지 중간으로 밀어 git %(trailers) 구조 조회를 깨뜨린다
-- [T-103](troubleshooting/T-103.md) · 스크립트로 파일 재생성 시 ReadAllText + UTF8Encoding(false)가 원본 BOM을 떨어뜨린다
+- [T-103](troubleshooting/T-103.md) · 스크립트로 파일 재생성 시 ReadAllText + UTF8Encoding(false)가 원본 BOM을 떨어뜨린다 **→ hookify/warn-inplace-replace-crlf.md**
 - [T-102](troubleshooting/T-102.md) · auto-merge 후 손수 짠 워처가 DIRTY를 안 봐 침묵 정지 — `pr-merge.sh` 쓰거나 워처에 DIRTY 분기
 - [T-101](troubleshooting/T-101.md) · content-hash 정적자산 인증 누수 — `@{}` 단일파일 해시 URL이 정확매칭 permitAll에서 빠져 302, 와일드카드로
 - [T-100](troubleshooting/T-100.md) · 워크트리 frontend `node_modules` 없음 → vite 미해결, `npm ci` (디렉토리 존재 ≠ 패키지 설치)
@@ -187,7 +187,7 @@
 - [T-096](troubleshooting/T-096.md) · 연쇄 PR 폴링 미머지 종료(TIMEOUT/OPEN/DIRTY)를 머지 완료로 오인 — 다음 브랜치 전 `gh pr view --json state`=MERGED 확인
 - [T-095](troubleshooting/T-095.md) · 워크트리 `gh pr merge --delete-branch`가 `main is already used by worktree`로 깨짐 — 머지는 성공
 - [T-094](troubleshooting/T-094.md) · Windows `timeout 30 git push --delete`도 hang 못 막음 → `gh api -X DELETE repos/{owner}/{repo}/git/refs/heads/<branch>`
-- [T-093](troubleshooting/T-093.md) · 워크트리 `npm run build`가 무관 9개 번들을 CRLF-only로 ` M` 표시 — `git diff --numstat`로 감별, 변경 파일만 stage
+- [T-093](troubleshooting/T-093.md) · 워크트리 `npm run build`가 무관 9개 번들을 CRLF-only로 ` M` 표시 — `git diff --numstat`로 감별, 변경 파일만 stage **→ hookify/warn-inplace-replace-crlf.md**
 - [T-092](troubleshooting/T-092.md) · minified Vue 프로덕션 번들은 `setupState` 키가 숨겨짐 — 루트 `_vnode.component`에서 `subTree` BFS+props 변이
 - [T-091](troubleshooting/T-091.md) · `pr-merge.sh`가 머지 성공 후 `git push origin --delete`에서 hang → 백그라운드 머지 안 끝남
 - [T-090](troubleshooting/T-090.md) · Windows preview `launch.json`으로 `gradlew bootRun` 못 띄움 — `cmd /c <절대경로>gradlew.bat -p <절대경로> bootRun`
