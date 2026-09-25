@@ -86,7 +86,7 @@
   - 계획 md(큰 작업만): 상단 blockquote에 `> 🧭 세션 메타: model=… · effort=…` 한 줄. **여기선 effort를 계속 적는다** — 계획 md를 쓰는 주체는 `designer` 같은 서브에이전트이고, 서브에이전트는 자기 effort를 정의 파일 frontmatter(`effort:`)에서 알 수 있어 **사용자를 붙잡는 마찰이 0**이다.
   - 커밋(모든 세션): trailer에 `Session-Model: …`(`Co-authored-by` 옆). squash 머지 후에도 `main`에 텍스트로 보존된다 — 단 구조 조회(`%(trailers)`)로는 안 잡히니 `git log --grep='Session-Model'`으로 읽는다(T-104).
 - ⚠️ **커밋 trailer의 `Session-Effort`는 폐지했다 (2026-08-13)**: 분업 커밋엔 여러 모델·effort가 섞여 코디네이터 값을 적으면 틀린 기록이 되고, 모델 추적은 벨트 로그(`~/.claude/logs/subagent-model.jsonl`)가 이미 자동으로 한다. 역할 분담이 남길 가치가 있으면 **PR body에 자연어로**. 폐지 경위 전문은 [참조](claude-docs/claude-md-reference.md).
-- soft 규칙이라 내가 누락할 수 있다 — 누락이 2회+ 재발하면 hard(훅)로 승격한다(재발·승격 트래커).
+- soft 규칙이라 내가 누락할 수 있다 — 누락이 2회+ 재발하면 hard(훅)로 승격한다(해당 T 파일의 회차 줄).
 
 ### 예외 (계획 생략 가능)
 
@@ -341,7 +341,7 @@ Claude Code 는 그 자식 프로세스 종료를 기다릴 뿐이라 **코어 �
 
 ### 디버깅 후
 
-- 해결 직후 답변 끝에 **"🧯 troubleshooting 추가 후보 — `<한 줄 요약>`. 박을까?"**를 짧게 제안한다. OK면 `claude-docs/troubleshooting/T-###.md`를 만들고 `powershell -ExecutionPolicy Bypass -File scripts/rebuild-troubleshooting-index.ps1 -HubPath claude-docs/troubleshooting.md`로 목차를 재생성한다(커밋 훅 `require-troubleshooting-toc.ps1`이 자동으로 해 주지만, 형식이 틀리면 그 훅이 커밋을 막는다). 번호는 `git ls-tree --name-only origin/main claude-docs/troubleshooting/ | tail -1` 다음 번호.
+- 해결 직후 답변 끝에 **"🧯 troubleshooting 추가 후보 — `<한 줄 요약>`. 박을까?"**를 짧게 제안한다. OK면 `claude-docs/troubleshooting/T-###.md`를 만들고 `powershell -ExecutionPolicy Bypass -File scripts/rebuild-troubleshooting-index.ps1 -HubPath claude-docs/troubleshooting.md`로 목차를 재생성한다(커밋 훅 `require-troubleshooting-toc.ps1`이 자동으로 해 주지만, 형식이 틀리면 그 훅이 커밋을 막는다). 훅의 검사기는 스테이징이 아니라 워킹 트리를 읽으니 미완성 T 파일은 커밋 전에 치우거나 함께 커밋한다. 번호는 `git ls-tree --name-only origin/main claude-docs/troubleshooting/ | tail -1` 다음 번호.
 - **2회 이상 재발한 트랩은 이 `CLAUDE.md`(항상 로드)의 해당 섹션 또는 훅으로 승격**한다 — prose 한 줄보다 하드픽스(훅·스크립트) 우선(사용자 합의 2026-06-22). 승격했으면 그 파일 frontmatter에 `promoted:`(또는 `guard:`)를 단다.
 - 옛 「🔁 재발·승격 트래커」 표는 [claude-docs/troubleshooting-tracker.md](claude-docs/troubleshooting-tracker.md)에 동결(참고용). 재발 카운팅은 표가 아니라 **회차 줄**이다.
 - 이관 항목(`legacy:`)은 원문 한 줄 그대로다 — 그 파일을 만질 일이 있으면 그때 4필드로 다듬는다(강제 아님).
