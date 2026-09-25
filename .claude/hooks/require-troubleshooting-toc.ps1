@@ -45,6 +45,11 @@ if (-not ($staged | Where-Object { $_ -eq $rel -or $_.StartsWith('claude-docs/tr
 $checker = Join-Path $cwd 'scripts\rebuild-troubleshooting-index.ps1'
 if (-not (Test-Path $checker)) { exit 0 }  # 검사기 없으면 비치명 통과
 
+# git·검사기 출력(UTF-8)을 CP949 로 디코딩하면 [BLOCKED] 메시지의 한글·—·✗ 가 깨진다 — 끝에서 원래 값 복원.
+$prevOutEnc = [Console]::OutputEncoding
+[Console]::OutputEncoding = [Text.Encoding]::UTF8
+try {
+
 # ── 1. 옛 형식 차단 ─────────────────────────────────────────────────────────
 try {
     $added = @(& git -C $cwd diff --cached -U0 -- $rel 2>$null)
@@ -78,3 +83,5 @@ if ($code -ne 0) {
 }
 & git -C $cwd add -- $rel 2>$null | Out-Null
 exit 0
+
+} finally { [Console]::OutputEncoding = $prevOutEnc }

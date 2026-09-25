@@ -52,6 +52,11 @@ run_hook() {
     echo $?
 }
 staged_hub_has() { git -C "$1" show :claude-docs/troubleshooting.md | grep -qF "$2" && echo yes || echo no; }
+# Byte-level (UTF-8 hex) containment — Git Bash grep can silently miss Korean patterns.
+err_has_utf8() {
+    local h n; h=$(od -An -tx1 -v "$ERRF" | tr -d ' \n'); n=$(printf '%s' "$1" | od -An -tx1 -v | tr -d ' \n')
+    [[ "$h" == *"$n"* ]] && echo yes || echo no
+}
 C='git commit -F .commit-msg-tmp'
 
 # ── REQ-13: new T file staged -> hub index regenerated and staged ──
@@ -80,6 +85,8 @@ git -C "$d" add claude-docs/troubleshooting/T-002.md
 check "[REQ-14] summary-less T file -> exit 2" "2" "$(run_hook "$C" "$d")"
 grep -qF 'INDEX-CHECK: INVALID' "$ERRF" && r=yes || r=no
 check "[REQ-14] block message carries checker output (INDEX-CHECK: INVALID)" "yes" "$r"
+check "[REQ-14] checker's Korean/symbols reach stderr intact (항목 검사 실패 — / ✗)" "yes yes" \
+    "$(err_has_utf8 '항목 검사 실패 — ') $(err_has_utf8 '  ✗ ')"
 
 # ── REQ-14: checker that prints no marker -> exit 2 (the check did not run) ──
 d=$(setup_repo)
@@ -94,6 +101,7 @@ git -C "$d" add claude-docs/troubleshooting.md
 check "[REQ-15] hub + old table row -> exit 2" "2" "$(run_hook "$C" "$d")"
 grep -qF 'claude-docs/troubleshooting/T-###.md' "$ERRF" && r=yes || r=no
 check "[REQ-15] block message names claude-docs/troubleshooting/T-###.md" "yes" "$r"
+check "[REQ-15] quoted old row keeps its Korean intact" "yes" "$(err_has_utf8 'T-002 (**옛 형식 행** / 증상: x)')"
 
 # ── REQ-15: old heading added to the hub -> exit 2 ──
 d=$(setup_repo)
