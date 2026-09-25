@@ -142,7 +142,7 @@ public class StudySession extends BaseTimeEntity {
     /**
      * 책 없이 잰 <b>종료된</b> 세션에 나중에 책을 붙인다 — 종료 후 태깅("무슨 책을 공부하셨나요?").
      *
-     * <p>독서 {@code ReadingSession#tagBook}에 <b>진행 중 거부</b>를 더했다: 재는 도중에 대상을 정하는
+     * <p>독서 {@code ReadingSession#tagBook}과 같이 <b>진행 중을 거부</b>한다: 재는 도중에 대상을 정하는
      * 것은 {@link #changeBook}의 문이라, 두 문이 같은 상태를 서로 다른 규칙으로 건드리지 않게 한다.
      *
      * <p>이 메서드는 <b>한 행</b>만 본다 — 자정 분할로 갈린 앞 조각까지 함께 붙이는 것은
@@ -175,6 +175,21 @@ public class StudySession extends BaseTimeEntity {
     public void changeBook(StudyBook book) {
         if (this.endedAt != null) {
             throw new IllegalStateException("cannot change book of an ended session");
+        }
+        this.book = book;
+    }
+
+    /**
+     * <b>끝난</b> 세션의 책 라벨을 정한다 — 기록 화면의 붙이기·바꾸기·떼기 한 문(독서
+     * {@code ReadingSession#assignBook}과 같다. 공부엔 수동 기록이 없어 null은 늘 허용).
+     * 자정 분할 조각을 함께 고치는 것은 {@code StudySessionService.assignBook}의 몫이다.
+     *
+     * @param book 새 대상(null = 책 없이)
+     * @throws IllegalStateException 진행 중 세션인 경우(그쪽은 {@link #changeBook})
+     */
+    public void assignBook(StudyBook book) {
+        if (this.endedAt == null) {
+            throw new IllegalStateException("cannot assign book of an active session — use changeBook");
         }
         this.book = book;
     }

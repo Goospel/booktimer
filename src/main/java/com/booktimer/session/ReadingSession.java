@@ -32,9 +32,10 @@ import java.time.Instant;
  * 레거시 행은 여전히 자정을 걸칠 수 있다(소급 재분할 없음).
  *
  * <p>측정은 "어떤 책"을 읽었는지({@link #book})에 연결된다 — 책별 누적 시간 집계의 토대.
- * <b>새 측정은 책이 필수</b>이며 그 강제는 유스케이스 경계({@code ReadingSessionService}·컨트롤러)가 한다.
- * 다만 과거엔 책 없는 측정이 가능했어서 그 레거시 행을 읽어들이려면 컬럼·필드는 nullable로 둔다
- * — 즉 {@code book == null}은 "신규 생성 금지"이되 "레거시 표현은 허용"을 뜻한다.
+ * <b>책은 선택이고 {@code book == null}은 1급 상태다</b> — 책 없이 시작한 측정은 그대로 원장에 남고
+ * (잔디·부채엔 시간으로 반영, 책별 통계에선 빠진다) 라벨은 세 문으로 고친다: 종료 직후
+ * {@link #tagBook}(1회성), 재는 도중 {@link #changeBook}, 끝난 기록의 정정 {@link #assignBook}.
+ * 책이 필수인 것은 수동 기록({@link #manual})뿐이다.
  */
 @Entity
 @Table(name = "reading_session")
@@ -93,9 +94,7 @@ public class ReadingSession extends BaseTimeEntity {
     }
 
     /**
-     * 책 없이 측정 세션을 만든다 — <b>레거시/테스트 표현 전용</b>이다.
-     * 운영 생성 경로(서비스)는 책을 필수로 요구하므로 이 팩토리로 만든 세션은 신규 측정 흐름에선 나오지 않는다.
-     * 과거 데이터(책 미지정 세션) 재현이나, 책과 무관한 타이머 계산 단위 테스트에만 쓴다.
+     * 책 없이 측정 세션을 만든다 — {@code start(user, startedAt, null)}과 같다(책 미지정은 1급 상태).
      *
      * @param user      측정 주체(필수)
      * @param startedAt 시작 시각(필수)
@@ -156,15 +155,22 @@ public class ReadingSession extends BaseTimeEntity {
     /**
      * 책 미지정 세션에 나중에 책을 연결한다 — <b>종료 후 태깅</b>(발견 1). 책 없이 시작한 측정을
      * "무슨 책이었나요?"로 되돌아보며 책을 붙이는 경로다. 이미 책이 지정된 세션은 재태깅하지 않는다
-     * (측정 시작 시 고른 책을 사후에 바꾸는 건 다른 관심사).
+     * (끝난 기록의 책을 바꾸는 건 {@link #assignBook}의 관심사).
+     *
+     * <p>가드 순서는 공부 {@code StudySession#tagBook}과 같다: null → 진행 중 → 이미 책(P17).
+     * 재는 도중에 대상을 정하는 것은 {@link #changeBook}의 문이라, 두 문이 같은 상태를 서로 다른 규칙으로
+     * 건드리지 않게 진행 중 세션을 거부한다.
      *
      * @param book 연결할 책(필수)
      * @throws IllegalArgumentException book 이 null 인 경우
-     * @throws IllegalStateException    이미 책이 지정된 세션인 경우(재태깅 금지)
+     * @throws IllegalStateException    진행 중 세션이거나, 이미 책이 지정된 세션인 경우(재태깅 금지)
      */
     public void tagBook(Book book) {
         if (book == null) {
             throw new IllegalArgumentException("book must not be null");
+        }
+        if (this.endedAt == null) {
+            throw new IllegalStateException("cannot tag an active session — use changeBook");
         }
         if (this.book != null) {
             throw new IllegalStateException("session already has a book");
@@ -178,8 +184,8 @@ public class ReadingSession extends BaseTimeEntity {
      *
      * <p>관심사가 다르니 <b>가드도 반대다</b>: tagBook은 끝난 세션에 책을 <i>붙이는</i> 1회성 문이라
      * 재태깅을 막고 null을 거부하지만, 이쪽은 <i>재는 동안</i> 라벨을 고쳐 다는 문이라 여러 번 허용하고
-     * null(=「책 없이」로 되돌리기)도 받는다. 대신 <b>종료된 세션은 거부</b>한다 — 끝난 기록의 대상을
-     * 바꾸는 문이 아니고, 그쪽은 tagBook의 1회 규칙이 지킨다.
+     * null(=「책 없이」로 되돌리기)도 받는다. 대신 <b>종료된 세션은 거부</b>한다 — 끝난 기록의 정정은
+     * {@link #assignBook}의 문이다.
      *
      * <p>세션은 멈추지 않는다. 세션이 시간의 원장이고 book은 그 원장의 <b>라벨</b>이라, 라벨만 갈면
      * 지금까지 잰 시간이 통째로 새 책에 붙는다.
@@ -190,6 +196,24 @@ public class ReadingSession extends BaseTimeEntity {
     public void changeBook(Book book) {
         if (this.endedAt != null) {
             throw new IllegalStateException("cannot change book of an ended session");
+        }
+        this.book = book;
+    }
+
+    /**
+     * <b>끝난</b> 세션의 책 라벨을 정한다 — 기록 화면에서 붙이기(null→책)·바꾸기(책→책)·떼기(책→null) 한 문.
+     * {@link #tagBook}(종료 직후 1회성)·{@link #changeBook}(진행 중)과 관심사가 다르고 가드도 다르다.
+     * 자정 분할 조각을 함께 고치는 것은 {@code ReadingSessionService.assignBook}의 몫이다(이 메서드는 한 행만 본다).
+     *
+     * @param book 새 대상(null = 책 없이 — 수동 기록은 불가)
+     * @throws IllegalStateException 진행 중 세션(그쪽은 changeBook) / 수동 기록에 null(수동 기록은 책 필수)
+     */
+    public void assignBook(Book book) {
+        if (this.endedAt == null) {
+            throw new IllegalStateException("cannot assign book of an active session — use changeBook");
+        }
+        if (book == null && this.manualEntry) {
+            throw new IllegalStateException("manual entry requires a book");
         }
         this.book = book;
     }

@@ -22,6 +22,7 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.server.ResponseStatusException;
+import tools.jackson.databind.JsonNode;
 
 import java.security.Principal;
 import java.time.Clock;
@@ -160,6 +161,35 @@ public class StudyApiController {
             studyService.changeActiveBook(user, book);
         } catch (IllegalStateException e) {
             throw new ResponseStatusException(HttpStatus.CONFLICT, "진행 중인 측정이 없습니다");
+        }
+        return ResponseEntity.ok(state(user, clock.instant()));
+    }
+
+    /**
+     * <b>끝난 측정의 책 정하기</b> — 기록 화면 [책 붙이기]/[바꾸기]/[책 없이 두기](독서
+     * {@code POST /api/sessions/{id}/book}과 같은 계약·같은 본문 규칙).
+     *
+     * <p>⚠️ 서비스의 IAE(남의·없는 세션)를 <b>여기서 잡아 404로</b> 바꾼다 — 안 잡으면 이 컨트롤러의 전역
+     * {@code @ExceptionHandler(IllegalArgumentException)}가 영문 메시지를 400으로 내보낸다(tag-book과 같은 형태).
+     *
+     * <p>두 원장·두 서재의 id 공간이 겹치므로 「공부 문에 독서 세션 id」는 같은 번호의 내 공부 세션이 없을 때만
+     * 404다 — 원장 분리는 클라이언트가 시트를 열 때 원장을 고정하는 것으로 지킨다.
+     *
+     * @return 200 갱신된 화면 상태 / 400 bookId 키 없음·비정수 / 404 남의·없는 세션, 남의 책·독서 책장의 id
+     *         / 409 진행 중 측정
+     */
+    @PostMapping("/api/study/sessions/{id}/book")
+    public ResponseEntity<StudyState> assignBook(@PathVariable("id") Long id, @RequestBody JsonNode body,
+                                                 Principal principal) {
+        User user = currentUserService.resolve(principal);
+        Long bookId = DashboardApiController.bookIdOf(body);
+        StudyBook book = ownedBookOrNull(user, bookId); // 남의 책·독서 책장 id → 404
+        try {
+            studyService.assignBook(user, id, book);
+        } catch (IllegalArgumentException e) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "측정을 찾을 수 없습니다"); // 세션 IDOR 마스킹
+        } catch (IllegalStateException e) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "책을 바꿀 수 없는 측정입니다");
         }
         return ResponseEntity.ok(state(user, clock.instant()));
     }

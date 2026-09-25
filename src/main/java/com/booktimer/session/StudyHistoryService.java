@@ -8,12 +8,15 @@ import java.time.Instant;
 import java.time.LocalDate;
 import java.time.YearMonth;
 import java.time.ZoneId;
+import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.TreeMap;
+import java.util.function.Function;
 
 /**
  * 공부 기록 — <b>타이머가 잰 측정 사실만</b> 있는 원장이다.
@@ -38,8 +41,12 @@ public class StudyHistoryService {
      */
     static final long SHADE_SCALE_SECONDS = 4 * 3600L;
 
-    /** @param totalSeconds 그날 완료 세션 합(초) */
-    public record Day(LocalDate date, long totalSeconds) {
+    /**
+     * @param totalSeconds 그날 완료 세션 합(초)
+     * @param sessions     그날 측정 한 건씩({@code startedAt} 오름차순) — 기록 화면이 날짜를 펼쳐 줄마다 책을
+     *                     붙이거나 바꾸는 좌표다. 꼴은 독서 기록과 같다(공부엔 수동 기록이 없어 {@code manual}은 늘 false)
+     */
+    public record Day(LocalDate date, long totalSeconds, List<DailyReadingRecord.SessionRow> sessions) {
     }
 
     /** @param days 그 달의 일자 기록(<b>최신 일 먼저</b>) */
@@ -74,21 +81,39 @@ public class StudyHistoryService {
 
         // 내림차순이라 아래 월 묶기가 최신 일 먼저로 굳는다(잔디는 순서를 안 본다).
         Map<LocalDate, Long> byDate = new TreeMap<>(Comparator.reverseOrder());
+        Map<LocalDate, List<StudySession>> sessionsByDate = new HashMap<>();
         for (StudySession session : sessionRepository.findByUserAndEndedAtIsNotNull(user)) {
-            byDate.merge(LocalDate.ofInstant(session.getStartedAt(), zone), session.getDurationSeconds(), Long::sum);
+            LocalDate date = LocalDate.ofInstant(session.getStartedAt(), zone);
+            byDate.merge(date, session.getDurationSeconds(), Long::sum);
+            sessionsByDate.computeIfAbsent(date, d -> new ArrayList<>()).add(session);
         }
 
         ContributionGraph graph = ContributionGraphBuilder.build(
                 byDate, LocalDate.ofInstant(now, zone), SHADE_SCALE_SECONDS);
 
-        return new StudyHistory(graph, groupByMonth(byDate));
+        DateTimeFormatter clock = DateTimeFormatter.ofPattern("HH:mm").withZone(zone);
+        return new StudyHistory(graph, groupByMonth(byDate, date -> rows(sessionsByDate.get(date), clock)));
+    }
+
+    /** 그날 세션 → 줄(시작 시각 순). 시각은 유저 타임존 — 날짜 귀속과 같은 TZ라 자정 언저리에서 어긋나지 않는다. */
+    private static List<DailyReadingRecord.SessionRow> rows(List<StudySession> sessions, DateTimeFormatter clock) {
+        return sessions.stream()
+                .sorted(Comparator.comparing(StudySession::getStartedAt))
+                .map(s -> new DailyReadingRecord.SessionRow(s.getId(),
+                        clock.format(s.getStartedAt()), clock.format(s.getEndedAt()), s.getDurationSeconds(),
+                        s.getBook() == null ? null : s.getBook().getId(),
+                        s.getBook() == null ? null : s.getBook().getTitle(),
+                        false))
+                .toList();
     }
 
     /** 최신 일 먼저인 일자 맵을 월별로 묶는다 — 삽입 순서를 보존해 월도 최신 먼저가 된다. */
-    private static List<Month> groupByMonth(Map<LocalDate, Long> byDateDesc) {
+    private static List<Month> groupByMonth(Map<LocalDate, Long> byDateDesc,
+                                            Function<LocalDate, List<DailyReadingRecord.SessionRow>> rowsOf) {
         Map<YearMonth, List<Day>> byMonth = new LinkedHashMap<>();
         byDateDesc.forEach((date, seconds) ->
-                byMonth.computeIfAbsent(YearMonth.from(date), m -> new ArrayList<>()).add(new Day(date, seconds)));
+                byMonth.computeIfAbsent(YearMonth.from(date), m -> new ArrayList<>())
+                        .add(new Day(date, seconds, rowsOf.apply(date))));
         return byMonth.entrySet().stream()
                 .map(e -> new Month(
                         e.getKey(),

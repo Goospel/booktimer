@@ -411,6 +411,7 @@ class ReadingSessionServiceTest {
     @DisplayName("tagBook: 책 미지정 세션을 찾아 책을 연결하고 저장한다")
     void tagBook_untaggedSession_linksBookAndSaves() {
         ReadingSession session = ReadingSession.start(user, T0); // book=null
+        session.end(T0.plusSeconds(600)); // 종료 후 태깅(P17 — 진행 중이면 거부)
         Book book = Book.register(user, "클린 코드", null, null, null, null, null, BookStatus.READING);
         when(sessionRepository.findByIdAndUser(1L, user)).thenReturn(Optional.of(session));
         when(sessionRepository.save(any(ReadingSession.class))).thenAnswer(returnsFirstArg());
@@ -425,6 +426,7 @@ class ReadingSessionServiceTest {
     @DisplayName("tagBook: 읽고싶음 책으로 태깅하면 그 책을 읽는중으로 자동 전환한다(측정 시작과 동일 시맨틱)")
     void tagBook_withWantToReadBook_marksReading() {
         ReadingSession session = ReadingSession.start(user, T0);
+        session.end(T0.plusSeconds(600));
         Book book = Book.register(user, "클린 코드", null, null, null, null, null, BookStatus.WANT_TO_READ);
         when(sessionRepository.findByIdAndUser(1L, user)).thenReturn(Optional.of(session));
         when(sessionRepository.save(any(ReadingSession.class))).thenAnswer(returnsFirstArg());
@@ -451,6 +453,7 @@ class ReadingSessionServiceTest {
     void tagBook_alreadyTagged_throwsAndDoesNotSave() {
         Book existing = Book.register(user, "기존 책", null, null, null, null, null, BookStatus.READING);
         ReadingSession session = ReadingSession.start(user, T0, existing);
+        session.end(T0.plusSeconds(600)); // 종료 세션이어야 「이미 책」 규칙을 잰다(진행 중이면 P17이 먼저 막는다)
         Book other = Book.register(user, "다른 책", null, null, null, null, null, BookStatus.READING);
         when(sessionRepository.findByIdAndUser(1L, user)).thenReturn(Optional.of(session));
 
@@ -843,6 +846,104 @@ class ReadingSessionServiceTest {
         service.tagBook(user, 1L, book);
 
         verify(sessionRepository, times(1)).save(any(ReadingSession.class));
+    }
+
+    // ==========================================================================
+    // assignBook — 끝난 세션의 책 정정(기록 화면 붙이기·바꾸기·떼기), 양방향 자정 체인
+    // ==========================================================================
+
+    /** 저장된 것처럼 id를 박은 완료 세션 — 체인 finder의 {@code IdNot} 인자가 id를 쓴다. */
+    private ReadingSession endedWithId(long id, Instant start, Instant end, Book book) {
+        ReadingSession s = ReadingSession.start(user, start, book);
+        s.end(end);
+        org.springframework.test.util.ReflectionTestUtils.setField(s, "id", id);
+        return s;
+    }
+
+    @Test
+    @DisplayName("assignBook: 남의 세션(소유 불일치) → IAE, 저장 없음")
+    void assignBook_foreignSession_throwsAndDoesNotSave() {
+        Book book = Book.register(user, "클린 코드", null, null, null, null, null, BookStatus.READING);
+        when(sessionRepository.findByIdAndUser(99L, user)).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> service.assignBook(user, 99L, book))
+                .isInstanceOf(IllegalArgumentException.class);
+        verify(sessionRepository, never()).save(any(ReadingSession.class));
+    }
+
+    @Test
+    @DisplayName("assignBook: 읽고싶음 책을 뒤 조각에 붙이면 앞 조각까지 함께, 읽는중 전환 스탬프는 체인의 가장 이른 시작")
+    void assignBook_wantToRead_flipsReadingWithEarliestStamp() {
+        Instant firstStart = kst("2026-06-01T23:50");
+        Instant midnight = LocalDate.of(2026, 6, 2).atStartOfDay(KST).toInstant();
+        ReadingSession first = endedWithId(1L, firstStart, midnight, null);
+        ReadingSession last = endedWithId(2L, midnight, kst("2026-06-02T00:40"), null);
+        Book book = Book.register(user, "클린 코드", null, null, null, null, null, BookStatus.WANT_TO_READ);
+        when(sessionRepository.findByIdAndUser(2L, user)).thenReturn(Optional.of(last));
+        when(sessionRepository.findFirstByUserAndEndedAtAndManualEntryFalseAndIdNot(user, midnight, 2L))
+                .thenReturn(Optional.of(first));
+        when(sessionRepository.save(any(ReadingSession.class))).thenAnswer(returnsFirstArg());
+
+        ReadingSession result = service.assignBook(user, 2L, book);
+
+        assertThat(result).isSameAs(last);
+        assertThat(last.getBook()).isSameAs(book);
+        assertThat(first.getBook()).isSameAs(book);
+        assertThat(book.getStatus()).isEqualTo(BookStatus.READING);
+        assertThat(book.getStartedReadingAt()).isEqualTo(firstStart);
+        verify(bookRepository).save(book);
+    }
+
+    @Test
+    @DisplayName("assignBook: null로 떼도 이전 책 상태는 되돌리지 않는다(P16) — 책 저장 없음")
+    void assignBook_detach_doesNotTouchPreviousBook() {
+        Book previous = Book.register(user, "이전 책", null, null, null, null, null, BookStatus.READING);
+        ReadingSession session = endedWithId(1L, kst("2026-06-01T10:00"), kst("2026-06-01T10:30"), previous);
+        when(sessionRepository.findByIdAndUser(1L, user)).thenReturn(Optional.of(session));
+        when(sessionRepository.save(any(ReadingSession.class))).thenAnswer(returnsFirstArg());
+
+        service.assignBook(user, 1L, null);
+
+        assertThat(session.getBook()).isNull();
+        assertThat(previous.getStatus()).isEqualTo(BookStatus.READING);
+        verify(sessionRepository).save(session);
+        verify(bookRepository, never()).save(any(Book.class));
+    }
+
+    @Test
+    @DisplayName("assignBook: 같은 책 재지정(자정 0초 세션 포함)은 예외 없이 끝 — 세션 저장 0회, 체인 finder 호출 0회")
+    void assignBook_sameBook_isNoOpBeforeWalking() {
+        Instant midnight = LocalDate.of(2026, 6, 2).atStartOfDay(KST).toInstant();
+        Book book = Book.register(user, "클린 코드", null, null, null, null, null, BookStatus.READING);
+        ReadingSession zero = endedWithId(1L, midnight, midnight, book); // [M,M] — 양 끝이 다 이음매
+        when(sessionRepository.findByIdAndUser(1L, user)).thenReturn(Optional.of(zero));
+
+        ReadingSession result = service.assignBook(user, 1L, book);
+
+        assertThat(result).isSameAs(zero);
+        verify(sessionRepository, never()).save(any(ReadingSession.class));
+        verify(sessionRepository, never()).findFirstByUserAndEndedAtAndManualEntryFalseAndIdNot(any(), any(), any());
+        verify(sessionRepository, never())
+                .findFirstByUserAndStartedAtAndEndedAtIsNotNullAndManualEntryFalseAndIdNot(any(), any(), any());
+    }
+
+    @Test
+    @DisplayName("assignBook: 수동 기록은 자정에 맞닿아도 체인 finder를 부르지 않는다 — 시각 인접이 링크가 아니다")
+    void assignBook_manualEntry_doesNotWalkChain() {
+        Instant midnight = LocalDate.of(2026, 9, 23).atStartOfDay(KST).toInstant();
+        Book before = Book.register(user, "데미안", null, null, null, null, null, BookStatus.READING);
+        Book after = Book.register(user, "싯다르타", null, null, null, null, null, BookStatus.READING);
+        ReadingSession manual = ReadingSession.manual(user, midnight, midnight.plusSeconds(1800), before);
+        org.springframework.test.util.ReflectionTestUtils.setField(manual, "id", 3L);
+        when(sessionRepository.findByIdAndUser(3L, user)).thenReturn(Optional.of(manual));
+        when(sessionRepository.save(any(ReadingSession.class))).thenAnswer(returnsFirstArg());
+
+        service.assignBook(user, 3L, after);
+
+        assertThat(manual.getBook()).isSameAs(after);
+        verify(sessionRepository, never()).findFirstByUserAndEndedAtAndManualEntryFalseAndIdNot(any(), any(), any());
+        verify(sessionRepository, never())
+                .findFirstByUserAndStartedAtAndEndedAtIsNotNullAndManualEntryFalseAndIdNot(any(), any(), any());
     }
 
     // ==========================================================================

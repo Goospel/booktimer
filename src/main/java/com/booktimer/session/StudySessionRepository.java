@@ -48,6 +48,15 @@ public interface StudySessionRepository extends JpaRepository<StudySession, Long
     Optional<StudySession> findByUserAndEndedAtAndBookIsNull(User user, Instant endedAt);
 
     /**
+     * 기록 화면 정정의 <b>앞쪽 이웃</b>(자정 이음매에 끝난 조각) — 라벨 판정은 서비스가 한다
+     * ({@code StudySessionService.assignBook}, 독서 {@code ReadingSessionRepository}의 같은 꼴 쿼리와 같은 규율).
+     */
+    Optional<StudySession> findFirstByUserAndEndedAtAndIdNot(User user, Instant endedAt, Long id);
+
+    /** 기록 화면 정정의 <b>뒤쪽 이웃</b>(자정 이음매에 시작한, 이미 끝난 조각 — 진행 중 세션은 딸려오지 않는다). */
+    Optional<StudySession> findFirstByUserAndStartedAtAndEndedAtIsNotNullAndIdNot(User user, Instant startedAt, Long id);
+
+    /**
      * 책별 누적 공부 시간(초) — 완료·책지정 세션만 DB에서 GROUP BY 집계.
      * 조건은 독서 {@code ReadingSessionRepository.sumSecondsByBook}과 글자 그대로 같다.
      */
@@ -133,8 +142,12 @@ public interface StudySessionRepository extends JpaRepository<StudySession, Long
      *
      * <p>귀속 기준은 다른 둘과 같은 {@code startedAt}이다 — 자정을 걸친 공부는 저장 시 조각난 행들이라
      * 각 조각이 제 날짜에 들어간다(레거시 행은 예외).
+     *
+     * <p><b>책을 함께 즉시 로딩</b>한다 — 날짜를 펼친 세션 줄이 책 id·제목을 싣는다(LEFT join이라 책 없는
+     * 세션도 그대로 온다). 파생 쿼리로 두면 book이 LAZY라 줄마다 쿼리가 나간다.
      */
-    List<StudySession> findByUserAndEndedAtIsNotNull(User user);
+    @Query("select s from StudySession s left join fetch s.book where s.user = :user and s.endedAt is not null")
+    List<StudySession> findByUserAndEndedAtIsNotNull(@Param("user") User user);
 
     /** 회원 탈퇴 시 해당 유저의 모든 공부 기록을 제거한다(FK: study_session.user_id → users). */
     void deleteByUser(User user);

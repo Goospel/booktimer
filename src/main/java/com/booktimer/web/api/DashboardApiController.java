@@ -23,6 +23,7 @@ import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.server.ResponseStatusException;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.GetMapping;
+import tools.jackson.databind.JsonNode;
 
 import java.security.Principal;
 import java.time.Clock;
@@ -195,7 +196,8 @@ public class DashboardApiController {
      * 종료 후 태깅 — 책 없이 측정한 세션에 나중에 책을 연결한다(발견 1).
      *
      * <p>IDOR 이중 방어: 책은 {@code findByIdAndUser}로 소유 검증(남의 책이면 404), 세션은 서비스가
-     * {@code findByIdAndUser}로 소유 검증(남의 세션이면 404 마스킹). 이미 책이 지정된 세션 재태깅은 409.
+     * {@code findByIdAndUser}로 소유 검증(남의 세션이면 404 마스킹). 진행 중 세션·이미 책이 지정된 세션은 409.
+     * 끝난 기록의 책을 바꾸거나 떼는 문은 {@code POST /api/sessions/{id}/book}이다.
      */
     @PostMapping("/api/sessions/{id}/tag-book")
     public ResponseEntity<TagBookResponse> tagBook(@PathVariable("id") Long id,
@@ -210,7 +212,8 @@ public class DashboardApiController {
         } catch (IllegalArgumentException e) {
             throw new ResponseStatusException(HttpStatus.NOT_FOUND, "측정을 찾을 수 없습니다"); // 세션 IDOR 마스킹
         } catch (IllegalStateException e) {
-            throw new ResponseStatusException(HttpStatus.CONFLICT, "이미 책이 지정된 측정입니다");
+            // 진행 중(P17 — 재는 도중은 active/book의 문) 또는 이미 책이 지정된 측정(1회성)
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "책을 붙일 수 없는 측정입니다");
         }
     }
 
@@ -240,6 +243,52 @@ public class DashboardApiController {
             throw new ResponseStatusException(HttpStatus.CONFLICT, "진행 중인 측정이 없습니다"); // stop과 같은 계약
         }
         return ResponseEntity.ok(buildTimerState(user));
+    }
+
+    /**
+     * <b>끝난 측정의 책 정하기</b> — 기록 화면 [책 붙이기]/[바꾸기]/[책 없이 두기]. {@code tag-book}(stop 직후
+     * 1회성)·{@code active/book}(진행 중)과 다른 셋째 문이라 두 문의 가드를 건드리지 않는다. 자정 분할 조각은
+     * 서비스가 함께 고친다({@link ReadingSessionService#assignBook}).
+     *
+     * <p>본문은 {@code JsonNode}로 받아 <b>키 없음({@code {}})과 {@code null}을 가른다</b> — JS의
+     * {@code JSON.stringify({bookId: undefined})}는 {@code {}}가 되므로, 시트가 id 없는 객체를 넘기는 버그 하나로
+     * 과거 원장의 책이 조용히 떨어지면 안 된다({@code Long bookId} 레코드는 둘을 똑같이 null로 읽는다).
+     *
+     * <p>응답은 start·active/book과 같은 {@link TimerState} — 읽고싶음→읽는중 전환이 {@code wantToReadBooks}·
+     * {@code readingBooks}에 바로 실린다.
+     *
+     * @return 200 / 400 bookId 키 없음·비정수 / 404 남의·없는 세션, 남의·없는 책 / 409 진행 중 측정·수동 기록에 null
+     */
+    @PostMapping("/api/sessions/{id}/book")
+    public ResponseEntity<TimerState> assignBook(@PathVariable("id") Long id, @RequestBody JsonNode body,
+                                                 Principal principal) {
+        User user = currentUserService.resolve(principal);
+        Long bookId = bookIdOf(body); // 키 없음 → 400, null → 떼기
+        Book book = null;
+        if (bookId != null) {
+            book = bookRepository.findByIdAndUser(bookId, user)
+                    .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "책을 찾을 수 없습니다")); // 책 IDOR
+        }
+        try {
+            sessionService.assignBook(user, id, book);
+        } catch (IllegalArgumentException e) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "측정을 찾을 수 없습니다"); // 세션 IDOR 마스킹
+        } catch (IllegalStateException e) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "책을 바꿀 수 없는 측정입니다"); // 진행 중 / 수동 기록에 null
+        }
+        return ResponseEntity.ok(buildTimerState(user));
+    }
+
+    /**
+     * {@code {"bookId": 5}} → 5, {@code {"bookId": null}} → null(떼기), {@code {}}·비정수 → 400.
+     * 떼기는 명시적이어야 한다. 공부 문({@code StudyApiController})도 같은 규칙을 쓴다.
+     */
+    static Long bookIdOf(JsonNode body) {
+        JsonNode n = body == null ? null : body.get("bookId");
+        if (n == null || !(n.isNull() || (n.isIntegralNumber() && n.canConvertToLong()))) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "bookId가 필요합니다");
+        }
+        return n.isNull() ? null : n.asLong();
     }
 
     private TimerState buildTimerState(User user) {
@@ -333,6 +382,8 @@ public class DashboardApiController {
      *
      * @param debtWaiverAvailable 리워드 광고로 밀린 하루를 지울 수 있는지(미니앱 버튼 노출 조건).
      *                            start/stop/waive 응답에 함께 실려 버튼 노출·숨김이 재조회 없이 갱신된다
+     * @param wantToReadBooks     읽고싶음 책 — 태깅·교체·정정 문이 읽고싶음→읽는중 전환을 일으키므로 응답에 실어야
+     *                            클라이언트의 시트 후보가 낡지 않는다. <b>맨 뒤</b>에 붙인 필드라 옛 클라이언트는 무시한다
      */
     public record TimerState(
             long remainingSeconds,
@@ -350,7 +401,8 @@ public class DashboardApiController {
             List<BookOption> readingBooks,
             List<BookOption> finishedBooks,
             Long recentBookId,
-            boolean debtWaiverAvailable
+            boolean debtWaiverAvailable,
+            List<BookOption> wantToReadBooks
     ) {
         /** 라이브 상태 → DTO. 용서권 가용 여부만 따로 받는다(부채 계산과 다른 출처라 합칠 수 없다). */
         public static TimerState of(DashboardModel.LiveState live, boolean debtWaiverAvailable) {
@@ -361,7 +413,8 @@ public class DashboardApiController {
                     live.activeBookTitle(), live.activeBookTotalSeconds(),
                     toOption(live.activeBook()),
                     toOptions(live.readingBooks()), toOptions(live.finishedBooks()),
-                    live.recentBookId(), debtWaiverAvailable);
+                    live.recentBookId(), debtWaiverAvailable,
+                    toOptions(live.wantToReadBooks()));
         }
     }
 

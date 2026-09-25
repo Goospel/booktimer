@@ -32,7 +32,7 @@ public interface ReadingSessionRepository extends JpaRepository<ReadingSession, 
 
     /**
      * 세션 전체를 책과 함께 즉시 로딩 — 트랜잭션 밖 매핑/렌더에서 lazy 예외 방지 + N+1 제거.
-     * LEFT join: book=null 레거시 세션도 보존(일자·시간 집계에 기여 — N-055 정신).
+     * LEFT join: book=null(책 미지정) 세션도 보존(일자·시간 집계에 기여 — N-055 정신).
      */
     @Query("select s from ReadingSession s left join fetch s.book where s.user = :user")
     List<ReadingSession> findByUserWithBook(@Param("user") User user);
@@ -98,12 +98,27 @@ public interface ReadingSessionRepository extends JpaRepository<ReadingSession, 
      *
      * <p>조각 링크 컬럼은 없다. 분할은 앞 조각의 {@code endedAt}과 뒤 조각의 {@code startedAt}을
      * <b>같은 Instant 값</b>으로 저장하므로 그 등치가 곧 링크다({@code ReadingSessionService.tagBook}이
-     * 뒤에서 앞으로 체인을 걷는다). {@code manualEntry=false} 조건은 방어다 — 수동 기록은 책이 필수라
-     * 애초에 미태깅이 없지만, 조건을 못 박아 두면 손으로 적은 기록이 실시간 조각 체인에 끼어들 수 없다.
+     * 뒤에서 앞으로 체인을 걷는다). {@code manualEntry=false} 조건이 계약이다 — 수동 기록도 책 삭제
+     * ({@link #unlinkBook})로 풀리면 미태깅이 될 수 있는데, 손으로 적은 기록이 실시간 조각 체인에 끼어들면 안 된다.
      *
      * <p>같은 시각에 끝난 미태깅 실시간 세션이 둘일 수는 없다(단일 활성 세션 불변식) — 그래서 Optional이다.
      */
     Optional<ReadingSession> findByUserAndEndedAtAndBookIsNullAndManualEntryFalse(User user, Instant endedAt);
+
+    /**
+     * <b>기록 화면 정정의 앞쪽 이웃</b> — 주어진 시각(자정 이음매)에 끝난 그 사용자의 실시간 세션. 라벨은
+     * 조건에 없다 — 정정은 책→책·책→null도 걸으므로 「같은 라벨인가」는 서비스가 판정한다
+     * ({@code ReadingSessionService.assignBook}). {@code IdNot}은 0초 세션({@code [T,T]})의 자기 매칭 방어다.
+     */
+    Optional<ReadingSession> findFirstByUserAndEndedAtAndManualEntryFalseAndIdNot(User user, Instant endedAt, Long id);
+
+    /**
+     * <b>기록 화면 정정의 뒤쪽 이웃</b> — 주어진 시각(자정 이음매)에 시작한, 이미 끝난 그 사용자의 실시간 세션.
+     * {@code EndedAtIsNotNull}이 계약이다 — 같은 자정에 시작한 진행 중 세션이 딸려오면 끝난 세션 전용
+     * {@code assignBook}이 예외를 던진다.
+     */
+    Optional<ReadingSession> findFirstByUserAndStartedAtAndEndedAtIsNotNullAndManualEntryFalseAndIdNot(
+            User user, Instant startedAt, Long id);
 
     /**
      * id + 소유자(user)로 세션을 조회 — 종료 후 태깅의 IDOR-안전 경계.
@@ -211,7 +226,7 @@ public interface ReadingSessionRepository extends JpaRepository<ReadingSession, 
      * 가장 최근에 측정(읽기 시작)한 책들의 id — startedAt 내림차순. 첫 원소가 "최근 읽은 책"이다.
      *
      * <p>대시보드 측정 드롭다운에서 이 책을 미리 선택해 "이어 읽기"를 자연스럽게 한다.
-     * 책 미지정(book is null) 레거시 세션은 제외한다. 호출부에서 {@code PageRequest.of(0, 1)}로 1건만 받는다.
+     * 책 미지정(book is null) 세션은 제외한다. 호출부에서 {@code PageRequest.of(0, 1)}로 1건만 받는다.
      */
     @Query("select s.book.id from ReadingSession s where s.user = :user and s.book is not null order by s.startedAt desc")
     List<Long> findRecentlyReadBookIds(@Param("user") User user, Pageable pageable);

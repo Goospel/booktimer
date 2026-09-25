@@ -102,7 +102,7 @@ public class ReadingSessionService {
      * 측정 시작을 깜빡한 독서를 <b>나중에 수동으로 기록</b>한다 — 이미 끝난 한 번의 측정을 직접 적는 경로.
      *
      * <p>실시간 측정({@link #start}/{@link #stop})과 결과가 같아야 사용자가 "어차피 기록 안 됐네" 하고
-     * 이탈하지 않는다(retention). {@code start}의 <b>책 필수</b> 규칙을 따르며 시작~종료가 이미 정해진
+     * 이탈하지 않는다(retention). {@code start}와 달리 <b>책이 필수</b>이며 시작~종료가 이미 정해진
      * 완료 세션을 만든다. 진행 중 세션 유무와 무관하다(과거 시점을 적는 것이라 충돌하지 않음).
      *
      * <p><b>부채는 세션 저장으로 자동 반영된다</b> — 부채는 날짜별로 완료 세션에서 유도되므로
@@ -112,7 +112,7 @@ public class ReadingSessionService {
      * @param user      측정 주체(필수)
      * @param startedAt 읽기 시작 시각(필수)
      * @param endedAt   읽기 종료 시각(필수, startedAt 이상)
-     * @param book      읽은 책(필수 — 책 미지정 기록 금지, {@code start}와 동일)
+     * @param book      읽은 책(필수 — 책 미지정 기록 금지, 책이 선택인 {@code start}와 다르다)
      * @return 저장된 완료 세션
      * @throws IllegalArgumentException book 이 null 이거나 endedAt 이 startedAt 보다 이른 경우
      */
@@ -282,14 +282,16 @@ public class ReadingSessionService {
      * <p><b>자정 분할 조각까지 함께 태깅한다.</b> {@code stop}은 마지막 조각을 돌려주므로 그 하나만
      * 붙이면 자정 전 몫이 미태깅으로 남아 책 통계에서 샌다. 조각 링크 컬럼은 없고 <b>시각 인접성</b>이
      * 링크다 — 앞 조각의 {@code endedAt}은 뒤 조각의 {@code startedAt}과 같은 값이므로 뒤에서 앞으로
-     * 체인을 걷는다. 미태깅·실시간 세션만 후보라(수동 기록은 책이 필수라 미태깅이 없다) 남의 독서나
-     * 무관한 세션이 딸려올 길이 없다.
+     * 체인을 걷는다. 미태깅·실시간 세션만 후보라 남의 독서나 무관한 세션이 딸려올 길이 없다(수동 기록도
+     * 책 삭제로 풀리면 미태깅이 될 수 있지만 finder의 {@code ManualEntryFalse}가 막는다).
+     *
+     * <p>끝난 기록의 책을 <b>바꾸거나 떼는</b> 문은 여기가 아니라 {@link #assignBook}이다(기록 화면).
      *
      * @param sessionId 태깅할 세션 id
      * @param book      연결할 책(호출부에서 소유 검증 완료)
      * @return 책이 연결된 세션(넘겨받은 그 세션 — 앞 조각들도 함께 태깅되지만 반환은 이것)
      * @throws IllegalArgumentException 해당 사용자의 그 세션이 없는 경우(IDOR — 컨트롤러가 404로 마스킹)
-     * @throws IllegalStateException    이미 책이 지정된 세션인 경우(컨트롤러가 409로)
+     * @throws IllegalStateException    진행 중 세션이거나 이미 책이 지정된 세션인 경우(컨트롤러가 409로)
      */
     public ReadingSession tagBook(User user, Long sessionId, Book book) {
         ReadingSession session = sessionRepository.findByIdAndUser(sessionId, user)
@@ -311,6 +313,91 @@ public class ReadingSessionService {
             bookRepository.save(book);
         }
         return saved;
+    }
+
+    /**
+     * <b>끝난 측정의 책 정정</b> — 기록 화면에서 측정 한 건에 책을 붙이고·바꾸고·뗀다
+     * ({@code POST /api/sessions/{id}/book}). {@link #tagBook}(stop 직후 1회성)·{@link #changeActiveBook}
+     * (진행 중)과 다른 셋째 문이다.
+     *
+     * <p><b>자정 분할 조각까지 양방향으로 함께 고친다</b> — 기록 화면에선 사용자가 앞 조각(전날 23:30–00:00)도
+     * 뒤 조각도 누를 수 있다. 링크는 {@link #tagBook}과 같은 시각 인접성이되 두 조건을 더한다: 이음매가
+     * <b>유저 TZ 자정</b>이어야 하고({@code splitByMidnight}은 자정에서만 자른다 — 없으면 같은 시각에 시작·종료한
+     * 0초 세션들이 서로 딸려온다), 이웃이 <b>고치기 전과 같은 라벨</b>이어야 한다(분할 조각은 같은 책을
+     * 물려받으므로 정상이면 늘 같다).
+     *
+     * <p><b>수동 기록은 걷지 않는다</b> — 과거 날짜 수동 기록은 전부 그날 00:00에서 시작하는 서버 앵커라
+     * 시각 인접이 링크가 아니다(엉뚱한 날의 다른 수동 기록이 바뀐다). 대가로 오늘 기준으로 적어 자정을 넘긴
+     * 수동 기록은 두 줄이 따로 고쳐진다.
+     *
+     * <p><b>종료</b>: 같은 책 재지정은 걷기 전에 끝난다. 그 밖엔 {@code book ≠ before}이고 걸은 행은 즉시
+     * {@code book}으로 바뀌어 「before와 같은 라벨」 조건이 거짓이 되므로 어떤 행도 두 번 걷지 않는다.
+     *
+     * <p>「읽고 싶어요」 책이면 「읽는 중」으로 전환한다 — 스탬프는 체인의 가장 이른 시작({@link #tagBook}과
+     * 같은 시맨틱). 떼거나 바꿀 때 <b>이전 책의 상태는 되돌리지 않는다</b>.
+     *
+     * @param book 새 대상(호출부에서 소유 검증 완료, null = 떼기)
+     * @return 넘겨받은 그 세션
+     * @throws IllegalArgumentException 해당 사용자의 그 세션이 없는 경우(컨트롤러가 404로 마스킹)
+     * @throws IllegalStateException    진행 중 세션이거나 수동 기록에 null인 경우(컨트롤러가 409로)
+     */
+    public ReadingSession assignBook(User user, Long sessionId, Book book) {
+        ReadingSession session = sessionRepository.findByIdAndUser(sessionId, user)
+                .orElseThrow(() -> new IllegalArgumentException("session not found for user"));
+        Book before = session.getBook();
+        if (sameBook(before, book)) {
+            return session; // 멱등 — 걷기 전에 끝낸다(0초 세션의 자기 매칭 방어도 겸한다)
+        }
+        session.assignBook(book);
+        sessionRepository.save(session);
+        Instant earliest = session.getStartedAt();
+        if (!session.isManualEntry()) {
+            // ponytail: 이음매는 「현재」 TZ 자정으로 판정 — TZ를 바꾼 사용자의 옛 조각은 체인이 끊길 수 있다(각자 고친다).
+            ZoneId zone = ZoneId.of(user.getTimezone());
+            for (ReadingSession cur = session; isDayStart(cur.getStartedAt(), zone); ) { // 뒤로(앞 조각)
+                Optional<ReadingSession> prev = sessionRepository
+                        .findFirstByUserAndEndedAtAndManualEntryFalseAndIdNot(user, cur.getStartedAt(), cur.getId());
+                if (prev.isEmpty() || !sameBook(prev.get().getBook(), before)) {
+                    break;
+                }
+                cur = prev.get();
+                cur.assignBook(book);
+                sessionRepository.save(cur);
+                earliest = cur.getStartedAt();
+            }
+            for (ReadingSession cur = session; isDayStart(cur.getEndedAt(), zone); ) {   // 앞으로(뒤 조각)
+                Optional<ReadingSession> next = sessionRepository
+                        .findFirstByUserAndStartedAtAndEndedAtIsNotNullAndManualEntryFalseAndIdNot(
+                                user, cur.getEndedAt(), cur.getId());
+                if (next.isEmpty() || !sameBook(next.get().getBook(), before)) {
+                    break;
+                }
+                cur = next.get();
+                cur.assignBook(book);
+                sessionRepository.save(cur);
+            }
+        }
+        if (book != null && book.startReading(earliest)) {
+            bookRepository.save(book);
+        }
+        return session;
+    }
+
+    /** {@code t}가 유저 타임존의 하루 시작(자정)인가 — 분할 조각의 이음매는 항상 이 시각이다({@link #splitByMidnight}). */
+    static boolean isDayStart(Instant t, ZoneId zone) {
+        return t.equals(LocalDate.ofInstant(t, zone).atStartOfDay(zone).toInstant());
+    }
+
+    /** 같은 책인가 — 둘 다 null이거나, 같은 인스턴스이거나, 같은 id(지연 프록시와 엔티티가 섞여도 같다). */
+    static <B> boolean sameBook(B a, B b, java.util.function.Function<B, Long> id) {
+        if (a == b) {
+            return true;
+        }
+        return a != null && b != null && id.apply(a) != null && id.apply(a).equals(id.apply(b));
+    }
+
+    private static boolean sameBook(Book a, Book b) {
+        return sameBook(a, b, Book::getId);
     }
 
     /**

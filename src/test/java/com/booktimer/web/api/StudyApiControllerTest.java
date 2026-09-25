@@ -28,6 +28,7 @@ import java.time.Instant;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
+import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.hamcrest.Matchers.*;
@@ -1069,6 +1070,275 @@ class StudyApiControllerTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.months[0].days[0].totalSeconds").value(2400))
                 .andExpect(jsonPath("$.months[0].days[1].totalSeconds").value(600));
+    }
+
+    // ── 끝난 측정의 책 정정 (기록 화면 붙이기·바꾸기·떼기) ─────────────────────
+
+    private org.springframework.test.web.servlet.ResultActions assign(String login, Long sessionId, String body)
+            throws Exception {
+        return mockMvc.perform(post("/api/study/sessions/" + sessionId + "/book")
+                .with(user(login)).with(csrf())
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(body));
+    }
+
+    private Long studyBookIdOf(Long sessionId) {
+        StudyBook b = studyRepository.findById(sessionId).orElseThrow().getBook();
+        return b == null ? null : b.getId();
+    }
+
+    @Test
+    @DisplayName("POST /api/study/sessions/{id}/book: 끝난 측정에 붙이면 그 책 totalSeconds·recentBookId가 된다")
+    void assignBook_attachesAndMovesSeconds() throws Exception {
+        User u = register("study-asg1@a.com", "studyasg1");
+        StudyBook book = studyBook(u, "정보처리기사 실기");
+        StudySession session = completedStudy(u, todayNoon(), Duration.ofMinutes(30));
+
+        assign("studyasg1", session.getId(), "{\"bookId\":" + book.getId() + "}")
+                .andExpect(status().isOk())
+                .andExpect(jsonPath(bookSeconds(book), hasItem(1800)))
+                .andExpect(jsonPath("$.recentBookId").value(book.getId().intValue()));
+    }
+
+    @Test
+    @DisplayName("POST /api/study/sessions/{id}/book: 책 → 다른 책 · 명시적 null로 떼기 모두 200")
+    void assignBook_replacesAndDetaches() throws Exception {
+        User u = register("study-asg2@a.com", "studyasg2");
+        StudyBook first = studyBook(u, "먼저 책");
+        StudyBook other = studyBook(u, "다른 책");
+        StudySession session = completedStudy(u, todayNoon(), Duration.ofMinutes(10), first);
+
+        assign("studyasg2", session.getId(), "{\"bookId\":" + other.getId() + "}").andExpect(status().isOk());
+        assertThat(studyBookIdOf(session.getId())).isEqualTo(other.getId());
+
+        assign("studyasg2", session.getId(), "{\"bookId\":null}").andExpect(status().isOk());
+        assertThat(studyBookIdOf(session.getId())).isNull();
+    }
+
+    @Test
+    @DisplayName("POST /api/study/sessions/{id}/book: {} → 400, 책 불변(떼기는 명시적이어야 한다)")
+    void assignBook_missingBookId_isBadRequest() throws Exception {
+        User u = register("study-asg3@a.com", "studyasg3");
+        StudyBook first = studyBook(u, "먼저 책");
+        StudySession session = completedStudy(u, todayNoon(), Duration.ofMinutes(10), first);
+
+        assign("studyasg3", session.getId(), "{}").andExpect(status().isBadRequest());
+
+        assertThat(studyBookIdOf(session.getId())).isEqualTo(first.getId());
+    }
+
+    /** 이 컨트롤러엔 전역 IAE → 400 핸들러가 있다 — 서비스 IAE를 잡지 않으면 IDOR 마스킹이 400으로 샌다. */
+    @Test
+    @DisplayName("POST /api/study/sessions/{남의 id}/book → 404이고 400이 아니다(전역 IAE 핸들러 함정)")
+    void assignBook_foreignSession_isNotFoundNotBadRequest() throws Exception {
+        User u = register("study-asg4@a.com", "studyasg4");
+        User stranger = register("study-asg4b@a.com", "studyasg4b");
+        StudyBook mine = studyBook(u, "내 책");
+        StudySession theirs = completedStudy(stranger, todayNoon(), Duration.ofMinutes(10));
+
+        assign("studyasg4", theirs.getId(), "{\"bookId\":" + mine.getId() + "}")
+                .andExpect(status().isNotFound());
+
+        assertThat(studyBookIdOf(theirs.getId())).isNull();
+    }
+
+    @Test
+    @DisplayName("POST /api/study/sessions/{id}/book: 남의 공부 책·독서 책장의 id → 404")
+    void assignBook_foreignOrReadingBook_isNotFound() throws Exception {
+        User u = register("study-asg5@a.com", "studyasg5");
+        User stranger = register("study-asg5b@a.com", "studyasg5b");
+        StudySession session = completedStudy(u, todayNoon(), Duration.ofMinutes(10));
+        StudyBook theirs = studyBook(stranger, "남의 공부 책");
+        Book reading = readingBook(u, "내 독서 책");
+
+        assign("studyasg5", session.getId(), "{\"bookId\":" + theirs.getId() + "}").andExpect(status().isNotFound());
+        assign("studyasg5", session.getId(), "{\"bookId\":" + reading.getId() + "}").andExpect(status().isNotFound());
+
+        assertThat(studyBookIdOf(session.getId())).isNull();
+    }
+
+    @Test
+    @DisplayName("POST /api/study/sessions/{id}/book: 진행 중 측정 → 409(그쪽은 active/book)")
+    void assignBook_activeSession_conflicts() throws Exception {
+        User u = register("study-asg6@a.com", "studyasg6");
+        StudyBook book = studyBook(u, "책");
+        mockMvc.perform(post("/api/study/start").with(user("studyasg6")).with(csrf()))
+                .andExpect(status().isOk());
+        Long activeId = studyRepository.findByUserAndEndedAtIsNull(u).orElseThrow().getId();
+
+        assign("studyasg6", activeId, "{\"bookId\":" + book.getId() + "}").andExpect(status().isConflict());
+
+        assertThat(studyBookIdOf(activeId)).isNull();
+    }
+
+    /**
+     * 교차 원장 id — 전제: <b>그 사용자에게 같은 번호의 공부 세션이 없을 때</b> 404다. 두 원장이 각자
+     * IDENTITY라 번호가 겹칠 수 있으므로 이건 IDOR 마스킹 확인이지 원장 분리 보장이 아니다(방어선은
+     * 클라이언트가 시트를 열 때 원장을 고정하는 것).
+     */
+    @Test
+    @DisplayName("POST /api/study/sessions/{독서 세션 id}/book: 같은 번호의 공부 세션이 없으면 404")
+    void assignBook_readingSessionId_isNotFoundWhenNoStudySessionShareIt() throws Exception {
+        User u = register("study-asg7@a.com", "studyasg7");
+        StudyBook book = studyBook(u, "책");
+        readingSessionService.start(u, todayNoon(), null);
+        Long readingId = readingSessionService.stop(u, todayNoon().plus(Duration.ofMinutes(10))).getId();
+        assertThat(studyRepository.findByIdAndUser(readingId, u)).as("전제: 같은 번호의 내 공부 세션 없음").isEmpty();
+
+        assign("studyasg7", readingId, "{\"bookId\":" + book.getId() + "}").andExpect(status().isNotFound());
+    }
+
+    @Test
+    @DisplayName("assignBook(공부): 앞 조각을 고치면 자정 너머 뒤 조각까지 — 50분 전부가 그 책에 간다")
+    void assignBook_earlierPiece_walksChainForward() throws Exception {
+        User u = register("study-asg8@a.com", "studyasg8");
+        StudyBook book = studyBook(u, "토익 RC");
+        studySessionService.start(u, seoul("2026-06-01T23:50"), null);
+        studySessionService.stop(u, seoul("2026-06-02T00:40"));
+        Long earlierId = studyRepository.findByUserAndEndedAtIsNotNull(u).stream()
+                .filter(s -> s.getEndedAt().equals(seoul("2026-06-02T00:00"))).findFirst().orElseThrow().getId();
+
+        assign("studyasg8", earlierId, "{\"bookId\":" + book.getId() + "}")
+                .andExpect(status().isOk())
+                .andExpect(jsonPath(bookSeconds(book), hasItem(3000)));
+    }
+
+    @Test
+    @DisplayName("assignBook(공부): 다른 사용자의 세션이 자정에 인접하고 같은 라벨(null)이어도 딸려오지 않는다")
+    void assignBook_otherUsersAdjacentSession_isNotDragged() throws Exception {
+        User alice = register("study-asg9a@a.com", "studyasg9a");
+        User bob = register("study-asg9b@a.com", "studyasg9b");
+        StudyBook bobBook = studyBook(bob, "밥 책");
+        studySessionService.start(alice, seoul("2026-06-01T23:30"), null);
+        Long aliceId = studySessionService.stop(alice, seoul("2026-06-02T00:00")).getId();
+        studySessionService.start(bob, seoul("2026-06-02T00:00"), null);
+        Long bobId = studySessionService.stop(bob, seoul("2026-06-02T00:30")).getId();
+
+        assign("studyasg9b", bobId, "{\"bookId\":" + bobBook.getId() + "}").andExpect(status().isOk());
+
+        assertThat(studyBookIdOf(bobId)).isEqualTo(bobBook.getId());
+        assertThat(studyBookIdOf(aliceId)).isNull();
+    }
+
+    /** 23:50→00:40을 재 자정에서 갈린 두 조각의 id — [앞, 뒤]. */
+    private List<Long> splitPieceIds(User u, StudyBook book) {
+        studySessionService.start(u, seoul("2026-06-01T23:50"), book);
+        Long laterId = studySessionService.stop(u, seoul("2026-06-02T00:40")).getId();
+        Long earlierId = studyRepository.findByUserAndEndedAtIsNotNull(u).stream()
+                .filter(s -> s.getEndedAt().equals(seoul("2026-06-02T00:00"))).findFirst().orElseThrow().getId();
+        return List.of(earlierId, laterId);
+    }
+
+    @Test
+    @DisplayName("assignBook(공부): 뒤 조각을 고치면 자정 앞 조각까지 — 책→다른 책도 체인을 걷는다")
+    void assignBook_laterPiece_walksChainBackward() throws Exception {
+        User u = register("study-asg10@a.com", "studyasg10");
+        StudyBook first = studyBook(u, "먼저 책");
+        StudyBook other = studyBook(u, "다른 책");
+        List<Long> pieces = splitPieceIds(u, first);
+
+        assign("studyasg10", pieces.get(1), "{\"bookId\":" + other.getId() + "}").andExpect(status().isOk());
+
+        assertThat(pieces).extracting(this::studyBookIdOf).containsExactly(other.getId(), other.getId());
+    }
+
+    /* 방향마다 붙이기를 한 번만 한다 — 위 테스트(뒤로 걷기)와 짝. 둘을 한 테스트에 묶으면 finder 하나의 user 조건이 빠져도 초록이다. */
+    @Test
+    @DisplayName("assignBook(공부): 앞으로 걷기 — 자정에 시작한 다른 사용자의 같은 라벨(null) 세션은 딸려오지 않는다")
+    void assignBook_forwardWalk_doesNotDragOtherUsersSession() throws Exception {
+        User alice = register("study-asg11a@a.com", "studyasg11a");
+        User bob = register("study-asg11b@a.com", "studyasg11b");
+        StudyBook aliceBook = studyBook(alice, "앨리스 책");
+        studySessionService.start(alice, seoul("2026-06-01T23:30"), null);
+        Long aliceId = studySessionService.stop(alice, seoul("2026-06-02T00:00")).getId();
+        studySessionService.start(bob, seoul("2026-06-02T00:00"), null);
+        Long bobId = studySessionService.stop(bob, seoul("2026-06-02T00:30")).getId();
+
+        assign("studyasg11a", aliceId, "{\"bookId\":" + aliceBook.getId() + "}").andExpect(status().isOk());
+
+        assertThat(studyBookIdOf(aliceId)).isEqualTo(aliceBook.getId());
+        assertThat(studyBookIdOf(bobId)).isNull();
+    }
+
+    @Test
+    @DisplayName("assignBook(공부): 앞 조각을 고칠 때 뒤 조각 라벨이 고치기 전과 다르면(이미 따로 고침) 딸려오지 않는다")
+    void assignBook_laterNeighbourWithDifferentLabel_isNotDragged() throws Exception {
+        User u = register("study-asg12@a.com", "studyasg12");
+        StudyBook separately = studyBook(u, "따로 고친 책");
+        StudyBook picked = studyBook(u, "새 책");
+        List<Long> pieces = splitPieceIds(u, null);
+        StudySession later = studyRepository.findById(pieces.get(1)).orElseThrow();
+        later.assignBook(separately); // 뒤 조각만 따로 라벨이 붙은 상태(엔티티 직접 — 픽스처)
+        studyRepository.save(later);
+
+        assign("studyasg12", pieces.get(0), "{\"bookId\":" + picked.getId() + "}").andExpect(status().isOk());
+
+        assertThat(pieces).extracting(this::studyBookIdOf).containsExactly(picked.getId(), separately.getId());
+    }
+
+    @Test
+    @DisplayName("assignBook(공부): 뒤 조각을 고칠 때 앞 조각 라벨이 고치기 전과 다르면(이미 따로 고침) 딸려오지 않는다")
+    void assignBook_earlierNeighbourWithDifferentLabel_isNotDragged() throws Exception {
+        User u = register("study-asg13@a.com", "studyasg13");
+        StudyBook separately = studyBook(u, "따로 고친 책");
+        StudyBook picked = studyBook(u, "새 책");
+        List<Long> pieces = splitPieceIds(u, null);
+        StudySession earlier = studyRepository.findById(pieces.get(0)).orElseThrow();
+        earlier.assignBook(separately); // 앞 조각만 따로 라벨이 붙은 상태(엔티티 직접 — 픽스처)
+        studyRepository.save(earlier);
+
+        assign("studyasg13", pieces.get(1), "{\"bookId\":" + picked.getId() + "}").andExpect(status().isOk());
+
+        assertThat(pieces).extracting(this::studyBookIdOf).containsExactly(separately.getId(), picked.getId());
+    }
+
+    @Test
+    @DisplayName("assignBook(공부): 같은 시각(자정 아님)에 시작·종료한 0초 세션 둘은 서로 딸려오지 않는다")
+    void assignBook_zeroSecondSessionsAtSameInstant_areNotChained() throws Exception {
+        User u = register("study-asg14@a.com", "studyasg14");
+        StudyBook book = studyBook(u, "책");
+        Instant t = seoul("2026-06-01T18:00");
+        studySessionService.start(u, t, null);
+        Long firstId = studySessionService.stop(u, t).getId();
+        studySessionService.start(u, t, null);
+        Long secondId = studySessionService.stop(u, t).getId();
+
+        assign("studyasg14", secondId, "{\"bookId\":" + book.getId() + "}").andExpect(status().isOk());
+
+        assertThat(studyBookIdOf(secondId)).isEqualTo(book.getId());
+        assertThat(studyBookIdOf(firstId)).isNull();
+    }
+
+    @Test
+    @DisplayName("assignBook(공부): 같은 자정에 시작한 진행 중 세션은 딸려오지 않는다(EndedAtIsNotNull)")
+    void assignBook_activeSessionAtSameMidnight_isNotDragged() throws Exception {
+        User u = register("study-asg15@a.com", "studyasg15");
+        StudyBook book = studyBook(u, "책");
+        studySessionService.start(u, seoul("2026-06-01T23:30"), null);
+        Long endedId = studySessionService.stop(u, seoul("2026-06-02T00:00")).getId();
+        Long activeId = studySessionService.start(u, seoul("2026-06-02T00:00"), null).getId();
+
+        assign("studyasg15", endedId, "{\"bookId\":" + book.getId() + "}").andExpect(status().isOk());
+
+        assertThat(studyBookIdOf(endedId)).isEqualTo(book.getId());
+        assertThat(studyBookIdOf(activeId)).isNull();
+    }
+
+    @Test
+    @DisplayName("GET /api/study/history: 날마다 sessions에 측정 한 건씩(id·HH:mm·책 제목) — 책은 fetch join이라 lazy 예외 없이")
+    void history_carriesSessionRows() throws Exception {
+        User u = register("study-histrows@a.com", "studyhistrows");
+        StudyBook book = studyBook(u, "정보처리기사 실기");
+        StudySession session = completedStudy(u, todayNoon(), Duration.ofMinutes(25), book);
+
+        mockMvc.perform(get("/api/study/history").with(user("studyhistrows")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.months[0].days[0].sessions[0].id").value(session.getId().intValue()))
+                .andExpect(jsonPath("$.months[0].days[0].sessions[0].start").value("12:00"))
+                .andExpect(jsonPath("$.months[0].days[0].sessions[0].end").value("12:25"))
+                .andExpect(jsonPath("$.months[0].days[0].sessions[0].bookId").value(book.getId().intValue()))
+                .andExpect(jsonPath("$.months[0].days[0].sessions[0].bookTitle").value("정보처리기사 실기"))
+                .andExpect(jsonPath("$.months[0].days[0].sessions[0].manual").value(false));
     }
 
     /** ⚡ 정렬이 {@code Asc}면 <b>처음</b> 공부한 책이 기본 선택으로 떠 캐러셀이 엉뚱한 데서 시작한다. */

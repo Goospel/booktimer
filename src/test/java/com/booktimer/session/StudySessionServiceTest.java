@@ -468,4 +468,54 @@ class StudySessionServiceTest {
 
         verify(studyRepository, times(1)).save(any(StudySession.class));
     }
+
+    // --- assignBook (끝난 세션의 책 정정 — 기록 화면, 양방향 자정 체인) ---
+
+    private StudySession endedWithId(long id, Instant start, Instant end, StudyBook label) {
+        StudySession s = StudySession.start(user, start, label);
+        s.end(end);
+        org.springframework.test.util.ReflectionTestUtils.setField(s, "id", id);
+        return s;
+    }
+
+    @Test
+    @DisplayName("assignBook: 내 세션이 아니면 IAE(컨트롤러가 404로), 저장 없음")
+    void assignBook_rejectsForeignSession() {
+        when(studyRepository.findByIdAndUser(99L, user)).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> service.assignBook(user, 99L, book))
+                .isInstanceOf(IllegalArgumentException.class);
+        verify(studyRepository, never()).save(any(StudySession.class));
+    }
+
+    @Test
+    @DisplayName("assignBook: 앞 조각을 고치면 자정 이음매 너머 뒤 조각까지 같은 책으로 바뀐다")
+    void assignBook_walksForwardAcrossMidnight() {
+        Instant midnight = kst("2026-06-02T00:00");
+        StudySession earlier = endedWithId(1L, kst("2026-06-01T23:50"), midnight, book);
+        StudySession later = endedWithId(2L, midnight, kst("2026-06-02T00:40"), book);
+        when(studyRepository.findByIdAndUser(1L, user)).thenReturn(Optional.of(earlier));
+        when(studyRepository.findFirstByUserAndStartedAtAndEndedAtIsNotNullAndIdNot(user, midnight, 1L))
+                .thenReturn(Optional.of(later));
+        when(studyRepository.save(any(StudySession.class))).thenAnswer(returnsFirstArg());
+
+        service.assignBook(user, 1L, other);
+
+        assertThat(earlier.getBook()).isSameAs(other);
+        assertThat(later.getBook()).isSameAs(other);
+    }
+
+    @Test
+    @DisplayName("assignBook: 같은 책 재지정은 예외 없이 끝 — 저장 0회, 체인 finder 0회")
+    void assignBook_sameBook_isNoOp() {
+        Instant midnight = kst("2026-06-02T00:00");
+        StudySession zero = endedWithId(1L, midnight, midnight, book);
+        when(studyRepository.findByIdAndUser(1L, user)).thenReturn(Optional.of(zero));
+
+        assertThat(service.assignBook(user, 1L, book)).isSameAs(zero);
+
+        verify(studyRepository, never()).save(any(StudySession.class));
+        verify(studyRepository, never()).findFirstByUserAndEndedAtAndIdNot(any(), any(), any());
+        verify(studyRepository, never()).findFirstByUserAndStartedAtAndEndedAtIsNotNullAndIdNot(any(), any(), any());
+    }
 }

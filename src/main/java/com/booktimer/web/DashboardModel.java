@@ -104,7 +104,7 @@ public class DashboardModel {
         List<Book> books = bookRepository.findByUserOrderByCreatedAtDesc(user);
         List<Book> readingBooks = books.stream().filter(b -> b.getStatus() == BookStatus.READING).toList();
         List<Book> finishedBooks = books.stream().filter(b -> b.getStatus() == BookStatus.FINISHED).toList();
-        // 읽고싶음 책 — 시작 드롭다운엔 안 넣지만(아직 안 편 책), "종료 후 태깅" 시트에선 고를 수 있다(발견 1).
+        // 읽고싶음 책 — 시작·태깅·교체·기록 정정 시트에서 고를 수 있다(고르면 「읽는 중」으로 전환된다).
         List<Book> wantToReadBooks = books.stream().filter(b -> b.getStatus() == BookStatus.WANT_TO_READ).toList();
 
         List<Long> recent = sessionRepository.findRecentlyReadBookIds(user, PageRequest.of(0, 1));
@@ -147,9 +147,9 @@ public class DashboardModel {
      * 계산이 라이브 잔여만 쓰는 현행과 동일하다. "빠뜨린 날" 목록 자체는 독서 기록
      * 화면({@code /history}, {@link com.booktimer.web.HistoryController})에 있다.
      *
-     * <p>측정 대상은 "읽는 중"·"완독"인 책뿐이다 — "읽고싶음"은 아직 펴지 않은 책이라 시간을 재는 게
-     * 이상하므로 드롭다운에서 제외한다(optgroup으로 「읽는 중」/「완독」을 시각적으로 구분). 가장 최근에
-     * 측정한 책(recentBookId)을 미리 선택해 "이어 읽기"를 자연스럽게 한다(없으면 브라우저 기본=첫 옵션).
+     * <p>SSR 모델엔 「읽는 중」·「완독」 목록과 가장 최근에 측정한 책(recentBookId — "이어 읽기" 기본 선택)을
+     * 싣는다. 「읽고싶음」 목록은 {@link LiveState}에만 있다 — JSON API가 시트(시작·태깅·교체·기록 정정)
+     * 후보로 내보내고, 그 책을 고르면 서버가 「읽는 중」으로 전환한다.
      *
      * <p>{@code activeStartedAt}은 화면에 시각 자체를 노출하진 않지만(사용자에겐 타임존이 보일 필요 없음),
      * 타이머 카드의 경과 계산(JS {@code data-started})에 여전히 필요하므로 모델에 남긴다.
