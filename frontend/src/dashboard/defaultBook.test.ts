@@ -4,25 +4,15 @@
 // 계산하면 「칩엔 A, 여백엔 B」로 갈리는 날이 온다(recentBookId가 지워진 책을 가리키는 순간이 그 자리다).
 import { describe, it, expect } from 'vitest'
 
-import { allBooksOf, defaultBookOf, defaultStudyBookOf } from './defaultBook'
+import { defaultBookOf, defaultStudyBookOf } from './defaultBook'
 import type { StudyBookRow } from '../study/api'
 
-const READING = [{ id: 1, title: '데미안' }, { id: 2, title: '수레바퀴 아래서' }]
-const FINISHED = [{ id: 3, title: '싯다르타' }]
-const WANT = [{ id: 4, title: '유리알 유희' }]
-
-describe('allBooksOf', () => {
-    it('읽는 중 → 다 읽음 → 읽고싶음 순으로 이어 붙인다', () => {
-        expect(allBooksOf(READING, FINISHED, WANT).map(b => b.id)).toEqual([1, 2, 3, 4])
-    })
-
-    it('전부 비면 빈 배열', () => {
-        expect(allBooksOf([], [], [])).toEqual([])
-    })
-})
+// 호출부는 읽는 중 책만 넘긴다(R2 결정 5) — 「다 읽은 책은 기본이 아니다」는 호출부 테스트
+// (test/book-pick-form·dashboard-margin-card)가 잰다. 이 함수 자체는 받은 목록 안에서만 고른다.
+const READING = [{ id: 1, title: '데미안' }, { id: 2, title: '수레바퀴 아래서' }, { id: 3, title: '싯다르타' }]
 
 describe('defaultBookOf', () => {
-    const all = allBooksOf(READING, FINISHED, WANT)
+    const all = READING
 
     it('recentBookId가 목록에 있으면 그 책 — 순서상 첫 책이 아니어도', () => {
         expect(defaultBookOf(all, 3)?.title).toBe('싯다르타')

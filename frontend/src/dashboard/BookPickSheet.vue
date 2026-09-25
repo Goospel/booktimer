@@ -4,9 +4,12 @@ import { getCsrfToken } from '../shared/follow'
 import { initialOf, coverColor, byline, statusBadge } from '../books/pure'
 import type { BookOption } from './types'
 
-// 통합 책 시트(발견 1, §6.5) — 하나의 컴포넌트가 두 모드를 겸한다:
-//  · mode='start' : 측정 전 "무슨 책을 읽을지" 고르기. 고르면 pick(id), 아래 CTA는 '책 없이 측정하기'(bookless).
-//  · mode='tag'   : 측정 종료 후 "무슨 책이었나요?" 태깅. 고르면 pick(id), 아래 CTA는 '건너뛰기'(skip).
+// 통합 책 시트(발견 1, §6.5) — 하나의 컴포넌트가 네 모드를 겸한다(문구는 아래 TEXT 한 곳):
+//  · mode='start'  : 측정 전 "무슨 책을 읽을지" 고르기. 고르면 pick, 아래 CTA는 '책 없이 측정하기'(bookless).
+//  · mode='tag'    : 측정 종료 직후 "무슨 책이었나요?" 태깅. 고르면 pick, 아래 CTA는 '건너뛰기'(skip).
+//  · mode='change' : 측정 중 교체(R2 P4). 지금 그 책엔 aria-current, CTA는 '책 없이 읽기'(bookless).
+//  · mode='assign' : 끝난 측정 한 건의 책 정정(R2, 기록 화면이 연다). CTA '책 없이 두기'(bookless) —
+//                    수동 기록은 책이 필수라 noneAllowed=false로 CTA를 아예 안 그린다.
 // 표지·저자·상태·검색담기는 책장 API(/api/books·/api/books/search)를 그대로 재사용 → 백엔드 변경 0.
 // 시트가 열릴 때 /api/books로 표지 목록을 로드한다. 실패하면 부모가 넘긴 목록(제목만)으로 폴백.
 
@@ -20,14 +23,20 @@ interface SearchRow {
     pubDate: string | null; owned: boolean
 }
 
-const props = defineProps<{
-    mode: 'start' | 'tag'
+const props = withDefaults(defineProps<{
+    mode: 'start' | 'tag' | 'change' | 'assign'
     // 로드 실패 시 폴백(제목만) — 정상 경로에선 /api/books 응답을 쓴다.
     readingBooks: BookOption[]
     finishedBooks: BookOption[]
     wantToReadBooks: BookOption[]
     pending?: boolean
-}>()
+    /** change·assign — 지금 그 책. 그 행에 aria-current를 붙이고, assign에선 제목도 가른다. */
+    currentBookId?: number | null
+    /** false면 「책 없이」 CTA를 그리지 않는다 — 수동 기록은 책이 필수다(assign). */
+    noneAllowed?: boolean
+    /** 부모 왕복(태깅·교체·정정)의 실패 — 시트 **안**에서 말한다. 페이지 상단 알림은 딤 뒤에 가려진다(R2 P7). */
+    error?: string | null
+}>(), { currentBookId: null, noneAllowed: true, error: null })
 
 const emit = defineEmits<{
     // 고른 책을 **통째로** 낸다(id만이 아니라) — start 모드에서 부모가 이 책을 칩에 올리기 때문이다.
@@ -40,10 +49,22 @@ const emit = defineEmits<{
     added: [book: { id: number; title: string; status: string }]
 }>()
 
-const title = computed(() => props.mode === 'tag' ? '무슨 책을 읽으셨나요?' : '측정할 책을 고르세요')
-const hint = computed(() => props.mode === 'tag'
-    ? '방금 측정한 독서에 책을 연결해요. 나중에 정해도 괜찮아요.'
-    : '고르면 책만 바뀌어요 — 측정은 「측정 시작」을 눌러야 시작돼요.')
+// [제목, 힌트, 하단 CTA]. tag 힌트는 중립 문구다 — 「나중에 정해도 괜찮아요」는 나중에 정할 자리가 없던 때의
+// 약속이라 지웠고, 「기록에서 붙일 수 있어요」는 그 기능이 실리는 PR에서 단다(운영 화면이 없는 기능을 말하지 않게).
+const TEXT = {
+    start: ['측정할 책을 고르세요', '책을 고르면 책만 바뀌어요 — 측정은 「측정 시작」을 눌러야 시작돼요.', '책 없이 측정하기'],
+    tag: ['무슨 책을 읽으셨나요?', '방금 측정한 독서에 책을 연결해요.', '책 없이 기록 · 건너뛰기'],
+    change: ['다른 책으로 바꿀까요?', '지금까지 잰 시간이 통째로 새 책에 붙어요.', '책 없이 읽기'],
+    assign: ['이 측정은 무슨 책이었나요?', '이 측정의 시간이 그 책에 붙어요.', '책 없이 두기'],
+} as const
+const text = computed(() => TEXT[props.mode])
+// assign은 책이 이미 붙은 측정이면 「바꾸기」로 묻는다 — 붙이기와 바꾸기가 한 문(POST /api/sessions/{id}/book)이다.
+const title = computed(() => props.mode === 'assign' && props.currentBookId !== null ? TEXT.change[0] : text.value[0])
+// 「책 없이 시작해도 돼요」는 시작 시트에서만 참이다 — 교체·정정 시트에서 그 말은 새 측정을 약속한다.
+const emptyText = computed(() => props.mode === 'start'
+    ? '아직 책장에 책이 없어요. 위에서 검색해 담거나, 책 없이 시작해도 돼요.'
+    : '아직 책장에 책이 없어요. 위에서 검색해 담을 수 있어요.')
+function onCta() { if (props.mode === 'tag') emit('skip'); else emit('bookless') }
 
 const STATUS_TABS = [
     { key: 'ALL', label: '전체' },
@@ -66,6 +87,10 @@ const fallback = computed<ShelfBook[]>(() => [
     ...props.wantToReadBooks.map(b => ({ id: b.id, title: b.title, author: null, coverUrl: b.coverUrl ?? null, isbn13: null, status: 'WANT_TO_READ', statusLabel: '읽고 싶음' })),
 ])
 const allBooks = computed(() => loadFailed.value ? fallback.value : shelf.value)
+// 로드도 실패하고 폴백도 비었으면 「책장이 비었다」는 거짓이다 — 모르는 것이지 없는 게 아니다.
+const loadLost = computed(() => loadFailed.value && fallback.value.length === 0)
+const addError = ref<string | null>(null)
+const shownError = computed(() => props.error ?? addError.value ?? (loadLost.value ? '책 목록을 불러오지 못했어요' : null))
 const books = computed(() => filter.value === 'ALL' ? allBooks.value : allBooks.value.filter(b => b.status === filter.value))
 
 async function loadShelf() {
@@ -83,7 +108,8 @@ async function loadShelf() {
     }
 }
 
-// 검색·담기(searchEnabled일 때만) — 책장 검색을 그대로 재사용해 시트 안에서 새 책을 담고 바로 고른다.
+// 검색·담기(searchEnabled일 때만) — 책장 검색을 그대로 재사용해 시트 안에서 새 책을 담는다.
+// 담은 뒤 목록에서 고른다(자동 선택 없음 — 담기와 고르기는 다른 결정이다).
 const q = ref('')
 const rows = ref<SearchRow[]>([])
 const searched = ref(false)
@@ -100,17 +126,25 @@ async function runSearch() {
     }
 }
 async function addRow(row: SearchRow) {
-    const res = await fetch('/api/books', {
-        method: 'POST', credentials: 'same-origin',
-        headers: { 'Content-Type': 'application/json', 'X-CSRF-TOKEN': getCsrfToken() },
-        body: JSON.stringify({
-            title: row.title, author: row.author, isbn13: row.isbn13, coverUrl: row.coverUrl,
-            publisher: row.publisher, purchaseLink: row.purchaseLink, category: row.category,
-            pubDate: row.pubDate, status: 'WANT_TO_READ',
-        }),
-    })
-    if (!res.ok) return
-    const saved = await res.json() as ShelfBook
+    addError.value = null
+    let saved: ShelfBook
+    try {
+        const res = await fetch('/api/books', {
+            method: 'POST', credentials: 'same-origin',
+            headers: { 'Content-Type': 'application/json', 'X-CSRF-TOKEN': getCsrfToken() },
+            body: JSON.stringify({
+                title: row.title, author: row.author, isbn13: row.isbn13, coverUrl: row.coverUrl,
+                publisher: row.publisher, purchaseLink: row.purchaseLink, category: row.category,
+                pubDate: row.pubDate, status: 'WANT_TO_READ',
+            }),
+        })
+        if (!res.ok) throw new Error(String(res.status))
+        saved = await res.json() as ShelfBook
+    } catch {
+        // 조용히 삼키면 버튼이 그대로라 「눌렀는데 아무 일도 없다」가 된다(P15 일부).
+        addError.value = '책을 담지 못했어요'
+        return
+    }
     if (!shelf.value.find(b => b.id === saved.id)) shelf.value = [saved, ...shelf.value]
     row.owned = true // 담은 직후 그 검색행을 '이미 있음'으로 전환(응답 owned 재조회 없이 로컬 갱신)
     emit('added', { id: saved.id, title: saved.title, status: saved.status })
@@ -137,7 +171,8 @@ onMounted(() => { overlayEl.value?.focus(); loadShelf() })
                 <p id="book-sheet-title" class="book-sheet-title">{{ title }}</p>
                 <button type="button" class="book-sheet-close" aria-label="닫기" @click="emit('close')">✕</button>
             </div>
-            <p class="book-sheet-hint">{{ hint }}</p>
+            <p class="book-sheet-hint">{{ text[1] }}</p>
+            <p v-if="shownError" class="book-sheet-error" role="alert">{{ shownError }}</p>
 
             <!-- 검색해서 담기 — 검색 가능할 때만. 카탈로그에서 찾아 시트 안에서 바로 책장에 담는다. -->
             <form v-if="searchEnabled" class="book-sheet-search" @submit.prevent="runSearch">
@@ -171,7 +206,9 @@ onMounted(() => { overlayEl.value?.focus(); loadShelf() })
             <!-- 내 책 목록 — 표지 + 제목/저자 + 상태 배지. 고르면 pick. -->
             <ul v-if="books.length" class="book-sheet-list">
                 <li v-for="b in books" :key="b.id">
-                    <button type="button" class="book-sheet-book" :disabled="pending" @click="emit('pick', b)">
+                    <button type="button" class="book-sheet-book" :disabled="pending"
+                            :aria-current="b.id === currentBookId ? 'true' : undefined"
+                            @click="emit('pick', b)">
                         <img v-if="b.coverUrl" class="book-sheet-cover" :src="b.coverUrl" alt="" loading="lazy" referrerpolicy="no-referrer">
                         <span v-else class="book-sheet-cover" :style="coverStyle(b)" aria-hidden="true">{{ initialOf(b.title) }}</span>
                         <span class="book-sheet-meta">
@@ -182,14 +219,11 @@ onMounted(() => { overlayEl.value?.focus(); loadShelf() })
                     </button>
                 </li>
             </ul>
-            <p v-else class="book-sheet-empty">아직 책장에 책이 없어요. 위에서 검색해 담거나, 책 없이 시작해도 돼요.</p>
+            <p v-else-if="!loadLost" class="book-sheet-empty">{{ emptyText }}</p>
 
-            <!-- 하단 CTA — start=책 없이 측정 / tag=건너뛰기. -->
-            <button v-if="mode === 'start'" type="button" class="book-sheet-cta" :disabled="pending" @click="emit('bookless')">
-                책 없이 측정하기
-            </button>
-            <button v-else type="button" class="book-sheet-cta" :disabled="pending" @click="emit('skip')">
-                책 없이 기록 · 건너뛰기
+            <!-- 하단 CTA — tag=건너뛰기(skip), 그 밖=책 없이(bookless). 수동 기록 정정엔 없다. -->
+            <button v-if="noneAllowed" type="button" class="book-sheet-cta" :disabled="pending" @click="onCta">
+                {{ text[2] }}
             </button>
         </div>
     </div>

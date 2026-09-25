@@ -112,3 +112,34 @@ describe('StudyBookSheet — 빈 서재 · 닫기 · 표현', () => {
         expect(mountSheet({}).text()).not.toMatch(/[\u{1F300}-\u{1FAFF}]/u);
     });
 });
+
+// R2 — 독서 시트와 같은 문구 규칙(P13·P14)과 기록 정정용 assign 모드, 시트 안 오류(P7 공부판).
+describe('StudyBookSheet — 힌트 · assign · 오류 (R2)', () => {
+    test('start 힌트는 「책을 고르면」으로 시작한다(P14)', () => {
+        expect(mountSheet({ mode: 'start' }).find('.book-sheet-hint').text())
+            .toBe('책을 고르면 책만 바뀌어요 — 공부 측정은 「공부 측정 시작」을 눌러야 시작돼요.');
+    });
+
+    test('tag 힌트는 중립 문구 — 「나중에 정해도」가 없다', () => {
+        expect(mountSheet({ mode: 'tag' }).find('.book-sheet-hint').text()).toBe('방금 잰 시간을 책에 붙여요.');
+    });
+
+    test('assign: 책 없는 측정 / 책 있는 측정의 제목이 갈리고, CTA 「책 없이 두기」 → none', async () => {
+        const blank = mountSheet({ mode: 'assign', currentBookId: null });
+        expect(blank.find('.book-sheet-title').text()).toBe('이 측정은 무슨 책이었나요?');
+        expect(blank.find('.book-sheet-hint').text()).toBe('이 측정의 시간이 그 책에 붙어요.');
+        expect(blank.find('.book-sheet-cta').text()).toBe('책 없이 두기');
+        await blank.find('.book-sheet-cta').trigger('click');
+        expect(blank.emitted('none')).toHaveLength(1);
+
+        const tagged = mountSheet({ mode: 'assign', currentBookId: 2 });
+        expect(tagged.find('.book-sheet-title').text()).toBe('다른 책으로 바꿀까요?');
+        expect(tagged.findAll('.book-sheet-book')[1].attributes('aria-current')).toBe('true');
+    });
+
+    test('error prop은 시트 패널 안에 서고, 없으면 줄 자체가 없다', () => {
+        expect(mountSheet({ mode: 'tag', error: '책을 연결하지 못했어요' })
+            .find('.book-sheet-panel .book-sheet-error').text()).toBe('책을 연결하지 못했어요');
+        expect(mountSheet({ mode: 'tag' }).find('.book-sheet-error').exists()).toBe(false);
+    });
+});

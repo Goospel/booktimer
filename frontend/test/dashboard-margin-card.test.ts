@@ -196,3 +196,41 @@ describe('홈 여백 카드 — 실패와 경합', () => {
         expect(wrapper.text()).not.toContain('A의 글');
     });
 });
+
+// R2 결정 5 — 여백 카드는 타이머 칩과 **같은 책**이어야 한다(defaultBook.ts가 한 곳인 이유). 칩만 읽는 중으로
+// 좁히고 여백을 안 좁히면 「칩엔 데미안, 여백엔 싯다르타」로 갈린다. 그래서 대시보드를 통째로 띄워 잰다.
+describe('홈 여백 카드 — 기본 책은 읽는 중만 (R2)', () => {
+    const GRAPH = { weeks: [[{ date: null, totalSeconds: 0, level: 0, manual: false }]], monthLabels: [], totalSeconds: 0, activeDays: 0, currentStreak: 0 };
+    const dashboard = (over: object) => ({
+        nickname: '테스터', loginId: 'tester',
+        remainingSeconds: 3600, carriedDebtSeconds: 0, todayGoalSeconds: 3600, todayReadSeconds: 0, carryover: true,
+        hasActiveSession: false, activeStartedAt: null, activeBookTitle: null, activeBookTotalSeconds: 0,
+        readingBooks: [], finishedBooks: [], wantToReadBooks: [], recentBookId: null,
+        graph: GRAPH, quotes: [], emailVerified: true, ...over,
+    });
+    function serve(dash: object) {
+        vi.mocked(fetch).mockImplementation((u: RequestInfo | URL) => {
+            const url = String(u);
+            if (url.includes('/api/dashboard')) return Promise.resolve(okJson(dash));
+            if (url.includes('/api/stories/of/')) return Promise.resolve(okJson(marginResponse([])));
+            return Promise.resolve(okJson({}));
+        });
+    }
+    const storyCalls = () => vi.mocked(fetch).mock.calls.map(c => String(c[0])).filter(u => u.includes('/api/stories/of/'));
+
+    test('recentBookId가 다 읽은 책이어도 여백 카드는 읽는 중 첫 책을 조회한다', async () => {
+        const { default: DashboardApp } = await import('../src/dashboard/DashboardApp.vue');
+        serve(dashboard({ readingBooks: [{ id: 1, title: '데미안' }], finishedBooks: [{ id: 3, title: '싯다르타' }], recentBookId: 3 }));
+        mount(DashboardApp, { attachTo: document.body });
+        await vi.waitFor(() => expect(storyCalls()).toHaveLength(1));
+        expect(storyCalls()[0]).toContain('bookId=1');
+    });
+
+    test('읽는 중이 0권이면 다 읽음·읽고 싶어요가 있어도 여백 카드는 책 없음 얼굴', async () => {
+        const { default: DashboardApp } = await import('../src/dashboard/DashboardApp.vue');
+        serve(dashboard({ finishedBooks: [{ id: 3, title: '싯다르타' }], wantToReadBooks: [{ id: 4, title: '유리알 유희' }], recentBookId: 3 }));
+        const w = mount(DashboardApp, { attachTo: document.body });
+        await vi.waitFor(() => expect(w.text()).toContain('책을 고르면'));
+        expect(storyCalls()).toHaveLength(0);
+    });
+});

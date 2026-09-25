@@ -8,7 +8,7 @@ import { getCsrfToken } from '../shared/follow'
 import type { TimerMode } from './timerMode'
 import { shouldRefresh, readMode, writeMode, effectiveMode, syncRailMode, studyFocusOn, syncStudyLamp } from './timerMode'
 import { withViewTransition } from './viewTransition'
-import { allBooksOf, defaultBookOf, defaultStudyBookOf } from './defaultBook'
+import { defaultBookOf, defaultStudyBookOf } from './defaultBook'
 import TimerCard from './TimerCard.vue'
 import StudyTimerCard from './StudyTimerCard.vue'
 import ModeToggle from './ModeToggle.vue'
@@ -47,6 +47,7 @@ const hasActiveSession = ref(false)
 const activeStartedAt = ref<string | null>(null)
 const activeBookTitle = ref<string | null>(null)
 const activeBookTotalSeconds = ref(0)
+const activeBookId = ref<number | null>(null)
 const readingBooks = ref<BookOption[]>([])
 const finishedBooks = ref<BookOption[]>([])
 const wantToReadBooks = ref<BookOption[]>([])
@@ -97,8 +98,8 @@ const pickedBook = ref<BookOption | null>(null)
 const pickedStudyBook = ref<StudyBookRow | null>(null)
 
 // 홈의 「지금 그 책」 — 타이머 칩과 여백 카드가 같은 책을 가리켜야 해서 한 곳에서 고른다.
-const marginBook = computed(() => pickedBook.value ??
-    defaultBookOf(allBooksOf(readingBooks.value, finishedBooks.value, wantToReadBooks.value), recentBookId.value))
+// 넘기는 목록도 칩(BookPickForm)과 같다 — 읽는 중만(R2 결정 5). 0권이면 null → 카드가 「책 고르기」로 답한다.
+const marginBook = computed(() => pickedBook.value ?? defaultBookOf(readingBooks.value, recentBookId.value))
 
 // 공부 쪽의 같은 규칙 — 필기 카드의 책 = 측정 중인 책, 아니면 칩 기본 책(StudyTimerCard와 같은 함수).
 // 측정 중인 책이 곧 필기할 책이다: 「책 바꾸기」로 activeBook이 바뀌면 필기도 따라간다(NotesPanel watch).
@@ -114,15 +115,21 @@ const initialNoteId = ref(noteIdParam(location.search))
 if (initialNoteId.value !== null) history.replaceState(null, '', location.pathname)
 watch(mode, () => { initialNoteId.value = null })
 
-// 책 고르기/태깅 통합 시트(발견 1, §6.5) — 'start'=측정 전 고르기, 'tag'=종료 후 태깅. 같은 시트를 모드로 겸한다.
-const sheetMode = ref<'start' | 'tag' | null>(null)
+// 책 고르기/태깅 통합 시트(발견 1, §6.5) — 'start'=측정 전 고르기, 'tag'=종료 후 태깅, 'change'=측정 중 교체(R2 P4).
+const sheetMode = ref<'start' | 'tag' | 'change' | null>(null)
 const pendingSessionId = ref<number | null>(null)
+// 태깅·교체 왕복 중 — 둘 다 「측정 원장에 책을 붙이는」 왕복이고 동시에 열리지 않는다(공부와 같은 공유).
 const tagging = ref(false)
 
 // 공부 책 시트 — 독서 시트와 원장이 갈린다(각자 자기 stop 응답에서만 열려 겹치지 않는다).
 // 'start'=시작 전 고르기, 'tag'=종료 후 태깅, 'change'=측정 중 교체.
 const studySheet = ref<'start' | 'tag' | 'change' | null>(null)
 const studyPendingSessionId = ref<number | null>(null)
+
+// 시트 안 오류(R2 P7) — 시트가 열린 동안 실패는 여기로 간다. 페이지 상단 actionError는 딤 뒤에 가려진다.
+// 두 시트는 동시에 열리지 않아 하나로 충분하고, 어느 시트든 열리거나 닫히면 비운다(옛 실패가 새 시트에 남지 않게).
+const sheetError = ref<string | null>(null)
+watch([sheetMode, studySheet], () => { sheetError.value = null })
 
 function applyTimerState(s: TimerState) {
     remainingSeconds.value = s.remainingSeconds
@@ -134,9 +141,11 @@ function applyTimerState(s: TimerState) {
     activeStartedAt.value = s.activeStartedAt
     activeBookTitle.value = s.activeBookTitle
     activeBookTotalSeconds.value = s.activeBookTotalSeconds
+    activeBookId.value = s.activeBook?.id ?? null
     readingBooks.value = s.readingBooks
     finishedBooks.value = s.finishedBooks
     recentBookId.value = s.recentBookId
+    if (s.wantToReadBooks) wantToReadBooks.value = s.wantToReadBooks
 }
 
 /** /api/dashboard 응답 전체를 화면 상태에 얹는다(최초 로드·복귀 재조회 공용). graph·quotes는 제외. */
@@ -366,10 +375,43 @@ async function tagBook(bookId: number) {
             headers: { 'Content-Type': 'application/json', 'X-CSRF-TOKEN': getCsrfToken() },
             body: JSON.stringify({ bookId }),
         })
-        if (!res.ok) { actionError.value = '책을 연결하지 못했어요'; return }
+        // 실패에 시트를 닫지 않는다 — stop 응답이 준 세션 좌표를 쥔 곳이 이 시트뿐이라 닫으면 미태깅으로 굳는다.
+        if (!res.ok) { sheetError.value = '책을 연결하지 못했어요'; return }
+        closeSheet()
+        // tag-book 응답엔 상태가 없다 — 읽고싶음 책을 붙이면 서버에선 읽는 중이 됐고 recentBookId도 바뀌었다(P10).
+        await refresh(true)
+    } catch {
+        sheetError.value = '네트워크 오류가 발생했습니다'
+    } finally {
+        tagging.value = false
+    }
+}
+
+/**
+ * 측정 중 교체(R2 P4) — 지금까지 잰 시간이 통째로 새 책으로 옮겨간다(서버 계약). null = 책 없이.
+ * 공부 studyChangeBook과 같은 골격: 409·404는 시트를 닫고 서버 진실로 맞추고, 그 밖 실패는 시트 안에서 말한다.
+ */
+async function handleChangeBook(bookId: number | null) {
+    if (tagging.value) return
+    tagging.value = true
+    try {
+        const res = await fetch('/api/sessions/active/book', {
+            method: 'POST',
+            credentials: 'same-origin',
+            headers: { 'Content-Type': 'application/json', 'X-CSRF-TOKEN': getCsrfToken() },
+            body: JSON.stringify({ bookId }),
+        })
+        if (res.status === 409) { closeSheet(); await conflict('진행 중인 측정이 없어요 — 화면을 최신으로 맞췄어요'); return }
+        // 404 = 다른 곳에서 지운 책. 열어 두면 지워진 그 행이 남아 눌러도 계속 실패한다 — 재조회가 목록을 고친다.
+        if (res.status === 404) { closeSheet(); await conflict('그 책이 서재에 없어요 — 화면을 최신으로 맞췄어요'); return }
+        if (!res.ok) { sheetError.value = '책을 바꾸지 못했어요'; return }
+        applyTimerState(await res.json() as TimerState)
+        // 고르기는 시작 전까지만 유효하다 — 측정 중에 바꿨으면 이제 서버 recentBookId(새 책)가 칩을 정한다.
+        // 남겨 두면 종료하는 순간 칩·여백이 옛 고른 책으로 튄다(공부 handleStudyStart의 Minor-3과 같은 규칙).
+        pickedBook.value = null
         closeSheet()
     } catch {
-        actionError.value = '네트워크 오류가 발생했습니다'
+        sheetError.value = '네트워크 오류가 발생했습니다'
     } finally {
         tagging.value = false
     }
@@ -381,14 +423,17 @@ function closeSheet() {
     pendingSessionId.value = null
 }
 
-// 시트에서 책을 고르면 — start 모드면 **고르기만** 한다(칩이 바뀐다), tag 모드면 방금 세션에 태깅.
+// 시트에서 책을 고르면 — start 모드면 **고르기만** 한다(칩이 바뀐다), tag 모드면 방금 세션에 태깅,
+// change 모드면 진행 중 측정의 책을 바꾼다.
 function onSheetPick(book: { id: number; title: string; coverUrl: string | null }) {
     if (sheetMode.value === 'tag') { tagBook(book.id); return }
+    if (sheetMode.value === 'change') { handleChangeBook(book.id); return }
     pickedBook.value = { id: book.id, title: book.title, coverUrl: book.coverUrl }
     sheetMode.value = null
 }
-// start 모드 하단 CTA — 책 없이 바로 시작.
+// 하단 「책 없이」 CTA — start는 책 없이 바로 시작, change는 진행 중 측정을 책 없이로(새 측정이 아니다).
 function onSheetBookless() {
+    if (sheetMode.value === 'change') { handleChangeBook(null); return }
     sheetMode.value = null
     handleStart(null)
 }
@@ -408,13 +453,13 @@ async function studyTagBook(bookId: number) {
             body: JSON.stringify({ bookId }),
         })
         // 여기엔 404 자동 복구(시트 닫기 + 재조회)를 두지 않는다 — start·change와 갈리는 자리다.
-        // 이 시트가 그 세션을 태깅할 **유일한 진입점**이라(세션 id는 stop 응답에만 실린다) 닫으면
-        // 미태깅으로 굳는다. 열어 둬야 사용자가 다른 책을 골라 성공할 수 있다.
-        if (!res.ok) { actionError.value = '책을 연결하지 못했어요'; return }
+        // 이 시트가 그 세션을 태깅할 홈의 **유일한 진입점**이라(세션 id는 stop 응답에만 실린다) 닫으면
+        // 미태깅으로 굳는다. 열어 둬야 사용자가 다른 책을 골라 성공할 수 있다 — 그래서 오류도 시트 안에(P7).
+        if (!res.ok) { sheetError.value = '책을 연결하지 못했어요'; return }
         study.value = studyStateOf(await res.json())
         closeStudySheet()
     } catch {
-        actionError.value = '네트워크 오류가 발생했습니다'
+        sheetError.value = '네트워크 오류가 발생했습니다'
     } finally {
         tagging.value = false
     }
@@ -435,11 +480,11 @@ async function studyChangeBook(bookId: number | null) {
         // 404 = 다른 곳에서 지운 책을 고른 것(start와 같은 규칙, E8). 시트를 닫지 않으면 지워진 그 행이
         // 목록에 남아 눌러도 계속 실패한다 — 재조회가 새 books를 실어 와 화면이 스스로 낫는다.
         if (res.status === 404) { closeStudySheet(); await conflict('그 책이 공부 서재에 없어요 — 화면을 최신으로 맞췄어요'); return }
-        if (!res.ok) { actionError.value = '책을 바꾸지 못했어요'; return }
+        if (!res.ok) { sheetError.value = '책을 바꾸지 못했어요'; return }
         study.value = studyStateOf(await res.json())
         closeStudySheet()
     } catch {
-        actionError.value = '네트워크 오류가 발생했습니다'
+        sheetError.value = '네트워크 오류가 발생했습니다'
     } finally {
         tagging.value = false
     }
@@ -517,9 +562,11 @@ function onSheetAdded(book: { id: number; title: string; status: string }) {
             :picked-book="pickedBook"
             :starting="starting"
             :stopping="stopping"
+            :changing="tagging"
             @start="handleStart"
             @stop="handleStop"
             @open-sheet="openStartSheet"
+            @change-book="sheetMode = 'change'"
         />
 
         <!-- 잔디가 있던 자리(2026-09-07) — 넓힌 폭에서 1년치 격자가 늘어져 걷었다. 기록은 /history와
@@ -559,14 +606,16 @@ function onSheetAdded(book: { id: number; title: string; status: string }) {
 
         <BrandQuote :quotes="data.quotes" />
 
-        <!-- 통합 책 시트(발견 1, §6.5) — 'start'=측정 전 고르기, 'tag'=종료 후 태깅. 같은 시트를 모드로 겸한다. -->
+        <!-- 통합 책 시트(발견 1, §6.5) — 'start'=측정 전 고르기, 'tag'=종료 후 태깅, 'change'=측정 중 교체. 같은 시트를 모드로 겸한다. -->
         <BookPickSheet
             v-if="sheetMode"
             :mode="sheetMode"
             :reading-books="readingBooks"
             :finished-books="finishedBooks"
             :want-to-read-books="wantToReadBooks"
-            :pending="sheetMode === 'tag' ? tagging : starting"
+            :current-book-id="sheetMode === 'change' ? activeBookId : null"
+            :error="sheetError"
+            :pending="sheetMode === 'start' ? starting : tagging"
             @pick="onSheetPick"
             @bookless="onSheetBookless"
             @skip="closeSheet"
@@ -580,6 +629,7 @@ function onSheetAdded(book: { id: number; title: string; status: string }) {
             :mode="studySheet"
             :books="study.books"
             :current-book-id="study.activeBook?.id ?? null"
+            :error="sheetError"
             :pending="studySheet === 'start' ? starting : tagging"
             @pick="onStudySheetPick"
             @none="onStudySheetNone"

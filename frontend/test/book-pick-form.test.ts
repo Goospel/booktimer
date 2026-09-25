@@ -101,3 +101,31 @@ describe('BookPickForm — 표지', () => {
         expect(w.find('span.dash-book-chip-cover').exists()).toBe(true);
     });
 });
+
+// R2 결정 5(2026-09-24) — 기본 책은 **읽는 중 안에서만** 고른다. 다 읽은 책이 기본 칩에 서면
+// 「측정 시작」 한 번에 끝난 책으로 시간이 쌓인다. 규칙은 defaultBookOf 본문이 아니라 「무엇을 넘기느냐」에
+// 있어서(그 함수는 안 바뀐다) 호출부인 이 폼에서 잰다.
+describe('BookPickForm — 기본 책은 읽는 중만 (R2)', () => {
+    test('recentBookId가 다 읽은 책이면 칩은 읽는 중 첫 책', () => {
+        const w = make({
+            readingBooks: [{ id: 1, title: '데미안' }],
+            finishedBooks: [{ id: 3, title: '싯다르타' }],
+            recentBookId: 3,
+        });
+        expect(w.find('.dash-book-chip-title').text()).toBe('데미안');
+    });
+
+    // 폴백은 null — 읽고 싶어요·다 읽음만 있는 사용자는 「책 고르기」에서 직접 고른다(§3-e-5).
+    test('읽는 중 0권 + 다 읽음·읽고 싶어요만 → 칩 없이 빈 상태(책 없이 측정 시작 + 책 고르기)', () => {
+        const w = make({
+            readingBooks: [],
+            finishedBooks: [{ id: 3, title: '싯다르타' }],
+            wantToReadBooks: [{ id: 4, title: '유리알 유희' }],
+            recentBookId: 3,
+        });
+        expect(w.find('.dash-book-chip').exists()).toBe(false);
+        const labels = w.findAll('button').map(b => b.text());
+        expect(labels).toContain('책 없이 측정 시작');
+        expect(labels).toContain('책 고르기');
+    });
+});

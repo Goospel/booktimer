@@ -25,12 +25,16 @@ const props = defineProps<{
     pickedBook?: BookOption | null
     starting?: boolean
     stopping?: boolean
+    /** 측정 중 책 교체 왕복 중 — 「책 바꾸기」를 잠근다(공부 StudyTimerCard와 같은 이름). */
+    changing?: boolean
 }>()
 
 const emit = defineEmits<{
     start: [bookId: number | null]
     stop: []
     openSheet: []
+    /** 측정 중 [책 바꾸기] — 시트를 여는 건 부모다(R2 P4). */
+    changeBook: []
 }>()
 
 // props를 ref로 래핑해 composable에 전달(props 변경 시 반응 — N-082 보존)
@@ -109,14 +113,20 @@ function totalHM(s: number): string {
                         <span class="dash-session-time">{{ sessionDisplay }}</span>
                     </div>
                     <div class="dash-divider"></div>
+                    <!-- 책 없이 재는 중엔 빈칸이 아니라 「책 없이」가 상태다(R2 P11). 누적 줄은 책이 있을 때만 —
+                         책이 없는데 「이 책 누적 0시간 0분」은 거짓이다. -->
                     <div class="dash-kv">
                         <span class="dash-kv-k">지금 읽는 책</span>
-                        <span class="dash-kv-v">{{ activeBookTitle }}</span>
+                        <span class="dash-kv-v">{{ activeBookTitle ?? '책 없이' }}</span>
                     </div>
-                    <div class="dash-kv">
+                    <div v-if="activeBookTitle !== null" class="dash-kv">
                         <span class="dash-kv-k">이 책 누적 독서</span>
                         <span class="dash-kv-v-num">{{ totalHM(activeBookTotalSeconds) }}</span>
                     </div>
+                    <!-- 잰 시간은 통째로 새 책에 옮겨간다(서버 계약) — 측정을 끊지 않고 바꾼다. 공부 카드와 같은 자리·같은 모양. -->
+                    <button type="button" class="dash-btn-link dash-bookless" :disabled="changing" @click="emit('changeBook')">
+                        책 바꾸기
+                    </button>
                     <button type="button" class="dash-btn-outline" @click="emit('stop')" :disabled="stopping">
                         {{ stopping ? '종료하는 중…' : '측정 종료' }}
                     </button>

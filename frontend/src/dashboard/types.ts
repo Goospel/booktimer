@@ -47,9 +47,16 @@ export interface TimerState {
     activeStartedAt: string | null
     activeBookTitle: string | null
     activeBookTotalSeconds: number
+    /** 측정 중인 책 — 교체 시트가 그 행에 aria-current를 붙이는 좌표. 옛 픽스처엔 없어 optional. */
+    activeBook?: BookOption | null
     readingBooks: BookOption[]
     finishedBooks: BookOption[]
     recentBookId: number | null
+    /**
+     * 읽고싶음 책 — 서버가 start·active/book·stop 응답에도 싣는다(R2 PR-1). 교체로 읽고싶음 책이 읽는 중이 되면
+     * 이 목록에서 빠져야 시트 폴백이 낡지 않는다. 옛 서버·옛 픽스처엔 없어 optional(없으면 기존 값을 둔다).
+     */
+    wantToReadBooks?: BookOption[]
 }
 
 /**
@@ -98,7 +105,7 @@ export function studyStateOf(s?: Partial<StudyState> | null): StudyState {
 export interface DashboardResponse extends TimerState {
     nickname: string
     loginId: string
-    // 읽고싶음 책 — 시작 드롭다운엔 없지만 "종료 후 태깅" 시트에서 고를 수 있다(발견 1). 초기 로드에만 실린다.
+    // 읽고싶음 책 — 기본 칩은 되지 않지만(읽는 중만, R2) 시작 시트·태깅 시트·교체 시트 모두에서 고를 수 있다.
     wantToReadBooks: BookOption[]
     graph: GraphDto
     quotes: QuoteDto[]

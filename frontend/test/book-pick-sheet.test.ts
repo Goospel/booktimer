@@ -28,7 +28,8 @@ const SEARCH = {
 let addBody: Record<string, unknown> | null = null;
 function fetchImpl(url: string, opts?: { method?: string; body?: string }) {
     if (url.includes('/api/books/search')) {
-        return Promise.resolve({ ok: true, status: 200, json: async () => SEARCH });
+        // 사본을 준다 — 시트가 담은 행을 owned=true로 바꾸므로, 원본을 주면 다음 테스트의 「담기」가 사라진다.
+        return Promise.resolve({ ok: true, status: 200, json: async () => structuredClone(SEARCH) });
     }
     if (url.includes('/api/books') && opts?.method === 'POST') {
         addBody = JSON.parse(opts.body!);
@@ -122,5 +123,137 @@ describe('BookPickSheet — 통합 책 시트 (발견 1, §6.5)', () => {
         const btn = w.findAll('.book-sheet-book').find(b => b.text().includes('읽고싶은 책'))!;
         await btn.trigger('click');
         expect(w.emitted('pick')![0][0]).toEqual(expect.objectContaining({ id: 3, title: '읽고싶은 책' }));
+    });
+});
+
+// R2 — 시트가 네 자리를 겸한다: start(고르기) · tag(종료 직후 붙이기) · change(측정 중 교체) · assign(기록에서 한 건 정정 — PR-3가 연다).
+// 문구가 모드마다 갈려야 하고(교체 시트가 「측정할 책을 고르세요」면 사용자는 새 측정이 시작된다고 읽는다),
+// 실패는 시트 **안**에서 말해야 한다(페이지 상단 알림은 딤 뒤에 가려진다 — P7).
+describe('BookPickSheet — change · assign 모드 (R2)', () => {
+    const cta = (w: VueWrapper) => w.find('.book-sheet-cta');
+
+    test('change: 제목·힌트·CTA가 교체 문구이고, CTA는 bookless를 올린다', async () => {
+        const w = make({ mode: 'change' });
+        await flushPromises();
+        expect(w.find('.book-sheet-title').text()).toBe('다른 책으로 바꿀까요?');
+        expect(w.find('.book-sheet-hint').text()).toBe('지금까지 잰 시간이 통째로 새 책에 붙어요.');
+        expect(cta(w).text()).toBe('책 없이 읽기');
+        await cta(w).trigger('click');
+        expect(w.emitted('bookless')).toHaveLength(1);
+        expect(w.emitted('skip')).toBeUndefined();
+    });
+
+    test('change: currentBookId 행에만 aria-current', async () => {
+        const w = make({ mode: 'change', currentBookId: 2 });
+        await flushPromises();
+        const rows = w.findAll('.book-sheet-book');
+        expect(rows.filter(r => r.attributes('aria-current') === 'true').map(r => r.text())).toEqual([expect.stringContaining('완독 책')]);
+        expect(rows).toHaveLength(3);   // 양성 대조: 전 행 부착이면 위 배열이 3칸이다
+    });
+
+    test('assign: 책 없는 측정이면 「이 측정은 무슨 책이었나요?」, 책 있는 측정이면 「다른 책으로 바꿀까요?」', async () => {
+        const blank = make({ mode: 'assign', currentBookId: null });
+        await flushPromises();
+        expect(blank.find('.book-sheet-title').text()).toBe('이 측정은 무슨 책이었나요?');
+        expect(blank.find('.book-sheet-hint').text()).toBe('이 측정의 시간이 그 책에 붙어요.');
+        expect(cta(blank).text()).toBe('책 없이 두기');
+        await cta(blank).trigger('click');
+        expect(blank.emitted('bookless')).toHaveLength(1);
+        blank.unmount(); wrapper = null;
+
+        const tagged = make({ mode: 'assign', currentBookId: 1 });
+        await flushPromises();
+        expect(tagged.find('.book-sheet-title').text()).toBe('다른 책으로 바꿀까요?');
+    });
+
+    test('assign + noneAllowed=false(수동 기록)면 「책 없이」 CTA가 아예 없다', async () => {
+        const w = make({ mode: 'assign', currentBookId: 1, noneAllowed: false });
+        await flushPromises();
+        expect(cta(w).exists()).toBe(false);
+        expect(w.findAll('.book-sheet-book')).toHaveLength(3);   // 양성 대조: 목록은 그대로
+    });
+
+    test('change·assign의 빈 서재 문구엔 「책 없이 시작」이 없다 — start는 그대로 (대조군)', async () => {
+        vi.stubGlobal('fetch', vi.fn(() => Promise.resolve({ ok: true, status: 200, json: async () => ({ books: [], searchEnabled: true }) })));
+        for (const mode of ['change', 'assign']) {
+            const w = make({ mode, readingBooks: [], finishedBooks: [], wantToReadBooks: [] });
+            await flushPromises();
+            expect(w.find('.book-sheet-empty').text()).toBe('아직 책장에 책이 없어요. 위에서 검색해 담을 수 있어요.');
+            w.unmount(); wrapper = null;
+        }
+        const start = make({ readingBooks: [], finishedBooks: [], wantToReadBooks: [] });
+        await flushPromises();
+        expect(start.find('.book-sheet-empty').text()).toContain('책 없이 시작해도 돼요');
+    });
+});
+
+describe('BookPickSheet — 시트 안 오류 (R2 P7)', () => {
+    test('error prop은 시트 패널 안에 선다', async () => {
+        const w = make({ mode: 'tag', error: '책을 연결하지 못했어요' });
+        await flushPromises();
+        expect(w.find('.book-sheet-panel .book-sheet-error').text()).toBe('책을 연결하지 못했어요');
+    });
+
+    test('error가 없으면 오류 줄 자체가 없다 (음성 대조)', async () => {
+        const w = make({ mode: 'tag' });
+        await flushPromises();
+        expect(w.find('.book-sheet-error').exists()).toBe(false);
+    });
+
+    // 로드 실패 + 폴백도 비었으면 「책장이 비었다」는 거짓이다 — 모르는 것이지 없는 게 아니다.
+    test('책장 로드 실패 + 폴백 목록도 비면 빈 문구 대신 「책 목록을 불러오지 못했어요」', async () => {
+        vi.stubGlobal('fetch', vi.fn(() => Promise.resolve({ ok: false, status: 500, json: async () => ({}) })));
+        const w = make({ mode: 'change', readingBooks: [], finishedBooks: [], wantToReadBooks: [] });
+        await flushPromises();
+        expect(w.find('.book-sheet-error').text()).toBe('책 목록을 불러오지 못했어요');
+        expect(w.find('.book-sheet-empty').exists()).toBe(false);
+    });
+
+    test('담기가 실패하면 조용히 삼키지 않고 「책을 담지 못했어요」 — added도 없다', async () => {
+        vi.stubGlobal('fetch', vi.fn((u: string, o?: { method?: string }) => {
+            if (u.includes('/api/books') && o?.method === 'POST') return Promise.resolve({ ok: false, status: 500, json: async () => ({}) });
+            return fetchImpl(u, o);
+        }));
+        const w = make();
+        await flushPromises();
+        await w.find('.book-sheet-search input').setValue('새로운');
+        await w.find('.book-sheet-search').trigger('submit');
+        await flushPromises();
+        await w.findAll('button').find(b => b.text() === '담기')!.trigger('click');
+        await flushPromises();
+        expect(w.find('.book-sheet-error').text()).toBe('책을 담지 못했어요');
+        expect(w.emitted('added')).toBeUndefined();
+    });
+
+    test('담기 요청이 통째로 거부돼도(오프라인) 같은 오류', async () => {
+        vi.stubGlobal('fetch', vi.fn((u: string, o?: { method?: string }) => {
+            if (u.includes('/api/books') && o?.method === 'POST') return Promise.reject(new TypeError('Failed to fetch'));
+            return fetchImpl(u, o);
+        }));
+        const w = make();
+        await flushPromises();
+        await w.find('.book-sheet-search input').setValue('새로운');
+        await w.find('.book-sheet-search').trigger('submit');
+        await flushPromises();
+        await w.findAll('button').find(b => b.text() === '담기')!.trigger('click');
+        await flushPromises();
+        expect(w.find('.book-sheet-error').text()).toBe('책을 담지 못했어요');
+    });
+});
+
+describe('BookPickSheet — start·tag 힌트 (R2 P13·P14)', () => {
+    // 「고르면」만으로는 무엇을 고르는지가 빠져 「고르면 측정이 시작된다」로 읽혔다(P14).
+    test('start 힌트는 「책을 고르면」으로 시작한다', async () => {
+        const w = make();
+        await flushPromises();
+        expect(w.find('.book-sheet-hint').text()).toBe('책을 고르면 책만 바뀌어요 — 측정은 「측정 시작」을 눌러야 시작돼요.');
+    });
+
+    // 「나중에 정해도 괜찮아요」는 나중에 정할 자리가 없던 때의 거짓말이다. 기록에서 붙이는 안내는
+    // 그 기능이 실리는 PR-3에서 — 그 사이 운영 화면이 없는 기능을 약속하지 않게 중립 문구로 둔다.
+    test('tag 힌트는 중립 문구 — 「나중에 정해도」가 없다', async () => {
+        const w = make({ mode: 'tag' });
+        await flushPromises();
+        expect(w.find('.book-sheet-hint').text()).toBe('방금 측정한 독서에 책을 연결해요.');
     });
 });
