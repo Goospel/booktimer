@@ -121,7 +121,8 @@ $fixture = @(
   '| 2026-06-09 | T-006 (**끊긴 행** / 첫 줄',
   ']둘째 줄 이어짐) |',
   '',
-  '| 2026-06-10 | T-002 (둘째 누적 갱신 메모) |'
+  '| 2026-06-10 | T-002 (둘째 누적 갱신 메모) |',
+  '| 2026-06-12 | T-007 (**괄호 닫힌 제목**) / **1회차** / 증상: 제목 뒤에서 괄호가 닫힘 |'
 )
 
 $tmp = Join-Path ([IO.Path]::GetTempPath()) ('mts-' + [Guid]::NewGuid().ToString('N').Substring(0, 8))
@@ -137,8 +138,8 @@ try {
   function Fx([string]$id) { $p = Join-Path $tsDir "$id.md"; if (Test-Path $p) { Read-Text $p } else { '' } }
 
   Write-Host "`n[REQ-02] 헤딩 섹션이 본문 원문 그대로 파일이 된다"
-  Assert-That 'REQ-02 · 스크립트 exit 0 + 마커 MIGRATE: OK files=6 tails=7 residual=1' `
-    ($run.Code -eq 0 -and $run.Out.Contains('MIGRATE: OK files=6 tails=7 residual=1')) "실제($($run.Code)): $($run.Out.Trim())"
+  Assert-That 'REQ-02 · 스크립트 exit 0 + 마커 MIGRATE: OK files=7 tails=7 residual=1' `
+    ($run.Code -eq 0 -and $run.Out.Contains('MIGRATE: OK files=7 tails=7 residual=1')) "실제($($run.Code)): $($run.Out.Trim())"
   $exp001 = @(
     '---', 'summary: 첫째 제목', 'date: 2026-06-01',
     'legacy: 2026-09-25 단일 파일 이관 · 헤딩형(4필드 이전 형식)', '---', '',
@@ -171,6 +172,14 @@ try {
   Assert-That 'REQ-03 · T-004 본문 = 원문 한 줄, \| → | 복원' ($t4.Contains("`n`n$plain`n") -and -not $t4.Contains('\|')) "실제:`n$t4"
   $t5 = Fx 'T-005'
   Assert-That 'REQ-03 · T-005(닫는 괄호 없음) 본문 끝이 원문 그대로' ($t5.Contains("`n`n증상: 괄호 안 닫힘`n")) "실제:`n$t5"
+  # 실데이터 14행(T-221·223~235)의 변형: 괄호가 볼드 제목 바로 뒤에서 닫힌다 — `(**제목**) / **1회차** / …`.
+  # 설계 문법 `^\*\*(.+?)\*\*\s*/` 는 여기서 다음 `** /` 까지 번져 summary 가 `제목**) / **1회차` 가 된다.
+  $exp007 = @(
+    '---', 'summary: 괄호 닫힌 제목', 'date: 2026-06-12',
+    'legacy: 2026-09-25 단일 파일 이관 · 표 행형', '---', '',
+    '# T-007 · 괄호 닫힌 제목', '',
+    '**1회차** / 증상: 제목 뒤에서 괄호가 닫힘', '') -join "`n"
+  Assert-That 'REQ-03 · T-007(`(**제목**) / …` 변형) 전문 일치 — summary=볼드 제목만' ((Fx 'T-007') -ceq $exp007) "실제:`n$(Fx 'T-007')"
 
   Write-Host "`n[REQ-04] 보강·확장·회차 행은 그 번호 파일 끝의 줄이 된다"
   Assert-That 'REQ-04 · T-002(신규 2 + 보강 2) 전문 일치 — 누적 갱신 2 + 2회차·3회차, 원문 순서' ((Fx 'T-002') -ceq $exp002) "실제:`n$(Fx 'T-002')"
@@ -209,13 +218,13 @@ try {
     ($hub.StartsWith("# 트러블슈팅 — 작업 중 만난 함정과 해결법`n") -and $hub.Contains("`n## 이관 이력`n") -and
      $hub.Contains('[troubleshooting-tracker.md](troubleshooting-tracker.md)')) "허브:`n$hub"
   Assert-That 'REQ-08 · 목차가 검사기로 채워졌다(T-006 줄, 최신이 위)' `
-    ($hub.Contains("- [T-006](troubleshooting/T-006.md) · 끊긴 행`n- [T-005](troubleshooting/T-005.md) · 닫는 괄호 없음`n")) "허브:`n$hub"
+    ($hub.Contains("- [T-007](troubleshooting/T-007.md) · 괄호 닫힌 제목`n- [T-006](troubleshooting/T-006.md) · 끊긴 행`n- [T-005](troubleshooting/T-005.md) · 닫는 괄호 없음`n")) "허브:`n$hub"
   $c = Invoke-Check $root
-  Assert-That 'REQ-08 · 검사기 -Check = OK (6 entries)' ($c.Code -eq 0 -and $c.Out.Contains('INDEX-CHECK: OK (6 entries)')) "실제($($c.Code)): $($c.Out.Trim())"
+  Assert-That 'REQ-08 · 검사기 -Check = OK (7 entries)' ($c.Code -eq 0 -and $c.Out.Contains('INDEX-CHECK: OK (7 entries)')) "실제($($c.Code)): $($c.Out.Trim())"
   $outs = @(Get-ChildItem $tsDir -Filter '*.md' -File -ErrorAction SilentlyContinue | ForEach-Object FullName) +
           @((Join-Path $root 'troubleshooting.md'), (Join-Path $root 'troubleshooting-tracker.md'))
   $bad = @($outs | Where-Object { (Has-Bom $_) -or (Has-Cr $_) })
-  Assert-That "REQ-08 · 산출물 $($outs.Count)개 전부 BOM 없음·CR 0" ($outs.Count -eq 8 -and $bad.Count -eq 0) "위반: $($bad -join ', ')"
+  Assert-That "REQ-08 · 산출물 $($outs.Count)개 전부 BOM 없음·CR 0" ($outs.Count -eq 9 -and $bad.Count -eq 0) "위반: $($bad -join ', ')"
   function Hash-All { ($outs | ForEach-Object { if (Test-Path $_) { (Get-FileHash $_ -Algorithm SHA256).Hash } else { 'missing' } }) -join ',' }
   $hash1 = Hash-All
   $r = Invoke-Migrate $fx $root
@@ -286,7 +295,7 @@ try {
         $isItem = (-not $p.Tag) -and (-not $sections.ContainsKey($p.Id)) -and (-not $seen.ContainsKey($p.Id))
         if (-not $p.Tag) { $seen[$p.Id] = $true }
         if ($isItem) {
-          $bm = [regex]::Match($p.Text, '^\*\*(.+?)\*\*\s*/\s*')
+          $bm = [regex]::Match($p.Text, '^\*\*(.+?)\*\*\)?\s*/\s*')
           $body = if ($bm.Success) { $p.Text.Substring($bm.Length) } else { $p.Text }
           $ok = $ft.Contains("`ndate: $($p.Date)`n") -and ([regex]::Matches($ft, [regex]::Escape("`n$body`n")).Count -eq 1)
           if ($bm.Success) { $ok = $ok -and $ft.Contains("`nsummary: $($bm.Groups[1].Value)`n") }
@@ -336,6 +345,10 @@ try {
     $rndIds = @($texts.Keys | Where-Object { $texts[$_] -match '\n- \*\*\d+회차\*\* \(' } | Sort-Object)
     Assert-That "REQ-10 · 회차 줄 번호 = 006·027·033·049·085·107·167 (실제 $($rndIds -join '·'))" (($rndIds -join ',') -eq '006,027,033,049,085,107,167')
     Assert-That 'REQ-10 · T-033 은 3회차 줄까지' ($texts['033'] -match '\n- \*\*3회차\*\* \(')
+    # 파서와 독립인 검사: summary 가 볼드 제목 경계(`** /`·`**) /`)를 넘어 본문을 삼키지 않았다.
+    # (왕복 검사는 참조 파서가 스크립트와 같은 제목 정규식을 쓰면 같은 오류를 같이 통과한다 — 실제로 그랬다.)
+    $overrun = @($texts.Keys | Where-Object { $texts[$_] -match '\nsummary: [^\n]*\*\*\)?\s+/' } | Sort-Object)
+    Assert-That "REQ-10 · summary 가 볼드 제목 경계를 넘은 파일 0건 (실제 $($overrun.Count): $($overrun -join ','))" ($overrun.Count -eq 0)
     $trkReal = Read-Text (Join-Path $real 'troubleshooting-tracker.md')
     Assert-That 'REQ-10 · 잔여 1행(초안) = 트래커 끝 절' ($trkReal.TrimEnd().EndsWith("## 누적 갱신 잔여`n`n| 2026-05-31 | 초안 + T-001~T-004 |"))
     # 양성 대조(V-3): T-107 의 **2회차** 태그를 모르는 태그로 바꾸면 조용히 신규가 되지 않고 크래시.

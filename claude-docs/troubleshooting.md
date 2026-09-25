@@ -45,21 +45,21 @@
 - [T-238](troubleshooting/T-238.md) · `@InjectMocks` 생성자 주입 서비스에 의존을 더하면 `@Mock` 한 줄이 없을 때 null이 주입되는데, 그 실패는 타깃 테스트만 돌리는 동안 영영 안 보인다
 - [T-237](troubleshooting/T-237.md) · `color-scheme: light`는 크롬 강제 다크를 못 막는다 — `only`가 붙어야 opt-out이고, 그 판정은 `getComputedStyle`이 아니라 화면 픽셀로만 갈린다
 - [T-236](troubleshooting/T-236.md) · `\uXXXX` 손 인코딩으로 쓴 한글은 한 음절만 어긋나도 에러 없이 통과한다 — 사용자 대면 랜딩 카피가 「쌓입니다」→「쌓팥니다」로 배포 직전까지 갔다
-- [T-235](troubleshooting/T-235.md) · 커밋 테스트 게이트가 8분에 걸려 `.java`가 든 커밋이 전부 막혔다 — 훅 메시지의 「경합」 단정에 두 번 헛짚었고, 그다음엔 내가 1회 측정으로 「스위트가 예산 추월」이라 단정했다가 대조군에서 뒤집혔다**) / **1회차**(T-078 하드픽스의 부작용) / 증상: `git commit`이 8분 뒤 `[BLOCKED] Test gate exceeded 8 min -- commit aborted (likely gradle daemon/lock contention, T-078)`로 차단됐다. 훅이 프로세스 트리를 `taskkill /T`하고 `gradlew --stop`까지 돌린 **직후**라 상태는 깨끗했고(`java` 프로세스 0 · 8080 미점유 — 둘 다 확인), 그대로 재시도했는데 **같은 자리에서 또** 8분에 막혔다. / 원인: 게이트 밖에서 `./gradlew test`를 직접 재니 **9분 6초 · BUILD SUCCESSFUL**. 경합이 아니라 **스위트 자체가 게이트 예산(8분)을 넘긴 것**이다. 그 8분은 T-078이 45분 freeze를 막으려 세운 상한인데 그 뒤 테스트가 자라 상한을 추월했다 — 하드픽스가 「무한 hang을 막는」 쪽에서 「정상 빌드를 죽이는」 쪽으로 넘어간 자리다. ⚠️ 두 번 헛짚은 이유는 **메시지가 원인을 단정**했기 때문이다: 「likely … contention」을 읽고 경합만 확인했고(0건), 그 결과가 「경합이 아니다」까지는 알려줘도 「그럼 뭐냐」로는 안 이어졌다. **자가복구 메시지는 진단을 한 방향으로 몰 수 있다 — 죽은 원인 하나를 배제했으면 메시지 밖을 본다.
-- [T-234](troubleshooting/T-234.md) · 콘솔 MCP `miniapp_update_screenshots`는 성공해도 `{"miniAppId":…,"appName":null}`만 돌려주고, 직후 `miniapp_get`·`miniapp_meta_status`는 옛값을 보여 「안 됐다」로 읽힌다 — 재호출하면 앱정보 검토가 두 번 접수될 수 있다**) / **1회차
-- [T-233](troubleshooting/T-233.md) · React 중복 key는 경고로 끝나지 않는다 — 형제 목록을 통째로 갈아끼울 때 중복 key의 첫 노드가 고아 DOM으로 남아, 다른 탭에 남의 행이 하나씩 쌓인다**) / **1회차
-- [T-232](troubleshooting/T-232.md) · Thymeleaf 템플릿 캐시가 기본 활성이라, `bootRun` 중 템플릿만 고치면 옛 화면이 그대로 나온다 — 증상이 「내 조건식이 틀렸나」로 읽혀 멀쩡한 코드를 고치게 만든다**) / **1회차
-- [T-231](troubleshooting/T-231.md) · 파이프로 거른 명령 출력은 에러 줄을 함께 삼켜, 「실패」를 「성공했는데 0건」으로 보이게 한다 — 하마터면 사실과 정반대인 문장을 문서에 박을 뻔했다**) / **1회차
-- [T-230](troubleshooting/T-230.md) · 자정을 걸친 세션은 저장 시 두 행으로 쪼개지고 행마다 초를 따로 내림해, 잰 시간이 1초 모자라진다 — `>= 1800` 단언이 KST 00:00~00:30에만 깨진다**) / **2회차(T-039 재발)
-- [T-229](troubleshooting/T-229.md) · 돌연변이 「생존」을 단일 파일 실행으로 판정하면 조용히 과대·과소 보고된다 — 계측기는 파일 경계를 모른다**) / **1회차
-- [T-228](troubleshooting/T-228.md) · 커밋 게이트 두 개가 조용히 스킵된다 — `git add -A && git commit -F ...`처럼 커밋 명령이 스스로 스테이징하면 PreToolUse 시점 인덱스가 아직 비어 있어 게이트가 그냥 통과한다**) / **1회차
-- [T-227](troubleshooting/T-227.md) · 커밋 게이트의 `./gradlew test`가 admin·토큰 계열 8건을 「expected 2 but was 8」류로 떨구는데, 소스를 한 글자도 안 고치고 재실행하면 전부 초록이다 — 순서 의존 오염이라 내 diff는 무죄다**) / **1회차
-- [T-226](troubleshooting/T-226.md) · `now − N분` 픽스처가 유저 tz 자정을 넘으면 `splitByMidnight`가 조각마다 초를 절단해 합이 1초 모자란다 — KST 00:00~00:30에만 빨간불이고, 그 시간대엔 커밋 훅이 통째로 막힌다**) / **1회차
-- [T-225](troubleshooting/T-225.md) · `maxTokens`는 사고(thinking) 토큰과 예산을 공유하고, 긴 구조화 출력은 설계 추정치를 쉽게 넘긴다 — 잘린 응답은 WARN 한 줄이고 사용자에겐 평범한 503이라 원인을 안 가리킨다**) / **1회차
-- [T-224](troubleshooting/T-224.md) · multipart는 계측기가 세 겹으로 새는 자리다 — 413 핸들러는 컨트롤러에서 발화하지 않고, MockMvc는 톰캣 파서를 안 타며, test properties가 운영 multipart 설정을 덮어쓴다**) / **1회차
-- [T-223](troubleshooting/T-223.md) · `open(path, "w")`는 「여는 순간」 truncate한다 — 뒤이은 인코딩 예외로 쓰기가 죽어도 원본은 이미 사라진 뒤였다. 1.36MB changelog가 3KB로 잘렸다**) / **1회차
+- [T-235](troubleshooting/T-235.md) · 커밋 테스트 게이트가 8분에 걸려 `.java`가 든 커밋이 전부 막혔다 — 훅 메시지의 「경합」 단정에 두 번 헛짚었고, 그다음엔 내가 1회 측정으로 「스위트가 예산 추월」이라 단정했다가 대조군에서 뒤집혔다
+- [T-234](troubleshooting/T-234.md) · 콘솔 MCP `miniapp_update_screenshots`는 성공해도 `{"miniAppId":…,"appName":null}`만 돌려주고, 직후 `miniapp_get`·`miniapp_meta_status`는 옛값을 보여 「안 됐다」로 읽힌다 — 재호출하면 앱정보 검토가 두 번 접수될 수 있다
+- [T-233](troubleshooting/T-233.md) · React 중복 key는 경고로 끝나지 않는다 — 형제 목록을 통째로 갈아끼울 때 중복 key의 첫 노드가 고아 DOM으로 남아, 다른 탭에 남의 행이 하나씩 쌓인다
+- [T-232](troubleshooting/T-232.md) · Thymeleaf 템플릿 캐시가 기본 활성이라, `bootRun` 중 템플릿만 고치면 옛 화면이 그대로 나온다 — 증상이 「내 조건식이 틀렸나」로 읽혀 멀쩡한 코드를 고치게 만든다
+- [T-231](troubleshooting/T-231.md) · 파이프로 거른 명령 출력은 에러 줄을 함께 삼켜, 「실패」를 「성공했는데 0건」으로 보이게 한다 — 하마터면 사실과 정반대인 문장을 문서에 박을 뻔했다
+- [T-230](troubleshooting/T-230.md) · 자정을 걸친 세션은 저장 시 두 행으로 쪼개지고 행마다 초를 따로 내림해, 잰 시간이 1초 모자라진다 — `>= 1800` 단언이 KST 00:00~00:30에만 깨진다
+- [T-229](troubleshooting/T-229.md) · 돌연변이 「생존」을 단일 파일 실행으로 판정하면 조용히 과대·과소 보고된다 — 계측기는 파일 경계를 모른다
+- [T-228](troubleshooting/T-228.md) · 커밋 게이트 두 개가 조용히 스킵된다 — `git add -A && git commit -F ...`처럼 커밋 명령이 스스로 스테이징하면 PreToolUse 시점 인덱스가 아직 비어 있어 게이트가 그냥 통과한다
+- [T-227](troubleshooting/T-227.md) · 커밋 게이트의 `./gradlew test`가 admin·토큰 계열 8건을 「expected 2 but was 8」류로 떨구는데, 소스를 한 글자도 안 고치고 재실행하면 전부 초록이다 — 순서 의존 오염이라 내 diff는 무죄다
+- [T-226](troubleshooting/T-226.md) · `now − N분` 픽스처가 유저 tz 자정을 넘으면 `splitByMidnight`가 조각마다 초를 절단해 합이 1초 모자란다 — KST 00:00~00:30에만 빨간불이고, 그 시간대엔 커밋 훅이 통째로 막힌다
+- [T-225](troubleshooting/T-225.md) · `maxTokens`는 사고(thinking) 토큰과 예산을 공유하고, 긴 구조화 출력은 설계 추정치를 쉽게 넘긴다 — 잘린 응답은 WARN 한 줄이고 사용자에겐 평범한 503이라 원인을 안 가리킨다
+- [T-224](troubleshooting/T-224.md) · multipart는 계측기가 세 겹으로 새는 자리다 — 413 핸들러는 컨트롤러에서 발화하지 않고, MockMvc는 톰캣 파서를 안 타며, test properties가 운영 multipart 설정을 덮어쓴다
+- [T-223](troubleshooting/T-223.md) · `open(path, "w")`는 「여는 순간」 truncate한다 — 뒤이은 인코딩 예외로 쓰기가 죽어도 원본은 이미 사라진 뒤였다. 1.36MB changelog가 3KB로 잘렸다
 - [T-222](troubleshooting/T-222.md) · 배포 직후 콘솔 로그 카탈로그는 로그마다 등록 시차가 달라, 이른 조회의 「없음」이 결함처럼 보인다
-- [T-221](troubleshooting/T-221.md) · `git commit -F .commit-msg-tmp`가 이전 세션의 잔재 파일을 조용히 집어 옛 메시지로 커밋됐다 — 파일 경유 커밋은 「파일이 지금 내 것인가」를 묻지 않는다**) / **2회차(변종 — 2026-09-12 #1105 리뷰 반영 커밋, 아래 ⑥)
+- [T-221](troubleshooting/T-221.md) · `git commit -F .commit-msg-tmp`가 이전 세션의 잔재 파일을 조용히 집어 옛 메시지로 커밋됐다 — 파일 경유 커밋은 「파일이 지금 내 것인가」를 묻지 않는다
 - [T-220](troubleshooting/T-220.md) · 자체 뒤로가기가 토스 네이티브 내비게이션 바의 뒤로가기와 중복 노출 — 비게임 출시 체크리스트의 「필수」 항목이라 판정 편차가 아니다. 그리고 그 「<」는 뒤로가기가 아니라 **종료 버튼**이었다
 - [T-219](troubleshooting/T-219.md) · TDS `Text`의 `style.textAlign`은 DOM에 안 실린다 — 공부 일정 달력의 요일 머리글이 칸 왼쪽에 붙어 날짜 열과 어긋났다
 - [T-218](troubleshooting/T-218.md) · 소스 문자열 단언은 「존재」가 아니라 「건수·전체 인자열」로 잡는다 — `toContain('식별자')`는 선언문에 걸려 배선을 통째로 지워도 초록이다(무계측 배선)

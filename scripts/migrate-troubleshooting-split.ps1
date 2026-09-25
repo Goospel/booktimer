@@ -139,7 +139,8 @@ foreach ($row in $rows) {
     $it = $items[$id]
     if (-not $tag) {
         if (-not $it) {
-            $bm = [regex]::Match($text, '^\*\*(.+?)\*\*\s*/\s*')
+            # `\)?`: 14행(T-221·223~235)은 괄호가 제목 바로 뒤에서 닫힌다 — `(**제목**) / **1회차** / …`.
+            $bm = [regex]::Match($text, '^\*\*(.+?)\*\*\)?\s*/\s*')
             if ($bm.Success) {
                 $summary = $bm.Groups[1].Value.Trim(); $body = $text.Substring($bm.Length)
             } else {

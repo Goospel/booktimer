@@ -89,7 +89,7 @@ check "[REQ-14] checker without INDEX-CHECK marker -> exit 2" "2" "$(run_hook "$
 
 # ── REQ-15: old table row added to the hub -> exit 2 with the new-path message ──
 d=$(setup_repo)
-printf '| 2026-09-25 | T-257 (**옛 형식 행** / 증상: x) |\n' >> "$d/claude-docs/troubleshooting.md"
+printf '| 2026-09-25 | T-002 (**옛 형식 행** / 증상: x) |\n' >> "$d/claude-docs/troubleshooting.md"
 git -C "$d" add claude-docs/troubleshooting.md
 check "[REQ-15] hub + old table row -> exit 2" "2" "$(run_hook "$C" "$d")"
 grep -qF 'claude-docs/troubleshooting/T-###.md' "$ERRF" && r=yes || r=no
@@ -97,7 +97,7 @@ check "[REQ-15] block message names claude-docs/troubleshooting/T-###.md" "yes" 
 
 # ── REQ-15: old heading added to the hub -> exit 2 ──
 d=$(setup_repo)
-printf '\n## T-257. 옛 헤딩\n\n본문\n' >> "$d/claude-docs/troubleshooting.md"
+printf '\n## T-002. 옛 헤딩\n\n본문\n' >> "$d/claude-docs/troubleshooting.md"
 git -C "$d" add claude-docs/troubleshooting.md
 check "[REQ-15] hub + old ## T-### heading -> exit 2" "2" "$(run_hook "$C" "$d")"
 
