@@ -1742,6 +1742,13 @@ a.shop-count:hover, a.shop-count:hover strong { color: var(--accent); }
 }
 .book-sheet-close:hover { color: var(--text); background: var(--sage-soft); }
 .book-sheet-hint { margin: 0; font-size: 13px; color: var(--muted); }
+/* 시트 안 오류(R2 P7) — 페이지 상단 .alert는 딤 뒤에 가려져 시트가 열린 동안 안 보인다. 힌트 바로 밑,
+   목록보다 먼저 서서 「왜 안 됐는지」가 누른 자리 가까이 있다. 톤은 책장 로드 오류와 같은 조용한 테라코타. */
+.book-sheet-error {
+    margin: 0; padding: 10px 12px; border-radius: var(--radius-sm);
+    background: var(--danger-soft); border: 1px solid var(--danger-line);
+    color: var(--danger-ink-deep); font-size: 13px; line-height: 1.5; word-break: keep-all;
+}
 
 /* 검색해서 담기 — 시트 안에서 카탈로그를 찾아 바로 책장에 담는다(책장 검색 재사용). */
 .book-sheet-search { display: flex; gap: 8px; align-items: stretch; }

@@ -42,6 +42,7 @@ const DASHBOARD = {
 // 케이스가 바꾸는 손잡이
 let startStatus = 200;
 let changeStatus = 200;
+let tagStatus = 200;
 let stopStudyBody: Record<string, unknown> = { ...STUDY_IDLE };
 let shelf = SHELF;
 // 필드가 빠진 옛 응답을 돌려줄 문 하나(''=없음) — 정규화 계측기 (i1)~(i3)가 켠다.
@@ -76,6 +77,7 @@ function fetchImpl(url: string, init?: RequestInit) {
     }
     if (url.includes('/api/study/sessions/')) {
         req.push({ url, body });
+        if (tagStatus !== 200) return ok({}, tagStatus);
         const id = (JSON.parse(body || '{}') as { bookId: number }).bookId;
         return ok({ ...STUDY_IDLE, books: shelf, recentBookId: id });
     }
@@ -121,6 +123,7 @@ const sent = (needle: string) => req.filter(r => r.url.includes(needle));
 beforeEach(() => {
     startStatus = 200;
     changeStatus = 200;
+    tagStatus = 200;
     partialDoor = '';
     stopStudyBody = { ...STUDY_IDLE };
     shelf = SHELF;
@@ -290,6 +293,22 @@ describe('DashboardApp — 측정 중 책 교체', () => {
         expect(w.find('.book-sheet-overlay').exists()).toBe(false);
         expect(countOf('/api/dashboard')).toBe(2);   // 최초 + 재조회
     });
+
+    // R2 P7 — 409·404 밖의 실패는 시트를 열어 둔 채 시트 안에서 말한다(페이지 알림은 딤 뒤에 가려진다).
+    test('(d3) 교체가 500이면 시트를 연 채 시트 안 오류 — 페이지 알림은 없다', async () => {
+        changeStatus = 500;
+        const w = await mountStudy();
+        await btnWith(w, '공부 측정 시작')!.trigger('click');
+        await vi.waitFor(() => expect(kv(w)).toBe('헌법'));
+
+        await btnWith(w, '책 바꾸기')!.trigger('click');
+        await sheetRow(w, '형법').trigger('click');
+        await vi.waitFor(() => expect(w.find('.book-sheet-panel .book-sheet-error').exists()).toBe(true));
+
+        expect(w.find('.book-sheet-error').text()).toBe('책을 바꾸지 못했어요');
+        expect(w.find('.book-sheet-overlay').exists()).toBe(true);
+        expect(w.find('.alert-error').exists()).toBe(false);
+    });
 });
 
 describe('DashboardApp — 종료 후 태깅', () => {
@@ -328,6 +347,24 @@ describe('DashboardApp — 종료 후 태깅', () => {
         expect(w.find('.book-sheet-overlay').exists()).toBe(false);
         expect(sent('/api/study/sessions/')).toHaveLength(0);
         expect(sent('/api/study/active/book')).toHaveLength(0);
+    });
+
+    // R2 P7 — 이 시트가 그 세션을 붙일 홈의 유일한 자리라 실패에도 닫지 않는다. 오류는 시트 **안**에.
+    test('(e3) 공부 tag-book이 실패하면 시트를 연 채 시트 안 오류 — 페이지 알림은 없다', async () => {
+        tagStatus = 404;
+        stopStudyBody = { ...STUDY_IDLE, untaggedSessionId: 42 };
+        const w = await mountStudy();
+        await btnWith(w, '공부 측정 시작')!.trigger('click');
+        await vi.waitFor(() => expect(kv(w)).toBe('헌법'));
+        await btnWith(w, '측정 종료')!.trigger('click');
+        await vi.waitFor(() => expect(w.find('.book-sheet-title').exists()).toBe(true));
+
+        await sheetRow(w, '형법').trigger('click');
+        await vi.waitFor(() => expect(w.find('.book-sheet-panel .book-sheet-error').exists()).toBe(true));
+
+        expect(w.find('.book-sheet-error').text()).toBe('책을 연결하지 못했어요');
+        expect(w.find('.book-sheet-overlay').exists()).toBe(true);
+        expect(w.find('.alert-error').exists()).toBe(false);
     });
 
     test('(f) 책을 걸고 잰 세션(untaggedSessionId null)엔 시트가 뜨지 않는다', async () => {

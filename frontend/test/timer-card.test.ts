@@ -104,3 +104,33 @@ describe('TimerCard 진행 중 피드백', () => {
         expect(btn.text()).toContain('종료하는 중');
     });
 });
+
+// R2 — 측정 중 패널. 책 없이 재는 중이면 「지금 읽는 책」이 빈칸이고 누적이 「0시간 0분」이던 자리(P11),
+// 그리고 측정 중에 책을 바꾸는 문이 웹에만 없던 자리(P4 — 공부 StudyTimerCard엔 있다).
+describe('TimerCard 측정 중 — 책 없이 · 책 바꾸기 (R2)', () => {
+    const measuring = { hasActiveSession: true, activeStartedAt: '2026-06-25T00:00:00Z' };
+
+    test('책 없이 측정 중이면 「책 없이」라고 말하고 누적 줄은 없다', () => {
+        const w = make({ ...measuring, activeBookTitle: null });
+        expect(w.find('.dash-kv-v').text()).toBe('책 없이');
+        expect(w.text()).not.toContain('이 책 누적 독서');
+    });
+
+    test('책이 있으면 제목과 누적 줄이 선다 (양성 대조)', () => {
+        const w = make({ ...measuring, activeBookTitle: '데미안', activeBookTotalSeconds: 3900 });
+        expect(w.find('.dash-kv-v').text()).toBe('데미안');
+        expect(w.text()).toContain('1시간 5분');
+    });
+
+    test('[책 바꾸기] → changeBook을 올린다 — 시트를 여는 건 부모다', async () => {
+        const w = make({ ...measuring, activeBookTitle: '데미안' });
+        await w.findAll('button').find(b => b.text() === '책 바꾸기')!.trigger('click');
+        expect(w.emitted('changeBook')).toHaveLength(1);
+        expect(w.emitted('stop')).toBeUndefined();
+    });
+
+    test('changing=true면 [책 바꾸기]가 잠긴다(교체 왕복 중)', () => {
+        const w = make({ ...measuring, activeBookTitle: '데미안', changing: true });
+        expect(w.findAll('button').find(b => b.text() === '책 바꾸기')!.attributes('disabled')).toBeDefined();
+    });
+});

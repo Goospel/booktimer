@@ -7,28 +7,33 @@ import type { StudyBookRow } from '../study/api'
 //  · 'start'  : 측정 전 「무슨 책으로 공부할지」. 고르면 pick(id), CTA는 책 없이 시작(none).
 //  · 'tag'    : 종료 후 「무슨 책이었나」. 고르면 pick(id), CTA는 건너뛰기(none).
 //  · 'change' : 측정 중 교체. 지금 그 책엔 aria-current, CTA는 책 없이 공부하기(none).
+//  · 'assign' : 끝난 측정 한 건의 책 정정(R2, 공부 기록 화면이 연다). CTA는 책 없이 두기(none).
 // 독서 BookPickSheet와 마크업·CSS(.book-sheet-*)만 같고 **데이터 계약이 다르다** — 여기선 fetch도
 // 검색도 없다. 목록은 /api/dashboard가 이미 실어 온 study.books가 props로 내려온다.
 // 그래서 독서 시트에 world/mode prop을 더하지 않았다: 공용 조각의 기본값 사각이 독서에 닿을 수 없다.
 
 const props = defineProps<{
-    mode: 'start' | 'tag' | 'change'
+    mode: 'start' | 'tag' | 'change' | 'assign'
     books: StudyBookRow[]
-    /** 측정 중인 책 — 'change'에서 그 행에 aria-current를 붙인다. */
+    /** 지금 그 책 — 'change'·'assign'에서 그 행에 aria-current를 붙이고, 'assign'에선 제목도 가른다. */
     currentBookId?: number | null
     pending?: boolean
+    /** 부모 왕복의 실패 — 시트 **안**에서 말한다(페이지 알림은 딤 뒤에 가려진다, R2 P7). */
+    error?: string | null
 }>()
 
 // 고른 책을 통째로 낸다 — 독서 BookPickSheet와 같은 계약(거긴 출처가 갈려서, 여긴 갈리지 않아도 같은 모양으로).
 const emit = defineEmits<{ pick: [book: StudyBookRow]; none: []; close: [] }>()
 
-// [제목, 힌트, 하단 CTA] — 세 모드의 문구는 여기 한 곳에만 있다.
+// [제목, 힌트, 하단 CTA] — 네 모드의 문구는 여기 한 곳에만 있다(독서 BookPickSheet TEXT와 같은 규칙).
 const T = {
-    start: ['공부할 책을 고르세요', '고르면 책만 바뀌어요 — 측정은 「공부 측정 시작」을 눌러야 시작돼요.', '책 없이 측정하기'],
-    tag: ['무슨 책을 공부하셨나요?', '방금 잰 시간을 책에 붙여요. 나중에 정해도 괜찮아요.', '책 없이 기록 · 건너뛰기'],
+    start: ['공부할 책을 고르세요', '책을 고르면 책만 바뀌어요 — 공부 측정은 「공부 측정 시작」을 눌러야 시작돼요.', '책 없이 측정하기'],
+    tag: ['무슨 책을 공부하셨나요?', '방금 잰 시간을 책에 붙여요.', '책 없이 기록 · 건너뛰기'],
     change: ['다른 책으로 바꿀까요?', '지금까지 잰 시간이 통째로 새 책에 붙어요.', '책 없이 공부하기'],
+    assign: ['이 측정은 무슨 책이었나요?', '이 측정의 시간이 그 책에 붙어요.', '책 없이 두기'],
 } as const
 const text = computed(() => T[props.mode])
+const title = computed(() => props.mode === 'assign' && props.currentBookId != null ? T.change[0] : text.value[0])
 
 function coverStyle(b: StudyBookRow) {
     const c = coverColor(b.isbn13 || b.title)
@@ -45,10 +50,11 @@ onMounted(() => overlayEl.value?.focus())
         <div class="book-sheet-panel is-study" role="dialog" aria-modal="true" aria-labelledby="study-sheet-title">
             <div class="sheet-handle" aria-hidden="true"></div>
             <div class="book-sheet-head">
-                <p id="study-sheet-title" class="book-sheet-title">{{ text[0] }}</p>
+                <p id="study-sheet-title" class="book-sheet-title">{{ title }}</p>
                 <button type="button" class="book-sheet-close" aria-label="닫기" @click="emit('close')">✕</button>
             </div>
             <p class="book-sheet-hint">{{ text[1] }}</p>
+            <p v-if="error" class="book-sheet-error" role="alert">{{ error }}</p>
 
             <ul v-if="books.length" class="book-sheet-list">
                 <li v-for="b in books" :key="b.id">
