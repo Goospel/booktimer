@@ -2,9 +2,10 @@ import { Button } from '@toss/tds-mobile';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
 
-import type { BookOption, ChatMe, ChatPartner, DashboardResponse, MarginBook, StudyState, TimerState } from './api';
-import { IDLE_STUDY, changeActiveBook, changeActiveStudyBook, fetchChatMe, fetchDashboard, setStudySessionGoal, startSession, startStudy, stopSession, stopStudy, tagBook, tagStudyBook, token } from './api';
+import type { BookOption, ChatMe, ChatPartner, DashboardResponse, MarginBook, SessionRow, StudyState, TimerState } from './api';
+import { IDLE_STUDY, changeActiveBook, changeActiveStudyBook, fetchChatMe, fetchDashboard, setSessionBook, setStudySessionBook, setStudySessionGoal, startSession, startStudy, stopSession, stopStudy, tagBook, tagStudyBook, token } from './api';
 import { nativeBack, useBackClose } from './back';
+import { CACHE_HISTORY, CACHE_STUDY_HISTORY, cacheDrop } from './cache';
 import {
   CoachmarkBubble,
   coachmarkSeen,
@@ -1553,6 +1554,20 @@ export function MainTabs({
   /** 태깅 실패 문구 — 시트 안에 선다(시트를 닫으면 함께 걷힌다). */
   const [tagError, setTagError] = useState<string | null>(null);
   /**
+   * 기록 붙이기 시트 — 기록 탭에서 누른 측정 한 건(R2). `null`이면 닫힘.
+   *
+   * <p>⚠️ <b>원장(`study`)을 여는 순간 고정한다</b> — 독서·공부 원장은 id 공간이 겹쳐 서버가 「공부 문에 독서 id」를
+   * 못 막는다(같은 번호의 공부 측정이 있으면 남의 원장이 바뀐다). 닫기 전에 모드가 바뀌어도 연 화면의 문을 부른다.
+   */
+  const [assigning, setAssigning] = useState<{
+    sessionId: number;
+    currentBookId: number | null;
+    manual: boolean;
+    study: boolean;
+  } | null>(null);
+  /** 기록 목록 재조회 키 — 오르면 기록 화면이 다시 받는다(붙이기·종료·태깅 뒤). */
+  const [historyEpoch, setHistoryEpoch] = useState(0);
+  /**
    * 공부 서재를 다시 세우는 세대 번호 — `<StudyLibrary key={shelfEpoch}>`의 `key`다.
    *
    * <p>그 화면은 자기 목록을 <b>마운트 1회</b>만 받는다. 그런데 태깅 시트는 그 화면 <b>위에서</b>
@@ -1752,6 +1767,19 @@ export function MainTabs({
   const fail = (e: Error) => (e.name === 'UnauthorizedError' ? onError(e) : setActionError(e.message));
 
   /**
+   * 그 원장의 기록이 낡았다 — 캐시를 버리고 재조회 키를 올린다. 기록 탭에서 재고 끝내도(탭 잠금은 이동만 막는다)
+   * 그 줄이 바로 서야 잔디와 목록이 어긋나지 않는다. 호출처: 독서·공부 stop · 태깅 · 붙이기 성공.
+   */
+  const invalidateHistory = (onStudy: boolean) => {
+    cacheDrop(onStudy ? CACHE_STUDY_HISTORY : CACHE_HISTORY);
+    setHistoryEpoch((n) => n + 1);
+  };
+
+  /** 기록의 [책 붙이기]/[바꾸기] — 붙이기 시트를 여는 <b>유일한 문</b>이다(진입·펼침으로는 안 열린다, T-183). */
+  const openAssign = (row: SessionRow, onStudy: boolean) =>
+    setAssigning({ sessionId: row.id, currentBookId: row.bookId, manual: row.manual, study: onStudy });
+
+  /**
    * 공부 측정 여닫기 — 독서 경로와 <b>갈라 둔다</b>. 태깅 시트·완독 축하·잔디 갱신이 여기 없는 것이
    * 곧 「공부는 잔디 밖」이라는 규칙의 구현이다(억제 코드가 0줄이다 — 배선 자체가 없다).
    */
@@ -1762,6 +1790,7 @@ export function MainTabs({
       stopStudy()
         .then((next) => {
           onStudyChange(next);
+          invalidateHistory(true);
           trackEvent('study_session_completed', { duration_seconds: duration });
           // 종료 직후 시트를 저절로 연다(독서 1474행과 같은 규율) — 태깅은 지금 기억이 가장 선명하다.
           // 붙일 책이 0권이면 열지 않는다: 빈 시트는 닫는 것 말고 할 게 없는 막다른 길이다.
@@ -1804,6 +1833,7 @@ export function MainTabs({
         .then((result) => {
           onTimerChange(result.timer);
           onGraphChange(result.graph); // stop 응답에 잔디가 동봉돼 새로고침 없이 즉시 갱신된다.
+          invalidateHistory(false); // 목록은 동봉이 아니라 다시 받는다 — 기록 탭에서 끝냈으면 그 줄이 바로 선다.
           setCelebrate(result.firstCompletedSession);
           // 종료 직전 스냅샷(`dashboard`)과 응답을 비교한다 — 이미 채운 날 또 재면 거짓이라 메달이 한 번만 튄다.
           setGoalReached(crossedGoal(dashboard, result.timer));
@@ -1837,6 +1867,7 @@ export function MainTabs({
    */
   const tag = (book: BookOption) => {
     if (tagging === null) return;
+    const onStudy = tagging.study;
     setBusy(true);
     setTagError(null);
     // 시트 아래가 공부 서재일 수 있다(그쪽 목록은 마운트 1회) — `shelfEpoch`가 그 화면을 다시 세운다.
@@ -1845,6 +1876,7 @@ export function MainTabs({
     (tagging.study
       ? tagStudyBook(tagging.sessionId, book.id).then(onStudyChange).then(() => setShelfEpoch((n) => n + 1))
       : tagBook(tagging.sessionId, book.id).then(() => onShelfChanged()))
+      .then(() => invalidateHistory(onStudy))
       .then(closeSheet)
       // 실패는 시트 안에서 말한다 — 탭바 위 스트립은 불투명 시트 패널에 가린다(R2 P7). 401은 재로그인으로.
       .catch((e: Error) => (e.name === 'UnauthorizedError' ? onError(e) : setTagError(e.message)))
@@ -1889,16 +1921,41 @@ export function MainTabs({
   /** 교체 시트 닫기 — 안 바꾸고 닫으면 토스트도 되살리지 않는다(제 역할은 끝났다). */
   const closeChangeSheet = () => setChanging(false);
 
-  /** 시트 닫기 — 태깅 시트를 닫는 건 곧 「건너뛰기」다(다시 들어갈 자리를 만들지 않는다). 지난 실패 문구도 함께 걷는다. */
+  /** 시트 닫기 — 태깅 시트를 닫는 건 곧 「건너뛰기」다(재진입은 기록 탭 — 날짜를 펼쳐 붙인다). 지난 실패 문구도 함께 걷는다. */
   const closeSheet = () => {
     setTagging(null);
     setTagError(null);
   };
 
+  /**
+   * 기록의 측정 한 건에 책 정하기(붙이기·바꾸기·떼기) — 문은 <b>시트를 연 순간 고정한 원장</b>이 고른다(R7).
+   * 응답으로 홈 상태를 갱신하고(읽고 싶어요 → 읽는 중 전환이 캐러셀에 따라온다) 그 원장의 기록을 다시 받는다.
+   * 실패하면 시트를 닫고 스트립으로 말한다 — 기록 화면이 곧 재진입점이다(교체 시트와 같은 규칙).
+   */
+  const assignSessionBook = (book: BookOption | null) => {
+    if (assigning === null) return;
+    const { sessionId, study: onStudy } = assigning;
+    const id = book === null ? null : book.id;
+    setBusy(true);
+    setActionError(null);
+    (onStudy ? setStudySessionBook(sessionId, id).then((next) => {
+          onStudyChange(next);
+          setShelfEpoch((n) => n + 1);
+        })
+      : setSessionBook(sessionId, id).then(onTimerChange))
+      .then(() => { setAssigning(null); invalidateHistory(onStudy); })
+      .catch((e: Error) => { setAssigning(null); fail(e); })
+      .finally(() => setBusy(false));
+  };
+
+  const closeAssign = () => setAssigning(null);
+
   // 안드로이드 뒤로가기는 시트만 닫는다 — 시트가 열린 채로 미니앱이 꺼지지 않게.
-  // 둘은 동시에 열리지 않는다(태깅은 종료 후, 교체는 측정 중) — backStack이 스택이라 공존도 안전하다.
+  // 셋은 동시에 열리지 않는다(태깅은 종료 후, 교체는 측정 중, 붙이기는 기록 탭에서 누른 뒤) —
+  // backStack이 스택이라 공존도 안전하다.
   useBackClose(tagging !== null, closeSheet);
   useBackClose(changing, closeChangeSheet);
+  useBackClose(assigning !== null, closeAssign);
 
   return (
     <>
@@ -1980,8 +2037,22 @@ export function MainTabs({
         {/* 달력은 공부 탭바로만 도달한다 — 도달 경로가 곧 게이트라 여기서 모드를 다시 안 따진다. */}
         {tab === 'calendar' && <StudyCalendar onError={onError} />}
         {/* 기록도 서재처럼 모드로 갈린다 — 공부 기록은 잔디·목록을 따로 받는다(대시보드 graph는 독서 것이다). */}
-        {tab === 'history' && mode === 'study' && <StudyHistory onError={onError} />}
-        {tab === 'history' && mode !== 'study' && <History graph={dashboard.graph} />}
+        {tab === 'history' && mode === 'study' && (
+          <StudyHistory
+            onError={onError}
+            onAssignBook={(row) => openAssign(row, true)}
+            reloadKey={historyEpoch}
+            candidateCount={(study.books ?? []).length}
+          />
+        )}
+        {tab === 'history' && mode !== 'study' && (
+          <History
+            graph={dashboard.graph}
+            onAssignBook={(row) => openAssign(row, false)}
+            reloadKey={historyEpoch}
+            candidateCount={taggableBooks(dashboard).length}
+          />
+        )}
       </div>
 
       {/* 액션 실패는 탭바 바로 위 스트립으로 — 다른 탭엔 홈의 ErrorMessage 자리가 없다.
@@ -2056,6 +2127,7 @@ export function MainTabs({
         <BookSheet
           books={tagging.study ? (study.books ?? []) : taggableBooks(dashboard)}
           title={tagging.study ? '무슨 책을 공부하셨나요?' : undefined}
+          hint="건너뛰어도 기록 탭에서 붙일 수 있어요"
           error={tagError}
           disabled={busy}
           onPick={tag}
@@ -2073,6 +2145,21 @@ export function MainTabs({
           disabled={busy}
           onPick={changeBook}
           onClose={closeChangeSheet}
+        />
+      )}
+
+      {/* 기록 붙이기 시트 — 기록 탭에서 [책 붙이기]/[바꾸기]를 눌렀을 때만 열린다(진입 직후 덮지 않는다, T-183).
+          후보는 연 원장의 서재다. 수동 기록은 책이 필수라 「책 없이」(떼기) 행을 숨긴다. */}
+      {assigning !== null && (
+        <ChangeBookSheet
+          title={assigning.currentBookId === null ? '이 측정은 무슨 책이었나요?' : '다른 책으로 바꿀까요?'}
+          subtitle="이 측정의 시간이 그 책에 붙어요"
+          hideNone={assigning.manual}
+          books={assigning.study ? (study.books ?? []) : taggableBooks(dashboard)}
+          currentBookId={assigning.currentBookId}
+          disabled={busy}
+          onPick={assignSessionBook}
+          onClose={closeAssign}
         />
       )}
     </>
@@ -2317,6 +2404,9 @@ export function StartToast({ toast, onChange }: { toast: StartToastState; onChan
 export function ChangeBookSheet({
   books,
   currentBookId,
+  title = '무슨 책으로 잴까요?',
+  subtitle = '측정은 멈추지 않아요 — 지금까지 잰 시간은 바꾼 책에 붙어요',
+  hideNone = false,
   disabled,
   onPick,
   onClose,
@@ -2325,6 +2415,11 @@ export function ChangeBookSheet({
   books: SheetBook[];
   /** 지금 재고 있는 책 — `null`이면 「책 없이」 행에 표시가 선다. */
   currentBookId: number | null;
+  /** 물음·부제 — 기록 붙이기(R2)가 끝난 측정에 맞게 갈아 끼운다. 기본값이 교체 시트의 옛 리터럴이다(렌더 불변). */
+  title?: string;
+  subtitle?: string;
+  /** 「책 없이」 행을 숨긴다 — 수동 기록은 책이 필수라 뗄 수 없다(서버 409). */
+  hideNone?: boolean;
   disabled: boolean;
   /** `null` = 「책 없이」 선택. */
   onPick: (book: BookOption | null) => void;
@@ -2382,12 +2477,12 @@ export function ChangeBookSheet({
   };
 
   return (
-    <Sheet title="무슨 책으로 잴까요?" onClose={onClose}>
+    <Sheet title={title} onClose={onClose}>
       <div style={{ marginTop: -4, marginBottom: 10, fontSize: 13, color: 'var(--adaptiveGrey600, #6F6A5E)', wordBreak: 'keep-all' }}>
-        측정은 멈추지 않아요 — 지금까지 잰 시간은 바꾼 책에 붙어요
+        {subtitle}
       </div>
       {books.map((b) => row(b))}
-      {row(null)}
+      {!hideNone && row(null)}
     </Sheet>
   );
 }

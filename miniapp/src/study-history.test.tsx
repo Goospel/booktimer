@@ -2,14 +2,14 @@ import { TDSMobileProvider } from '@toss/tds-mobile';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
 
-import type { StudyHistoryResponse, StudyMonth } from './api';
+import type { StudyDay, StudyHistoryResponse, StudyMonth } from './api';
 import { Legend, StatStrip } from './screens/History';
-import { StudyHistoryView, StudyMonthlyRecords } from './screens/StudyHistory';
+import { StudyDayRow, StudyHistoryView, StudyMonthlyRecords } from './screens/StudyHistory';
 import { graph, userAgent } from './test-fixtures';
 
 /**
- * 공부 기록 화면 — <b>측정 사실만</b>. 판정(지킴/못 지킴)은 「일정」 탭의 몫이고, 책이 없으니
- * 표지 열·펼침도 없다. 하니스가 정적 렌더라(effect·클릭이 안 돈다) 데이터를 받아 그리기만 하는
+ * 공부 기록 화면 — <b>측정 사실만</b>. 판정(지킴/못 지킴)은 「일정」 탭의 몫이고, 표지 열은 없다
+ * (펼치면 측정 한 건씩 책이 선다 — 아래 「공부 기록 펼침」). 하니스가 정적 렌더라(effect·클릭이 안 돈다) 데이터를 받아 그리기만 하는
  * `StudyHistoryView`를 잰다(T-149).
  */
 
@@ -47,10 +47,9 @@ describe('공부 기록 화면', () => {
    * 독서 전제인 네 가지가 <b>마크업에 없어야</b> 한다. 부정 단언이지만 effect·핸들러가 아니라
    * 「그려진 것」을 재므로 항상 통과가 아니다 — `History`를 그대로 재사용하면 즉시 붉어진다(T-149 밖).
    */
-  it('독서 전제는 한 조각도 안 그린다 — 읽은 날·직접 채움·책 안 고른 기록·펼침 손잡이', () => {
+  it('독서 전제는 한 조각도 안 그린다 — 읽은 날·직접 채움·(측정 좌표 없는 날의) 펼침 손잡이', () => {
     expect(markup).not.toContain('>읽은 날<');
     expect(markup).not.toContain('직접 채움');
-    expect(markup).not.toContain('책 안 고른 기록');
     expect(markup).not.toContain('data-day-toggle');
   });
 
@@ -102,6 +101,43 @@ describe('공부 기록 화면', () => {
     expect(markup).toContain('>1시간<'); // 09-02
     expect(markup).toContain('>30분<'); // 09-01
     expect(markup).toContain('>수요일<'); // 09-02의 요일
+  });
+});
+
+/**
+ * 공부 기록 펼침(R2) — 공부 원장에도 책이 붙는다. 측정이 있는 날은 독서 기록과 <b>같은 측정 줄</b>로 펼친다
+ * (조각을 복제하면 「1분 미만」·후보 0권 안내 같은 규칙을 두 곳에서 밟는다).
+ */
+describe('공부 기록 펼침 (StudyDayRow)', () => {
+  const withSessions: StudyDay = {
+    date: '2026-09-02',
+    totalSeconds: 3_600,
+    sessions: [
+      { id: 7, start: '07:40', end: '08:20', seconds: 2_400, bookId: 101, bookTitle: '정보처리기사', manual: false },
+      { id: 8, start: '21:00', end: '21:20', seconds: 1_200, bookId: null, bookTitle: null, manual: false },
+    ],
+  };
+  const row = (day: StudyDay, expanded: boolean) =>
+    render(<StudyDayRow day={day} monthMax={3_600} expanded={expanded} candidateCount={2} onToggle={() => {}} onAssign={() => {}} />);
+
+  it('측정이 있는 날은 손잡이를 둔다 — 없는 날(옛 응답)엔 없다', () => {
+    expect(row(withSessions, false)).toContain('data-day-toggle');
+    expect(row({ date: '2026-09-01', totalSeconds: 1_800 }, false)).not.toContain('data-day-toggle');
+  });
+
+  it('펼치면 독서와 같은 측정 줄이 선다 — 시각 · 제목 · [바꾸기] / 「책 없음」 · [책 붙이기]', () => {
+    const markup = row(withSessions, true);
+
+    expect(markup).toContain('>07:40–08:20<');
+    expect(markup).toContain('>정보처리기사<');
+    expect(markup).toContain('>바꾸기<');
+    expect(markup).toContain('>책 없음<');
+    expect(markup).toContain('>책 붙이기<');
+    expect(row(withSessions, false)).not.toContain('>책 붙이기<'); // 접힌 줄엔 없다(대조군)
+  });
+
+  it('펼친 공부 줄엔 「그날 목표」 줄이 없다 — 공부 막대는 목표가 아니라 그 달 최대에 견준다', () => {
+    expect(row(withSessions, true)).not.toContain('그날 목표');
   });
 });
 

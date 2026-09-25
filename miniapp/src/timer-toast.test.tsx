@@ -229,6 +229,28 @@ describe('교체 시트 (ChangeBookSheet)', () => {
     expect(rowOf('코스모스')).toContain('읽고 싶어요');
     expect(rowOf('데미안')).not.toContain('읽고 싶어요');
   });
+
+  /** 기록 붙이기(R2 PR-5)가 이 시트를 재사용한다 — 물음·부제를 갈아 끼우고, 수동 기록 줄에선 떼기 행을 숨긴다. */
+  it('기록 붙이기 모드 — 물음·부제를 갈아 끼우고 hideNone이면 「책 없이」 행이 없다', () => {
+    const markup = render(
+      <ChangeBookSheet
+        books={books}
+        currentBookId={null}
+        title="이 측정은 무슨 책이었나요?"
+        subtitle="이 측정의 시간이 그 책에 붙어요"
+        hideNone
+        disabled={false}
+        onPick={() => {}}
+        onClose={() => {}}
+      />,
+    );
+
+    expect(markup).toContain('이 측정은 무슨 책이었나요?');
+    expect(markup).toContain('이 측정의 시간이 그 책에 붙어요');
+    expect(markup).not.toContain('측정은 멈추지 않아요'); // 교체 부제는 끝난 측정에선 거짓이다
+    expect(markup).not.toContain('data-book-title=""');
+    expect(markup).toContain('data-book-title="데미안"'); // 책 행은 그대로(부재 단언의 대조군)
+  });
 });
 
 /**

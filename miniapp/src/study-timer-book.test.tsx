@@ -142,7 +142,7 @@ function dashboard(study: StudyState): DashboardResponse {
   };
 }
 
-function renderHome(mode: 'reading' | 'study', study: StudyState) {
+function renderHome(mode: 'reading' | 'study', study: StudyState, selectedStudyBookId?: number | null) {
   return renderToStaticMarkup(
     <TDSMobileProvider userAgent={userAgent}>
       <Home
@@ -153,7 +153,7 @@ function renderHome(mode: 'reading' | 'study', study: StudyState) {
         onBlockedModeChange={() => {}}
         selectedBookId={undefined}
         onSelectBook={() => {}}
-        selectedStudyBookId={undefined}
+        selectedStudyBookId={selectedStudyBookId}
         onSelectStudyBook={() => {}}
         onTimerChange={() => {}}
         celebrate={false}
@@ -192,6 +192,28 @@ describe('홈 공부 히어로 — 대기 중엔 고르고, 재는 중엔 무엇
     const markup = renderHome('study', { ...IDLE_STUDY, books: studyBooks, recentBookId: 102 });
 
     expect(markup).toContain('data-selected-book="토익 실전 1000제"');
+  });
+
+  /**
+   * 골라 둔 공부 책이 서재에서 빠졌으면(stale id) 가운데는 「책 없이」다 — ▶가 시작할 대상(timerStartBookId)과
+   * 같은 규칙이라야 「화면이 가리키는 칸 = 시작할 대상」이 된다(R2 P6-a 공부판).
+   */
+  it('서재 밖 id를 골라 뒀으면 가운데는 「책 없이 측정」이다 — 서재 안 id면 그 책(대조군)', () => {
+    const idle = { ...IDLE_STUDY, books: studyBooks, recentBookId: 101 };
+    // ⚠️ 라벨(`data-selected-book`)만 보면 안 된다 — 못 찾은 id도 라벨은 「책 없이」 카드로 떨어져, 정규화를 걷어낸
+    //    돌연변이(어느 칸도 가운데가 아님)가 살아남았다. 「책 없이」 칸 자체가 가운데(aria-current)인지 잰다.
+    const leadCard = (markup: string) => {
+      const at = markup.indexOf('data-lead-card=""');
+      return markup.slice(markup.lastIndexOf('<button', at), markup.indexOf('>', at));
+    };
+
+    const stale = renderHome('study', idle, 99);
+    expect(stale).toContain('data-selected-book="책 없이 측정"');
+    expect(leadCard(stale)).toContain('aria-current="true"');
+
+    const shelved = renderHome('study', idle, 102);
+    expect(shelved).toContain('data-selected-book="토익 실전 1000제"');
+    expect(leadCard(shelved)).not.toContain('aria-current="true"');
   });
 
   it('측정 중이면 캐러셀 대신 「측정 중 · 제목」이다 — 고를 자리가 사라진다', () => {

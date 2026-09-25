@@ -1,17 +1,17 @@
 import { TDSMobileProvider } from '@toss/tds-mobile';
 import { readFileSync } from 'node:fs';
 import { renderToStaticMarkup } from 'react-dom/server';
-import { beforeEach, describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-import type { DailyRecord, MonthlySection } from './api';
+import type { DailyRecord, MonthlySection, SessionRow } from './api';
 import { CACHE_HISTORY, cacheClear, cachePut } from './cache';
 import {
   DayRow,
   History,
   MonthlyRecords,
   StatStrip,
+  SessionLines,
   barPercent,
-  bookRows,
   coverStack,
   formatMonthTitle,
   formatRecordDate,
@@ -19,9 +19,11 @@ import {
   goalLabel,
   isExpandable,
   latestDate,
+  sessionAction,
 } from './screens/History';
 import { StudyMonthlyRecords } from './screens/StudyHistory';
-import { graph, userAgent } from './test-fixtures';
+import { stripComments } from './source-scan';
+import { clickHandlerFor, graph, userAgent } from './test-fixtures';
 import { GrassGrid, monthLabelPositions } from './ui';
 
 /**
@@ -210,45 +212,123 @@ describe('표지 더미 (coverStack)', () => {
   });
 });
 
-describe('펼침 줄 (bookRows)', () => {
-  it('서버가 정한 오래 읽은 순 그대로 세운다 — 화면이 다시 정렬하면 접힌 더미와 펼친 목록이 어긋난다', () => {
-    const rows = bookRows(day({ totalSeconds: 5_400, books: [bk('미움받을 용기', 3_600), bk('사피엔스', 1_800)] }));
+/** 측정 한 건. 기본은 07:40–08:40 한 시간, 책 없음. */
+const sr = (id: number, over: Partial<SessionRow> = {}): SessionRow => ({
+  id,
+  start: '07:40',
+  end: '08:40',
+  seconds: 3_600,
+  bookId: null,
+  bookTitle: null,
+  manual: false,
+  ...over,
+});
 
-    expect(rows.map((r) => r.title)).toEqual(['미움받을 용기', '사피엔스']);
+/**
+ * 펼침의 기준은 <b>측정이 한 건이라도 있는가</b>다(R2). 책을 안 고른 날도 펼쳐야 붙일 자리가 나온다 —
+ * 옛 기준(「책이 한 권이라도」)은 정확히 붙일 게 있는 날을 닫아 두었다.
+ */
+describe('펼칠 수 있는 날 (isExpandable)', () => {
+  it('책 없는 측정 한 건만 있어도 펼친다 — 거기가 책을 붙이는 자리다', () => {
+    expect(isExpandable(day({ books: [], sessions: [sr(1)] }))).toBe(true);
   });
 
-  it('책 시간의 합이 총합보다 적으면 마지막에 「책 안 고른 기록」을 둔다 — 조용히 빼면 펼친 시간을 더해도 위 총합과 안 맞는다', () => {
-    const rows = bookRows(day({ totalSeconds: 5_400, books: [bk('데미안', 3_600)] }));
-
-    expect(rows.at(-1)).toEqual({ title: '책 안 고른 기록', coverUrl: null, seconds: 1_800, unassigned: true });
-  });
-
-  it('차액이 없으면 그 줄을 안 만든다 — 「0초」짜리 빈 줄이 생긴다', () => {
-    expect(bookRows(day({ totalSeconds: 3_600, books: [bk('데미안', 3_600)] }))).toHaveLength(1);
-  });
-
-  it('책이 하나도 없는 날은 그날 전부가 「책 안 고른 기록」이다', () => {
-    expect(bookRows(day({ totalSeconds: 1_200, books: [] }))).toEqual([
-      { title: '책 안 고른 기록', coverUrl: null, seconds: 1_200, unassigned: true },
-    ]);
+  it('sessions가 없거나(옛 서버) 비었으면 못 펼친다 — 책이 있어도 좌표가 없으면 펼칠 게 없다', () => {
+    expect(isExpandable(day({ books: [bk('가', 3_600)] }))).toBe(false);
+    expect(isExpandable(day({ books: [bk('가', 3_600)], sessions: [] }))).toBe(false);
   });
 });
 
-describe('펼칠 수 있는 날 (isExpandable)', () => {
-  it('두 권 이상이면 펼칠 수 있다', () => {
-    expect(isExpandable(day({ totalSeconds: 5_400, books: [bk('가', 3_600), bk('나', 1_800)] }))).toBe(true);
+/** 줄 오른쪽에 무엇을 세우나 — 책 없는 줄은 붙이기, 책 있는 줄은 바꾸기, 붙일 후보가 0권이면 버튼 대신 안내. */
+describe('측정 줄의 손잡이 (sessionAction)', () => {
+  it('책 없는 줄 + 후보가 있으면 attach', () => {
+    expect(sessionAction(sr(1), 2)).toBe('attach');
   });
 
-  it('한 권뿐이어도 펼칠 수 있다 — 접힌 줄엔 제목이 없어 시리즈 몇 권인지 표지로는 안 보인다', () => {
-    expect(isExpandable(day({ totalSeconds: 3_600, books: [bk('가', 3_600)] }))).toBe(true);
+  it('책 있는 줄은 change — 후보 수와 무관하다(그 책 자체가 후보다)', () => {
+    expect(sessionAction(sr(1, { bookId: 3, bookTitle: '데미안' }), 1)).toBe('change');
+    expect(sessionAction(sr(1, { bookId: 3, bookTitle: '데미안' }), 0)).toBe('change');
   });
 
-  it('한 권이어도 책 안 고른 시간이 있으면 펼칠 수 있다 — 그 책 시간과 그날 총합이 다르다', () => {
-    expect(isExpandable(day({ totalSeconds: 5_400, books: [bk('가', 3_600)] }))).toBe(true);
+  it('책 없는 줄 + 후보 0권이면 none — 빈 시트를 여는 막다른 문을 만들지 않는다', () => {
+    expect(sessionAction(sr(1), 0)).toBe('none');
+    expect(sessionAction(sr(1, { manual: true, start: null, end: null }), 0)).toBe('none');
+  });
+});
+
+/** 펼친 측정 줄 — 시각/시간 · 제목 · 손잡이. 훅 없는 순수 컴포넌트라 트리와 마크업을 둘 다 잰다. */
+describe('측정 줄 (SessionLines)', () => {
+  const render = (rows: SessionRow[], candidateCount = 2) =>
+    renderToStaticMarkup(
+      <TDSMobileProvider userAgent={userAgent}>
+        <SessionLines rows={rows} candidateCount={candidateCount} onAssign={() => {}} />
+      </TDSMobileProvider>,
+    );
+
+  it('시각 범위 · 걸린 시간 · 책 제목을 줄마다 적는다', () => {
+    const markup = render([sr(1, { start: '07:40', end: '08:20', seconds: 2_400, bookId: 3, bookTitle: '데미안' })]);
+
+    expect(markup).toContain('>07:40–08:20<');
+    expect(markup).toContain('>40분<');
+    expect(markup).toContain('>데미안<');
+    expect(markup).toContain('>바꾸기<');
   });
 
-  it('책이 아예 없는 날은 펼칠 수 없다 — 한 줄이 곧 그날 전부다', () => {
-    expect(isExpandable(day({ totalSeconds: 1_200, books: [] }))).toBe(false);
+  it('책 없는 줄은 「책 없음」 + [책 붙이기]', () => {
+    const markup = render([sr(1)]);
+
+    expect(markup).toContain('>책 없음<');
+    expect(markup).toContain('>책 붙이기<');
+  });
+
+  it('수동 기록은 시각 대신 「직접 기록」 — 서버 앵커 시각(00:00)을 찍으면 거짓이다', () => {
+    const markup = render([sr(1, { manual: true, start: null, end: null, bookId: 3, bookTitle: '데미안' })]);
+
+    expect(markup).toContain('>직접 기록<');
+    expect(markup).not.toContain('null');
+  });
+
+  it('60초 미만은 「1분 미만」 — 「45초」는 측정 줄에서 소음이다', () => {
+    expect(render([sr(1, { seconds: 45 })])).toContain('>1분 미만<');
+    expect(render([sr(1, { seconds: 60 })])).toContain('>1분<'); // 경계 — 60초부터는 분으로
+  });
+
+  it('후보 0권인 책 없는 줄은 버튼 대신 회색 안내 — 누를 수 없는 화면 안 글자다', () => {
+    const markup = render([sr(1)], 0);
+
+    expect(markup).toContain('서재에 책을 담으면 붙일 수 있어요');
+    expect(markup).not.toContain('<button');
+    // 양성 대조군 — 후보가 있으면 같은 줄에 버튼이 선다(위 부재 단언이 공허하지 않다)
+    expect(render([sr(1)], 1)).toContain('<button');
+  });
+
+  it('줄마다 제 줄의 측정을 넘긴다 — 두 줄의 핸들러가 뒤바뀌면 남의 측정에 책이 붙는다', () => {
+    const onAssign = vi.fn();
+    const a = sr(11);
+    const b = sr(12, { start: '09:00', end: '09:30', seconds: 1_800, bookId: 3, bookTitle: '데미안' });
+    const tree = SessionLines({ rows: [a, b], candidateCount: 2, onAssign });
+
+    clickHandlerFor(tree, '책 붙이기')?.();
+    expect(onAssign).toHaveBeenCalledTimes(1);
+    expect(onAssign).toHaveBeenLastCalledWith(a);
+
+    clickHandlerFor(tree, '바꾸기')?.();
+    expect(onAssign).toHaveBeenCalledTimes(2);
+    expect(onAssign).toHaveBeenLastCalledWith(b);
+  });
+
+  it('손잡이는 어느 줄의 것인지 읽힌다 — 「바꾸기」 다섯 개가 똑같이 읽히면 스크린리더로는 고를 수 없다(웹과 같은 모양)', () => {
+    const markup = render([
+      sr(1, { start: '07:40', end: '08:20', seconds: 2_400, bookId: 3, bookTitle: '데미안' }),
+      sr(2, { manual: true, start: null, end: null }),
+    ]);
+
+    expect(markup).toContain('aria-label="07:40–08:20 측정 책 바꾸기"');
+    expect(markup).toContain('aria-label="직접 기록 측정 책 붙이기"');
+  });
+
+  it('격자는 3열(시각/시간 · 제목 · 손잡이) — 360px에서 제목 칸이 남는다(설계 §4.5)', () => {
+    expect(render([sr(1)])).toContain('grid-template-columns:max-content minmax(0, 1fr) max-content');
   });
 });
 
@@ -257,15 +337,24 @@ describe('하루 한 줄 (DayRow)', () => {
   const busy = day({
     date: '2026-08-14',
     totalSeconds: 4_500,
-    books: [bk('미움받을 용기', 3_600), bk('사피엔스', 900)],
+    books: [bk('미움받을 용기', 3_600)],
     goalSeconds: 9_000,
+    sessions: [
+      sr(1, { bookId: 1, bookTitle: '미움받을 용기' }),
+      sr(2, { start: '21:00', end: '21:15', seconds: 900 }),
+    ],
   });
-  const alone = day({ date: '2026-08-13', totalSeconds: 3_600, books: [bk('데미안', 3_600)] });
+  const alone = day({
+    date: '2026-08-13',
+    totalSeconds: 3_600,
+    books: [bk('데미안', 3_600)],
+    sessions: [sr(3, { bookId: 3, bookTitle: '데미안' })],
+  });
 
   const render = (d: DailyRecord, expanded: boolean) =>
     renderToStaticMarkup(
       <TDSMobileProvider userAgent={userAgent}>
-        <DayRow day={d} expanded={expanded} onToggle={() => {}} />
+        <DayRow day={d} expanded={expanded} candidateCount={2} onToggle={() => {}} />
       </TDSMobileProvider>,
     );
 
@@ -282,22 +371,14 @@ describe('하루 한 줄 (DayRow)', () => {
     expect(markup.slice(markup.lastIndexOf('<', at), at)).not.toContain('--tds-paragraph-color:grey');
   });
 
-  it('펼치면 책마다 얼마나 읽었는지 적는다 — 사용자가 물은 「무슨 책을 얼마나」다', () => {
+  it('펼치면 측정 한 건씩 선다 — 무슨 책을 언제 얼마나, 그리고 붙일 손잡이', () => {
     const markup = render(busy, true);
 
-    expect(markup).toContain('미움받을 용기');
-    expect(markup).toContain('1시간');
-    expect(markup).toContain('15분');
-  });
-
-  it('책 막대는 그날 가장 오래 읽은 책을 기준으로 잰다 — 하루 막대가 그날 목표를 기준으로 재는 것과 같은 규칙', () => {
-    const markup = render(busy, true);
-
-    // 하루 막대는 4500/9000(그날 목표) = 50%. 책 막대는 3600/3600 = 100%, 900/3600 = 25%.
-    // 책 막대의 표식은 높이 4px이다 — 그냥 `width:100%`로 찾으면 행 격자(`width:100%`)에 걸려 늘 초록이다.
-    expect(dayBarWidth(markup)).toBe('50%');
-    expect(markup).toContain('width:100%;height:4px');
-    expect(markup).toContain('width:25%;height:4px');
+    expect(markup).toContain('>07:40–08:40<');
+    expect(markup).toContain('>미움받을 용기<');
+    expect(markup).toContain('>책 없음<');
+    expect(markup).toContain('>책 붙이기<');
+    expect(dayBarWidth(markup)).toBe('50%'); // 하루 막대는 그대로 그날 목표 기준(4500/9000)
   });
 
   it('하루 막대는 그날 목표를 기준으로 잰다 — 채우면 가득, 반이면 반, 넘겨도 가득', () => {
@@ -339,14 +420,16 @@ describe('하루 한 줄 (DayRow)', () => {
     expect(render(alone, false).match(grid)![1]).toBe(render(busy, false).match(grid)![1]);
   });
 
-  it('책이 있는 날은 한 권이어도 손잡이를 둔다 — 펼쳐야 제목이 나온다', () => {
+  it('측정이 있는 날은 손잡이를 둔다 — 책을 안 고른 날도(붙일 자리다)', () => {
     expect(render(busy, false)).toContain('data-day-toggle');
     expect(render(alone, false)).toContain('data-day-toggle');
+    const bookless = day({ date: '2026-08-12', totalSeconds: 1_200, books: [], sessions: [sr(4, { seconds: 1_200 })] });
+    expect(render(bookless, false)).toContain('data-day-toggle');
   });
 
-  it('책을 안 고른 날엔 손잡이를 안 둔다 — 펼쳐도 「책 안 고른 기록」 한 줄뿐이라 새로 보이는 게 없다', () => {
-    const none = day({ date: '2026-08-12', totalSeconds: 1_200, books: [] });
-    expect(render(none, false)).not.toContain('data-day-toggle');
+  it('측정 좌표가 없는 날(옛 서버 응답)엔 손잡이를 안 둔다 — 펼쳐도 붙일 수 없다', () => {
+    const legacy = day({ date: '2026-08-12', totalSeconds: 1_200, books: [bk('데미안', 1_200)] });
+    expect(render(legacy, false)).not.toContain('data-day-toggle');
   });
 });
 
@@ -531,43 +614,30 @@ describe('기록 위계 (시안 2d)', () => {
   });
 
   /**
-   * ⚠️ 픽스처가 계측기의 조준을 정한다 — 책이 한 권이면 하루 합계와 책 시간이 같은 문자열이 되어
-   * `indexOf`가 <b>합계(15px)를 먼저</b> 집는다. 그래서 두 권으로 갈라 책 줄만 겨눈다(월/일 합계에는
-   * 이미 같은 규율을 썼는데 여기만 빠져 있었다 — 독립 리뷰 적발).
+   * 측정 줄의 시각·시간은 <b>값이 아니라 표지</b>다 — 하루 합계(세리프 17)가 그 줄의 답이고, 펼친 줄은 그 답의
+   * 내역이라 비세리프로 물러난다. ⚠️ 줄 시간(20분)이 하루 합계(30분)와 다른 문자열이어야 `indexOf`가 제 자리를 집는다.
    */
-  it('펼친 책별 시간은 세리프 16이다 — 하루 합계(17)보다 한 단 작다(시안 펼친 줄 16)', () => {
-    const twoBooks: DailyRecord = {
-      date: '2026-08-21',
-      totalSeconds: 1_800,
-      books: [
-        { title: '사피엔스', coverUrl: null, seconds: 1_200 }, // 20분
-        { title: '데미안', coverUrl: null, seconds: 600 }, // 10분
+  it('측정 줄 시각은 비세리프 14(보조), 걸린 시간은 13(최소) 흐린 글자다 — 하루 합계(세리프 17)보다 물러난다', () => {
+    const withSessions: DailyRecord = {
+      ...day('2026-08-21', 1_800),
+      sessions: [
+        { id: 1, start: '07:40', end: '08:00', seconds: 1_200, bookId: null, bookTitle: null, manual: false },
+        { id: 2, start: '21:00', end: '21:10', seconds: 600, bookId: null, bookTitle: null, manual: false },
       ],
-      manuallyFilled: false,
     };
     const markup = renderToStaticMarkup(
       <TDSMobileProvider userAgent={userAgent}>
-        <DayRow day={twoBooks} expanded onToggle={() => {}} />
+        <DayRow day={withSessions} expanded onToggle={() => {}} />
       </TDSMobileProvider>,
     );
 
-    const bookTime = tagBefore(markup, '20분');
-
-    expect(bookTime).not.toBe('');
-    expect(bookTime).toContain('Gowun Batang');
-    expect(bookTime).toContain('font-size:16px');
-    expect(tagBefore(markup, '30분')).toContain('font-size:17px'); // 하루 합계는 17
-  });
-
-  it('가이드라인은 여백 인용 줄과 같은 세이지 선이다 — 「위 줄에 딸린 것」을 앱이 한 가지로 말한다', () => {
-    const markup = renderToStaticMarkup(
-      <TDSMobileProvider userAgent={userAgent}>
-        <DayRow day={day('2026-08-21', 1_800)} expanded onToggle={() => {}} />
-      </TDSMobileProvider>,
-    );
-
-    expect(markup).toContain('padding-left:16px');
-    expect(markup).toContain('2px solid var(--adaptiveBlue200');
+    const range = tagBefore(markup, '07:40–08:00');
+    const length = tagBefore(markup, '20분');
+    expect(range).toContain('font-size:14px');
+    expect(range).not.toContain('Gowun Batang');
+    expect(length).toContain('font-size:13px');
+    expect(length).toContain('--tds-paragraph-color:var(--adaptiveGrey600');
+    expect(tagBefore(markup, '30분')).toContain('font-size:17px'); // 하루 합계는 그대로 17
   });
 });
 
@@ -669,14 +739,6 @@ describe('기록 Soft (시안 Soft-History)', () => {
     );
   });
 
-  it('펼친 책 줄은 표지 26 · 이름 16 · 시간 16 흐린 잉크(grey700)', () => {
-    const twoBooks = day({ totalSeconds: 1_800, books: [bk('사피엔스', 1_200), bk('데미안', 600)] });
-    const markup = render(<DayRow day={twoBooks} expanded onToggle={() => {}} />);
-
-    expect(tagBefore(markup, '사피엔스</')).toContain('font-size:16px');
-    expect(tagBefore(markup, '20분')).toContain('var(--adaptiveGrey700');
-    expect(markup).toContain('width:26px');
-  });
 });
 
 /**
@@ -718,7 +780,18 @@ describe('그림자 예산 — 반복 요소엔 큰 흐림이 없다', () => {
             },
           ]}
         />
-        <DayRow day={day({ books: [bk('사피엔스', 3_000), bk('데미안', 2_400)] })} expanded onToggle={() => {}} />
+        <DayRow
+          day={day({
+            books: [bk('사피엔스', 3_000)],
+            sessions: [
+              { id: 1, start: '07:40', end: '08:30', seconds: 3_000, bookId: 2, bookTitle: '사피엔스', manual: false },
+              { id: 2, start: '21:00', end: '21:40', seconds: 2_400, bookId: null, bookTitle: null, manual: false },
+            ],
+          })}
+          expanded
+          candidateCount={2}
+          onToggle={() => {}}
+        />
         <StudyMonthlyRecords months={[{ month: '2026-09', totalSeconds: 3_600, days: [{ date: '2026-09-02', totalSeconds: 3_600 }] }]} />
         <GrassGrid weeks={[[{ date: '2026-09-23', totalSeconds: 0, level: 0, manual: false }]]} today="2026-09-23" />
       </>,
@@ -745,5 +818,30 @@ describe('그림자 예산 — 반복 요소엔 큰 흐림이 없다', () => {
 
     expect(markup).toContain('box-shadow:var(--dentShadow'); // 변수 그림자가 이 마크업에 실리는 경로 자체는 살아 있다
     expect(markup).not.toContain('var(--puffShadow');
+  });
+});
+
+/**
+ * 기록 화면의 재조회 — 붙이기·종료·태깅 뒤 App이 `reloadKey`를 올리면 목록을 다시 받는다. 받는 쪽 deps가
+ * 빠지면 붙인 줄이 「책 없음」으로 남고 기록 탭에서 끝낸 측정이 목록에 안 선다(§3-e-11). effect는 정적
+ * 렌더에서 안 돌아(T-149) 주석을 걷은 소스로 잰다(T-205).
+ */
+describe('기록 재조회 (reloadKey)', () => {
+  const flat = (file: string) =>
+    stripComments(readFileSync(new URL(file, import.meta.url), 'utf8')).replace(/\s+/g, ' ');
+  const count = (hay: string, needle: string) => hay.split(needle).length - 1;
+
+  it('독서 기록은 reloadKey가 바뀌면 다시 받고, 성공하면 지난 실패 문구를 걷는다', () => {
+    const src = flat('./screens/History.tsx');
+
+    expect(count(src, '}, [reloadKey]);')).toBe(1);
+    expect(src).toContain('if (alive) { setSections(r.months); setError(null); }');
+  });
+
+  it('공부 기록도 같다', () => {
+    const src = flat('./screens/StudyHistory.tsx');
+
+    expect(count(src, '}, [onError, reloadKey]);')).toBe(1);
+    expect(src).toContain('if (alive) { setData(r); setError(null); }');
   });
 });
