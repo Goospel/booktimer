@@ -140,26 +140,50 @@ await page.evaluate(() => {
 await settle()
 await shot('03-library')
 
-// 04 기록 — 잔디 + 날짜별 기록(하루에 읽은 책 더미)
-// ⚠️ 최상단에서 찍지 않는다 — 0에서 찍으면 연속·통계 카드가 위쪽을 다 먹고 이 화면의 새 얼굴인
-// **표지 더미**가 탭바 아래로 밀려 한 줄도 안 보인다(실측). 잔디 제목을 기준선으로 잡으면 잔디와
-// 날짜 줄이 한 컷에 같이 들어온다 — 위쪽 카드가 또 바뀌어도 컷의 첫 줄은 늘 잔디다.
+// 04 기록 — 잔디 + 펼친 하루(R2: 측정 한 건씩 「시각/길이 · 책 · [바꾸기]/[책 붙이기]」 + 「그날 목표」).
+// 이 컷이 파는 것 = 잔디, 그리고 측정이 한 건씩 보이고 책 없는 측정에 [책 붙이기]로 나중에 책을 붙일 수 있다는 것.
+// 둘 다 담는다(사용자 결정 2026-09-25 「잔디도 살리기」). 날을 차례로 펼쳐 **측정 줄 ≥ 2 · [책 붙이기] ≥ 1이면서
+// 잔디 제목부터 그 날 바닥(「그날 목표」)까지가 탭바 16px 위에 드는 첫 날**을 고른다. 그런 날이 없으면 죽는다 —
+// 잔디를 내주는 구도로 조용히 물러서지 않는다(목 픽스처가 오늘을 두 줄로 두는 이유다, dev-mock `readingSessionsAt`).
 await tab('기록')
-await page.evaluate(() => {
+const days = page.locator('button[data-day-toggle]')
+let picked = -1
+for (let i = 0, n = await days.count(); i < n && picked < 0; i++) {
+    await days.nth(i).click()
+    await settle(250)
+    const fits = await days.nth(i).evaluate((t) => {
+        const box = t.parentElement
+        const attach = [...box.querySelectorAll('button')].filter((b) => (b.textContent ?? '').trim() === '책 붙이기')
+        if (box.querySelectorAll('[data-session-row]').length < 2 || attach.length < 1) return false
+        const label = [...document.querySelectorAll('*')].find(
+            (e) => e.children.length === 0 && (e.textContent ?? '').trim() === '읽은 날짜',
+        )
+        const nav = document.querySelector('nav[aria-label="메인 탭"]')
+        if (!label || !nav) throw new Error('잔디 제목·탭바 중 하나를 못 찾았다') // 문구가 바뀌면 엉뚱한 그림 대신 죽는다
+        const span = box.getBoundingClientRect().bottom - (label.getBoundingClientRect().top - 12)
+        return span <= nav.getBoundingClientRect().top - 16
+    })
+    if (fits) picked = i
+    else { await days.nth(i).click(); await settle(250) } // 한 번에 하나만 펼쳐지지만, 닫고 넘어가야 다음 날 좌표가 안 흔들린다
+}
+if (picked < 0) throw new Error('잔디와 한 컷에 드는 「측정 여러 건 + [책 붙이기]」 날이 없다')
+const layout = await days.nth(picked).evaluate((t) => {
     const label = [...document.querySelectorAll('*')].find(
         (e) => e.children.length === 0 && (e.textContent ?? '').trim() === '읽은 날짜',
     )
-    if (!label) throw new Error('기록 잔디 제목을 못 찾았다') // 문구가 바뀌면 엉뚱한 그림 대신 여기서 죽는다
+    const nav = document.querySelector('nav[aria-label="메인 탭"]')
+    const box = t.parentElement
     window.scrollTo(0, label.getBoundingClientRect().top + window.scrollY - 12)
+    const r = (el) => el.getBoundingClientRect()
+    if (r(box).bottom > r(nav).top - 16) throw new Error('펼친 날이 탭바에 가린다') // 스크롤이 끝까지 못 가면 여기서 잡힌다
+    return {
+        date: t.innerText.split('\n').slice(0, 2).join(' '),
+        rows: [...box.querySelectorAll('[data-session-row]')].map((x) => x.innerText.replace(/\n/g, ' | ')),
+        grassTitleTop: Math.round(r(label).top), dayTop: Math.round(r(t).top),
+        dayBottom: Math.round(r(box).bottom), navTop: Math.round(r(nav).top),
+    }
 })
-// 여러 권 읽은 첫 날을 펼쳐 둔다 — 더미만 접힌 채로는 「표지가 겹쳐 있다」까지만 보이고 이 기능의
-// 요점인 **책별로 얼마나 읽었나**가 그림에 없다. 펼침이 위쪽 레이아웃은 안 건드리므로 기준선은
-// 그대로 유효하다(아래 줄만 밀린다).
-await page.evaluate(() => {
-    const first = document.querySelector('button[data-day-toggle]')
-    if (!first) throw new Error('펼칠 수 있는 날이 없다') // 목 픽스처가 한 권짜리만 남으면 여기서 죽는다
-    first.click()
-})
+console.log('04 구도', JSON.stringify(layout)) // README 실측 좌표의 출처
 await settle()
 await shot('04-history')
 
