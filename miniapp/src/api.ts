@@ -288,6 +288,12 @@ export interface TimerState {
   activeBook?: BookOption | null;
   readingBooks: BookOption[];
   finishedBooks: BookOption[];
+  /**
+   * 읽고 싶어요 책 — 태깅·교체 시트 후보(`taggableBooks`)의 재료다. 태깅·교체가 이 책을 읽는 중으로 옮기므로
+   * 뮤테이션 응답에도 실려야 시트 후보가 낡지 않는다(R2). 옛 서버는 `TimerState`에 안 실어 선택 필드다
+   * (대시보드는 늘 싣는다 — {@link DashboardResponse}).
+   */
+  wantToReadBooks?: BookOption[];
   recentBookId: number | null;
   /** 리워드 광고로 밀린 하루를 지울 수 있는지 — 지울 빠뜨린 날이 남았는지를 서버가 판정해 준다(횟수 제한 없음). */
   debtWaiverAvailable: boolean;
@@ -386,6 +392,22 @@ export interface DailyRecord {
    * `undefined`로 온다(소비처는 `?? 0`). 전환이 끝나면 다음 응답이 곧 덮는다.
    */
   goalSeconds?: number;
+  /** 그날 측정 한 건씩 — 기록 화면 펼침과 [책 붙이기]의 좌표(R2). 옛 서버는 안 준다. */
+  sessions?: SessionRow[];
+}
+
+/**
+ * `DailyReadingRecord.SessionRow` — 측정 한 건. `start`·`end`는 유저 타임존 "HH:mm"이고, 수동 기록(`manual`)은
+ * 둘 다 `null`이다(그 시각은 실측이 아니라 서버 앵커라 화면에 찍으면 거짓이다). 순서는 서버가 정한다.
+ */
+export interface SessionRow {
+  id: number;
+  start: string | null;
+  end: string | null;
+  seconds: number;
+  bookId: number | null;
+  bookTitle: string | null;
+  manual: boolean;
 }
 
 /** `session.MonthlyReadingSection` — 최신 월 먼저, 각 달 안에서도 최신 일 먼저(서버가 그 순서로 준다). */
@@ -547,6 +569,13 @@ export const changeActiveBook = (bookId: number | null): Promise<TimerState> =>
   request('/api/sessions/active/book', { body: { bookId } });
 
 /**
+ * <b>끝난</b> 측정의 책 정하기 — 기록 화면의 붙이기·바꾸기·떼기(`null`) 한 문(R2). 진행 중이거나 수동 기록에
+ * `null`이면 409, 남의 세션·남의 책이면 404다. 자정 조각은 서버가 함께 고친다.
+ */
+export const setSessionBook = (sessionId: number, bookId: number | null): Promise<TimerState> =>
+  request(`/api/sessions/${sessionId}/book`, { body: { bookId } });
+
+/**
  * 공부 측정 시작·종료 — 독서와 <b>다른 엔드포인트</b>다(원장이 다르므로 문도 다르다).
  * 409 계약은 독서와 같다: 중복 시작 / 무세션 종료. 독서 측정 중에도 시작은 409다(이중 계측 금지).
  */
@@ -575,6 +604,10 @@ export const tagStudyBook = (sessionId: number, bookId: number): Promise<StudySt
  */
 export const changeActiveStudyBook = (bookId: number | null): Promise<StudyState> =>
   request('/api/study/active/book', { body: { bookId } });
+
+/** 끝난 공부 측정의 책 정하기 — 독서 {@link setSessionBook}의 공부판(원장이 다르니 문도 다르다). */
+export const setStudySessionBook = (sessionId: number, bookId: number | null): Promise<StudyState> =>
+  request(`/api/study/sessions/${sessionId}/book`, { body: { bookId } });
 
 export const setGoal = (dailyIncrementSeconds: number): Promise<void> =>
   request('/api/miniapp/goal', { body: { dailyIncrementSeconds } });
@@ -632,6 +665,8 @@ export const setStudyCheck = (
 export interface StudyDay {
   date: string;
   totalSeconds: number;
+  /** 그날 측정 한 건씩(공부엔 수동 기록이 없어 `manual`은 늘 false). 옛 서버는 안 준다. */
+  sessions?: SessionRow[];
 }
 
 /** `YYYY-MM` — Jackson이 `YearMonth`를 이 모양으로 직렬화한다. 최신 월 먼저, 달 안에서도 최신 일 먼저. */

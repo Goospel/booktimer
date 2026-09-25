@@ -228,6 +228,8 @@ const state = {
    * 옮길 것이 없다. `bookId`가 이미 차 있으면 재태깅 409의 근거다(한 번 잰 시간이 두 책에 쌓이는 것을 막는다).
    */
   studyLastStopped: null as { id: number; bookId: number | null; seconds: number } | null,
+  /** 마지막으로 끝낸 <b>독서</b> 측정 — 공부 `studyLastStopped`와 같은 규율(태깅이 그 초를 책으로 옮긴다, R2 P22). */
+  lastStopped: null as { id: number; bookId: number | null; seconds: number } | null,
   /**
    * 공부 일정 판정 — `YYYY-MM-DD` → 지킴/못 지킴. <b>키가 없으면 무기록</b>이라 서버의 「행 부재」와
    * 같은 3상태가 된다(모듈 메모리라 새로고침이 초기화다).
@@ -347,6 +349,8 @@ function timerState(): TimerState {
     activeBook: active === null ? null : toOption(active),
     readingBooks: bookOptions('READING'),
     finishedBooks: bookOptions('FINISHED'),
+    // 태깅·교체 응답에도 실린다(R2) — 읽고 싶어요 책을 붙이면 여기서 빠지고 readingBooks로 옮겨 간다.
+    wantToReadBooks: bookOptions('WANT_TO_READ'),
     // 서버는 `startedAt desc`로 고른다 — **활성 세션도 그 정렬에 들어가** 측정 중이면 그 책이 최신이다.
     // 상수로 두면 홈 여백 문이 측정 중에 엉뚱한 책을 가리켜(브라우저 실측 2026-08-16) 목이 거짓 신호를 준다.
     recentBookId: state.activeBookId ?? 1,
@@ -1139,12 +1143,14 @@ const routes: [Method, RegExp, (ctx: Ctx) => unknown][] = [
     state.todayReadSeconds += elapsed;
     const book = books.find((b) => b.id === state.activeBookId);
     if (book !== undefined) book.seconds += elapsed;
+    const sessionId = nextId();
+    state.lastStopped = { id: sessionId, bookId: state.activeBookId, seconds: elapsed };
     state.activeStartedAt = null;
     state.activeBookId = null;
     state.completedSessions += 1;
     // graph를 동봉해야 홈이 재조회 없이 잔디를 갱신한다(`StopResponse` 계약).
     return {
-      sessionId: nextId(),
+      sessionId,
       untagged,
       firstCompletedSession: state.completedSessions === 1,
       timer: timerState(),
@@ -1162,15 +1168,26 @@ const routes: [Method, RegExp, (ctx: Ctx) => unknown][] = [
     state.completedSessions += 1;
     return undefined; // 서버도 204라 본문이 없다
   }],
+  /**
+   * 종료 후 태깅 — 공부 목과 같은 규율: 책 검증이 먼저, 마지막 종료 측정만 좌표로 받고, 그 초를 책으로 옮긴다
+   * (R2 P22 — 전엔 시간을 안 옮겨 붙인 책의 누적이 그대로였다). 읽고 싶어요 책이면 읽는 중으로 옮긴다(서버와 같다).
+   */
   ['POST', /^\/api\/sessions\/(\d+)\/tag-book$/, ({ id, body }) => {
-    const book = books.find((b) => b.id === body.bookId);
-    return { sessionId: id, bookTitle: book?.title ?? '알 수 없는 책' };
+    const book = mustFindBook(body.bookId as number);
+    const last = state.lastStopped;
+    if (last === null || last.id !== id) throw new ApiError(404, '측정을 찾을 수 없습니다');
+    if (last.bookId !== null) throw new ApiError(409, '이미 책이 붙은 측정입니다');
+    book.seconds += last.seconds;
+    startReading(book);
+    state.lastStopped = { ...last, bookId: book.id };
+    return { sessionId: id, bookTitle: book.title };
   }],
   // 진행 중 세션의 대상 교체 — 세션 id를 안 받는다(서버가 「내 진행 중 세션」을 찾는다).
   // 409를 실물처럼 재현해야 「방금 끝난 뒤 바꾸기」가 목에서도 같은 말을 한다.
   ['POST', /^\/api\/sessions\/active\/book$/, ({ body }) => {
     if (state.activeStartedAt === null) throw new ApiError(409, '진행 중인 측정이 없습니다');
     state.activeBookId = (body.bookId as number | null) ?? null;
+    if (state.activeBookId !== null) startReading(mustFindBook(state.activeBookId));
     return timerState();
   }],
 
@@ -1716,6 +1733,13 @@ function mustFindBook(id: number): MyBookSummary {
   const book = books.find((b) => b.id === id);
   if (book === undefined) throw new ApiError(404, '없는 책이에요');
   return book;
+}
+
+/** 측정을 붙이면 읽고 싶어요 → 읽는 중(서버 `Book.startReading`) — 다른 상태는 그대로다. */
+function startReading(book: MyBookSummary): void {
+  if (book.status !== 'WANT_TO_READ') return;
+  book.status = 'READING';
+  book.statusLabel = STATUS_LABEL.READING;
 }
 
 /** 없는 책·남의 책은 서버처럼 404다(존재 비노출) — 목이 서버보다 무르면 그 경로를 못 밟는다. */

@@ -1,5 +1,5 @@
 import { Button, TDSMobileProvider } from '@toss/tds-mobile';
-import { isValidElement, type ReactNode } from 'react';
+import type { ReactNode } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -17,7 +17,7 @@ import {
   replayGuide,
 } from './screens/Settings';
 import { readFileSync } from 'node:fs';
-import { graph, stubLocalStorage, userAgent } from './test-fixtures';
+import { clickHandlerFor, graph, stubLocalStorage, userAgent } from './test-fixtures';
 
 vi.mock('./api', async (importOriginal) => ({
   ...(await importOriginal<typeof import('./api')>()),
@@ -346,29 +346,9 @@ describe('PC 웹 로그인 코드 섹션', () => {
   /**
    * 정적 렌더는 <b>마크업만</b> 본다 — 두 버튼의 `onClick`을 서로 바꿔 놓아도 HTML은 한 글자도 안 변해
    * 위 단언이 전부 통과한다. 사용자에겐 「웹 열기를 눌렀더니 코드만 새로 발급되고 브라우저는 안 열린다」인데
-   * 아무도 안 보는 셈이다. 그래서 마크업 대신 <b>엘리먼트 트리</b>를 직접 읽어 라벨↔핸들러를 확인한다.
+   * 아무도 안 보는 셈이다. 그래서 마크업 대신 <b>엘리먼트 트리</b>를 직접 읽어 라벨↔핸들러를 확인한다
+   * (`clickHandlerFor`는 공용 헬퍼 — test-fixtures).
    */
-  const textOf = (node: ReactNode): string => {
-    if (typeof node === 'string' || typeof node === 'number') return String(node);
-    if (Array.isArray(node)) return node.map(textOf).join('');
-    if (isValidElement(node)) return textOf((node.props as { children?: ReactNode }).children);
-    return '';
-  };
-
-  const clickHandlerFor = (node: ReactNode, label: string): (() => void) | undefined => {
-    if (Array.isArray(node)) {
-      for (const child of node) {
-        const hit = clickHandlerFor(child, label);
-        if (hit) return hit;
-      }
-      return undefined;
-    }
-    if (!isValidElement(node)) return undefined;
-    const props = node.props as { children?: ReactNode; onClick?: () => void };
-    if (typeof props.onClick === 'function' && textOf(props.children).includes(label)) return props.onClick;
-    return clickHandlerFor(props.children, label);
-  };
-
   it('두 버튼이 각자 제 핸들러에 걸려 있다 — 바꿔 걸어도 마크업은 그대로라 트리로만 보인다', () => {
     const onIssue = vi.fn();
     const onOpenWeb = vi.fn();

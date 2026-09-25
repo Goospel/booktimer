@@ -1755,3 +1755,45 @@ describe('대화 진입점 판정 (resolveChatMe · chatEntryOf)', () => {
     expect(updater('jieun')).toBe('jieun'); // App 책방이 이미 있으면 건드리지 않는다
   });
 });
+
+/**
+ * R2 PR-4 — 태깅·교체 시트의 후보와 실패 표시. 시트는 정적 렌더로 열린 상태에 닿지 못해(T-149) 게이트·배선을
+ * 소스로 잰다(주석을 걷고 — T-205). 후보 계산 자체는 `taggableBooks` 단위 테스트(home.test)가 맡는다.
+ */
+describe('태깅·교체 시트 배선 (R2)', () => {
+  const src = stripComments(readFileSync(new URL('./App.tsx', import.meta.url), 'utf8'));
+  const flat = src.replace(/\s+/g, ' ');
+
+  it('종료 게이트가 세 상태 후보를 센다 — 읽고 싶어요만 가진 사람에게도 시트가 뜬다(P8)', () => {
+    expect(flat).toContain('if (result.untagged && taggableBooks(dashboard).length > 0)');
+  });
+
+  it('읽는 중 0권 게이트가 남아 있지 않다', () => {
+    // 음성 판정 전용 — 위 양성 단언이 새 게이트의 존재를 못 박으므로 이 부재 단언은 공허하지 않다.
+    expect(flat).not.toContain('dashboard.readingBooks.length > 0');
+  });
+
+  it('태깅·교체 시트의 독서 목록이 taggableBooks다', () => {
+    expect(flat).toContain('books={tagging.study ? (study.books ?? []) : taggableBooks(dashboard)}');
+    expect(flat).toContain("books={mode === 'study' ? (study.books ?? []) : taggableBooks(dashboard)}");
+  });
+
+  it('태깅 실패는 시트 안에서 말한다 — 시트를 연 채 setTagError로(P7)', () => {
+    const tag = flat.slice(flat.indexOf('const tag = (book: BookOption)'), flat.indexOf('const changeBook ='));
+
+    expect(tag).toContain('setTagError(e.message)');
+    expect(flat).toContain('error={tagError}');
+  });
+
+  it('독서 태깅 성공 뒤 대시보드를 다시 받는다 — 읽고 싶어요 책이 읽는 중으로 옮겨 가 캐러셀에 선다(P10)', () => {
+    expect(flat).toContain('tagBook(tagging.sessionId, book.id).then(() => onShelfChanged())');
+  });
+
+  it('홈의 「책 바꾸기」가 교체 시트를 연다', () => {
+    expect(flat).toContain('onChangeActiveBook={() => setChanging(true)}');
+  });
+
+  it('서재가 0권에서 생기면 홈 선택을 homePickAfterShelf로 보정한다(P6-b)', () => {
+    expect(flat).toContain('homePickAfterShelf(');
+  });
+});

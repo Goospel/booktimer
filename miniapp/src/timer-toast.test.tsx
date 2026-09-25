@@ -210,6 +210,25 @@ describe('교체 시트 (ChangeBookSheet)', () => {
 
     expect(markup).toContain('책 없이');
   });
+
+  it('읽는 중이 아닌 후보 행엔 상태 라벨이 선다 — 교체 후보도 태깅처럼 세 상태다(R2)', () => {
+    const markup = render(
+      <ChangeBookSheet
+        books={[book(1, '데미안'), { ...book(4, '코스모스'), statusLabel: '읽고 싶어요' }]}
+        currentBookId={1}
+        disabled={false}
+        onPick={() => {}}
+        onClose={() => {}}
+      />,
+    );
+    const rowOf = (title: string) => {
+      const at = markup.indexOf('data-book-title="' + title + '"');
+      return markup.slice(markup.lastIndexOf('<button', at), markup.indexOf('</button>', at));
+    };
+
+    expect(rowOf('코스모스')).toContain('읽고 싶어요');
+    expect(rowOf('데미안')).not.toContain('읽고 싶어요');
+  });
 });
 
 /**

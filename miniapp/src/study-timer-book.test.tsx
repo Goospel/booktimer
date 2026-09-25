@@ -438,7 +438,8 @@ describe('배선 — 시트 두 장이 모드로 갈린다(소스)', () => {
   });
 
   it('시트 두 장의 재료가 모드로 갈린다 — 독서 책장으로 공부를 물으면 딴 서재가 뜬다', () => {
-    expect(code).toMatch(/tagging\.study \? \(study\.books \?\? \[\]\) : dashboard\.readingBooks/);
+    // 독서 쪽은 R2부터 세 상태 후보(taggableBooks) — 갈림 자체(study.books ↔ 독서 책장)는 그대로다.
+    expect(code).toMatch(/tagging\.study \? \(study\.books \?\? \[\]\) : taggableBooks\(dashboard\)/);
     expect(code).toMatch(/title=\{tagging\.study \? '무슨 책을 공부하셨나요\?'/);
     expect(code).toMatch(/mode === 'study' \? \(study\.activeBook\?\.id \?\? null\)/);
   });
