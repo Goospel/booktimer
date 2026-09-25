@@ -224,6 +224,8 @@ try {
   Assert-That 'REQ-08 · 허브 H1 · 이관 이력 절 · 트래커 링크' `
     ($hub.StartsWith("# 트러블슈팅 — 작업 중 만난 함정과 해결법`n") -and $hub.Contains("`n## 이관 이력`n") -and
      $hub.Contains('[troubleshooting-tracker.md](troubleshooting-tracker.md)')) "허브:`n$hub"
+  # 문구: 템플릿(goospel-claude-config#90)과 같게 — 규칙 불릿 제목이 legacy 면제도 함께 말한다.
+  Assert-That 'REQ-08 · 허브 규칙 제목에 guard·legacy 면제' ($hub.Contains('**4필드는 `guard:`·`legacy:`가 없는 항목에만 필수**')) '허브 규칙 불릿 제목이 guard 만 말한다'
   Assert-That 'REQ-08 · 목차가 검사기로 채워졌다(T-006 줄, 최신이 위)' `
     ($hub.Contains("- [T-007](troubleshooting/T-007.md) · 괄호 닫힌 제목`n- [T-006](troubleshooting/T-006.md) · 끊긴 행`n- [T-005](troubleshooting/T-005.md) · 닫는 괄호 없음`n")) "허브:`n$hub"
   $c = Invoke-Check $root
