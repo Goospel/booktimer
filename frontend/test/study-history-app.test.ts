@@ -127,17 +127,23 @@ describe('StudyHistoryApp — 기록에서 책 붙이기 (R2 PR-3)', () => {
     let shelfOk = true;
     let postOk = true;
     let postHold: Promise<void> | null = null; // 있으면 POST 응답을 그때까지 붙잡는다(경주 재현용)
+    let postReject = false; // 있으면 POST가 네트워크 오류로 거부된다(catch 경로)
 
     beforeEach(() => {
         posts = [];
         shelfOk = true;
         postOk = true;
         postHold = null;
+        postReject = false;
         vi.stubGlobal('fetch', vi.fn((url: string, opts?: { method?: string; body?: string; headers?: Record<string, string> }) => {
             if (opts?.method === 'POST') {
                 posts.push({ url, body: JSON.parse(opts.body ?? 'null'), headers: opts.headers ?? {} });
                 const ok = postOk;
-                return (postHold ?? Promise.resolve()).then(() => ({ ok, status: ok ? 200 : 409, json: async () => ({}) }));
+                const reject = postReject;
+                return (postHold ?? Promise.resolve()).then(() => {
+                    if (reject) throw new TypeError('Failed to fetch');
+                    return { ok, status: ok ? 200 : 409, json: async () => ({}) };
+                });
             }
             if (url.includes('/api/study/books')) {
                 return Promise.resolve({ ok: shelfOk, status: shelfOk ? 200 : 500, json: async () => SHELF, text: async () => '' });
@@ -230,6 +236,16 @@ describe('StudyHistoryApp — 기록에서 책 붙이기 (R2 PR-3)', () => {
         await vi.waitFor(() => expect(calls('/api/study/history')).toBe(2));
         await w.vm.$nextTick();
         expect(w.find('.book-sheet-title').text()).toBe('다른 책으로 바꿀까요?');
+    });
+
+    test('먼저 보낸 요청이 네트워크 오류여도 새로 연 시트엔 오류를 붙이지 않는다', async () => {
+        postReject = true;
+        const w = await raceToSecondRow(true);
+        await new Promise((r) => setTimeout(r, 0));
+        await w.vm.$nextTick();
+        expect(w.find('.book-sheet-panel').exists()).toBe(true); // 시트는 열려 있다(양성)
+        expect(calls('/api/study/history')).toBe(1);             // 성공 경로가 아니라 catch를 탔다
+        expect(w.find('.book-sheet-error').exists()).toBe(false);
     });
 
     test('공부 서재를 못 받았으면 시트 안에서 「책 목록을 불러오지 못했어요」 — 서재가 비었다고 단언하지 않는다', async () => {
