@@ -1,64 +1,45 @@
 #!/usr/bin/env bash
-# TDD test for troubleshooting TOC auto-generation.
-#  - .claude/scripts/rebuild-troubleshooting-toc.ps1: regenerates the
-#    "## 📑 목차" section from "## T-###" body headings (GitHub anchor rules).
-#    Echoes 'changed' | 'unchanged'. Non-fatal on missing TOC section.
-#  - .claude/hooks/require-troubleshooting-toc.ps1: PreToolUse gate that, on
-#    `git commit` with claude-docs/troubleshooting.md staged, runs the rebuild
-#    and re-adds the file if the TOC changed (auto-fix, mirrors rebuild-memory-index).
+# TDD test for the troubleshooting commit gate after the split (2026-09-25).
+#  .claude/hooks/require-troubleshooting-toc.ps1 (PreToolUse, `git commit`):
+#   - hub claude-docs/troubleshooting.md or any claude-docs/troubleshooting/ file staged
+#     -> runs scripts/rebuild-troubleshooting-index.ps1 -HubPath <hub> (rebuild mode)
+#        exit 0 -> re-adds the regenerated hub (auto-fix, REQ-13)
+#        exit 1 (INVALID) -> BLOCK exit 2 with the checker output (REQ-14)
+#        no `INDEX-CHECK:` marker -> BLOCK exit 2 (the check did not run, REQ-14)
+#   - old single-file rows added to the hub (`| date | T-###` / `## T-###.`) -> BLOCK exit 2 (REQ-15)
+#   - broken JSON / not a commit / nothing staged / checker missing -> exit 0 (fail-open, REQ-16)
+# Fixtures use the real checker copied from scripts/ (the one the hook will run).
 
-SCRIPT=".claude/scripts/rebuild-troubleshooting-toc.ps1"
+CHECKER="scripts/rebuild-troubleshooting-index.ps1"
 HOOK=".claude/hooks/require-troubleshooting-toc.ps1"
 FAILED=0
 TMPS=()
 cleanup() { for d in "${TMPS[@]}"; do rm -rf "$d" 2>/dev/null; done; }
 trap cleanup EXIT
+ERRF=$(mktemp); TMPS+=("$ERRF")
 
-# Fixture: TOC lists T-001/T-002 only; body has T-001/002/003 (003 has special chars).
-FIXTURE_STALE=$'# 트러블슈팅\n\n## 📑 목차\n\n- [T-001. 첫째](#t-001-첫째)\n- [T-002. 둘째](#t-002-둘째)\n\n---\n\n## T-001. 첫째\n\n본문1\n\n## T-002. 둘째\n\n본문2\n\n## T-003. `git`/특수 > 문자\n\n본문3\n'
-# Fully-synced fixture (TOC already has all 3 with correct anchors).
-FIXTURE_SYNCED=$'# 트러블슈팅\n\n## 📑 목차\n\n- [T-001. 첫째](#t-001-첫째)\n- [T-002. 둘째](#t-002-둘째)\n- [T-003. `git`/특수 > 문자](#t-003-git특수--문자)\n\n---\n\n## T-001. 첫째\n\n본문1\n\n## T-002. 둘째\n\n본문2\n\n## T-003. `git`/특수 > 문자\n\n본문3\n'
-
-winpath() { cygpath -w "$1"; }
 check() {
     local label="$1" expected="$2" got="$3"
     if [ "$got" = "$expected" ]; then echo "PASS: $label"; else echo "FAIL: $label (expected [$expected], got [$got])"; FAILED=1; fi
 }
 
-# ── Case 1: stale TOC → regenerate adds T-003 with correct special-char anchor ──
-f=$(mktemp -d); TMPS+=("$f")
-printf '%s' "$FIXTURE_STALE" > "$f/ts.md"
-out=$(powershell.exe -NoProfile -File "$SCRIPT" -Path "$(winpath "$f/ts.md")" 2>/dev/null | tr -d '\r' | tr -d '\n')
-check "stale → stdout 'changed'" "changed" "$out"
-grep -qF '[T-003. `git`/특수 > 문자](#t-003-git특수--문자)' "$f/ts.md" && r=ok || r=missing
-check "stale → T-003 line with correct GitHub anchor" "ok" "$r"
-n=$(grep -c '^## T-' "$f/ts.md")
-check "stale → body headings intact (3)" "3" "$n"
+HUB=$'# 트러블슈팅\n\n## 항목 목차 (자동 생성 — 직접 편집 금지)\n\n<!-- INDEX:START -->\n<!-- INDEX:END -->\n'
+item() {  # id summary
+    printf -- '---\nsummary: %s\n---\n\n# %s · %s\n\n- **증상**: a\n- **원인**: b\n- **해결**: c\n- **재발방지**: d\n' "$2" "$1" "$2"
+}
 
-# ── Case 2: synced TOC → no-op, file byte-identical ──
-f=$(mktemp -d); TMPS+=("$f")
-printf '%s' "$FIXTURE_SYNCED" > "$f/ts.md"
-before=$(md5sum "$f/ts.md" | cut -d' ' -f1)
-out=$(powershell.exe -NoProfile -File "$SCRIPT" -Path "$(winpath "$f/ts.md")" 2>/dev/null | tr -d '\r' | tr -d '\n')
-after=$(md5sum "$f/ts.md" | cut -d' ' -f1)
-check "synced → stdout 'unchanged'" "unchanged" "$out"
-check "synced → file byte-identical" "$before" "$after"
-
-# ── Case 3: no '## 📑 목차' section → fail-soft, body untouched ──
-f=$(mktemp -d); TMPS+=("$f")
-printf '%s' $'# 트러블슈팅\n\n## T-001. 첫째\n\n본문\n' > "$f/ts.md"
-before=$(md5sum "$f/ts.md" | cut -d' ' -f1)
-powershell.exe -NoProfile -File "$SCRIPT" -Path "$(winpath "$f/ts.md")" >/dev/null 2>&1
-after=$(md5sum "$f/ts.md" | cut -d' ' -f1)
-check "no TOC section → file untouched" "$before" "$after"
-
-# ── Hook setup: throwaway git repo with troubleshooting.md + the script copied in ──
-setup_repo_with_script() {
-    local content="$1" d; d=$(mktemp -d); TMPS+=("$d")
+# Throwaway repo: current hub + T-001, committed. Echoes the path.
+setup_repo() {
+    local d; d=$(mktemp -d); TMPS+=("$d")
     git -C "$d" init -q; git -C "$d" config user.email t@t.t; git -C "$d" config user.name tester
-    mkdir -p "$d/claude-docs" "$d/.claude/scripts"
-    printf '%s' "$content" > "$d/claude-docs/troubleshooting.md"
-    cp "$SCRIPT" "$d/.claude/scripts/"
+    git -C "$d" config core.autocrlf false
+    mkdir -p "$d/claude-docs/troubleshooting" "$d/scripts"
+    cp "$CHECKER" "$d/scripts/"
+    printf '%s' "$HUB" > "$d/claude-docs/troubleshooting.md"
+    item T-001 '첫째' > "$d/claude-docs/troubleshooting/T-001.md"
+    powershell.exe -NoProfile -ExecutionPolicy Bypass -File "$(cygpath -w "$d/$CHECKER")" \
+        -HubPath "$(cygpath -w "$d/claude-docs/troubleshooting.md")" >/dev/null 2>&1
+    git -C "$d" add -A; git -C "$d" commit -q -m init
     echo "$d"
 }
 run_hook() {
@@ -67,50 +48,100 @@ run_hook() {
     esc_cmd=$(printf '%s' "$cmd" | sed 's/\\/\\\\/g; s/"/\\"/g')
     esc_cwd=$(printf '%s' "$win_cwd" | sed 's/\\/\\\\/g')
     printf '{"tool_input":{"command":"%s"},"cwd":"%s"}' "$esc_cmd" "$esc_cwd" \
-        | powershell.exe -NoProfile -File "$HOOK" >/dev/null 2>&1
+        | timeout 90 powershell.exe -NoProfile -File "$HOOK" >/dev/null 2>"$ERRF"
     echo $?
 }
+staged_hub_has() { git -C "$1" show :claude-docs/troubleshooting.md | grep -qF "$2" && echo yes || echo no; }
+# Byte-level (UTF-8 hex) containment — Git Bash grep can silently miss Korean patterns.
+err_has_utf8() {
+    local h n; h=$(od -An -tx1 -v "$ERRF" | tr -d ' \n'); n=$(printf '%s' "$1" | od -An -tx1 -v | tr -d ' \n')
+    [[ "$h" == *"$n"* ]] && echo yes || echo no
+}
+C='git commit -F .commit-msg-tmp'
 
-# ── Case 4: staged stale troubleshooting.md + git commit → hook re-adds fixed TOC ──
-d=$(setup_repo_with_script "$FIXTURE_STALE"); git -C "$d" add -A
-check "hook: staged stale ts.md → exit 0" "0" "$(run_hook 'git commit -F .commit-msg-tmp' "$d")"
-git -C "$d" show :claude-docs/troubleshooting.md | grep -qF '#t-003-git특수--문자' && r=ok || r=missing
-check "hook: regenerated TOC is staged" "ok" "$r"
+# ── REQ-13: new T file staged -> hub index regenerated and staged ──
+d=$(setup_repo)
+item T-002 '둘째' > "$d/claude-docs/troubleshooting/T-002.md"; git -C "$d" add claude-docs/troubleshooting/T-002.md
+check "[REQ-13] T file staged -> exit 0" "0" "$(run_hook "$C" "$d")"
+check "[REQ-13] T file staged -> staged hub lists T-002" "yes" "$(staged_hub_has "$d" '[T-002](troubleshooting/T-002.md)')"
 
-# ── Case 4b: same, but Korean right before the closing quote (stdin UTF-8, no fail-open) ──
-d=$(setup_repo_with_script "$FIXTURE_STALE"); git -C "$d" add -A
-run_hook 'git commit -F .commit-msg-tmp # 테스트' "$d" >/dev/null
-git -C "$d" show :claude-docs/troubleshooting.md | grep -qF '#t-003-git특수--문자' && r=ok || r=missing
-check "hook: Korean in command → regenerated TOC still staged" "ok" "$r"
+# ── REQ-13: same with Korean right before the closing quote (UTF-8 stdin, no fail-open) ──
+d=$(setup_repo)
+item T-002 '둘째' > "$d/claude-docs/troubleshooting/T-002.md"; git -C "$d" add claude-docs/troubleshooting/T-002.md
+run_hook "$C # 한글" "$d" >/dev/null
+check "[REQ-13] Korean in command -> staged hub still lists T-002" "yes" "$(staged_hub_has "$d" '[T-002](troubleshooting/T-002.md)')"
 
-# ── Case 5: troubleshooting.md NOT staged → pass (no-op) ──
-d=$(setup_repo_with_script "$FIXTURE_STALE")
+# ── REQ-13 control: nothing troubleshooting-related staged -> exit 0, hub untouched ──
+d=$(setup_repo)
+item T-002 '둘째' > "$d/claude-docs/troubleshooting/T-002.md"   # present but NOT staged
 printf 'x\n' > "$d/other.txt"; git -C "$d" add other.txt
-check "hook: ts.md not staged → exit 0" "0" "$(run_hook 'git commit -F .commit-msg-tmp' "$d")"
+check "[REQ-13 ctrl] not staged -> exit 0" "0" "$(run_hook "$C" "$d")"
+check "[REQ-13 ctrl] not staged -> staged hub unchanged" "no" "$(staged_hub_has "$d" 'T-002')"
 
-# ── Case 6: non-commit command → pass ──
-d=$(setup_repo_with_script "$FIXTURE_STALE"); git -C "$d" add -A
-check "hook: git status (non-commit) → exit 0" "0" "$(run_hook 'git status' "$d")"
+# ── REQ-13: [Console]::OutputEncoding setter throws (no console: FreeConsole -> "handle is invalid")
+#    -> gate still runs (exit 0 + hub regenerated), not an uncaught exit 1 that skips the whole gate.
+#    PowerShell allocates a hidden console before any native command, so `git` is shadowed by a
+#    function (fixed staged list) to keep the process console-less up to the setter. ──
+NOCON=$(mktemp -d); TMPS+=("$NOCON")
+cat > "$NOCON/run.ps1" <<'EOF'
+param([string]$Hook)
+function global:git { if ($args -contains '--name-only') { 'claude-docs/troubleshooting/T-002.md' } }
+Add-Type -Namespace W -Name K -MemberDefinition '[DllImport("kernel32.dll")] public static extern bool FreeConsole();'
+[void][W.K]::FreeConsole()
+try { & $Hook; exit $LASTEXITCODE } catch { [Console]::Error.WriteLine("UNCAUGHT: $($_.Exception.Message)"); exit 1 }
+EOF
+d=$(setup_repo)
+item T-002 '둘째' > "$d/claude-docs/troubleshooting/T-002.md"
+got=$(printf '{"tool_input":{"command":"%s"},"cwd":"%s"}' "$C" "$(cygpath -w "$d" | sed 's/\\/\\\\/g')" \
+    | timeout 90 powershell.exe -NoProfile -File "$(cygpath -w "$NOCON/run.ps1")" -Hook "$(cygpath -w "$PWD/$HOOK")" >/dev/null 2>"$ERRF"; echo $?)
+check "[REQ-13] setter throws (no console) -> exit 0" "0" "$got"
+grep -qF '[T-002](troubleshooting/T-002.md)' "$d/claude-docs/troubleshooting.md" && r=yes || r=no
+check "[REQ-13] setter throws (no console) -> checker ran, hub lists T-002" "yes" "$r"
 
-# ── Case 7: broken JSON → fail-open ──
+# ── REQ-14: T file without summary -> exit 2, checker output passed on ──
+d=$(setup_repo)
+printf -- '---\npromoted: x\n---\n\n# T-002 · 둘째\n' > "$d/claude-docs/troubleshooting/T-002.md"
+git -C "$d" add claude-docs/troubleshooting/T-002.md
+check "[REQ-14] summary-less T file -> exit 2" "2" "$(run_hook "$C" "$d")"
+grep -qF 'INDEX-CHECK: INVALID' "$ERRF" && r=yes || r=no
+check "[REQ-14] block message carries checker output (INDEX-CHECK: INVALID)" "yes" "$r"
+check "[REQ-14] checker's Korean/symbols reach stderr intact (항목 검사 실패 — / ✗)" "yes yes" \
+    "$(err_has_utf8 '항목 검사 실패 — ') $(err_has_utf8 '  ✗ ')"
+
+# ── REQ-14: checker that prints no marker -> exit 2 (the check did not run) ──
+d=$(setup_repo)
+printf 'param([string]$HubPath)\nexit 0\n' > "$d/$CHECKER"
+item T-002 '둘째' > "$d/claude-docs/troubleshooting/T-002.md"; git -C "$d" add claude-docs/troubleshooting/T-002.md
+check "[REQ-14] checker without INDEX-CHECK marker -> exit 2" "2" "$(run_hook "$C" "$d")"
+
+# ── REQ-15: old table row added to the hub -> exit 2 with the new-path message ──
+d=$(setup_repo)
+printf '| 2026-09-25 | T-002 (**옛 형식 행** / 증상: x) |\n' >> "$d/claude-docs/troubleshooting.md"
+git -C "$d" add claude-docs/troubleshooting.md
+check "[REQ-15] hub + old table row -> exit 2" "2" "$(run_hook "$C" "$d")"
+grep -qF 'claude-docs/troubleshooting/T-###.md' "$ERRF" && r=yes || r=no
+check "[REQ-15] block message names claude-docs/troubleshooting/T-###.md" "yes" "$r"
+check "[REQ-15] quoted old row keeps its Korean intact" "yes" "$(err_has_utf8 'T-002 (**옛 형식 행** / 증상: x)')"
+
+# ── REQ-15: old heading added to the hub -> exit 2 ──
+d=$(setup_repo)
+printf '\n## T-002. 옛 헤딩\n\n본문\n' >> "$d/claude-docs/troubleshooting.md"
+git -C "$d" add claude-docs/troubleshooting.md
+check "[REQ-15] hub + old ## T-### heading -> exit 2" "2" "$(run_hook "$C" "$d")"
+
+# ── REQ-15 control: plain sentence added to the hub -> passes (exit 0) ──
+d=$(setup_repo)
+printf '\n일반 문장 한 줄.\n' >> "$d/claude-docs/troubleshooting.md"
+git -C "$d" add claude-docs/troubleshooting.md
+check "[REQ-15 ctrl] hub + plain sentence -> exit 0" "0" "$(run_hook "$C" "$d")"
+
+# ── REQ-16: fail-open paths ──
+d=$(setup_repo)
+item T-002 '둘째' > "$d/claude-docs/troubleshooting/T-002.md"; git -C "$d" add -A
+check "[REQ-16] git status (non-commit) -> exit 0" "0" "$(run_hook 'git status' "$d")"
 got=$(echo "not-json" | powershell.exe -NoProfile -File "$HOOK" >/dev/null 2>&1; echo $?)
-check "hook: broken JSON → fail-open exit 0" "0" "$got"
-
-# ── Case 8: BOM-prefixed stale → changed, original BOM preserved ──
-f=$(mktemp -d); TMPS+=("$f")
-printf '\xef\xbb\xbf%s' "$FIXTURE_STALE" > "$f/ts.md"
-out=$(powershell.exe -NoProfile -File "$SCRIPT" -Path "$(winpath "$f/ts.md")" 2>/dev/null | tr -d '\r' | tr -d '\n')
-check "BOM stale → 'changed'" "changed" "$out"
-b3=$(head -c3 "$f/ts.md" | od -An -tx1 | tr -d ' \n')
-check "BOM stale → BOM preserved (efbbbf)" "efbbbf" "$b3"
-
-# ── Case 9: BOM-prefixed synced → unchanged, byte-identical ──
-f=$(mktemp -d); TMPS+=("$f")
-printf '\xef\xbb\xbf%s' "$FIXTURE_SYNCED" > "$f/ts.md"
-before=$(md5sum "$f/ts.md" | cut -d' ' -f1)
-out=$(powershell.exe -NoProfile -File "$SCRIPT" -Path "$(winpath "$f/ts.md")" 2>/dev/null | tr -d '\r' | tr -d '\n')
-after=$(md5sum "$f/ts.md" | cut -d' ' -f1)
-check "BOM synced → 'unchanged'" "unchanged" "$out"
-check "BOM synced → byte-identical" "$before" "$after"
+check "[REQ-16] broken JSON -> exit 0" "0" "$got"
+rm "$d/$CHECKER"
+check "[REQ-16] checker missing -> exit 0" "0" "$(run_hook "$C" "$d")"
 
 exit $FAILED
