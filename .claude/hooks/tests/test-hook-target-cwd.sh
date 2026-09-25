@@ -154,10 +154,10 @@ check '[W-M5 RED] msg: cd T/sub && commit -> -F read from sub'          2 "$(run
 
 # -- require-troubleshooting-toc.ps1: auto-fix must land in the target's index
 toc_repo() {
-    init_repo "$1"; mkdir -p "$1/claude-docs" "$1/.claude/scripts"
+    init_repo "$1"; mkdir -p "$1/claude-docs" "$1/scripts"
     printf '# ts\n' > "$1/claude-docs/troubleshooting.md"
-    printf 'param([string]$Path)\nAdd-Content -Path $Path -Value "REBUILT-MARK"\nWrite-Output "changed"\n' \
-        > "$1/.claude/scripts/rebuild-troubleshooting-toc.ps1"
+    printf 'param([string]$HubPath)\nAdd-Content -Path $HubPath -Value "REBUILT-MARK"\nWrite-Output "INDEX-CHECK: REBUILT (0 entries)"\n' \
+        > "$1/scripts/rebuild-troubleshooting-index.ps1"
     git -C "$1" add claude-docs/troubleshooting.md
 }
 marked() { git -C "$1" show :claude-docs/troubleshooting.md 2>/dev/null | grep -q REBUILT-MARK && echo yes || echo no; }
