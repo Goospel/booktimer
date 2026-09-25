@@ -49,7 +49,6 @@ if (-not $Force -and @(Get-ChildItem $OutDir -Filter 'T-*.md' -File -ErrorAction
 }
 
 # ── 1. 읽기 (전부 메모리에 — HubOut 이 Source 와 같아도 된다) ─────────────────
-$srcBytes = [System.IO.File]::ReadAllBytes($Source)
 $raw = [System.IO.File]::ReadAllText($Source, [System.Text.Encoding]::UTF8).TrimStart([char]0xFEFF).Replace("`r`n", "`n")
 $lines = $raw.Split("`n")
 
@@ -197,7 +196,7 @@ if ($residual.Count -gt 0) { $tracker += @('', '## 누적 갱신 잔여', '') + 
 $ids = @($items.Keys | Sort-Object)
 $max = [int]$ids[-1]
 $gaps = @(1..$max | ForEach-Object { 'T-{0:D3}' -f $_ } | Where-Object { -not $items.ContainsKey($_.Substring(2)) })
-$kb = [Math]::Round($srcBytes.Length / 1KB)
+$kb = [Math]::Floor($utf8.GetByteCount($raw) / 1000)   # LF 정규화 기준 — CRLF 체크아웃에서 돌려도 같은 허브가 나온다
 $nTable = $items.Count - $nHeading
 $hub = @(
     '# 트러블슈팅 — 작업 중 만난 함정과 해결법',
