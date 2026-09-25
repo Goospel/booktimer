@@ -219,14 +219,17 @@ describe('StudyHistoryApp — 기록에서 책 붙이기 (R2 PR-3)', () => {
         await w.find('.book-sheet-close').trigger('click');
         await w.findAll('.record-session button')[1].trigger('click');
         expect(w.find('.book-sheet-title').text()).toBe('다른 책으로 바꿀까요?');
+        await vi.waitFor(() => expect((w.find('.book-sheet-book').element as HTMLButtonElement).disabled).toBe(true));
         release();
         return w;
     }
+    // 먼저 보낸 요청이 끝났다는 양성 신호 — 대기 중엔 새 시트의 책 버튼도 잠겨 있다가(assignPending) finally에서 풀린다.
+    const firstSettled = (w: Awaited<ReturnType<typeof raceToSecondRow>>) =>
+        vi.waitFor(() => expect((w.find('.book-sheet-book').element as HTMLButtonElement).disabled).toBe(false));
 
     test('먼저 보낸 요청이 실패해도 새로 연 다른 줄의 시트엔 오류를 붙이지 않는다', async () => {
         const w = await raceToSecondRow(false);
-        await new Promise((r) => setTimeout(r, 0));
-        await w.vm.$nextTick();
+        await firstSettled(w);
         expect(w.find('.book-sheet-panel').exists()).toBe(true);
         expect(w.find('.book-sheet-error').exists()).toBe(false);
     });
@@ -241,10 +244,9 @@ describe('StudyHistoryApp — 기록에서 책 붙이기 (R2 PR-3)', () => {
     test('먼저 보낸 요청이 네트워크 오류여도 새로 연 시트엔 오류를 붙이지 않는다', async () => {
         postReject = true;
         const w = await raceToSecondRow(true);
-        await new Promise((r) => setTimeout(r, 0));
-        await w.vm.$nextTick();
+        await firstSettled(w);
         expect(w.find('.book-sheet-panel').exists()).toBe(true); // 시트는 열려 있다(양성)
-        expect(calls('/api/study/history')).toBe(1);             // 성공 경로가 아니라 catch를 탔다
+        expect(calls('/api/study/history')).toBe(1);             // 성공 경로는 타지 않았다
         expect(w.find('.book-sheet-error').exists()).toBe(false);
     });
 

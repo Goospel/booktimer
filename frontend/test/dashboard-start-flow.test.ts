@@ -57,7 +57,7 @@ function fetchImpl(url: string, opts?: { method?: string; body?: string }) {
     if (url.includes('/api/dashboard')) dashboardCalls++;
     return Promise.resolve({ ok: true, status: 200, json: async () => ({ ...DASHBOARD }) });
 }
-beforeEach(() => { startBody = null; startStatus = 200; dashboardCalls = 0;vi.stubGlobal('fetch', vi.fn((u: string, o?: { method?: string; body?: string }) => fetchImpl(u, o))); });
+beforeEach(() => { startBody = null; startStatus = 200; dashboardCalls = 0; vi.stubGlobal('fetch', vi.fn((u: string, o?: { method?: string; body?: string }) => fetchImpl(u, o))); });
 afterEach(() => { vi.unstubAllGlobals(); document.body.innerHTML = ''; });
 
 describe('DashboardApp — 측정 시작 시트 플로우 (발견 1)', () => {

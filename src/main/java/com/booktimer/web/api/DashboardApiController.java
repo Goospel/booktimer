@@ -40,7 +40,7 @@ import java.util.List;
  *
  * <p>에러 계약(상태코드만 — {@code GlobalExceptionHandler}가 ResponseStatusException을 잡아 코드 보존):
  * 404 = bookId가 '있으나' 소유 아님·미존재(IDOR 마스킹) — bookId를 아예 안 주면 책 미지정 시작 허용(발견 1).
- * 409 = 중복 start / 무세션 stop. 403 = CSRF 누락.
+ * 409 = 중복 start / 무세션 stop — start는 진행 중 측정(독서·공부)을 bookId 검사보다 먼저 봐 404보다 409가 앞선다. 403 = CSRF 누락.
  */
 @RestController
 public class DashboardApiController {
