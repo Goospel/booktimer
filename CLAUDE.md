@@ -119,7 +119,6 @@
      ```
      🤖 Generated with [Claude Code](https://claude.com/claude-code)
      ```
-   - PR body 작성 시 글로벌 규칙대로 **troubleshooting sweep** 수행(학습 노트 sweep은 2026-08-18 폐기)
    - **보고 감사 — 숫자는 보고 시점에 다시 잰다 (필수)** — PR body·답변에 넣는 모든 수치(테스트 건수·검출 건수·측정값·건드린 파일 수)는
      **그 자리에서 재측정**하거나 「미검증」이라 표시한다. 기억으로 적은 숫자가 실제와 어긋나는 것은 가장 조용한 보고 결함이다 —
      홈 피드 「29종 0건」은 **내가 고른 깨끗한 값으로만 검증한** 숫자가 배포까지 간 경우였다.
@@ -200,7 +199,7 @@ powershell -File .claude/scripts/remove-worktree.ps1 ../BookTimer-<task>   # 또
 
 - **자기 cwd 워크트리를 절대 삭제하지 않는다** — `remove-worktree`·`git worktree remove`를 자기 자신에게 쓰면 cwd가 사라져 세션이 마비된다(실제 재발 2026-06-30 — [참조](claude-docs/claude-md-reference.md)). 위 「머지 후 정리 — remove-worktree」는 **일회성 세션 전용**이다 — 이 구분이 핵심.
 - **워크트리는 재사용**: 머지 후 같은 폴더에서 `git fetch origin && git checkout -b <다음브랜치> origin/main`으로 다음 작업 시작. 정리는 옛 브랜치 로컬 삭제(`git branch -D`)까지만, 폴더·cwd는 보존.
-- 작업이 끝나면 종료하지 말고 **"완료 — 다음 작업 대기 중"**으로 대기. (soft 규칙 — 2회+ 재발 시 훅 승격, 트래커는 troubleshooting 상단 표.)
+- 작업이 끝나면 종료하지 말고 **"완료 — 다음 작업 대기 중"**으로 대기. (soft 규칙 — 2회+ 재발 시 훅 승격, 회차는 해당 T 파일의 회차 줄.)
 
 ### worktree로도 남는 공유 자원 (따로 조율)
 
@@ -330,29 +329,22 @@ Claude Code 는 그 자식 프로세스 종료를 기다릴 뿐이라 **코어 �
 
 ---
 
-## 🧯 트러블슈팅 활용 — `claude-docs/troubleshooting.md`
+## 🧯 트러블슈팅 활용 — `claude-docs/troubleshooting/T-###.md`
 
-작업 중 만난 함정과 해결법은 [claude-docs/troubleshooting.md](claude-docs/troubleshooting.md) 에 `T-###` 로 누적한다. **같은 실수 두 번 반복 방지**가 목적.
+함정과 해결법은 항목 1건 = 파일 1개로 누적한다(허브 [claude-docs/troubleshooting.md](claude-docs/troubleshooting.md)는 자동 목차 — 손대지 않는다). 쓰기 규칙은 글로벌 CLAUDE.md 「작업 추적 3종」이 정한다: 먼저 가드로 막고 `summary:`+`guard:` 두 줄, 문서로만 막을 수 있을 때만 4필드, 2회차는 새 번호 대신 그 파일 끝 `- **N회차**` 줄 + `/hookify`.
 
-### 작업 시작 / 디버깅 전 — 먼저 참고
+### 작업 시작 / 디버깅 전 — 먼저 검색
 
-- 빌드·git·PowerShell·테스트 등에서 막히면, **추측하기 전에 먼저** `troubleshooting.md` 를 확인한다.
-- 이미 기록된 트랩이면 그 해법을 그대로 적용한다 (두 번 헤매지 않기).
-- 옛 개념 노트 `claude-docs/learning-notes.md` 는 **아카이브**다(아래 폐기 안내) — 검색해서 읽는 건 유용하니 막지 않되, **새로 쓰지 않는다**.
+- 빌드·git·PowerShell·테스트 등에서 막히면 **추측하기 전에** `summary:`를 검색한다 — `Select-String -Path claude-docs/troubleshooting/T-*.md -Pattern '^summary:' | Select-String '<증상 키워드>'`. 허브는 Read하지 않는다(목차뿐, 길다).
+- 이미 기록된 트랩이면 그 해법을 그대로 적용한다.
+- 옛 개념 노트 `claude-docs/learning-notes.md`는 **아카이브**다(2026-08-18 폐기) — 검색해 읽는 건 유용하니 막지 않되 새로 쓰지 않는다. 그 안의 `troubleshooting.md#t-###` 앵커 링크는 이관(2026-09-25)으로 깨져 있다 — 번호로 `troubleshooting/T-###.md`를 연다.
 
-### 디버깅 후 — 자동 sweep
+### 디버깅 후
 
-1분 이상 헤맨 문제를 해결했으면 **`T-###` 후보 하나를 점검**한다 — "이렇게 하지 마라"(재발 방지 절차)와
-"왜 이렇게 동작하는가"(개념)를 **한 항목 안에서** 다룬다. 개념은 `T-###` 의 *원인* 필드가 담는 몫이다.
-
-> **⚠️ 학습 노트(`N-###`) 파이프라인은 폐기했다 (2026-08-18 사용자 확정).** 함정 없는 개념만은 이제 안 남긴다.
-> 파일·기존 상호참조는 아카이브로 보존하므로, 이 문서의 `N-###` 링크는 낡은 게 아니라 **의도된 포인터**다(N-032·N-055·N-077 등).
-
-- 해결 직후, 답변 끝에 **"🧯 troubleshooting 추가 후보 — `<한 줄 요약>`. 박을까?"** 를 짧게 제안한다.
-- 사용자가 OK 하면 즉시 `troubleshooting.md` 에 `T-###` 로 추가한다.
-- PR 머지 직전에도 sweep 을 함께 수행한다 (Git 워크플로 4번).
-- **자주 재발(2회 이상)하는 트랩은 `troubleshooting.md`(참조용)에 더해 이 `CLAUDE.md`(항상 로드)의 해당 섹션에도 승격**한다 — 매번 troubleshooting 을 안 펼쳐도 바로 대처하게. (예: git/gradle 무한 hang → 「🧪 TDD → ⚠️ 커밋이 무한 hang 하면」, T-078. 사용자 합의: 2026-06-22.)
-- **재발 카운팅 = `troubleshooting.md` 상단 「🔁 재발·승격 트래커」 표로 한다 (필수).** `T-###` 를 새로 쓸 때 같은 트랩의 재발이면 ① 항목 끝에 `N회차(이전 T-### 재발)` 명시 ② 트래커 표의 회차·승격상태 갱신(신규 1회는 표에 안 올리고 2회째에 군으로). 표에서 **2회+인데 미승격**이 보이면 승격 — **prose 한 줄보다 하드픽스(훅·스크립트) 우선**. 답변에서도 재발이면 "이건 N회차"를 짚는다. (배경은 [참조](claude-docs/claude-md-reference.md).)
+- 해결 직후 답변 끝에 **"🧯 troubleshooting 추가 후보 — `<한 줄 요약>`. 박을까?"**를 짧게 제안한다. OK면 `claude-docs/troubleshooting/T-###.md`를 만들고 `powershell -ExecutionPolicy Bypass -File scripts/rebuild-troubleshooting-index.ps1 -HubPath claude-docs/troubleshooting.md`로 목차를 재생성한다(커밋 훅 `require-troubleshooting-toc.ps1`이 자동으로 해 주지만, 형식이 틀리면 그 훅이 커밋을 막는다). 번호는 `git ls-tree --name-only origin/main claude-docs/troubleshooting/ | tail -1` 다음 번호.
+- **2회 이상 재발한 트랩은 이 `CLAUDE.md`(항상 로드)의 해당 섹션 또는 훅으로 승격**한다 — prose 한 줄보다 하드픽스(훅·스크립트) 우선(사용자 합의 2026-06-22). 승격했으면 그 파일 frontmatter에 `promoted:`(또는 `guard:`)를 단다.
+- 옛 「🔁 재발·승격 트래커」 표는 [claude-docs/troubleshooting-tracker.md](claude-docs/troubleshooting-tracker.md)에 동결(참고용). 재발 카운팅은 표가 아니라 **회차 줄**이다.
+- 이관 항목(`legacy:`)은 원문 한 줄 그대로다 — 그 파일을 만질 일이 있으면 그때 4필드로 다듬는다(강제 아님).
 
 ---
 
