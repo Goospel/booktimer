@@ -1,6 +1,32 @@
+import { isValidElement, type ReactNode } from 'react';
 import { vi } from 'vitest';
 
 import type { ContributionDay, ContributionGraph } from './api';
+
+/**
+ * 정적 렌더는 <b>마크업만</b> 본다 — 두 버튼의 `onClick`을 서로 바꿔 놓아도 HTML은 한 글자도 안 변한다.
+ * 그래서 훅 없는 컴포넌트를 함수로 불러 <b>엘리먼트 트리</b>에서 라벨↔핸들러를 찾는다(settings.test 선례).
+ */
+export const textOf = (node: ReactNode): string => {
+  if (typeof node === 'string' || typeof node === 'number') return String(node);
+  if (Array.isArray(node)) return node.map(textOf).join('');
+  if (isValidElement(node)) return textOf((node.props as { children?: ReactNode }).children);
+  return '';
+};
+
+export const clickHandlerFor = (node: ReactNode, label: string): (() => void) | undefined => {
+  if (Array.isArray(node)) {
+    for (const child of node) {
+      const hit = clickHandlerFor(child, label);
+      if (hit) return hit;
+    }
+    return undefined;
+  }
+  if (!isValidElement(node)) return undefined;
+  const props = node.props as { children?: ReactNode; onClick?: () => void };
+  if (typeof props.onClick === 'function' && textOf(props.children).includes(label)) return props.onClick;
+  return clickHandlerFor(props.children, label);
+};
 
 /** 테스트 공용 픽스처 — 잔디 그래프와 TDS Provider 껍데기(ui/app 테스트가 같은 데이터를 쓴다). */
 

@@ -24,7 +24,9 @@ import {
   FirstSessionBanner,
   Home,
   LAMP_PAGE_CLASS,
+  ReadingNowCard,
   RemainingNote,
+  StudyMeasuringLine,
   TRACK_V_PAD,
   askNotificationAgreement,
   carouselIndexOf,
@@ -32,6 +34,7 @@ import {
   claimDebtWaiver,
   defaultBookId,
   goalHandleLabel,
+  homePickAfterShelf,
   marginDoorBook,
   noBookSubtitle,
   notificationAgreementTarget,
@@ -39,10 +42,13 @@ import {
   selectionAt,
   shouldShowNotificationCard,
   showWaiverButton,
+  taggableBooks,
+  timerStartBookId,
   todayProgress,
   waiverErrorMessage,
 } from './screens/Home';
-import { graph, stubLocalStorage, userAgent } from './test-fixtures';
+import { stripComments } from './source-scan';
+import { clickHandlerFor, graph, stubLocalStorage, userAgent } from './test-fixtures';
 import { coverColor } from './ui';
 import { REWARD_AD_GROUP_ID, notificationAgreementSupported, requestNotificationAgreement, watchRewardAd } from './toss';
 
@@ -2134,5 +2140,220 @@ describe('홈 대화 미읽음 카드', () => {
 
   it('대화가 꺼져 있으면(값 없음) 없다', () => {
     expect(renderHome()).not.toContain('읽지 않은 대화');
+  });
+});
+
+/**
+ * 태깅·교체 시트의 후보 — 캐러셀(「읽는 중」)보다 <b>넓다</b>(R2 결정 4). 읽고 싶어요·다 읽음 책에도 방금 잰
+ * 시간을 붙일 수 있어야 하고(책 0권 게이트가 「읽고 싶어요만 가진 사람」의 시트를 영영 막던 P8), 한 책이
+ * 전환 직후 두 목록에 잠깐 같이 있어도 한 행이다.
+ */
+describe('태깅·교체 후보 (taggableBooks)', () => {
+  const lists = (reading: BookOption[], want: BookOption[], finished: BookOption[]) => ({
+    readingBooks: reading,
+    wantToReadBooks: want,
+    finishedBooks: finished,
+  });
+
+  it('읽는 중 → 읽고 싶어요 → 다 읽음 순이다 — 지금 읽는 책이 손 닿는 위에 선다', () => {
+    const rows = taggableBooks(lists([book(1, '데미안')], [book(2, '코스모스')], [book(3, '사피엔스')]));
+
+    expect(rows.map((b) => b.id)).toEqual([1, 2, 3]);
+  });
+
+  it('읽는 중이 아닌 책엔 상태 라벨이 붙는다 — 서재 탭과 같은 말이다', () => {
+    const rows = taggableBooks(lists([book(1, '데미안')], [book(2, '코스모스')], [book(3, '사피엔스')]));
+
+    expect(rows.map((b) => b.statusLabel)).toEqual([undefined, '읽고 싶어요', '다 읽음']);
+  });
+
+  it('같은 id가 읽는 중과 읽고 싶어요에 다 있으면 한 번, 라벨 없이 — 먼저 나온 상태가 이긴다', () => {
+    const rows = taggableBooks(lists([book(4, '코스모스')], [book(4, '코스모스')], []));
+
+    expect(rows).toHaveLength(1);
+    expect(rows[0].statusLabel).toBeUndefined();
+  });
+
+  it('셋 다 비면 빈 목록 — 게이트가 이 값으로 시트를 안 연다', () => {
+    expect(taggableBooks(lists([], [], []))).toEqual([]);
+  });
+
+  it('읽고 싶어요 목록이 없는 옛 응답(TimerState)도 읽는 중·다 읽음으로 선다', () => {
+    const rows = taggableBooks({ readingBooks: [book(1, '데미안')], finishedBooks: [book(3, '사피엔스')] });
+
+    expect(rows.map((b) => b.id)).toEqual([1, 3]);
+  });
+});
+
+/**
+ * 「화면이 가리키는 칸 = ▶가 시작할 대상」(P6-a). 캐러셀은 서재에서 빠진 id를 받으면 어느 칸도 가운데로
+ * 그리지 않는데, 가운데 원은 같은 값을 「책 없이」로 강등해 시작했다 — 같은 규칙 하나로 둘을 맞춘다.
+ */
+describe('캐러셀 선택 정규화 (timerStartBookId · Home)', () => {
+  const books = [book(1, '데미안'), book(2, '노인과 바다')];
+
+  it('골라 둔 책이 다 읽음으로 빠졌으면 여백 문도 서지 않는다 — 가운데는 「책 없이」, ▶도 책 없이 시작한다', () => {
+    // 옛 배선은 정규화 없는 id를 여백 문에 넘겨, 캐러셀은 「책 없이」인데 문은 다 읽은 책을 가리켰다.
+    const markup = renderHome(
+      { readingBooks: books, finishedBooks: [book(3, '사피엔스')], recentBookId: 1 },
+      { selectedBookId: 3 },
+    );
+    const carousel = card(markup, CAROUSEL_HEADER);
+
+    expect(carousel).toContain('data-selected-book="책 없이 측정"');
+    expect(carousel).not.toContain('여백에 글 남기기');
+    // 양성 대조군 — 같은 화면에서 읽는 중 책을 골랐으면 문이 선다(부재 단언이 공허하지 않다)
+    const control = renderHome(
+      { readingBooks: books, finishedBooks: [book(3, '사피엔스')], recentBookId: 1 },
+      { selectedBookId: 1 },
+    );
+    expect(card(control, CAROUSEL_HEADER)).toContain('여백에 글 남기기');
+  });
+
+  it('홈이 가운데 세우는 칸은 timerStartBookId와 늘 같다(회귀 가드)', () => {
+    const titleOf = (id: number | null) => (id === null ? '책 없이 측정' : books.find((b) => b.id === id)!.title);
+    const cases: [number | null, number | null | undefined][] = [
+      [2, undefined],
+      [99, undefined],
+      [1, null],
+      [1, 2],
+      [1, 99],
+    ];
+
+    for (const [recent, pick] of cases) {
+      const markup = renderHome({ readingBooks: books, recentBookId: recent }, { selectedBookId: pick });
+      expect(markup).toContain(`data-selected-book="${titleOf(timerStartBookId(books, recent, pick))}"`);
+    }
+  });
+});
+
+/**
+ * 0권에서 「책 없이」를 고른 사람(`null`)이 첫 책을 담으면 그 선택을 풀어 준다(P6-b) — 안 풀면 담은 책이
+ * 캐러셀에 서도 가운데는 계속 「책 없이」라, 방금 담은 책으로 재려면 한 번 더 밀어야 한다.
+ */
+describe('서재가 0권에서 생길 때 선택 풀기 (homePickAfterShelf)', () => {
+  it('0 → 1권이고 「책 없이」를 골라 뒀으면 아직 안 고른 것(undefined)으로 되돌린다', () => {
+    expect(homePickAfterShelf(0, 1, null)).toBeUndefined();
+  });
+
+  it('그 밖엔 고른 값을 그대로 둔다', () => {
+    expect(homePickAfterShelf(1, 2, null)).toBeNull(); // 책이 있는데 「책 없이」를 고른 건 의도다
+    expect(homePickAfterShelf(0, 1, 5)).toBe(5);
+    expect(homePickAfterShelf(0, 1, undefined)).toBeUndefined();
+    expect(homePickAfterShelf(0, 0, null)).toBeNull();
+    expect(homePickAfterShelf(2, 0, 1)).toBe(1);
+  });
+});
+
+describe('태깅 시트 — 후보 상태 라벨 · 시트 안 오류', () => {
+  const rows = [book(1, '데미안'), { ...book(4, '코스모스'), statusLabel: '읽고 싶어요' as const }];
+
+  const renderSheet = (error: string | null = null) =>
+    renderToStaticMarkup(
+      <TDSMobileProvider userAgent={userAgent}>
+        <BookSheet books={rows} disabled={false} error={error} onPick={() => {}} onSkip={() => {}} onClose={() => {}} />
+      </TDSMobileProvider>,
+    );
+
+  /** 그 책 행 버튼 한 개의 마크업. */
+  const rowOf = (markup: string, title: string) => {
+    const at = markup.indexOf(`data-book-title="${title}"`);
+    return markup.slice(markup.lastIndexOf('<button', at), markup.indexOf('</button>', at));
+  };
+
+  it('읽는 중이 아닌 책 행에 상태 라벨이 선다 — 읽는 중 책 행엔 없다', () => {
+    const markup = renderSheet();
+
+    expect(rowOf(markup, '코스모스')).toContain('읽고 싶어요');
+    expect(rowOf(markup, '데미안')).not.toContain('읽고 싶어요');
+  });
+
+  it('실패 문구가 시트 안에 선다 — 탭바 위 스트립은 시트 패널에 가린다', () => {
+    const markup = renderSheet('책을 붙이지 못했어요');
+
+    expect(markup).toContain('책을 붙이지 못했어요');
+    expect(markup.indexOf('책을 붙이지 못했어요')).toBeGreaterThan(markup.indexOf('무슨 책을 읽으셨나요?'));
+  });
+});
+
+/**
+ * 측정 중 홈의 [책 바꾸기] — 교체 시트로 가는 문이 토스트 하나뿐이면 5초 뒤엔 문이 없다(D-2·D-4).
+ * 정적 렌더는 `onClick`을 못 보므로 훅 없는 조각을 함수로 불러 라벨↔핸들러를 트리에서 잰다.
+ */
+describe('측정 중 책 바꾸기 문', () => {
+  it('독서 「읽는 중」 카드의 「책 바꾸기」가 받은 핸들러를 부른다', () => {
+    const onChangeBook = vi.fn();
+    const tree = ReadingNowCard({ book: book(1, '데미안'), totalSeconds: 0, onChangeBook });
+
+    clickHandlerFor(tree, '책 바꾸기')?.();
+    expect(onChangeBook).toHaveBeenCalledTimes(1);
+  });
+
+  it('공부 측정 줄에 「책 바꾸기」와 「회당 시간 바꾸기」가 둘 다 서고 서로 다른 핸들러다', () => {
+    const onOpen = vi.fn();
+    const onChangeBook = vi.fn();
+    const tree = StudyMeasuringLine({
+      elapsed: 600,
+      title: '수학의 정석',
+      goal: { line: null, label: '회당 시간 바꾸기', onOpen },
+      onChangeBook,
+    });
+
+    clickHandlerFor(tree, '책 바꾸기')?.();
+    expect(onChangeBook).toHaveBeenCalledTimes(1);
+    expect(onOpen).toHaveBeenCalledTimes(0);
+
+    clickHandlerFor(tree, '회당 시간 바꾸기')?.();
+    expect(onOpen).toHaveBeenCalledTimes(1);
+    expect(onChangeBook).toHaveBeenCalledTimes(1);
+  });
+
+  it('책 없이 공부 중에도 「책 바꾸기」가 선다 — 회당 시간 손잡이는 없다', () => {
+    const onChangeBook = vi.fn();
+    const tree = StudyMeasuringLine({ elapsed: 600, title: null, goal: null, onChangeBook });
+
+    clickHandlerFor(tree, '책 바꾸기')?.();
+    expect(onChangeBook).toHaveBeenCalledTimes(1);
+    expect(clickHandlerFor(tree, '회당 시간')).toBeUndefined();
+  });
+
+  it('홈이 두 문에 같은 onChangeActiveBook을 넘긴다', () => {
+    const src = stripComments(homeSource);
+
+    expect(src.match(/onChangeBook=\{onChangeActiveBook\}/g)?.length).toBe(2);
+  });
+
+  it('측정 중 독서 홈과 책 없이 공부 중인 홈에 「책 바꾸기」가 그려진다', () => {
+    const reading = renderHome({
+      hasActiveSession: true,
+      activeStartedAt: new Date().toISOString(),
+      activeBookTitle: '데미안',
+      activeBook: book(1, '데미안'),
+      readingBooks: [book(1, '데미안')],
+    });
+    expect(card(reading, READING_NOW_HEADER)).toContain('책 바꾸기');
+
+    const study = renderToStaticMarkup(
+      <TDSMobileProvider userAgent={userAgent}>
+        <Home
+          dashboard={dashboard()}
+          mode="study"
+          study={{ ...IDLE_STUDY, hasActiveSession: true, activeStartedAt: new Date().toISOString(), activeBook: null, books: [] }}
+          onChangeMode={() => {}}
+          onBlockedModeChange={() => {}}
+          selectedBookId={undefined}
+          onSelectBook={() => {}}
+          onTimerChange={() => {}}
+          celebrate={false}
+          onGoGoal={() => {}}
+          goalAdPending={false}
+          onGoSettings={() => {}}
+          onError={() => {}}
+          onOpenMargin={() => {}}
+          onComposeMargin={() => {}}
+        />
+      </TDSMobileProvider>,
+    );
+    expect(study).toContain('책 바꾸기');
   });
 });

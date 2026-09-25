@@ -311,6 +311,46 @@ describe('dev-mock 핸들러', () => {
 });
 
 /**
+ * 독서 태깅·교체의 책 상태 전이(R2) — 서버는 읽고 싶어요 책을 붙이면 읽는 중으로 옮긴다. 목이 이걸 안 하면
+ * 「태깅한 책이 캐러셀에 선다」(A-6)를 브라우저로 볼 길이 없다.
+ */
+describe('dev-mock 독서 태깅·교체', () => {
+  const addWant = (title: string) =>
+    mockRequest<MyBookSummary>('/api/books', { body: { title, author: '목', status: 'WANT_TO_READ', isbn13: null } });
+
+  afterEach(() => vi.useRealTimers());
+
+  it('tag-book이 마지막 종료 측정의 초를 그 책으로 옮기고 읽는 중으로 전환한다', async () => {
+    const want = await addWant('태깅 목 책');
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-09-25T09:00:00Z'));
+    await mockRequest<TimerState>('/api/sessions/start', { body: { bookId: null } });
+    vi.setSystemTime(new Date('2026-09-25T09:01:30Z'));
+    const stopped = await mockRequest<StopResponse>('/api/sessions/stop', { body: {} });
+
+    await mockRequest(`/api/sessions/${stopped.sessionId}/tag-book`, { body: { bookId: want.id } });
+
+    const shelf = await mockRequest<ShelfResponse>('/api/books', {});
+    expect(shelf.books.find((b) => b.id === want.id)?.seconds).toBe(90);
+    const dash = await mockRequest<DashboardResponse>('/api/dashboard', {});
+    expect(dash.readingBooks.map((b) => b.id)).toContain(want.id);
+    expect(dash.wantToReadBooks.map((b) => b.id)).not.toContain(want.id);
+  });
+
+  it('active/book으로 읽고 싶어요 책을 고르면 응답 readingBooks에 있고 wantToReadBooks에 없다', async () => {
+    const want = await addWant('교체 목 책');
+    await mockRequest<TimerState>('/api/sessions/start', { body: { bookId: null } });
+
+    const timer = await mockRequest<TimerState>('/api/sessions/active/book', { body: { bookId: want.id } });
+    await mockRequest<StopResponse>('/api/sessions/stop', { body: {} }); // 다른 테스트에 진행 중 측정을 남기지 않는다
+
+    expect(timer.readingBooks.map((b) => b.id)).toContain(want.id);
+    expect(timer.wantToReadBooks).toBeDefined();
+    expect(timer.wantToReadBooks!.map((b) => b.id)).not.toContain(want.id);
+  });
+});
+
+/**
  * 목 모드 배선 — 게이트가 `VITE_DEV_MOCK`에 실제로 걸려 있는가. 이게 어긋나면 `dev:mock`이 조용히
  * 서버를 때려(로그인 안 된 401) "목이 안 먹는다"로 시간을 태운다. env를 갈아끼우고 모듈을 다시 불러야
  * 재는 값이라(플래그는 모듈 로드 시 한 번 정해진다) 이 한 건만 격리해서 본다.

@@ -324,11 +324,63 @@ export function GoalReachedView({
 /**
  * 처음 골라 둘 책 — 최근 읽은 책(=이어 읽기)이 읽는 중 목록에 있으면 그 책, 아니면 첫 책, 없으면 `null`.
  *
- * <p>웹 `BookPickForm`의 `defaultBook`과 같은 규칙이다. `recentBookId`가 목록 밖일 수 있는 건 그 책을
- * 다 읽었거나 뺐기 때문이다 — 그때 아무것도 안 고른 채로 두면 "측정 시작"이 죽은 버튼이 된다.
+ * <p>웹 `BookPickForm`의 `defaultBook`과 같은 규칙이다 — <b>읽는 중 안에서만</b> 고른다(웹도 R2 PR-2부터 같다).
+ * `recentBookId`가 목록 밖일 수 있는 건 그 책을 다 읽었거나 뺐기 때문이다 — 그때 아무것도 안 고른 채로 두면
+ * "측정 시작"이 죽은 버튼이 된다.
  */
-export function defaultBookId(readingBooks: BookOption[], recentBookId: number | null): number | null {
+export function defaultBookId(readingBooks: { id: number }[], recentBookId: number | null): number | null {
   return readingBooks.find((b) => b.id === recentBookId)?.id ?? readingBooks[0]?.id ?? null;
+}
+
+/**
+ * 측정이 시작할 책 — 홈 캐러셀 가운데 칸과 탭바 가운데 원이 <b>같은 값</b>을 본다(단일 출처).
+ *
+ * <p>캐러셀의 문법은 "가운데 온 것이 곧 측정 대상"이고 그 선택은 App이 든다(`homeBookId`). 다른 탭에서
+ * 눌러도 홈에 지금 가운데 와 있는 그 책으로 시작하는 것이 같은 문법의 연장이다 — 서재에서 보던 책으로
+ * 시작하지 않는 이유도 이것이다(측정 대상의 출처가 둘이 되면 무엇으로 시작될지 예측할 수 없다).
+ *
+ * <p>어떤 조합에서도 최소 `null`(「책 없이」)까지는 떨어져 **죽은 버튼이 될 수 없다**. 고른 책이 서재에서
+ * 빠졌으면(stale id) 「책 없이」로 강등한다 — 홈도 이 값으로 캐러셀·여백 문을 세워 「화면이 가리키는 칸 =
+ * ▶가 시작할 대상」이 된다(R2 P6-a). App이 아니라 여기 사는 이유는 순환 import 회피다(App이 re-export한다).
+ */
+export function timerStartBookId(
+  readingBooks: { id: number }[],
+  recentBookId: number | null,
+  homeBookId: number | null | undefined,
+): number | null {
+  const picked = homeBookId === undefined ? defaultBookId(readingBooks, recentBookId) : homeBookId;
+  return readingBooks.some((b) => b.id === picked) ? picked : null;
+}
+
+/**
+ * 서재가 0권에서 생길 때 홈 선택 보정(R2 P6-b) — 0권에서 「책 없이」(`null`)를 고른 사람이 첫 책을 담으면
+ * 「아직 안 고름」(`undefined`)으로 되돌려 기본 책(방금 담은 책)이 가운데 오게 한다. 그 밖엔 고른 값 그대로다 —
+ * 책이 있는데 「책 없이」를 고른 것은 의도다.
+ */
+export function homePickAfterShelf(
+  prevCount: number,
+  nextCount: number,
+  pick: number | null | undefined,
+): number | null | undefined {
+  return prevCount === 0 && nextCount > 0 && pick === null ? undefined : pick;
+}
+
+/** 시트 한 행 — 읽는 중이 아닌 후보엔 서재 탭과 같은 상태 라벨이 붙는다. */
+export type SheetBook = BookOption & { statusLabel?: '읽고 싶어요' | '다 읽음' };
+
+/**
+ * 태깅·교체 시트의 독서 후보 — 캐러셀(「읽는 중」)보다 <b>넓다</b>(R2 결정 4). 순서는 읽는 중 → 읽고 싶어요 →
+ * 다 읽음이고, 전환 직후 한 책이 두 목록에 잠깐 같이 있어도 <b>id로 한 행</b>이다(먼저 나온 상태가 이긴다).
+ *
+ * <p>`wantToReadBooks`가 선택인 것은 옛 서버의 `TimerState`가 안 싣기 때문이다 — 그때는 두 상태로 선다.
+ */
+export function taggableBooks(d: Pick<TimerState, 'readingBooks' | 'wantToReadBooks' | 'finishedBooks'>): SheetBook[] {
+  const rows: SheetBook[] = [
+    ...d.readingBooks,
+    ...(d.wantToReadBooks ?? []).map((b) => ({ ...b, statusLabel: '읽고 싶어요' as const })),
+    ...d.finishedBooks.map((b) => ({ ...b, statusLabel: '다 읽음' as const })),
+  ];
+  return rows.filter((b, i) => rows.findIndex((r) => r.id === b.id) === i);
 }
 
 /**
@@ -1084,21 +1136,37 @@ export function waiverErrorMessage(error: Error): string {
 export function BookSheet({
   books,
   title,
+  hint,
+  error = null,
   disabled,
   onPick,
   onSkip,
   onClose,
 }: {
-  books: BookOption[];
+  /** 후보 — 읽는 중이 아닌 책은 `statusLabel`이 행 오른쪽에 선다({@link taggableBooks}). */
+  books: SheetBook[];
   /** 물음 — 안 주면 독서 문구다. 기본값이 옛 리터럴이라 독서 렌더는 이 프롭이 생겨도 바이트 불변이다. */
   title?: string;
+  /** 물음 밑 한 줄 안내 — 없으면 그리지 않는다. */
+  hint?: string;
+  /**
+   * 실패 문구 — <b>시트 안</b>에 선다. 탭바 위 액션 스트립(z 100)은 불투명 시트 패널(z 201)에 가려,
+   * 거기 띄우면 눌렀는데 아무 일도 없는 화면이 된다(R2 P7).
+   */
+  error?: string | null;
   disabled: boolean;
-  onPick: (book: BookOption) => void;
+  onPick: (book: SheetBook) => void;
   onSkip: () => void;
   onClose: () => void;
 }) {
   return (
     <Sheet title={title ?? '무슨 책을 읽으셨나요?'} onClose={onClose}>
+      {hint !== undefined && (
+        <div style={{ marginTop: -4, marginBottom: 10, fontSize: 13, color: 'var(--adaptiveGrey600, #6F6A5E)', wordBreak: 'keep-all' }}>
+          {hint}
+        </div>
+      )}
+      <ErrorMessage message={error} />
       {books.map((book) => (
           <button
             key={book.id}
@@ -1127,6 +1195,11 @@ export function BookSheet({
             <Text typography="st11" style={{ flex: 1, minWidth: 0, wordBreak: 'keep-all' }}>
               {book.title}
             </Text>
+            {book.statusLabel !== undefined && (
+              <Text typography="st12" color="grey600" style={{ flex: 'none' }}>
+                {book.statusLabel}
+              </Text>
+            )}
           </button>
         ))}
       <Button display="block" variant="weak" size="medium" style={{ marginTop: 8 }} disabled={disabled} onClick={onSkip}>
@@ -1229,14 +1302,19 @@ export function AccountSection({
  *
  * <p>{@link children}는 카드 바닥의 손잡이 자리다 — 캐러셀 카드가 이 카드로 바뀌어도 <b>「지금 이
  * 화면이 가리키는 책」에 딸린 손잡이는 따라와야</b> 하기 때문이다(지금은 여백 문 하나).
+ *
+ * <p>{@link onChangeBook}은 측정 대상 교체 문이다(R2 D-2) — 시작 토스트의 [바꾸기]는 5초 뒤 사라져
+ * 문이 되지 못한다. 제목 줄 밑에 두는 이유: 바꾸는 대상이 바로 그 제목이다.
  */
 export function ReadingNowCard({
   book,
   totalSeconds,
+  onChangeBook,
   children,
 }: {
   book: BookOption | null;
   totalSeconds: number;
+  onChangeBook?: () => void;
   children?: ReactNode;
 }) {
   return (
@@ -1263,10 +1341,67 @@ export function ReadingNowCard({
               이 책 누적 {formatDuration(totalSeconds)}
             </Text>
           )}
+          {onChangeBook !== undefined && (
+            <Button variant="weak" size="small" style={{ marginTop: 8 }} onClick={onChangeBook}>
+              책 바꾸기
+            </Button>
+          )}
         </div>
       </div>
       {children}
     </section>
+  );
+}
+
+/**
+ * 공부 측정 중 히어로 줄 — 「측정 중 N분 · 제목」 + 회당 시간 손잡이 + [책 바꾸기](R2 D-4).
+ *
+ * <p>공부 측정 중 홈엔 「읽는 중」 같은 카드를 세우지 않는다(히어로가 이미 제목을 말한다) — 그래서 교체 문은
+ * 측정을 말하는 이 줄 옆에 선다(웹 `StudyTimerCard`와 같은 자리). 회당 시간 손잡이와 달리 <b>책 없이 재는
+ * 중에도 선다</b> — 책을 붙이는 것도 교체다.
+ *
+ * <p>훅이 없는 조각으로 꺼낸 이유는 테스트다: 정적 렌더는 `onClick`을 못 보므로 함수로 불러 라벨↔핸들러를 잰다.
+ */
+export function StudyMeasuringLine({
+  elapsed,
+  title,
+  goal,
+  onChangeBook,
+}: {
+  elapsed: number;
+  /** 재는 책 제목 — 책 없이 재면 `null`. */
+  title: string | null;
+  /** 회당 시간 — 재는 책이 있을 때만(`null`이면 줄·손잡이 둘 다 없다). */
+  goal: { line: string | null; label: string; onOpen: () => void } | null;
+  onChangeBook: () => void;
+}) {
+  return (
+    // 공부 측정 줄은 게이지·타일 없이 가운데 시계 <b>바로 밑</b>에 서서, 왼쪽 정렬이면 시계와 어긋나 보였다
+    // (목 모드 실측). 정렬은 감싼 div가 든다 — TDS `Text`는 style의 textAlign을 거른다(T-216).
+    <div style={{ textAlign: 'center' }}>
+      <Text typography="t5" color="blue500" style={{ display: 'block', marginTop: 16 }}>
+        측정 중 {formatDuration(elapsed)}
+        {title !== null && ` · ${title}`}
+      </Text>
+      {goal?.line != null && (
+        <Text typography="st11" color="blue700" style={{ display: 'block', marginTop: 6 }}>
+          {goal.line}
+        </Text>
+      )}
+      <div style={{ display: 'flex', justifyContent: 'center', flexWrap: 'wrap', gap: 8, marginTop: 8 }}>
+        {goal !== null && (
+          <Button variant="weak" size="small" onClick={goal.onOpen}>
+            {goal.label}
+          </Button>
+        )}
+        <Button variant="weak" size="small" onClick={onChangeBook}>
+          책 바꾸기
+        </Button>
+      </div>
+      <Text typography="st12" color="grey600" style={{ display: 'block', marginTop: 6 }}>
+        {ACTIVE_STUDY_RELIEF}
+      </Text>
+    </div>
   );
 }
 
@@ -1304,6 +1439,7 @@ export function Home({
   goalReached = false,
   onContinueReading = () => {},
   onGoHistory = () => {},
+  onChangeActiveBook = () => {},
 }: {
   dashboard: DashboardResponse;
   /** 지금 재는 것 — 히어로 한 장이 이 값으로 두 얼굴을 갖는다(파생은 App이 한다). */
@@ -1365,14 +1501,18 @@ export function Home({
   onContinueReading?: () => void;
   /** 메달 화면의 「기록 보기」 — 기록 탭으로 간다(탭 이동이 메달을 끈다). */
   onGoHistory?: () => void;
+  /** 측정 중 [책 바꾸기] — 교체 시트는 App이 연다(토스트의 [바꾸기]와 같은 시트). 옛 하니스는 안 넘긴다. */
+  onChangeActiveBook?: () => void;
 }) {
-  /** 측정할 책 — 아직 안 골랐으면 기본값(이어 읽기)으로 떨어진다. 고른 값은 App이 들어 화면을 나갔다 와도 남는다. */
-  const selectedBookId = picked === undefined ? defaultBookId(dashboard.readingBooks, dashboard.recentBookId) : picked;
+  /**
+   * 측정할 책 — 탭바 원이 시작할 대상과 <b>같은 함수</b>로 정한다(아직 안 골랐으면 이어 읽기, 서재에서 빠진 id면
+   * 「책 없이」). 고른 값은 App이 들어 화면을 나갔다 와도 남는다.
+   */
+  const selectedBookId = timerStartBookId(dashboard.readingBooks, dashboard.recentBookId, picked);
   /** 공부 서재 — 옛 서버(이 필드를 안 주는)는 빈 목록이라 캐러셀에 「책 없이」 칸만 선다. */
   const studyBooks = study.books ?? [];
   /** 공부 캐러셀의 가운데 — 독서와 같은 규칙(최근 공부한 책 → 첫 책 → 「책 없이」). */
-  const studySelectedId =
-    selectedStudyBookId === undefined ? defaultBookId(studyBooks, study.recentBookId ?? null) : selectedStudyBookId;
+  const studySelectedId = timerStartBookId(studyBooks, study.recentBookId ?? null, selectedStudyBookId);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [now, setNow] = useState(() => Date.now());
@@ -1787,31 +1927,22 @@ export function Home({
             </div>
           )}
           {mode === 'study' && study.hasActiveSession && (
-            // 공부 측정 줄은 게이지·타일 없이 가운데 시계 <b>바로 밑</b>에 서서, 왼쪽 정렬이면 시계와 어긋나 보였다
-            // (목 모드 실측). 독서 측정 줄은 전폭 타일 밑이라 타일의 왼쪽 선을 따르는 게 맞아 그대로 둔다.
-            // 정렬은 감싼 div가 든다 — TDS `Text`는 style의 textAlign을 거른다(T-216).
-            <div style={{ textAlign: 'center' }}>
-              <Text typography="t5" color="blue500" style={{ display: 'block', marginTop: 16 }}>
-                측정 중 {formatDuration(studyElapsed)}
-                {study.activeBook != null && ` · ${study.activeBook.title}`}
-              </Text>
-              {/* 회당 시간 — 남은 시간/달성 한 줄(스톱워치면 없음) + 같은 시트를 여는 손잡이. 책 없이 재면 둘 다 없다. */}
-              {goalHandleBook !== null && (
-                <>
-                  {studySessionLine(studyGoalView) !== null && (
-                    <Text typography="st11" color="blue700" style={{ display: 'block', marginTop: 6 }}>
-                      {studySessionLine(studyGoalView)}
-                    </Text>
-                  )}
-                  <Button variant="weak" size="small" style={{ marginTop: 8 }} onClick={() => openGoalSheet(goalHandleBook)}>
-                    {sessionGoalHandleLabel(goalHandleBook.sessionGoalSeconds, true)}
-                  </Button>
-                </>
-              )}
-              <Text typography="st12" color="grey600" style={{ display: 'block', marginTop: 6 }}>
-                {ACTIVE_STUDY_RELIEF}
-              </Text>
-            </div>
+            // 독서 측정 줄은 전폭 타일 밑이라 타일의 왼쪽 선을 따르고, 공부 줄은 시계 밑 가운데다(StudyMeasuringLine).
+            // 회당 시간 — 남은 시간/달성 한 줄(스톱워치면 없음) + 같은 시트를 여는 손잡이. 책 없이 재면 둘 다 없다.
+            <StudyMeasuringLine
+              elapsed={studyElapsed}
+              title={study.activeBook?.title ?? null}
+              goal={
+                goalHandleBook === null
+                  ? null
+                  : {
+                      line: studySessionLine(studyGoalView),
+                      label: sessionGoalHandleLabel(goalHandleBook.sessionGoalSeconds, true),
+                      onOpen: () => openGoalSheet(goalHandleBook),
+                    }
+              }
+              onChangeBook={onChangeActiveBook}
+            />
           )}
           {mode === 'reading' && dashboard.hasActiveSession && (
             <>
@@ -1897,7 +2028,11 @@ export function Home({
           </section>
         )
       ) : dashboard.hasActiveSession ? (
-        <ReadingNowCard book={dashboard.activeBook ?? null} totalSeconds={dashboard.activeBookTotalSeconds}>
+        <ReadingNowCard
+          book={dashboard.activeBook ?? null}
+          totalSeconds={dashboard.activeBookTotalSeconds}
+          onChangeBook={onChangeActiveBook}
+        >
           {marginDoor}
         </ReadingNowCard>
       ) : (

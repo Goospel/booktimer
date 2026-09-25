@@ -20,7 +20,8 @@ import { Goal } from './screens/Goal';
 import { GuestShell, whenPageLoaded } from './screens/GuestHome';
 import type { LoginSource } from './screens/GuestHome';
 import { History } from './screens/History';
-import { BookSheet, Home, defaultBookId } from './screens/Home';
+import type { SheetBook } from './screens/Home';
+import { BookSheet, Home, homePickAfterShelf, taggableBooks, timerStartBookId } from './screens/Home';
 import { Library } from './screens/Library';
 import { LinkAccount } from './screens/LinkAccount';
 import { LoginBridge } from './screens/LoginBridge';
@@ -152,23 +153,10 @@ export const tabChangeHandler =
 export const TIMER_ACTION_SLOT = 2;
 
 /**
- * 가운데 액션이 시작할 책 — 홈 「측정 시작」이 쓰던 규칙 그대로다(단일 출처).
- *
- * <p>캐러셀의 문법은 "가운데 온 것이 곧 측정 대상"이고 그 선택은 App이 든다(`homeBookId`). 다른 탭에서
- * 눌러도 홈에 지금 가운데 와 있는 그 책으로 시작하는 것이 같은 문법의 연장이다 — 서재에서 보던 책으로
- * 시작하지 않는 이유도 이것이다(측정 대상의 출처가 둘이 되면 무엇으로 시작될지 예측할 수 없다).
- *
- * <p>어떤 조합에서도 최소 `null`(「책 없이」)까지는 떨어져 **죽은 버튼이 될 수 없다**.
+ * 가운데 액션이 시작할 책 — 홈 캐러셀과 같은 함수다(단일 출처). 본체는 홈으로 옮겼다(순환 import 회피, R2 P6-a) —
+ * 여기 import하던 쪽이 그대로 쓰도록 다시 내보낸다.
  */
-export function timerStartBookId(
-  readingBooks: BookOption[],
-  recentBookId: number | null,
-  homeBookId: number | null | undefined,
-): number | null {
-  const picked = homeBookId === undefined ? defaultBookId(readingBooks, recentBookId) : homeBookId;
-  // 고른 책이 서재에서 빠졌으면(stale id) 「책 없이」로 강등한다 — 옛 홈 배선과 같은 처리다.
-  return readingBooks.some((b) => b.id === picked) ? picked : null;
-}
+export { timerStartBookId };
 
 /** ▶(채움 삼각형) — 탭 아이콘들(스트로크)과 달리 원 위 흰 채움이 작게도 또렷하다. */
 const PLAY_ICON = 'M9.5 6.8v10.4l8.5-5.2z';
@@ -787,6 +775,17 @@ export function App() {
    * 고른 사람이 돌아올 때마다 이어 읽기 책으로 끌려간다.
    */
   const [homeBookId, setHomeBookId] = useState<number | null | undefined>(undefined);
+  /**
+   * 0권에서 「책 없이」를 고른 사람이 첫 책을 담으면 그 선택을 푼다(R2 P6-b) — 안 풀면 방금 담은(또는 태깅으로
+   * 읽는 중이 된) 책이 캐러셀에 서도 가운데는 계속 「책 없이」다. 판정은 {@link homePickAfterShelf}.
+   */
+  const readingCount = dashboard?.readingBooks.length ?? 0;
+  const prevReadingCount = useRef(readingCount);
+  useEffect(() => {
+    const prev = prevReadingCount.current;
+    prevReadingCount.current = readingCount;
+    setHomeBookId((pick) => homePickAfterShelf(prev, readingCount, pick));
+  }, [readingCount]);
   /**
    * 공부 캐러셀에서 고른 책 — 위 독서 선택과 <b>별개 슬롯</b>이다.
    *
@@ -1551,6 +1550,8 @@ export function MainTabs({
   const measuring = dashboard.hasActiveSession || study.hasActiveSession;
   /** 태깅 시트 — `null`이면 닫힘. 열림 여부와 대상 세션이 늘 같이 움직여 상태 하나로 족하다. */
   const [tagging, setTagging] = useState<Untagged | null>(null);
+  /** 태깅 실패 문구 — 시트 안에 선다(시트를 닫으면 함께 걷힌다). */
+  const [tagError, setTagError] = useState<string | null>(null);
   /**
    * 공부 서재를 다시 세우는 세대 번호 — `<StudyLibrary key={shelfEpoch}>`의 `key`다.
    *
@@ -1625,7 +1626,10 @@ export function MainTabs({
   const [startToast, setStartToast] = useState<StartToastState | null>(null);
   const startToastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  /** 교체 시트가 열려 있는지 — 토스트의 [바꾸기]가 여는 유일한 문이다. */
+  /**
+   * 교체 시트가 열려 있는지 — 문은 둘이다: 시작 토스트의 [바꾸기](다른 탭에서 시작했을 때)와 홈의 [책 바꾸기]
+   * (독서 「읽는 중」 카드·공부 히어로 줄, R2). 토스트는 5초 뒤 사라져 그것만으론 문이 되지 못했다.
+   */
   const [changing, setChanging] = useState(false);
 
   /** 토스트를 걷는다 — 타이머까지 함께 걷어야 나중에 빈 토스트가 되살아나지 않는다. */
@@ -1806,8 +1810,9 @@ export function MainTabs({
           // 이 앱의 핵심 전환 — 콘솔 대표 전환이 이 이벤트라, 빠지면 지표 자체가 죽는다.
           trackEvent('reading_session_completed', { duration_seconds: duration });
           // 종료 직후 시트를 저절로 연다(태깅은 지금 기억이 가장 선명하다). 붙일 책이 0권이면 열지 않는다 —
-          // 빈 시트는 닫는 것 말고 할 수 있는 게 없는 막다른 길이다.
-          if (result.untagged && dashboard.readingBooks.length > 0)
+          // 빈 시트는 닫는 것 말고 할 수 있는 게 없는 막다른 길이다. 후보는 읽는 중만이 아니라 세 상태다(R2 P8) —
+          // 읽고 싶어요만 담은 사람에게도 붙일 책이 있다.
+          if (result.untagged && taggableBooks(dashboard).length > 0)
             setTagging({ sessionId: result.sessionId, study: false });
         })
         .catch(fail)
@@ -1833,12 +1838,16 @@ export function MainTabs({
   const tag = (book: BookOption) => {
     if (tagging === null) return;
     setBusy(true);
+    setTagError(null);
     // 시트 아래가 공부 서재일 수 있다(그쪽 목록은 마운트 1회) — `shelfEpoch`가 그 화면을 다시 세운다.
+    // 독서 문은 응답에 서재 상태가 없다 — 읽고 싶어요 책을 붙이면 서버가 읽는 중으로 옮기므로 대시보드를
+    // 다시 받아야 캐러셀·다음 시트 후보가 그 책을 제자리에 세운다(R2 P10).
     (tagging.study
       ? tagStudyBook(tagging.sessionId, book.id).then(onStudyChange).then(() => setShelfEpoch((n) => n + 1))
-      : tagBook(tagging.sessionId, book.id))
-      .then(() => setTagging(null))
-      .catch(fail)
+      : tagBook(tagging.sessionId, book.id).then(() => onShelfChanged()))
+      .then(closeSheet)
+      // 실패는 시트 안에서 말한다 — 탭바 위 스트립은 불투명 시트 패널에 가린다(R2 P7). 401은 재로그인으로.
+      .catch((e: Error) => (e.name === 'UnauthorizedError' ? onError(e) : setTagError(e.message)))
       .finally(() => setBusy(false));
   };
 
@@ -1880,8 +1889,11 @@ export function MainTabs({
   /** 교체 시트 닫기 — 안 바꾸고 닫으면 토스트도 되살리지 않는다(제 역할은 끝났다). */
   const closeChangeSheet = () => setChanging(false);
 
-  /** 시트 닫기 — 태깅 시트를 닫는 건 곧 「건너뛰기」다(다시 들어갈 자리를 만들지 않는다). */
-  const closeSheet = () => setTagging(null);
+  /** 시트 닫기 — 태깅 시트를 닫는 건 곧 「건너뛰기」다(다시 들어갈 자리를 만들지 않는다). 지난 실패 문구도 함께 걷는다. */
+  const closeSheet = () => {
+    setTagging(null);
+    setTagError(null);
+  };
 
   // 안드로이드 뒤로가기는 시트만 닫는다 — 시트가 열린 채로 미니앱이 꺼지지 않게.
   // 둘은 동시에 열리지 않는다(태깅은 종료 후, 교체는 측정 중) — backStack이 스택이라 공존도 안전하다.
@@ -1940,6 +1952,7 @@ export function MainTabs({
             goalReached={goalReached}
             onContinueReading={timerAction}
             onGoHistory={() => changeTab('history')}
+            onChangeActiveBook={() => setChanging(true)}
           />
         )}
         {/* 서재 탭은 두 모드 공통이지만 화면은 갈린다 — 공부 책과 독서 책이 섞이지 않는 것이 요구 그 자체다. */}
@@ -2041,8 +2054,9 @@ export function MainTabs({
       {/* 시트는 측정 종료 후 태깅 자리 하나다 — 탭바(zIndex 100) 위에 떠 어느 탭에서 끝내도 보인다. */}
       {tagging !== null && (
         <BookSheet
-          books={tagging.study ? (study.books ?? []) : dashboard.readingBooks}
+          books={tagging.study ? (study.books ?? []) : taggableBooks(dashboard)}
           title={tagging.study ? '무슨 책을 공부하셨나요?' : undefined}
+          error={tagError}
           disabled={busy}
           onPick={tag}
           onSkip={closeSheet}
@@ -2050,10 +2064,11 @@ export function MainTabs({
         />
       )}
 
-      {/* 교체 시트 — 측정 중에만 열리고, 토스트의 [바꾸기]가 여는 유일한 문이다. */}
+      {/* 교체 시트 — 측정 중에만 열린다. 문은 토스트의 [바꾸기]와 홈의 [책 바꾸기] 둘이다.
+          독서 후보는 태깅과 같은 세 상태(R2 결정 4 — 캐러셀만 「읽는 중」이다). */}
       {changing && (
         <ChangeBookSheet
-          books={mode === 'study' ? (study.books ?? []) : dashboard.readingBooks}
+          books={mode === 'study' ? (study.books ?? []) : taggableBooks(dashboard)}
           currentBookId={mode === 'study' ? (study.activeBook?.id ?? null) : (dashboard.activeBook?.id ?? null)}
           disabled={busy}
           onPick={changeBook}
@@ -2306,7 +2321,8 @@ export function ChangeBookSheet({
   onPick,
   onClose,
 }: {
-  books: BookOption[];
+  /** 후보 — 읽는 중이 아닌 책은 `statusLabel`이 행 오른쪽에 선다(태깅 시트와 같은 모양). */
+  books: SheetBook[];
   /** 지금 재고 있는 책 — `null`이면 「책 없이」 행에 표시가 선다. */
   currentBookId: number | null;
   disabled: boolean;
@@ -2314,7 +2330,7 @@ export function ChangeBookSheet({
   onPick: (book: BookOption | null) => void;
   onClose: () => void;
 }) {
-  const row = (book: BookOption | null) => {
+  const row = (book: SheetBook | null) => {
     const current = (book === null ? null : book.id) === currentBookId;
     return (
       <button
@@ -2353,6 +2369,9 @@ export function ChangeBookSheet({
         >
           {book === null ? '책 없이' : book.title}
         </span>
+        {book?.statusLabel !== undefined && (
+          <span style={{ flex: 'none', fontSize: 13, color: 'var(--adaptiveGrey600, #6F6A5E)' }}>{book.statusLabel}</span>
+        )}
         {current && (
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" style={{ flex: 'none', stroke: 'var(--adaptiveBlue700, #4F6B4C)' }} strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round">
             <path d="M5 12.5 10 17.5 19 7" />
