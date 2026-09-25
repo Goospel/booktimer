@@ -1439,7 +1439,7 @@ describe('여백 위의 탭바 (MarginShell)', () => {
     expect(markup).not.toContain('aria-label="측정 끝내기"');
   });
 
-  it('잠긴 칸이 없다 — 어느 탭으로든 곷장 나간다', () => {
+  it('잠긴 칸이 없다 — 어느 탭으로든 곧장 나간다', () => {
     expect(markup).not.toContain('aria-disabled');
   });
 

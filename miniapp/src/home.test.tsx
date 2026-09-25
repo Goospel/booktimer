@@ -1879,7 +1879,7 @@ describe('측정 중 「읽는 중」 카드', () => {
   });
 
   /** 책 없이 측정은 이 앱의 정상 경로다 — 카드가 통째로 사라지면 화면이 튀다. */
-  it('책 없이 측정 중이면 카드는 서되 「책 없이」로 뜼다', () => {
+  it('책 없이 측정 중이면 카드는 서되 「책 없이」로 뜬다', () => {
     const markup = measuring({ activeBook: null, activeBookTitle: null });
 
     expect(markup).toContain('읽는 중');
