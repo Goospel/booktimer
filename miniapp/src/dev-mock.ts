@@ -28,7 +28,9 @@ import type {
   SearchRow,
   SharedMarginEntry,
   SocialEvent,
+  SessionRow,
   StudyBookRow,
+  StudyDay,
   StudyState,
   TimerState,
   UserRow,
@@ -258,61 +260,105 @@ const state = {
   ] as StudyBookRow[],
   /** 이 세션에서 끝낸 측정 수 — 첫 종료(=1)에만 축하 배너가 뜬다. 새로고침하면 0으로 돌아가 다시 볼 수 있다. */
   completedSessions: 0,
+  /**
+   * 기록 줄의 책 덮어쓰기 — 측정 id → 책 id(`null` = 뗐다). 붙이기 문·태깅이 여기에 쓰고 줄을 만들 때 이긴다.
+   * 독서·공부는 <b>따로 든다</b> — 서버의 두 원장처럼 id 공간이 갈려 있어야 「공부 문엔 공부 줄만」이 목에서도 선다.
+   */
+  sessionBook: {} as Record<number, number | null>,
+  studySessionBook: {} as Record<number, number | null>,
+  /** 이 세션에서 끝낸 측정 — 오늘 날짜 줄 뒤에 붙는다(기록 탭에서 재고 끝내도 그 줄이 선다, A-7). */
+  liveSessions: [] as SessionRow[],
+  studyLiveSessions: [] as SessionRow[],
   nextId: 500,
 };
 
 const nextId = (): number => (state.nextId += 1);
 
+/** 픽스처 측정의 id — 이 세션에서 끝낸 측정(`nextId`, 500~)과 겹치지 않게 띄운다. */
+const fixtureSessionId = (base: number, offset: number, i: number): number => base + offset * 10 + i;
+
+/** `분(자정 기준)` → `HH:mm`. */
+const hhmm = (minutes: number): string =>
+  `${String(Math.floor(minutes / 60) % 24).padStart(2, '0')}:${String(minutes % 60).padStart(2, '0')}`;
+
+/** 지금 이 기기의 `HH:mm` — 이 세션에서 끝낸 측정 줄의 시각(목이라 서버 유저 타임존은 흉내 내지 않는다). */
+const clockOf = (iso: string): string => new Date(iso).toTimeString().slice(0, 5);
+
+/**
+ * 그 offset의 측정 줄 픽스처 — <b>줄이 먼저</b>고 날의 책·합계는 여기서 유도한다(서버와 같은 방향). 거꾸로 두면
+ * 줄의 책을 바꿔도 접힌 줄의 표지 더미·합계가 안 따라와 브라우저 확인이 거짓 신호를 준다.
+ *
+ * <p>합은 잔디와 같은 초(`LEVELS × 900`)라 두 그림이 어긋나지 않는다. 브라우저로 밟아야 할 꼴을 섞는다:
+ * 어제(offset 1)는 다섯 건에 책 넷(360px 넘침 · 표지 더미 넘침) · 책 없는 줄 · 수동 줄(잔디 직접 채움 칸과
+ * 같은 날, 늘 책이 있다) · 1분 미만 줄. 줄의 책은 붙이기 문이 쓴 덮어쓰기(`sessionBook`)가 이긴다.
+ * 오늘 줄 뒤에는 이 세션에서 끝낸 측정이 붙는다 — 기록 탭에서 재고 끝내도 그 줄이 선다(A-7).
+ */
+function readingSessionsAt(offset: number): SessionRow[] {
+  const total = LEVELS[offset % LEVELS.length] * 900;
+  const n = total === 0 ? 0 : offset === 1 ? 5 : 1 + (offset % 3);
+  const seconds = Array.from({ length: n }, () => Math.floor(total / n));
+  if (n > 0) seconds[n - 1] += total - seconds.reduce((a, b) => a + b, 0);
+  if (n >= 2 && offset % 4 === 2) {
+    seconds[0] += seconds[n - 1] - 45; // 합은 그대로 두고 마지막 줄만 1분 미만으로
+    seconds[n - 1] = 45;
+  }
+  const rows = seconds.map((s, i): SessionRow => {
+    const manual = i === n - 1 && offset % 13 === 5;
+    const start = 7 * 60 + 40 + i * 60;
+    const id = fixtureSessionId(100_000, offset, i);
+    const fixture = !manual && (offset + i) % 5 === 0 ? null : SHELF_IDS[(offset + i) % SHELF_IDS.length];
+    return {
+      id,
+      start: manual ? null : hhmm(start),
+      end: manual ? null : hhmm(start + Math.floor(s / 60)),
+      seconds: s,
+      bookId: id in state.sessionBook ? state.sessionBook[id] : fixture,
+      bookTitle: null,
+      manual,
+    };
+  });
+  const live = offset === 0 ? state.liveSessions.map((r) => ({ ...r, bookId: r.id in state.sessionBook ? state.sessionBook[r.id] : r.bookId })) : [];
+  return [...rows, ...live].map((r) => ({ ...r, bookTitle: books.find((b) => b.id === r.bookId)?.title ?? null }));
+}
+
+/** 측정 줄이 붙을 수 있는 독서 책 — 읽고 싶어요(4)는 잰 적이 없는 책이라 픽스처 줄에 안 쓴다. */
+const SHELF_IDS = [1, 2, 3, 5];
+
+/** 모든 날의 독서 측정 줄 — 붙이기 문이 id를 찾는 곳. */
+const allReadingRows = (): SessionRow[] =>
+  Array.from({ length: GRAPH_WEEKS * 7 }, (_, offset) => readingSessionsAt(offset)).flat();
+
 /**
  * 날짜별 기록 목 — 잔디와 **같은 패턴·같은 초**에서 만든다. 둘이 어긋나면(잔디는 초록인데 목록은 빔)
  * 화면 버그가 아니라 목 버그로 시간을 태운다. 서버처럼 최신 월 먼저, 달 안에서도 최신 일 먼저다.
  */
-/**
- * 한 뭉치를 책 수만큼 <b>내림차순</b>으로 나눈다 — 서버가 오래 읽은 순으로 주기 때문이다.
- *
- * <p>마지막 몫이 나머지를 흡수해 합이 `pot`과 <b>정확히</b> 같다. 반올림 오차를 그냥 두면 목이 서버와
- * 1초씩 어긋나고, 그러면 「책 안 고른 기록」 줄이 있어야 할 날에 없거나 없어야 할 날에 생긴다.
- */
-function splitSeconds(pot: number, count: number): number[] {
-  if (count === 0) return [];
-  const weights = [4, 3, 2, 1].slice(0, count);
-  const sum = weights.reduce((a, b) => a + b, 0);
-  const out: number[] = [];
-  let left = pot;
-  for (let i = 0; i < count - 1; i++) {
-    const share = Math.round((pot * weights[i]) / sum);
-    out.push(share);
-    left -= share;
-  }
-  out.push(left);
-  return out;
-}
-
 function buildMonths(): MonthlySection[] {
   const byMonth = new Map<string, DailyRecord[]>();
 
   for (let offset = 0; offset < GRAPH_WEEKS * 7; offset++) {
-    const level = LEVELS[offset % LEVELS.length];
-    if (level === 0) continue; // 안 읽은 날은 행이 없다(잔디는 회색 칸으로만 남는다).
+    const sessions = readingSessionsAt(offset);
+    if (sessions.length === 0) continue; // 안 읽은 날은 행이 없다(잔디는 회색 칸으로만 남는다).
     const date = isoDate(offset);
-    const total = level * 900;
-    // 권수를 섞어 둬야 더미의 네 꼴(없음 · 한 권 · 두 권 · 넘침「+1」)이 다 눈에 보인다.
-    const count = offset % 5 === 0 ? 0 : offset % 4 === 1 ? 4 : offset % 6 === 5 ? 3 : offset % 3 === 2 ? 2 : 1;
-    // 책을 안 고르고 잰 시간이 남는 날 — 펼쳤을 때 회색 「책 안 고른 기록」 줄이 나오는 경로.
-    const leftover = offset % 7 === 3;
-    const picked = Array.from({ length: count }, (_, i) => books[(offset + i) % books.length]);
-    const shares = splitSeconds(leftover ? Math.round(total * 0.7) : total, count);
-    const days = byMonth.get(date.slice(0, 7));
-    const record = {
+    // 그날 읽은 책 — 책 붙은 줄을 제목별로 합쳐 오래 읽은 순(서버 `BookRead`와 같은 규칙).
+    const perBook = new Map<number, number>();
+    for (const s of sessions) if (s.bookId !== null) perBook.set(s.bookId, (perBook.get(s.bookId) ?? 0) + s.seconds);
+    const record: DailyRecord = {
       date,
-      totalSeconds: total,
-      books: picked.map((book, i) => ({ title: book.title, coverUrl: book.coverUrl, seconds: shares[i] })),
+      totalSeconds: sessions.reduce((sum, s) => sum + s.seconds, 0),
+      books: [...perBook]
+        .sort((a, b) => b[1] - a[1])
+        .map(([id, seconds]) => {
+          const book = books.find((b) => b.id === id)!;
+          return { title: book.title, coverUrl: book.coverUrl, seconds };
+        }),
       manuallyFilled: offset % 13 === 5,
       // 3주 전에 목표를 1시간 → 현재값(대개 30분)으로 내린 사용자 — 최근엔 30분만 읽어도 가득 차고,
       // 그 전엔 1시간이라야 가득 찬다. offset 4는 목표 0(「목표 없음」) 경로다 — 가득 찬 막대 +
       // 펼침 「그날 목표 없음」이 브라우저에서 눈에 보인다.
       goalSeconds: offset === 4 ? 0 : offset < 21 ? state.goalSeconds : 3_600,
+      sessions,
     };
+    const days = byMonth.get(date.slice(0, 7));
     if (days === undefined) byMonth.set(date.slice(0, 7), [record]);
     else days.push(record);
   }
@@ -394,17 +440,48 @@ function studyLevel(seconds: number): number {
   return 4;
 }
 
-/** 공부 기록 목록 — 0 아닌 날만 월별로 묶는다. offset이 커질수록 과거라 월·일 모두 최신 먼저로 굳는다. */
-function studyMonths(): { month: string; totalSeconds: number; days: { date: string; totalSeconds: number }[] }[] {
-  const byMonth = new Map<string, { date: string; totalSeconds: number }[]>();
+/** 측정 줄이 붙을 수 있는 공부 책 — 공부 서재 픽스처의 id(독서 책장과 다른 id 공간). */
+const STUDY_SHELF_IDS = [101, 102, 103];
+
+/**
+ * 그 offset의 공부 측정 줄 — 독서 {@link readingSessionsAt}와 같은 규율(줄이 먼저, 합은 잔디와 같은 초).
+ * 수동 줄은 없다(공부 원장엔 수동 입력이 없다). 오늘 줄 뒤에 이 세션에서 끝낸 공부 측정이 붙는다 — 그 합이
+ * `studyTodaySeconds`라 날 합계가 {@link studySecondsAt}와 그대로 맞는다.
+ */
+function studySessionsAt(offset: number): SessionRow[] {
+  const total = studySecondsAt(offset) - (offset === 0 ? state.studyTodaySeconds : 0);
+  const n = total === 0 ? 0 : offset === 1 ? 5 : 1 + (offset % 2);
+  const seconds = Array.from({ length: n }, () => Math.floor(total / n));
+  if (n > 0) seconds[n - 1] += total - seconds.reduce((a, b) => a + b, 0);
+  const rows = seconds.map((s, i): SessionRow => {
+    const start = 19 * 60 + i * 60;
+    const id = fixtureSessionId(200_000, offset, i);
+    const fixture = (offset + i) % 4 === 0 ? null : STUDY_SHELF_IDS[(offset + i) % STUDY_SHELF_IDS.length];
+    return { id, start: hhmm(start), end: hhmm(start + Math.floor(s / 60)), seconds: s, bookId: fixture, bookTitle: null, manual: false };
+  });
+  const live = offset === 0 ? state.studyLiveSessions : [];
+  return [...rows, ...live].map((r) => {
+    const bookId = r.id in state.studySessionBook ? state.studySessionBook[r.id] : r.bookId;
+    return { ...r, bookId, bookTitle: state.studyBooks.find((b) => b.id === bookId)?.title ?? null };
+  });
+}
+
+/** 모든 날의 공부 측정 줄 — 공부 붙이기 문이 id를 찾는 곳. */
+const allStudyRows = (): SessionRow[] =>
+  Array.from({ length: GRAPH_WEEKS * 7 }, (_, offset) => studySessionsAt(offset)).flat();
+
+/** 공부 기록 목록 — 측정이 있는 날만 월별로 묶는다. offset이 커질수록 과거라 월·일 모두 최신 먼저로 굳는다. */
+function studyMonths(): { month: string; totalSeconds: number; days: StudyDay[] }[] {
+  const byMonth = new Map<string, StudyDay[]>();
 
   for (let offset = 0; offset < GRAPH_WEEKS * 7; offset++) {
-    const seconds = studySecondsAt(offset);
-    if (seconds === 0) continue; // 안 한 날은 행이 없다(잔디는 회색 칸으로만 남는다).
+    const sessions = studySessionsAt(offset);
+    if (sessions.length === 0) continue; // 안 한 날은 행이 없다(잔디는 회색 칸으로만 남는다).
     const date = isoDate(offset);
+    const day: StudyDay = { date, totalSeconds: sessions.reduce((sum, s) => sum + s.seconds, 0), sessions };
     const days = byMonth.get(date.slice(0, 7));
-    if (days === undefined) byMonth.set(date.slice(0, 7), [{ date, totalSeconds: seconds }]);
-    else days.push({ date, totalSeconds: seconds });
+    if (days === undefined) byMonth.set(date.slice(0, 7), [day]);
+    else days.push(day);
   }
 
   return [...byMonth].map(([month, days]) => ({
@@ -1145,6 +1222,15 @@ const routes: [Method, RegExp, (ctx: Ctx) => unknown][] = [
     if (book !== undefined) book.seconds += elapsed;
     const sessionId = nextId();
     state.lastStopped = { id: sessionId, bookId: state.activeBookId, seconds: elapsed };
+    state.liveSessions.push({
+      id: sessionId,
+      start: clockOf(state.activeStartedAt ?? new Date().toISOString()),
+      end: clockOf(new Date().toISOString()),
+      seconds: elapsed,
+      bookId: state.activeBookId,
+      bookTitle: null,
+      manual: false,
+    });
     state.activeStartedAt = null;
     state.activeBookId = null;
     state.completedSessions += 1;
@@ -1180,14 +1266,33 @@ const routes: [Method, RegExp, (ctx: Ctx) => unknown][] = [
     book.seconds += last.seconds;
     startReading(book);
     state.lastStopped = { ...last, bookId: book.id };
+    state.sessionBook[id] = book.id; // 기록 탭의 그 줄도 따라온다
     return { sessionId: id, bookTitle: book.title };
   }],
   // 진행 중 세션의 대상 교체 — 세션 id를 안 받는다(서버가 「내 진행 중 세션」을 찾는다).
   // 409를 실물처럼 재현해야 「방금 끝난 뒤 바꾸기」가 목에서도 같은 말을 한다.
   ['POST', /^\/api\/sessions\/active\/book$/, ({ body }) => {
     if (state.activeStartedAt === null) throw new ApiError(409, '진행 중인 측정이 없습니다');
-    state.activeBookId = (body.bookId as number | null) ?? null;
-    if (state.activeBookId !== null) startReading(mustFindBook(state.activeBookId));
+    // 책 검증이 상태 변경보다 <b>먼저</b>다 — 없는 책으로 404를 주고도 상태를 바꿔 두면 서버(검증 실패 시 기존 책
+    // 유지)와 달리 「없는 책을 재는 중」이 남는다(PR-4 리뷰 F4).
+    const id = (body.bookId as number | null) ?? null;
+    if (id !== null) startReading(mustFindBook(id));
+    state.activeBookId = id;
+    return timerState();
+  }],
+  /**
+   * 끝난 측정의 책 정하기(R2) — 기록 탭의 붙이기·바꾸기·떼기 한 문. 서버 순서 그대로: 키 없음 400 → 책 404 →
+   * 측정 404 → 수동 기록에 null 409. 읽고 싶어요 책을 붙이면 읽는 중으로 옮긴다(서버와 같다).
+   * ponytail: 줄의 책만 바꾸고 책별 누적(`book.seconds`)은 안 옮긴다 — 픽스처 줄과 책 누적이 애초에 따로 논다.
+   */
+  ['POST', /^\/api\/sessions\/(\d+)\/book$/, ({ id, body }) => {
+    if (body.bookId === undefined) throw new ApiError(400, 'bookId가 필요합니다');
+    const book = body.bookId === null ? null : mustFindBook(body.bookId as number);
+    const row = allReadingRows().find((r) => r.id === id);
+    if (row === undefined) throw new ApiError(404, '측정을 찾을 수 없습니다');
+    if (row.manual && book === null) throw new ApiError(409, '책을 바꿀 수 없는 측정입니다');
+    state.sessionBook[id] = book === null ? null : book.id;
+    if (book !== null) startReading(book);
     return timerState();
   }],
 
@@ -1218,6 +1323,15 @@ const routes: [Method, RegExp, (ctx: Ctx) => unknown][] = [
     }
     const sessionId = nextId();
     state.studyLastStopped = { id: sessionId, bookId: state.studyStudyingBookId, seconds };
+    state.studyLiveSessions.push({
+      id: sessionId,
+      start: clockOf(state.studyStartedAt),
+      end: clockOf(new Date().toISOString()),
+      seconds,
+      bookId: state.studyStudyingBookId,
+      bookTitle: null,
+      manual: false,
+    });
     state.studyStartedAt = null;
     state.studyStudyingBookId = null;
     // 책 없이 잰 측정만 붙일 자리가 있다 — 책을 걸고 잰 것엔 좌표를 안 준다(서버 `stopped.getBook()==null`).
@@ -1236,6 +1350,15 @@ const routes: [Method, RegExp, (ctx: Ctx) => unknown][] = [
     state.studyBookSeconds[book.id] = (state.studyBookSeconds[book.id] ?? 0) + last.seconds;
     state.studyRecentBookId = book.id;
     state.studyLastStopped = { ...last, bookId: book.id };
+    state.studySessionBook[id] = book.id; // 기록 탭의 그 줄도 따라온다
+    return studyState();
+  }],
+  /** 끝난 공부 측정의 책 정하기(R2) — 독서 문의 공부판. 수동 기록·상태 전이가 없다. 줄의 책만 바꾼다(누적은 안 옮긴다). */
+  ['POST', /^\/api\/study\/sessions\/(\d+)\/book$/, ({ id, body }) => {
+    if (body.bookId === undefined) throw new ApiError(400, 'bookId가 필요합니다');
+    const book = body.bookId === null ? null : mustFindStudyBook(body.bookId as number);
+    if (!allStudyRows().some((r) => r.id === id)) throw new ApiError(404, '측정을 찾을 수 없습니다');
+    state.studySessionBook[id] = book === null ? null : book.id;
     return studyState();
   }],
 

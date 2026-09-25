@@ -1158,8 +1158,9 @@ describe('책 없이 부제 (noBookSubtitle)', () => {
     expect(noBookSubtitle(0)).toBe('서재에 책을 추가하면 여기서 골라요');
   });
 
-  it('책이 있으면 기록에 책이 안 남는다고 알린다 — 고를 수 있는데 굳이 안 고르는 선택이다', () => {
-    expect(noBookSubtitle(2)).toBe('기록에 책이 남지 않아요');
+  it('책이 있으면 나중에 붙이는 자리를 알린다 — 기록 탭에서 측정 한 건씩 붙인다(R2 P13)', () => {
+    expect(noBookSubtitle(1)).toBe('끝난 뒤 기록 탭에서 붙일 수 있어요');
+    expect(noBookSubtitle(2)).toBe('끝난 뒤 기록 탭에서 붙일 수 있어요');
   });
 });
 

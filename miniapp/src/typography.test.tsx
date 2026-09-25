@@ -42,7 +42,7 @@ const rules = css.replace(/\/\*[\s\S]*?\*\//g, '');
 const SERIF_SPREADS = {
   'App.tsx': 2,
   'GuestHome.tsx': 5,
-  'History.tsx': 7,
+  'History.tsx': 6, // 2026-09-25 펼친 책별 시간(세리프 16)이 측정 줄(비세리프)로 바뀌며 한 자리 줄었다(R2 PR-5)
   'Home.tsx': 6, // 2026-09-24 하루 목표 세리프 값이 회색 캡션으로 내려가 한 자리 줄었다
   'HomeFeed.tsx': 3,
   'Library.tsx': 1,

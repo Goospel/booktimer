@@ -1,7 +1,8 @@
+import { Button } from '@toss/tds-mobile';
 import type { CSSProperties } from 'react';
 import { useEffect, useState } from 'react';
 
-import type { BookRead, ContributionDay, ContributionGraph, DailyRecord, MonthlySection } from '../api';
+import type { BookRead, ContributionDay, ContributionGraph, DailyRecord, MonthlySection, SessionRow } from '../api';
 import { fetchHistory } from '../api';
 import { CACHE_HISTORY, cacheGet, cachePut } from '../cache';
 import { formatDuration } from '../format';
@@ -30,8 +31,22 @@ const CELL_SIZE = 11;
  * 홈이 넘겨준 최신 graph를 그대로 그린다(설계 §2.5).
  *
  * <p>탭 재편(PR-5) 전까지 있던 "돌아가기" 버튼은 탭 전환이 대신하므로 없앴다.
+ *
+ * <p>날짜를 펼치면 측정 한 건씩 서고 [책 붙이기]/[바꾸기]가 붙는다(R2). 시트는 App이 연다 — 이 화면은
+ * 누른 줄을 넘길 뿐이다. `reloadKey`가 오르면 목록을 다시 받는다(붙이기·기록 탭에서의 종료 뒤).
  */
-export function History({ graph }: { graph: ContributionGraph }) {
+export function History({
+  graph,
+  onAssignBook = () => {},
+  reloadKey = 0,
+  candidateCount = 0,
+}: {
+  graph: ContributionGraph;
+  onAssignBook?: (row: SessionRow) => void;
+  reloadKey?: number;
+  /** 붙일 수 있는 책 수 — 0이면 책 없는 줄에 버튼 대신 안내가 선다({@link sessionAction}). */
+  candidateCount?: number;
+}) {
   // 날짜별 기록은 대시보드에 안 실려 오므로 이 탭에서 따로 받는다. 실패해도 위쪽 잔디는 그대로 두고
   // 아래에만 사유를 남긴다 — 목록 하나 때문에 화면 전체를 에러로 덮으면 손해가 크다.
   // 지난 성공 응답이 첫 렌더의 출발점이다 — 탭을 다시 열 때 아래쪽만 늦게 붙던 자리(재검증은 그대로).
@@ -45,13 +60,17 @@ export function History({ graph }: { graph: ContributionGraph }) {
     fetchHistory()
       .then((r) => {
         cachePut(CACHE_HISTORY, r.months); // 언마운트 뒤 도착해도 캐시엔 넣는다 — 다음 진입의 첫 렌더가 된다
-        if (alive) setSections(r.months);
+        if (alive) {
+          // 재조회(reloadKey)가 성공하면 지난 실패 문구를 걷는다
+          setSections(r.months);
+          setError(null);
+        }
       })
       .catch((e: Error) => alive && setError(e.message));
     return () => {
       alive = false;
     };
-  }, []);
+  }, [reloadKey]);
 
   return (
     <Screen title="내 기록">
@@ -66,7 +85,9 @@ export function History({ graph }: { graph: ContributionGraph }) {
         <Legend />
       </section>
 
-      {sections !== null && <MonthlyRecords months={sections} />}
+      {sections !== null && (
+        <MonthlyRecords months={sections} candidateCount={candidateCount} onAssign={onAssignBook} />
+      )}
       <ErrorMessage message={error} />
     </Screen>
   );
@@ -248,42 +269,24 @@ export function coverStack(books: BookRead[], max = 3): { shown: BookRead[]; mor
   return { shown: books.slice(0, max - 1), more: books.length - (max - 1) };
 }
 
-/** 펼친 하루의 한 줄 — 책 한 권, 또는 마지막의 「책 안 고른 기록」. */
-export interface DayBookRow extends BookRead {
-  /** 책이 아니라 차액 줄이면 true — 표지 대신 빈 칸, 회색으로 눌러 그린다. */
-  unassigned: boolean;
-}
-
-/** 「책 안 고른 기록」 줄의 이름 — 책이 아니라서 제목 자리에 설명이 온다. */
-const UNASSIGNED_LABEL = '책 안 고른 기록';
-
 /**
- * 펼쳤을 때 세울 줄들 — 책들 + (남으면) 「책 안 고른 기록」.
+ * 펼칠 수 있는 날인가 — 기준은 <b>「측정이 한 건이라도 있는가」</b>다(R2).
  *
- * <p>책을 안 고르고 잰 세션은 서버 `books`에 안 잡히지만 `totalSeconds`에는 남아 있다. 그 차액을 그냥
- * 버리면 <b>펼친 시간을 다 더해도 접힌 줄의 총합과 안 맞는다</b> — 사용자가 산수를 해 보는 순간 화면이
- * 거짓말한 게 된다. 그래서 남는 만큼을 마지막 줄로 밝힌다. 차액이 없으면 그 줄을 안 만든다(「0초」 줄이 된다).
+ * <p>펼침은 이제 「무슨 책을」에 더해 <b>책을 붙이는 자리</b>다 — 책을 안 고른 날이야말로 펼쳐야 한다(옛 기준
+ * 「책이 한 권이라도」는 정확히 붙일 게 있는 날을 닫아 두었다). `sessions`를 안 주는 옛 서버 응답은 좌표가 없어
+ * 붙일 수도 없으니 펼치지 않는다.
  */
-export function bookRows(day: DailyRecord): DayBookRow[] {
-  const rows: DayBookRow[] = day.books.map((book) => ({ ...book, unassigned: false }));
-  const rest = day.totalSeconds - day.books.reduce((sum, book) => sum + book.seconds, 0);
-  if (rest > 0) {
-    rows.push({ title: UNASSIGNED_LABEL, coverUrl: null, seconds: rest, unassigned: true });
-  }
-  return rows;
+export function isExpandable(day: { sessions?: SessionRow[] }): boolean {
+  return (day.sessions ?? []).length >= 1;
 }
 
 /**
- * 펼칠 수 있는 날인가 — 기준은 <b>「책이 한 권이라도 있는가」</b>다.
- *
- * <p>접힌 줄에는 제목이 없고 20px 표지뿐이라, 한 권만 읽은 날도 펼쳐야 <b>무슨 책인지</b>가 나온다.
- * 특히 시리즈물은 권마다 표지가 같아서, 책이 바뀌어도 접힌 줄로는 그게 안 보였다(사용자 보고 2026-09-08).
- * 전 기준 「펼치면 줄이 둘 이상인가」는 펼침의 값을 <b>시간</b>으로만 셌던 셈이다 — 제목도 값이다.
- *
- * <p>책을 아예 안 고른 날은 그대로 안 펼친다 — 펼쳐도 「책 안 고른 기록」 한 줄이 그날 전부라 새로 보이는 게 없다.
+ * 측정 줄 오른쪽에 무엇을 세우나. 책 있는 줄은 `'change'`(그 책이 곧 후보라 후보 수와 무관), 책 없는 줄은
+ * 붙일 후보가 있으면 `'attach'`, 0권이면 `'none'` — 빈 시트를 여는 막다른 문 대신 누를 수 없는 안내 글자를 둔다.
  */
-export function isExpandable(day: DailyRecord): boolean {
-  return day.books.length >= 1;
+export function sessionAction(row: SessionRow, candidateCount: number): 'attach' | 'change' | 'none' {
+  if (row.bookId !== null) return 'change';
+  return candidateCount > 0 ? 'attach' : 'none';
 }
 
 /** `2026-08` → `2026년 8월`. */
@@ -296,7 +299,15 @@ export function formatMonthTitle(month: string): string {
  * 잔디 아래 날짜별 기록 — 언제·무슨 책을·얼마나 읽었는지. 웹 `MonthlyRecords.vue`와 같은 정보를 담되
  * 월 ◀▶ 이동은 두지 않는다(A안): 폰은 세로 스크롤이 자연스럽고, 한 달만 담으면 잔디 아래가 다시 빈다.
  */
-export function MonthlyRecords({ months }: { months: MonthlySection[] }) {
+export function MonthlyRecords({
+  months,
+  candidateCount = 0,
+  onAssign = () => {},
+}: {
+  months: MonthlySection[];
+  candidateCount?: number;
+  onAssign?: (row: SessionRow) => void;
+}) {
   // 한 번에 하나만 펼친다 — 여럿이 동시에 열리면 목록이 벽이 되고, 하루를 보러 온 사람이 스크롤을 잃는다.
   const [openDate, setOpenDate] = useState<string | null>(null);
 
@@ -321,6 +332,8 @@ export function MonthlyRecords({ months }: { months: MonthlySection[] }) {
                   day={day}
                   expanded={day.date === openDate}
                   onToggle={() => setOpenDate(day.date === openDate ? null : day.date)}
+                  candidateCount={candidateCount}
+                  onAssign={onAssign}
                 />
               ))}
             </div>
@@ -420,7 +433,7 @@ export function DayBar({ percent }: { percent: number }) {
 }
 
 /** 버튼의 기본 꼴을 지운다 — 손잡이지 알약이 아니다. `ROW_GRID`를 뒤에 펴서 격자를 입힌다. */
-const BUTTON_RESET: CSSProperties = {
+export const BUTTON_RESET: CSSProperties = {
   border: 'none',
   background: 'none',
   color: 'inherit',
@@ -433,7 +446,8 @@ const BUTTON_RESET: CSSProperties = {
  *
  * <p>전에는 표지를 <b>옆으로 나열</b>했다. 그래서 네 권을 읽은 날은 세 장 + 「+1」로 늘어서기만 하고,
  * <b>어느 책을 오래 읽었는지</b>는 어디에도 없었다 — 그날 총합 하나뿐이었다. 겹쳐 쌓으면 자리를 덜 쓰면서
- * 「여러 권」이 형태로 읽히고, 눌러 펼치면 책마다 얼마나 읽었는지가 나온다(사용자 요청 2026-08-20).
+ * 「여러 권」이 형태로 읽힌다(사용자 요청 2026-08-20). 눌러 펼치면 측정 한 건씩(시각·시간·책)이 서고
+ * 거기서 책을 붙이거나 바꾼다(R2).
  *
  * <p>펼침 상태를 스스로 들지 않고 위에서 받는다 — 한 번에 하나만 열려야 하는데, 각 줄이 제 상태를 들면
  * 그 규칙을 아무도 강제할 수 없다. 덕분에 정적 렌더 하니스(클릭이 안 도는)에서도 펼친 꼴을 계측할 수 있다.
@@ -442,10 +456,14 @@ export function DayRow({
   day,
   expanded,
   onToggle,
+  candidateCount = 0,
+  onAssign = () => {},
 }: {
   day: DailyRecord;
   expanded: boolean;
   onToggle: () => void;
+  candidateCount?: number;
+  onAssign?: (row: SessionRow) => void;
 }) {
   const expandable = isExpandable(day);
   const summary = (
@@ -459,7 +477,6 @@ export function DayRow({
       <DayBar percent={barPercent(day.totalSeconds, day.goalSeconds ?? 0)} />
 
       <DayTotal seconds={day.totalSeconds} />
-
 
       {expandable ? <Chevron open={expanded} /> : <span aria-hidden="true" />}
     </>
@@ -480,7 +497,15 @@ export function DayRow({
       ) : (
         <div style={ROW_GRID}>{summary}</div>
       )}
-      {expanded && <BookLines rows={bookRows(day)} goalSeconds={day.goalSeconds} />}
+      {expanded && (
+        <div style={{ marginTop: 10 }}>
+          <SessionLines rows={day.sessions ?? []} candidateCount={candidateCount} onAssign={onAssign} />
+          {/* 값이 아니라 말이라 비세리프로 둔다 — 요일 줄과 같은 판단(위계 테스트의 비세리프 목록). */}
+          <Text typography="st12" color="grey600" style={{ display: 'block', marginTop: 10 }}>
+            {goalLabel(day.goalSeconds)}
+          </Text>
+        </div>
+      )}
     </div>
   );
 }
@@ -597,88 +622,92 @@ function CoverPile({ books }: { books: BookRead[] }) {
 }
 
 /**
- * 펼친 책 줄들 — 무슨 책을 얼마나.
+ * 펼친 날의 측정 줄 — 한 건씩 「시각/시간 · 제목 · 손잡이」(R2). 독서·공부 기록이 같이 쓴다.
  *
- * <p>막대 기준은 <b>그날 가장 오래 읽은 줄</b>이다 — 총합을 기준으로 재면 여러 권인 날은 죄다 짧은
- * 막대가 돼 견줄 수가 없다. 하루 막대(그날 목표를 얼마나 채웠나)와 책 막대(그날 안에서의 비중)는
- * 서로 다른 것을 잰다.
+ * <p><b>훅 없는 순수 컴포넌트</b>다 — 테스트가 함수로 불러 엘리먼트 트리에서 라벨↔핸들러를 잰다(정적 렌더는
+ * `onClick`을 못 본다). 상태·시트는 위(App)가 든다.
  *
- * <p>맨 아래 한 줄은 하루 막대의 기준을 밝힌다 — 막대만 보면 무엇에 견줘 쟀는지 알 수 없다.
+ * <p>격자는 3열이다: 360px 폭 쟁반 안 가용 폭은 292px이라 네 값(시각·시간·제목·버튼)을 한 줄에 두면 제목 칸이
+ * ≈50px로 남아 두 글자면 잘린다. 시간을 시각 밑으로 쌓아 제목 칸을 ≥120px로 지킨다(설계 §4.5).
+ * 들여쓰기·세로선은 없다 — 눌린 쟁반이 이미 「그날에 딸린 것」을 묶는다.
  */
-function BookLines({ rows, goalSeconds }: { rows: DayBookRow[]; goalSeconds?: number }) {
-  const longest = rows.reduce((max, row) => Math.max(max, row.seconds), 0);
-  const name: CSSProperties = { display: 'block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' };
-
+export function SessionLines({
+  rows,
+  candidateCount,
+  onAssign,
+}: {
+  rows: SessionRow[];
+  candidateCount: number;
+  onAssign: (row: SessionRow) => void;
+}) {
   return (
-    // 왼쪽 세로선은 여백의 인용 줄과 같은 값이다 — 「위 줄에 딸린 것」이라는 말을 앱이 한 가지로 한다.
-    // 그 줄이 B에서 세이지 200으로 옮겨 갔으므로 여기도 함께 옮긴다(안 옮기면 이 주석이 거짓이 된다).
-    // 시안 2d는 `rgba(110,138,106,.35)`로 인용(.5)보다 한 톤 옅지만, 15% 알파 차이로 두 자리를
-    // 갈라 두면 「한 가지로 한다」는 규약만 잃는다.
-    // 들여쓰기 58 = 날짜 칸(50) + 간격(8) — 가이드라인이 표지 더미 칸 시작점에 선다(쟁반 안이라 옛 70은 막대를 깎았다).
-    <div
-      style={{
-        margin: '10px 0 0 58px',
-        paddingLeft: 16,
-        borderLeft: '2px solid var(--adaptiveBlue200, #B6C9AE)',
-        display: 'flex',
-        flexDirection: 'column',
-        gap: 8,
-      }}
-    >
-      {rows.map((row) => (
-        <div
-          key={row.title}
-          style={{
-            display: 'grid',
-            gridTemplateColumns: '26px minmax(0, 1fr) 36px 72px',
-            alignItems: 'center',
-            columnGap: 8,
-          }}
-        >
-          {row.unassigned ? (
-            <span
-              aria-hidden="true"
-              style={{
-                display: 'block',
-                width: 26,
-                height: 36,
-                borderRadius: 3,
-                border: '1px dashed var(--adaptiveGrey200, #E4DDD0)',
-              }}
-            />
-          ) : (
-            <BookCover url={row.coverUrl} title={row.title} width={26} />
-          )}
+    <div style={SESSION_GRID}>
+      {rows.map((row) => {
+        const action = sessionAction(row, candidateCount);
+        return (
+          // 줄은 격자에 녹는다(display: contents) — 줄마다 격자를 따로 두면 max-content 시각 칸 폭이 줄마다 달라
+          // 제목 시작점이 흔들렸다(목 모드 360px 스크린샷). 한 격자라야 세 칸이 모든 줄에서 같은 자리에 선다.
+          <div key={row.id} data-session-row="" style={{ display: 'contents' }}>
+            <div>
+              {/* 값이 아니라 표지라 비세리프다 — 그날의 답(하루 합계, 세리프 17)은 접힌 줄에 있다.
+                  크기는 Soft 눈금(보조 14 · 최소 13)이다 — 설계 초안의 13/12는 「최소 13」 규칙과 부딪혀 한 단 올렸다. */}
+              <Text typography="st12" style={{ display: 'block', fontSize: 14, whiteSpace: 'nowrap' }}>
+                {row.manual ? MANUAL_LABEL : `${row.start}–${row.end}`}
+              </Text>
+              <Text typography="st12" color="grey600" style={{ display: 'block', fontSize: 13, whiteSpace: 'nowrap' }}>
+                {sessionLength(row.seconds)}
+              </Text>
+            </div>
 
-          {/* 이름 16 — 시안 펼친 줄. 책 안 고른 줄은 책이 아니라 설명이라 흐리게 눌러 그린다. */}
-          <Text typography="st11" color={row.unassigned ? 'grey600' : undefined} style={{ ...name, fontSize: 16 }}>
-            {row.title}
-          </Text>
+            <div data-session-title="" style={{ minWidth: 0 }}>
+              <Text
+                typography="st11"
+                color={row.bookTitle === null ? 'grey600' : undefined}
+                style={{ display: 'block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
+              >
+                {row.bookTitle ?? '책 없음'}
+              </Text>
+              {action === 'none' && (
+                <Text typography="st12" color="grey600" style={{ display: 'block', fontSize: 13, wordBreak: 'keep-all' }}>
+                  서재에 책을 담으면 붙일 수 있어요
+                </Text>
+              )}
+            </div>
 
-          <div
-            aria-hidden="true"
-            style={{
-              width: `${barPercent(row.seconds, longest)}%`,
-              height: 4,
-              borderRadius: 2,
-              background: row.unassigned ? 'var(--adaptiveGrey200, #E4DDD0)' : LEVEL_COLORS[1],
-            }}
-          />
-
-          <div style={{ textAlign: 'right' }}>
-            <Text typography="st11" color="grey700" style={{ whiteSpace: 'nowrap', ...SERIF_VALUE, fontSize: 16 }}>
-              {formatDuration(row.seconds)}
-            </Text>
+            {action === 'none' ? (
+              <span aria-hidden="true" />
+            ) : (
+              <Button
+                variant="weak"
+                size="small"
+                aria-label={`${row.manual ? MANUAL_LABEL : `${row.start}–${row.end}`} 측정 ${action === 'attach' ? '책 붙이기' : '책 바꾸기'}`}
+                onClick={() => onAssign(row)}
+              >
+                {action === 'attach' ? '책 붙이기' : '바꾸기'}
+              </Button>
+            )}
           </div>
-        </div>
-      ))}
-
-      {/* 값이 아니라 말이라 비세리프로 둔다 — 요일 줄과 같은 판단(위계 테스트의 비세리프 목록). */}
-      <Text typography="st12" color="grey600" style={{ display: 'block', marginTop: 2 }}>
-        {goalLabel(goalSeconds)}
-      </Text>
+        );
+      })}
     </div>
   );
+}
+
+/** 측정 줄 격자 — 시각/시간 스택 · 제목 · 손잡이. 모든 줄이 이 한 격자를 나눠 쓴다. */
+const SESSION_GRID: CSSProperties = {
+  display: 'grid',
+  gridTemplateColumns: 'max-content minmax(0, 1fr) max-content',
+  alignItems: 'center',
+  columnGap: 8,
+  rowGap: 12,
+};
+
+/** 수동 기록 줄의 시각 자리 — 그 시각은 서버 앵커(과거 날짜 00:00)라 찍으면 거짓이다. 웹 기록과 같은 말. */
+const MANUAL_LABEL = '직접 기록';
+
+/** 줄의 걸린 시간 — 60초 미만은 「1분 미만」(「45초」는 측정 줄에서 소음이다, 웹 기록과 같은 말). */
+function sessionLength(seconds: number): string {
+  return seconds < 60 ? '1분 미만' : formatDuration(seconds);
 }
 
 /**
@@ -687,7 +716,7 @@ function BookLines({ rows, goalSeconds }: { rows: DayBookRow[]; goalSeconds?: nu
  * <p>도는 것은 `transform`뿐이다 — 합성만 유발해 표지를 다시 래스터화하지 않는다(T-176에서 발광
  * `box-shadow` 애니메이션이 표지를 초당 60번 다시 그리게 했던 자리다).
  */
-function Chevron({ open }: { open: boolean }) {
+export function Chevron({ open }: { open: boolean }) {
   return (
     <svg
       width="10"

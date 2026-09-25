@@ -1778,10 +1778,17 @@ describe('태깅·교체 시트 배선 (R2)', () => {
     expect(flat).toContain("books={mode === 'study' ? (study.books ?? []) : taggableBooks(dashboard)}");
   });
 
-  it('태깅 실패는 시트 안에서 말한다 — 시트를 연 채 setTagError로(P7)', () => {
+  /**
+   * ⚠️ 식 <b>전체</b>로 잰다 — `setTagError(e.message)` 부분 문자열만 보면 401 분기를 지우거나, 성공 뒤
+   * `.then(closeSheet)`를 빼거나, closeSheet가 지난 문구를 안 걷는 돌연변이가 전부 살아남았다(PR-4 리뷰 F2).
+   */
+  it('태깅 실패는 시트 안에서 말한다 — 401만 재로그인, 성공은 시트를 닫고 문구를 걷는다(P7)', () => {
     const tag = flat.slice(flat.indexOf('const tag = (book: BookOption)'), flat.indexOf('const changeBook ='));
+    const close = flat.slice(flat.indexOf('const closeSheet = () =>'), flat.indexOf('useBackClose(tagging !== null'));
 
-    expect(tag).toContain('setTagError(e.message)');
+    expect(tag).toContain(".catch((e: Error) => (e.name === 'UnauthorizedError' ? onError(e) : setTagError(e.message)))");
+    expect(tag).toContain('.then(closeSheet)');
+    expect(close).toContain('setTagging(null); setTagError(null);');
     expect(flat).toContain('error={tagError}');
   });
 
@@ -1793,7 +1800,85 @@ describe('태깅·교체 시트 배선 (R2)', () => {
     expect(flat).toContain('onChangeActiveBook={() => setChanging(true)}');
   });
 
+  /** 결과를 버리는 돌연변이(`void homePickAfterShelf(…)`)가 부분 문자열 단언을 통과했다(PR-4 리뷰 F1) — 배선 전체를 잰다. */
   it('서재가 0권에서 생기면 홈 선택을 homePickAfterShelf로 보정한다(P6-b)', () => {
-    expect(flat).toContain('homePickAfterShelf(');
+    expect(flat).toContain('setHomeBookId((pick) => homePickAfterShelf(prev, readingCount, pick));');
+    expect(flat).toContain('}, [readingCount]);');
+  });
+});
+
+/**
+ * R2 PR-5 — 기록 탭에서 측정 한 건씩 책 붙이기·바꾸기. 시트는 정적 렌더로 열 수 없어(T-149) 배선을 소스로 잰다
+ * (주석을 걷고 — T-205). 줄·손잡이 자체는 `history.test`의 `SessionLines`가, 목 문은 `dev-mock.test`가 맡는다.
+ */
+describe('기록 붙이기 배선 (R2 PR-5)', () => {
+  const src = stripComments(readFileSync(new URL('./App.tsx', import.meta.url), 'utf8'));
+  const flat = src.replace(/\s+/g, ' ');
+  const between = (from: string, to: string) => flat.slice(flat.indexOf(from), flat.indexOf(to, flat.indexOf(from)));
+
+  it('두 기록 화면에 붙이기 문·재조회 키·후보 수를 넘긴다', () => {
+    expect(flat).toContain(
+      '<StudyHistory onError={onError} onAssignBook={(row) => openAssign(row, true)} reloadKey={historyEpoch} candidateCount={(study.books ?? []).length} />',
+    );
+    expect(flat).toContain(
+      '<History graph={dashboard.graph} onAssignBook={(row) => openAssign(row, false)} reloadKey={historyEpoch} candidateCount={taggableBooks(dashboard).length} />',
+    );
+  });
+
+  it('시트를 여는 곳은 사용자가 누른 [책 붙이기]/[바꾸기] 하나뿐이다 — 진입·펼침으로 저절로 뜨지 않는다(T-183 보조)', () => {
+    // 판정은 첫 진입 재현(A-8)이 한다. 여기는 「setAssigning({ 호출처가 openAssign 하나」라는 구조만 잠근다.
+    expect(flat.match(/setAssigning\(\{/g)).toHaveLength(1);
+    expect(flat).toContain(
+      'const openAssign = (row: SessionRow, onStudy: boolean) => setAssigning({ sessionId: row.id, currentBookId: row.bookId, manual: row.manual, study: onStudy });',
+    );
+  });
+
+  it('붙이기 시트는 ChangeBookSheet이고, 수동 기록 줄에선 「책 없이」를 숨긴다', () => {
+    const sheet = between('<ChangeBookSheet title={assigning', '/>');
+
+    expect(sheet).toContain("title={assigning.currentBookId === null ? '이 측정은 무슨 책이었나요?' : '다른 책으로 바꿀까요?'}");
+    expect(sheet).toContain('subtitle="이 측정의 시간이 그 책에 붙어요"');
+    expect(sheet).toContain('hideNone={assigning.manual}');
+    expect(sheet).toContain('books={assigning.study ? (study.books ?? []) : taggableBooks(dashboard)}');
+    expect(sheet).toContain('onPick={assignSessionBook}');
+  });
+
+  it('어느 원장의 문을 부를지는 시트를 열 때 고정한 assigning.study가 정한다 — 서버는 id 공간이 겹쳐 못 막는다(R7)', () => {
+    const fn = between('const assignSessionBook =', 'const closeAssign =');
+
+    expect(fn).toContain('const { sessionId, study: onStudy } = assigning;');
+    // 식 전체 — 성공 뒤 상태 갱신(공부: 스냅샷·서재 재조회 / 독서: 타이머 상태)까지 잠근다. 부분 문자열이면 `.then`을 지워도 산다.
+    expect(fn).toContain(
+      '(onStudy ? setStudySessionBook(sessionId, id).then((next) => { onStudyChange(next); setShelfEpoch((n) => n + 1); })',
+    );
+    expect(fn).toContain(': setSessionBook(sessionId, id).then(onTimerChange))');
+    expect(fn).not.toContain("mode === 'study'"); // 지금 모드가 아니라 연 순간의 원장이다
+  });
+
+  it('붙이기 성공은 시트를 닫고 그 원장의 기록을 다시 받는다 — 실패는 시트를 닫고 스트립으로', () => {
+    const fn = between('const assignSessionBook =', 'const closeAssign =');
+
+    expect(fn).toContain('.then(() => { setAssigning(null); invalidateHistory(onStudy); })');
+    expect(fn).toContain('.catch((e: Error) => { setAssigning(null); fail(e); })');
+  });
+
+  it('독서 stop · 공부 stop · 태깅 성공도 기록을 다시 받는다 — 기록 탭에서 재고 끝내도 그 줄이 바로 선다', () => {
+    expect(between('const studyAction = () =>', 'const timerAction =')).toContain('invalidateHistory(true);');
+    expect(between('stopSession()', '} else {')).toContain('invalidateHistory(false);');
+    expect(between('const tag = (book: BookOption)', 'const changeBook =')).toContain('.then(() => invalidateHistory(onStudy))');
+  });
+
+  it('invalidateHistory는 그 원장의 캐시를 버리고 재조회 키를 올린다', () => {
+    expect(flat).toContain(
+      'const invalidateHistory = (onStudy: boolean) => { cacheDrop(onStudy ? CACHE_STUDY_HISTORY : CACHE_HISTORY); setHistoryEpoch((n) => n + 1); };',
+    );
+  });
+
+  it('네이티브 뒤로가기가 붙이기 시트를 닫는다', () => {
+    expect(flat).toContain('useBackClose(assigning !== null, closeAssign);');
+  });
+
+  it('태깅 시트가 건너뛰어도 기록 탭에서 붙일 수 있다고 말한다(P13 — 기능이 실리는 이 PR에서)', () => {
+    expect(between('<BookSheet', '/>')).toContain('hint="건너뛰어도 기록 탭에서 붙일 수 있어요"');
   });
 });

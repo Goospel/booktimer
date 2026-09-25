@@ -348,6 +348,108 @@ describe('dev-mock 독서 태깅·교체', () => {
     expect(timer.wantToReadBooks).toBeDefined();
     expect(timer.wantToReadBooks!.map((b) => b.id)).not.toContain(want.id);
   });
+
+  it('active/book에 없는 책 id면 404이고 재던 책은 그대로다 — 서버는 검증 실패 시 기존 책을 유지한다', async () => {
+    await mockRequest<TimerState>('/api/sessions/start', { body: { bookId: 1 } });
+
+    await expect(mockRequest('/api/sessions/active/book', { body: { bookId: 9_999 } })).rejects.toMatchObject({ status: 404 });
+    const dash = await mockRequest<DashboardResponse>('/api/dashboard', {});
+    await mockRequest<StopResponse>('/api/sessions/stop', { body: {} });
+
+    expect(dash.activeBook?.id).toBe(1);
+  });
+});
+
+/**
+ * 기록 화면의 측정 줄(R2 PR-5) — 목의 날짜 기록은 <b>측정 한 건씩 먼저</b> 만들고 날의 책·합계를 거기서
+ * 유도한다. 거꾸로 두면 줄의 책을 바꿔도 접힌 줄의 표지 더미·합계가 안 따라와, 브라우저 확인이 거짓 신호를 준다.
+ */
+describe('dev-mock 기록 측정 줄', () => {
+  const history = async () => (await mockRequest<{ months: MonthlySection[] }>('/api/history', {})).months;
+  const allRows = async () => (await history()).flatMap((m) => m.days.flatMap((d) => d.sessions ?? []));
+
+  it('날의 합계와 책 목록이 측정 줄에서 유도된다 — 합계 = 줄 합, 책 = 책 붙은 줄을 제목별로 합쳐 오래 읽은 순', async () => {
+    const days = (await history()).flatMap((m) => m.days);
+
+    expect(days.length).toBeGreaterThan(0);
+    for (const d of days) {
+      const rows = d.sessions ?? [];
+      expect(rows.length).toBeGreaterThan(0);
+      expect(d.totalSeconds).toBe(rows.reduce((sum, r) => sum + r.seconds, 0));
+      const byTitle = new Map<string, number>();
+      for (const r of rows) if (r.bookTitle !== null) byTitle.set(r.bookTitle, (byTitle.get(r.bookTitle) ?? 0) + r.seconds);
+      expect(d.books.map((b) => [b.title, b.seconds])).toEqual([...byTitle].sort((a, b) => b[1] - a[1]));
+    }
+  });
+
+  it('브라우저로 밟아야 할 네 꼴이 다 있다 — 책 없는 줄 · 수동 줄 · 1분 미만 줄 · 다섯 건 이상인 날', async () => {
+    const rows = await allRows();
+    const days = (await history()).flatMap((m) => m.days);
+
+    expect(rows.some((r) => r.bookId === null && !r.manual)).toBe(true);
+    expect(rows.some((r) => r.manual && r.start === null && r.end === null && r.bookId !== null)).toBe(true);
+    expect(rows.some((r) => r.seconds < 60)).toBe(true);
+    expect(days.some((d) => (d.sessions ?? []).length >= 5)).toBe(true);
+  });
+
+  it('책 없는 줄에 책을 붙이면 다음 조회에서 그 줄이 그 책이다 — 응답은 TimerState', async () => {
+    const target = (await allRows()).find((r) => r.bookId === null && !r.manual)!;
+
+    const timer = await mockRequest<TimerState>(`/api/sessions/${target.id}/book`, { body: { bookId: 2 } });
+
+    expect(timer.readingBooks).toBeDefined();
+    const after = (await allRows()).find((r) => r.id === target.id)!;
+    expect(after.bookId).toBe(2);
+    expect(after.bookTitle).toBe('사피엔스');
+  });
+
+  it('책을 떼면(null) 그 줄이 책 없음이 된다', async () => {
+    const target = (await allRows()).find((r) => r.bookId !== null && !r.manual)!;
+
+    await mockRequest(`/api/sessions/${target.id}/book`, { body: { bookId: null } });
+
+    expect((await allRows()).find((r) => r.id === target.id)!.bookId).toBeNull();
+  });
+
+  it('수동 줄에서 책을 떼면 409 — 수동 기록은 책이 필수다', async () => {
+    const manual = (await allRows()).find((r) => r.manual)!;
+
+    await expect(mockRequest(`/api/sessions/${manual.id}/book`, { body: { bookId: null } })).rejects.toMatchObject({ status: 409 });
+  });
+
+  it('bookId 키가 없으면(`{}`) 400 — 떼기는 명시적이어야 한다', async () => {
+    const target = (await allRows())[0];
+
+    await expect(mockRequest(`/api/sessions/${target.id}/book`, { body: {} })).rejects.toMatchObject({ status: 400 });
+  });
+
+  it('없는 측정 id면 404', async () => {
+    await expect(mockRequest('/api/sessions/1/book', { body: { bookId: 2 } })).rejects.toMatchObject({ status: 404 });
+  });
+
+  it('방금 끝낸 측정이 오늘 줄로 선다 — 기록 탭에서 재고 끝내도 목록이 따라온다(A-7)', async () => {
+    const before = (await allRows()).length;
+    await mockRequest<TimerState>('/api/sessions/start', { body: { bookId: null } });
+    const stopped = await mockRequest<StopResponse>('/api/sessions/stop', { body: {} });
+
+    const rows = await allRows();
+    expect(rows.length).toBe(before + 1);
+    expect(rows.find((r) => r.id === stopped.sessionId)?.bookId).toBeNull();
+  });
+
+  it('공부 기록도 측정 줄을 싣고, 공부 문으로 붙이면 그 줄이 바뀐다 — 응답은 StudyState', async () => {
+    const studyRows = async () =>
+      (await mockRequest<StudyHistoryResponse>('/api/study/history', {})).months.flatMap((m) =>
+        m.days.flatMap((d) => d.sessions ?? []),
+      );
+    const target = (await studyRows()).find((r) => r.bookId === null)!;
+
+    const state = await mockRequest<StudyState>(`/api/study/sessions/${target.id}/book`, { body: { bookId: 102 } });
+
+    expect(state.books).toBeDefined();
+    expect((await studyRows()).find((r) => r.id === target.id)!.bookId).toBe(102);
+    await expect(mockRequest(`/api/study/sessions/${target.id}/book`, { body: {} })).rejects.toMatchObject({ status: 400 });
+  });
 });
 
 /**

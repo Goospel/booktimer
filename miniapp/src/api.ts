@@ -371,7 +371,10 @@ export interface BookRead {
   seconds: number;
 }
 
-/** `session.DailyReadingRecord` — 세션 "횟수"는 서버가 일부러 안 준다(1분짜리 측정까지 세어 숫자만 부푼다). */
+/**
+ * `session.DailyReadingRecord` — 접힌 줄엔 세션 "횟수"를 안 보인다(1분짜리 측정까지 세어 숫자만 부푼다). 펼침용으로
+ * 측정 한 건씩(`sessions`)은 싣는다(R2, 2026-09-24).
+ */
 export interface DailyRecord {
   /** `YYYY-MM-DD`(유저 타임존 기준). */
   date: string;
@@ -380,7 +383,7 @@ export interface DailyRecord {
    * 그날 읽은 책 — 제목별 합산, <b>오래 읽은 순</b>(서버가 정한 순서다. 화면이 다시 정렬하지 않는다).
    *
    * <p>`totalSeconds`는 이 목록의 합보다 <b>클 수 있다</b> — 책을 안 고르고 잰 세션의 시간은 총합에만
-   * 들어가고 여기엔 안 잡힌다. 그 차액은 화면이 「책 안 고른 기록」 줄로 밝힌다(`bookRows`).
+   * 들어가고 여기엔 안 잡힌다. 펼치면 그 측정이 「책 없음」 줄로 서서 거기서 책을 붙인다(`sessions` · `SessionLines`).
    */
   books: BookRead[];
   manuallyFilled: boolean;
