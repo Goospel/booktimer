@@ -295,7 +295,10 @@ const clockOf = (iso: string): string => new Date(iso).toTimeString().slice(0, 5
  */
 function readingSessionsAt(offset: number): SessionRow[] {
   const total = LEVELS[offset % LEVELS.length] * 900;
-  const n = total === 0 ? 0 : offset === 1 ? 5 : 1 + (offset % 3);
+  // 오늘(0)은 두 건 — 책 없음 + 책 한 권. 스토어 컷 04가 잔디와 「측정 두 줄 · [책 붙이기]」를 한 컷에 담을 수 있는
+  // 날은 목록 첫 줄뿐이다(한 줄 아래인 어제에 두 줄을 둬도 잔디 제목부터 552px > 탭바 위 526px, 375×618 실측).
+  // 합은 그대로라 잔디·홈은 안 움직인다(홈은 이 줄을 안 읽는다).
+  const n = total === 0 ? 0 : offset === 1 ? 5 : offset === 0 ? 2 : 1 + (offset % 3);
   const seconds = Array.from({ length: n }, () => Math.floor(total / n));
   if (n > 0) seconds[n - 1] += total - seconds.reduce((a, b) => a + b, 0);
   if (n >= 2 && offset % 4 === 2) {
