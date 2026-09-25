@@ -6,6 +6,8 @@
     <!-- 방문 통계(GA4, 측정 ID 설정 시에만) -->
     <th:block th:replace="~{analytics :: gtag}"></th:block>
     <meta name="viewport" content="width=device-width, initial-scale=1">
+    <!-- 기록 화면의 [책 붙이기]/[바꾸기] POST가 이 토큰을 단다(R2 PR-3) — 없으면 조용히 403 -->
+    <meta name="_csrf" th:content="${_csrf != null ? _csrf.token : ''}">
     <title>독서 기록 — BookTimer</title>
     <link rel="stylesheet" th:href="@{/css/app.css}">
     <!-- 광고 로더(게시자 ID 설정 시에만) -->

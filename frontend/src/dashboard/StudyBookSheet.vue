@@ -20,6 +20,8 @@ const props = defineProps<{
     pending?: boolean
     /** 부모 왕복의 실패 — 시트 **안**에서 말한다(페이지 알림은 딤 뒤에 가려진다, R2 P7). */
     error?: string | null
+    /** 목록 자체를 못 받았다 — 비었는지 모르니 「서재에 책이 없어요」라고 단언하지 않는다(독서 loadLost와 같은 규칙). */
+    loadFailed?: boolean
 }>()
 
 // 고른 책을 통째로 낸다 — 독서 BookPickSheet와 같은 계약(거긴 출처가 갈려서, 여긴 갈리지 않아도 같은 모양으로).
@@ -28,7 +30,7 @@ const emit = defineEmits<{ pick: [book: StudyBookRow]; none: []; close: [] }>()
 // [제목, 힌트, 하단 CTA] — 네 모드의 문구는 여기 한 곳에만 있다(독서 BookPickSheet TEXT와 같은 규칙).
 const T = {
     start: ['공부할 책을 고르세요', '책을 고르면 책만 바뀌어요 — 공부 측정은 「공부 측정 시작」을 눌러야 시작돼요.', '책 없이 측정하기'],
-    tag: ['무슨 책을 공부하셨나요?', '방금 잰 시간을 책에 붙여요.', '책 없이 기록 · 건너뛰기'],
+    tag: ['무슨 책을 공부하셨나요?', '방금 잰 시간을 책에 붙여요. 건너뛰어도 「공부 기록」에서 붙일 수 있어요.', '책 없이 기록 · 건너뛰기'],
     change: ['다른 책으로 바꿀까요?', '지금까지 잰 시간이 통째로 새 책에 붙어요.', '책 없이 공부하기'],
     assign: ['이 측정은 무슨 책이었나요?', '이 측정의 시간이 그 책에 붙어요.', '책 없이 두기'],
 } as const
@@ -72,7 +74,7 @@ onMounted(() => overlayEl.value?.focus())
                 </li>
             </ul>
             <!-- 시트 안에서 담지 않는다(⏸) — 담는 자리는 공부 서재 한 곳이다. -->
-            <p v-else class="book-sheet-empty">
+            <p v-else-if="!loadFailed" class="book-sheet-empty">
                 아직 공부 서재에 책이 없어요. <a href="/study/books">공부 서재에서 담기</a>
             </p>
 

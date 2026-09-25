@@ -1027,6 +1027,43 @@ button:disabled, .btn-primary:disabled { opacity: .5; cursor: not-allowed; }
     overscroll-behavior: contain;
 }
 
+/* 기록 날짜 줄 펼침(R2) — 측정이 있는 날은 머리 전체가 버튼이고, 펼치면 측정 한 건 = 한 줄.
+   .record-head는 옛 두 칸(날짜·시간)을 그대로 감싸 펼침 없는 날도 예전과 같은 모양이다.
+   공부 기록은 카드의 .is-study 토큰 스왑이 그대로 파랑으로 끌고 간다(리터럴 0줄). 애니메이션 없음. */
+.record-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex: 1 1 100%; min-width: 0; }
+.record-row.is-expandable { flex-wrap: wrap; }
+.record-toggle {
+    width: 100%; margin: 0; padding: 0; border: 0; background: none;
+    font: inherit; color: inherit; text-align: left; cursor: pointer; border-radius: var(--radius-sm);
+}
+.record-toggle:hover .record-date { color: var(--accent-hover); }
+.record-toggle:focus-visible { outline: 2px solid var(--accent); outline-offset: 4px; }
+.record-chevron { flex: 0 0 auto; color: var(--muted); }
+.record-row.is-open .record-chevron { transform: rotate(180deg); }
+.record-sessions {
+    flex: 1 1 100%; list-style: none; margin: 10px 0 0; padding: 0 0 0 12px;
+    border-left: 2px solid var(--border);
+}
+/* [시각 범위 / 길이] · 책 · 버튼 — 시각과 길이를 두 줄로 쌓아 좁은 폭에서도 제목 칸이 남는다(390px 기준). */
+.record-session {
+    display: grid; grid-template-columns: max-content minmax(0, 1fr) max-content;
+    align-items: center; gap: 12px; padding: 6px 0;
+}
+.record-session-when { display: flex; flex-direction: column; gap: 1px; font-variant-numeric: tabular-nums; }
+.record-session-range { font-size: 13px; color: var(--text); white-space: nowrap; }
+.record-session-len { font-size: 12px; color: var(--muted); white-space: nowrap; }
+.record-session-book { min-width: 0; font-size: 13.5px; color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.record-session-book.is-none { color: var(--muted); }
+.record-session-btn {
+    min-height: 36px; padding: 0 12px; border: 1px solid var(--border); border-radius: var(--radius-sm);
+    background: var(--card-bg); color: var(--muted); font: inherit; font-size: 12.5px; font-weight: 600;
+    white-space: nowrap; cursor: pointer;
+}
+/* 책 없는 측정이 이 화면이 부르는 일이다 — 「책 붙이기」만 잉크색, 「바꾸기」는 조용히. */
+.record-session-btn.is-attach { color: var(--accent-hover); border-color: var(--accent); }
+.record-session-btn:hover { color: var(--text); border-color: var(--accent); }
+.record-session-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
 /* === 독서 잔디 (GitHub 컨트리뷰션 그래프 스타일) === */
 /* 헤더: 제목 좌측 / 연속 일수 칩(「N일 연속 독서」) 우측 상단.
    h2의 아래 여백(12px)을 래퍼로 옮겨 요약문과의 간격을 그대로 유지한다. */
