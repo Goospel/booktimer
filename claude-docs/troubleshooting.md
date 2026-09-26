@@ -24,6 +24,7 @@
      각 항목의 frontmatter(summary)에서 재생성합니다. 내용을 바꾸려면 그 항목의
      summary를 고치세요(단일 출처). 최신 항목이 위. -->
 
+- [T-257](troubleshooting/T-257.md) · 토스 기능성 푸시는 알림동의문 미동의자에게도 `resultType=SUCCESS`를 주고 조용히 버린다 — 서버 「발송 성공」·콘솔 검수 승인은 도달의 증거가 아니다(재참여 넛지 6주 도달 0, 2026-09-26 양성 대조로 확정) **→ 가드: `TossMessengerClient`가 성공 본문의 발송 수·도달 실패 사유를 로그로 남긴다(PR-1) + 동의 없이 보내는 캠페인을 두지 않는다(옛 넛지 SSM 소등 S-0·코드 삭제 PR-1, 독서 알림은 동의 성공 뒤에만 서버 설정이 켜진다 — PR-3)**
 - [T-256](troubleshooting/T-256.md) · 「두 분기의 `<Profile>`은 서로 다른 JSX라 재마운트된다」가 틀렸다 — React는 키 없는 최상위 프래그먼트를 배열로 풀어 맞추므로 두 분기가 같은 fiber로 이어진다
 - [T-255](troubleshooting/T-255.md) · CI에 없는 테스트는 깨져도 신호가 0이다 — 로컬 수동 스위트가 3일간 전면 실패인 채 머지가 계속됐다
 - [T-254](troubleshooting/T-254.md) · 돌연변이 주입 스크립트가 gradle을 한 번도 안 돌리고 「전부 사살」을 보고했다 — 한 세션에서 두 사람이 같은 함정에 빠졌다 **→ hookify/warn-vitest-basic-reporter.md**

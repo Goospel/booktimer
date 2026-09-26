@@ -45,7 +45,6 @@ case "\$*" in
                  MYSQL_ROOT_PASSWORD MINIAPP_ALLOWED_ORIGINS \\
                  TOSS_MESSENGER_ENABLED TOSS_FINISH_TEMPLATE_CODE \\
                  TOSS_GOAL_MET_ENABLED TOSS_GOAL_MET_TEMPLATE_CODE \\
-                 TOSS_RETENTION_ENABLED TOSS_RETENTION_TEMPLATE_CODE \\
                  TOSS_STUDY_GOAL_ENABLED TOSS_STUDY_GOAL_TEMPLATE_CODE \\
                  CHAT_MESSAGE_KEY CHAT_ENABLED \\
                  TOSS_DM_MESSAGE_ENABLED TOSS_DM_MESSAGE_TEMPLATE_CODE; do
@@ -120,9 +119,6 @@ assert_has "  .env 에 완독 템플릿 코드" "$env_out" "BOOKTIMER_TOSS_FINIS
 # 목표 달성 푸시 — 게이트가 매핑에서 빠지면 스케줄러 빈이 안 떠서 "켰는데 아무 일도 안 일어나는" 무성 장애가 된다.
 assert_has "  .env 에 목표달성 게이트" "$env_out" "BOOKTIMER_TOSS_GOAL_MET_ENABLED=value-of-TOSS_GOAL_MET_ENABLED"
 assert_has "  .env 에 목표달성 템플릿 코드" "$env_out" "BOOKTIMER_TOSS_GOAL_MET_TEMPLATE_CODE=value-of-TOSS_GOAL_MET_TEMPLATE_CODE"
-# 재참여(7일 비활동) 넛지 푸시 — 같은 무성 장애. SSM을 true로 켜도 스케줄러 빈이 안 떠서 매일 19시 배치가 안 돈다.
-assert_has "  .env 에 재참여 게이트" "$env_out" "BOOKTIMER_TOSS_RETENTION_ENABLED=value-of-TOSS_RETENTION_ENABLED"
-assert_has "  .env 에 재참여 템플릿 코드" "$env_out" "BOOKTIMER_TOSS_RETENTION_TEMPLATE_CODE=value-of-TOSS_RETENTION_TEMPLATE_CODE"
 # 공부 회당 시간 푸시 — 같은 무성 장애. SSM을 true로 켜도 스케줄러 빈이 안 떠서 분당 배치가 안 돈다.
 assert_has "  .env 에 공부 회당 시간 게이트" "$env_out" "BOOKTIMER_TOSS_STUDY_GOAL_ENABLED=value-of-TOSS_STUDY_GOAL_ENABLED"
 assert_has "  .env 에 공부 회당 시간 템플릿 코드" "$env_out" "BOOKTIMER_TOSS_STUDY_GOAL_TEMPLATE_CODE=value-of-TOSS_STUDY_GOAL_TEMPLATE_CODE"
@@ -137,7 +133,7 @@ assert_has "  .env 에 대화 암호화 키" "$env_out" "BOOKTIMER_CHAT_MESSAGE_
 # 머지됐고, 「정상 렌더」가 exit=1로 죽어 이 파일 전체가 3일간 빨간불이었다(2026-09-22 발견).
 assert_has "  .env 에 대화 킬스위치" "$env_out" "BOOKTIMER_CHAT_ENABLED=value-of-CHAT_ENABLED"
 # 새 메시지 푸시 — 빠지면 SSM을 true로 켜도 ChatPushService가 캠페인 꺼짐으로 읽어 알림이 영영 안 간다.
-# 화면은 멀쩡하고 대화도 되므로 아무도 모르는 무성 장애다(재참여·공부 푸시와 같은 부류).
+# 화면은 멀쩡하고 대화도 되므로 아무도 모르는 무성 장애다(목표 달성·공부 푸시와 같은 부류).
 assert_has "  .env 에 대화 푸시 게이트" "$env_out" "BOOKTIMER_TOSS_DM_MESSAGE_ENABLED=value-of-TOSS_DM_MESSAGE_ENABLED"
 assert_has "  .env 에 대화 푸시 템플릿 코드" "$env_out" "BOOKTIMER_TOSS_DM_MESSAGE_TEMPLATE_CODE=value-of-TOSS_DM_MESSAGE_TEMPLATE_CODE"
 
