@@ -262,6 +262,39 @@ class DashboardApiControllerTest {
         assertThat(sessionRepository.findByUserAndEndedAtIsNull(u)).isEmpty();
     }
 
+    // 「이미 재는 중 + 낡은 bookId」는 「책이 없다」(404)가 아니라 「측정이 이미 돈다」(409)여야 한다 —
+    // 다른 탭에서 지운 책 id로 시작해도 클라이언트가 화면을 최신으로 맞추게. (IDOR 404는 무세션일 때만 — 위 5번.)
+
+    @Test
+    @DisplayName("POST /api/sessions/start: 독서 진행 중 + 남의 bookId → 404가 아니라 409")
+    void startSession_readingActive_staleBookId_409() throws Exception {
+        User u = register("stalebook@a.com", "stalebook");
+        User other = register("stalebookother@a.com", "stalebookother");
+        Book othersBook = addBook(other, "남의 책", BookStatus.READING);
+        sessionService.start(u, clock.instant(), null);
+
+        mockMvc.perform(post("/api/sessions/start")
+                        .with(user("stalebook@a.com")).with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"bookId\":" + othersBook.getId() + "}"))
+                .andExpect(status().isConflict());
+    }
+
+    @Test
+    @DisplayName("POST /api/sessions/start: 공부 진행 중 + 없는 bookId → 404가 아니라 409")
+    void startSession_studyActive_staleBookId_409() throws Exception {
+        User u = register("stalestudy@a.com", "stalestudy");
+        studySessionService.start(u, clock.instant(), null);
+
+        mockMvc.perform(post("/api/sessions/start")
+                        .with(user("stalestudy@a.com")).with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"bookId\":999999999}"))
+                .andExpect(status().isConflict());
+
+        assertThat(sessionRepository.findByUserAndEndedAtIsNull(u)).isEmpty();
+    }
+
     // ── 8. stop 활성 없음 → 409 ──────────────────────────────────────────────
 
     @Test

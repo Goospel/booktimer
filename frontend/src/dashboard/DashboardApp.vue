@@ -229,6 +229,8 @@ async function handleStart(bookId: number | null) {
             body: JSON.stringify({ bookId }),
         })
         if (res.status === 409) { await conflict('다른 곳에서 이미 측정 중이에요 — 화면을 최신으로 맞췄어요'); return }
+        // 404 = 다른 탭에서 지운 책 — 재조회가 목록을 고치고 conflict가 고른 책을 버린다.
+        if (res.status === 404) { await conflict('그 책이 서재에 없어요 — 화면을 최신으로 맞췄어요'); return }
         if (!res.ok) { actionError.value = '측정을 시작할 수 없습니다'; return }
         applyTimerState(await res.json() as TimerState)
     } catch {

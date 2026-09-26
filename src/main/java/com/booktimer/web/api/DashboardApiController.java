@@ -40,7 +40,7 @@ import java.util.List;
  *
  * <p>에러 계약(상태코드만 — {@code GlobalExceptionHandler}가 ResponseStatusException을 잡아 코드 보존):
  * 404 = bookId가 '있으나' 소유 아님·미존재(IDOR 마스킹) — bookId를 아예 안 주면 책 미지정 시작 허용(발견 1).
- * 409 = 중복 start / 무세션 stop. 403 = CSRF 누락.
+ * 409 = 중복 start / 무세션 stop — start는 진행 중 측정(독서·공부)을 bookId 검사보다 먼저 봐 404보다 409가 앞선다. 403 = CSRF 누락.
  */
 @RestController
 public class DashboardApiController {
@@ -119,6 +119,12 @@ public class DashboardApiController {
     @PostMapping("/api/sessions/start")
     public ResponseEntity<TimerState> start(@RequestBody StartSessionRequest req, Principal principal) {
         User user = currentUserService.resolve(principal);
+        // 활성 검사를 책 조회보다 먼저 한다(공부 start와 같은 순서) — 반대면 「이미 재는 중 + 낡은 bookId」가
+        // 409가 아니라 404로 나가 「책이 없다」로 오안내한다. 서비스처럼 독서·공부 둘 다 본다.
+        if (sessionRepository.findByUserAndEndedAtIsNull(user).isPresent()
+                || studySessionService.activeSession(user) != null) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "이미 진행 중인 측정이 있습니다");
+        }
         // bookId를 아예 안 주면 책 미지정 세션(발견 1 — 시작을 책 선택으로 가로막지 않음).
         // bookId가 '있는데' 소유 아님/미존재면 404(IDOR 마스킹) — 이 경계는 그대로 유지.
         Book book = null;
@@ -128,7 +134,7 @@ public class DashboardApiController {
         }
         try {
             sessionService.start(user, clock.instant(), book);
-        } catch (IllegalStateException e) {
+        } catch (IllegalStateException e) { // 선검사와 저장 사이의 경주 대비
             throw new ResponseStatusException(HttpStatus.CONFLICT, "이미 진행 중인 측정이 있습니다");
         }
         return ResponseEntity.ok(buildTimerState(user));

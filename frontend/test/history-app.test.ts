@@ -269,12 +269,17 @@ describe('HistoryApp — 기록에서 책 붙이기·바꾸기 (R2 PR-3)', () =>
     let posts: { url: string; body: unknown; headers: Record<string, string> }[] = [];
     let postOk = true;
     let postHold: Promise<void> | null = null; // 있으면 POST 응답을 그때까지 붙잡는다(경주 재현용)
+    let postReject = false; // 있으면 POST가 네트워크 오류로 거부된다(catch 경로)
 
     function route(url: string, opts?: { method?: string; body?: string; headers?: Record<string, string> }) {
         if (opts?.method === 'POST') {
             posts.push({ url, body: JSON.parse(opts.body ?? 'null'), headers: opts.headers ?? {} });
             const ok = postOk;
-            return (postHold ?? Promise.resolve()).then(() => ({ ok, status: ok ? 200 : 409, json: async () => ({}) }));
+            const reject = postReject;
+            return (postHold ?? Promise.resolve()).then(() => {
+                if (reject) throw new TypeError('Failed to fetch');
+                return { ok, status: ok ? 200 : 409, json: async () => ({}) };
+            });
         }
         if (url.includes('/api/books')) return Promise.resolve({ ok: true, status: 200, json: async () => SHELF_BOOKS });
         return Promise.resolve({ ok: true, status: 200, json: async () => ({ ...MOCK_RESPONSE, months: SESSION_MONTHS }) });
@@ -285,6 +290,7 @@ describe('HistoryApp — 기록에서 책 붙이기·바꾸기 (R2 PR-3)', () =>
         posts = [];
         postOk = true;
         postHold = null;
+        postReject = false;
         vi.stubGlobal('fetch', vi.fn(route));
         const meta = document.createElement('meta');
         meta.name = '_csrf';
@@ -341,8 +347,8 @@ describe('HistoryApp — 기록에서 책 붙이기·바꾸기 (R2 PR-3)', () =>
     });
 
     // F3 — 보낸 뒤 시트를 닫고 다른 줄을 열면, 먼저 보낸 요청의 결과가 새 시트에 붙으면 안 된다.
-    test('먼저 보낸 요청이 실패해도 새로 연 다른 줄의 시트엔 오류를 붙이지 않고 닫지도 않는다', async () => {
-        postOk = false;
+    async function raceToSecondRow(ok: boolean) {
+        postOk = ok;
         let release!: () => void;
         postHold = new Promise<void>((r) => { release = r; });
         const w = await openSheetFor(0);
@@ -351,10 +357,35 @@ describe('HistoryApp — 기록에서 책 붙이기·바꾸기 (R2 PR-3)', () =>
         await w.find('.book-sheet-close').trigger('click');
         await w.findAll('.record-session')[1].find('button').trigger('click');
         expect(w.find('.book-sheet-title').text()).toBe('다른 책으로 바꿀까요?');
+        await vi.waitFor(() => expect((w.find('.book-sheet-book').element as HTMLButtonElement).disabled).toBe(true));
         release();
-        await new Promise((r) => setTimeout(r, 0));
+        return w;
+    }
+    // 먼저 보낸 요청이 끝났다는 양성 신호 — 대기 중엔 새 시트의 책 버튼도 잠겨 있다가(assignPending) finally에서 풀린다.
+    const firstSettled = (w: Awaited<ReturnType<typeof raceToSecondRow>>) =>
+        vi.waitFor(() => expect((w.find('.book-sheet-book').element as HTMLButtonElement).disabled).toBe(false));
+
+    test('먼저 보낸 요청이 실패해도 새로 연 다른 줄의 시트엔 오류를 붙이지 않고 닫지도 않는다', async () => {
+        const w = await raceToSecondRow(false);
+        await firstSettled(w);
+        expect(w.find('.book-sheet-panel').exists()).toBe(true);
+        expect(w.find('.book-sheet-error').exists()).toBe(false);
+    });
+
+    test('먼저 보낸 요청이 성공하면 기록은 재조회하되, 새로 연 시트는 닫지 않는다', async () => {
+        const w = await raceToSecondRow(true);
+        await vi.waitFor(() => expect(historyCalls()).toBe(2)); // 성공 경로를 실제로 탔다(양성)
         await w.vm.$nextTick();
         expect(w.find('.book-sheet-panel').exists()).toBe(true);
+        expect(w.find('.book-sheet-title').text()).toBe('다른 책으로 바꿀까요?');
+    });
+
+    test('먼저 보낸 요청이 네트워크 오류여도 새로 연 시트엔 오류를 붙이지 않는다', async () => {
+        postReject = true;
+        const w = await raceToSecondRow(true);
+        await firstSettled(w);
+        expect(w.find('.book-sheet-panel').exists()).toBe(true); // 시트는 열려 있다(양성)
+        expect(historyCalls()).toBe(1);                          // 성공 경로는 타지 않았다
         expect(w.find('.book-sheet-error').exists()).toBe(false);
     });
 });
