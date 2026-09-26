@@ -57,15 +57,6 @@ public class TossProperties {
         private String goalMetTemplateCode;
 
         /**
-         * 재참여(7일 비활동) 넛지 배치 점등 — false면 스케줄러 빈 자체가 없다(매일 19시 배치가 아예 안 돈다).
-         * {@link #enabled}와 <b>별개 토글</b>이라 완독 축하·목표 달성과 독립적으로 켜고 끌 수 있다.
-         */
-        private boolean retentionEnabled;
-
-        /** 재참여 넛지 템플릿의 templateSetCode(콘솔 발급). 비어 있으면 발송하지 않는다. */
-        private String retentionTemplateCode;
-
-        /**
          * 공부 「회당 시간」 도달 감지 스케줄러 점등 — false면 스케줄러 빈 자체가 없다.
          * {@link #goalMetEnabled}(독서)와 <b>별개 토글</b>이다(실발송엔 {@link #enabled}도 true여야 한다).
          */
@@ -170,22 +161,6 @@ public class TossProperties {
 
         public void setGoalMetTemplateCode(String goalMetTemplateCode) {
             this.goalMetTemplateCode = goalMetTemplateCode;
-        }
-
-        public boolean isRetentionEnabled() {
-            return retentionEnabled;
-        }
-
-        public void setRetentionEnabled(boolean retentionEnabled) {
-            this.retentionEnabled = retentionEnabled;
-        }
-
-        public String getRetentionTemplateCode() {
-            return retentionTemplateCode;
-        }
-
-        public void setRetentionTemplateCode(String retentionTemplateCode) {
-            this.retentionTemplateCode = retentionTemplateCode;
         }
     }
 

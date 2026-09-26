@@ -17,6 +17,8 @@ import tools.jackson.databind.json.JsonMapper;
 
 import java.net.http.HttpClient;
 import java.time.Duration;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Map;
 
 /**
@@ -31,6 +33,9 @@ import java.util.Map;
  *
  * <p>mTLS·지연 초기화·SSL 번들은 {@code TossLoginClient}와 동일 계약이다(인증서가 없어도 앱은 뜨고,
  * 호출 시점에만 실패). 타임아웃은 로그인보다 짧게 잡는다 — 완독 응답을 붙잡고 있을 이유가 없다.
+ *
+ * <p><b>{@code resultType=SUCCESS}는 수락이지 도달이 아니다</b> — 알림동의문 미동의 수신자에게도 SUCCESS가
+ * 온다(2026-09-26 확정, T-257). 그래서 성공 본문의 채널별 발송 수·도달 실패 사유를 로그로 남긴다.
  */
 @Component
 @ConditionalOnProperty(name = "booktimer.toss.messenger.enabled", havingValue = "true")
@@ -67,7 +72,8 @@ public class TossMessengerClient {
      * @param templateSetCode 콘솔에서 검수 승인된 템플릿 코드
      * @param context         템플릿 변수
      * @return 토스가 {@code resultType=SUCCESS}를 준 경우에만 true. 그 외 모든 경우(네트워크·인증서·4xx·5xx·
-     *         미승인 템플릿)는 로그만 남기고 false — <b>예외를 던지지 않는다</b>.
+     *         미승인 템플릿)는 로그만 남기고 false — <b>예외를 던지지 않는다</b>. true는 수락이지 도달이 아니다 —
+     *         알림동의문 미동의 수신자에게도 SUCCESS가 온다(2026-09-26 확정).
      */
     public boolean sendMessage(String tossUserKey, String templateSetCode, Map<String, String> context) {
         try {
@@ -94,10 +100,33 @@ public class TossMessengerClient {
         JsonNode root = objectMapper.readTree(body);
         JsonNode resultType = root.findValue("resultType");
         if (resultType != null && "SUCCESS".equals(resultType.asText())) {
-            return true;
+            try {
+                logDelivery(root.path("success"), templateSetCode);
+            } catch (RuntimeException e) {
+                // 로그는 곁가지다 — 여기서 던지면 sendMessage의 catch가 이미 수락된 발송을 false로 뒤집고,
+                // 목표 달성 폴러(성공만 마킹)가 동의자에게 분마다 다시 보낸다.
+                log.warn("토스 메시지 발송 결과 기록 실패(판정은 성공 그대로, template={}): {}", templateSetCode, e.toString());
+            }
+            return true; // SUCCESS는 수락이지 도달이 아니다(T-257)
         }
         log.warn("토스 메시지 발송 거부 (template={}): {}", templateSetCode, body);
         return false;
+    }
+
+    /** 성공 본문의 채널별 발송 수·도달 실패 사유 — 유저키는 헤더로만 보내 본문에 없다. */
+    private void logDelivery(JsonNode success, String templateSetCode) {
+        int push = success.path("sentPushCount").asInt(-1);   // 필드가 없으면 -1(모양이 바뀐 신호)
+        int inbox = success.path("sentInboxCount").asInt(-1);
+        List<String> reasons = new ArrayList<>();
+        success.path("fail").forEach(channel -> channel.forEach(item -> {
+            String reason = item.path("reachedFailReason").asString("");
+            if (!reason.isBlank()) reasons.add(reason);
+        }));
+        if (push == 0 && inbox == 0) {
+            log.warn("토스 메시지 발송 결과 — 도달 0 (template={}): push={} inbox={} fail={}", templateSetCode, push, inbox, reasons);
+        } else {
+            log.info("토스 메시지 발송 결과 (template={}): push={} inbox={} fail={}", templateSetCode, push, inbox, reasons);
+        }
     }
 
     private RestClient restClient() {
