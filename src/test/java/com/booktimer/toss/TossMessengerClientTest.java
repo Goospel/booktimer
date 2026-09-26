@@ -117,7 +117,7 @@ class TossMessengerClientTest {
 
         assertThat(sent).isTrue();
         assertThat(output.getOut()).contains("토스 메시지 발송 결과 (template=FINISH_CELEBRATION): push=1 inbox=1");
-        // 음성 판정 전용 — 지금 로그 시그니처엔 키가 들어오지 않아 못 실패한다. 누가 키를 싣는 회귀를 막는 가드.
+        // 키 누출 가드 — 발송 경로에서 키를 로그에 실으면 여기서 죽는다(리뷰 돌연변이로 확인).
         assertThat(output.getOut()).doesNotContain("uk-secret-1");
     }
 
@@ -131,6 +131,8 @@ class TossMessengerClientTest {
 
         assertThat(client().sendMessage("uk-1", "FINISH_CELEBRATION", Map.of())).isTrue();
         assertThat(output.getOut()).contains("도달 0").contains("NOT_AGREED_TEST");
+        // 경고 레벨까지 잠근다 — info로 내려가면 운영에서 경고 필터에 안 걸린다.
+        assertThat(output.getOut().lines().filter(l -> l.contains("도달 0"))).singleElement().asString().contains("WARN");
     }
 
     @Test
@@ -147,6 +149,7 @@ class TossMessengerClientTest {
     @DisplayName("REQ-02 · 성공 본문 모양이 깨져도(success가 배열, fail이 문자열) 판정은 true다")
     void success_malformedBody_stillTrue() {
         // 계약 보존 가드 — 로그 처리가 판정을 뒤집으면 목표 달성 폴러(성공만 마킹)가 동의자에게 분마다 재발송한다.
+        // 지금 파싱은 이 두 모양에서 예외를 내지 않는다(catch는 방어 코드) — 이 테스트는 「던짐 + catch 없음」 조합을 잡는다.
         server.expect(requestTo(SEND_URL))
                 .andRespond(withSuccess("{\"resultType\":\"SUCCESS\",\"success\":[1,2]}", MediaType.APPLICATION_JSON));
         server.expect(requestTo(SEND_URL))
