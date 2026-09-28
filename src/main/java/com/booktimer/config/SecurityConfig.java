@@ -16,8 +16,6 @@ import org.springframework.security.authentication.DefaultAuthenticationEventPub
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configurers.AbstractHttpConfigurer;
 import org.springframework.security.config.http.SessionCreationPolicy;
-import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
-import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.authentication.HttpStatusEntryPoint;
 import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
@@ -33,7 +31,7 @@ import java.util.List;
  * 웹 보안 설정 — 폼 로그인 + 세션 기반 인증.
  *
  * <p>인증 주체 조회는 {@link com.booktimer.security.BookTimerUserDetailsService}(이메일=식별자),
- * 비밀번호 검증은 여기 등록한 BCrypt {@link PasswordEncoder}가 담당한다. 두 빈이 있으면
+ * 비밀번호 검증은 {@link PasswordEncoderConfig}가 등록한 BCrypt PasswordEncoder가 담당한다. 두 빈이 있으면
  * Spring이 DaoAuthenticationProvider를 자동 구성해 폼 로그인 인증을 처리한다.
  *
  * <p>인가 정책: 기본 차단(default-deny). 로그인 페이지·정적 리소스·에러만 공개하고,
@@ -42,11 +40,6 @@ import java.util.List;
  */
 @Configuration
 public class SecurityConfig {
-
-    @Bean
-    public PasswordEncoder passwordEncoder() {
-        return new BCryptPasswordEncoder();
-    }
 
     /**
      * 인증 성공/실패 이벤트 발행을 명시 보장한다. {@link com.booktimer.security.LoginAttemptEventListener}가
