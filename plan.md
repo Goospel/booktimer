@@ -3638,6 +3638,22 @@ package-private static이라 호출이 공짜였고, 복제하면 0초 조각 �
 
 ---
 
+### 📚✏️ 웹 공부 타이머 — 탭을 떠나면 멈추기 (설계 `claude-docs/plans/2026-09-28-web-study-away-time.md`)
+
+> 웹 **공부** 타이머만(독서·미니앱 제외), 컴퓨터(fine pointer)에서만. 탭이 30초 이상 안 보이면 떠난 순간~돌아온 순간을
+> 측정에서 뺀다 — 브라우저가 비운 구간을 기억했다가 stop 때 함께 보내고 서버가 그만큼 `durationSeconds`를 줄인다(스키마 변경 0).
+> 돌아오면 카드 안에 「N분 자리를 비워 타이머를 멈췄어요 · 되돌리기」(인강·PDF로 떠난 경우 복구).
+
+- ✅ **PR-1 서버 (2026-09-28)** — `StudySession.end(endedAt, excludedSeconds)`(0 ≤ x ≤ 구간 길이, 아니면 IAE),
+  `StudySessionService.stop(user, now, away)` — 상한 클램프 → 자정 분할 → 조각마다 겹친 만큼(`excludedSeconds`: 자르기·겹침 합치기·합산) 차감.
+  `POST /api/study/stop`은 본문 선택(`awayIntervals`) — **미니앱은 `{}`(JSON), 현 웹 번들은 본문 없음 — 둘 다 차감 0(기존 결과 그대로)**, 200개 초과·from/to null·`from >= to`는 400,
+  측정 범위 밖은 서버가 잘라낸다. 방치 스윕은 동작 불변. 아무도 구간을 안 보내므로 배포만으로는 무해하다.
+- [ ] **PR-2 웹** — `studyAway.ts`(원장·30초 유예·localStorage) + `DashboardApp`(`visibilitychange`·`pagehide`·stop 본문) + `StudyTimerCard`
+  (`elapsed` 소비처 4곳을 차감값으로, 카드 안 안내·되돌리기). 미검증 가정 U1~U5(실 브라우저)는 이 PR의 게이트다.
+
+
+---
+
 ### 🚪 미니앱 「로그인 전 이탈」 줄이기 — 가치 먼저, 로그인은 저장할 때 (설계 `claude-docs/plans/2026-09-10-login-before-value.md`)
 
 > 소개 화면(`screen_login`) 21명 중 「토스로 시작하기」를 누른 사람은 4명(19%). 이탈은 토스 동의창 **이전**,
