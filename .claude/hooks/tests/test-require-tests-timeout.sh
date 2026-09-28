@@ -2,9 +2,11 @@
 # TDD test for require-tests-before-commit.ps1 -- TEST GATE TIMEOUT (A1, T-078 hard-fix)
 #
 # The gradle test gate must NOT hang forever on a build-lock/daemon deadlock.
-# It runs gradlew under a timeout (BOOKTIMER_TEST_GATE_TIMEOUT_MS, default 8min);
+# It runs gradlew under a timeout (BOOKTIMER_TEST_GATE_TIMEOUT_MS, default 20min,
+# capped at 24min -- must stay below the settings.json hook timeout, T-235);
 # on timeout it kills the gradle process tree, runs `gradlew --stop` to self-heal,
-# and blocks the commit (fail-closed, exit 2) with a T-078 message.
+# and blocks the commit (fail-closed, exit 2) naming both possible causes.
+# Case 8 pins the budget order, Case 9 the message markers.
 #
 # Cases 1-3 use a FAKE gradlew.bat so no real JDK/build is needed:
 #   1. fast exit 0  -> hook exit 0   (passing tests allowed)         [red+green]
@@ -117,5 +119,56 @@ check "broken JSON -> fail-open exit 0" 0 "$got"
 R7=$(make_repo); W7=$(to_win "$R7"); stage_java "$R7"; write_fake_gradlew "$R7" fail
 got=$(run_cmd "git add \"docs/테스트\" && git commit -F .commit-msg-tmp" "$W7")
 check "Korean before quote in command + gradle fails -> exit 2" 2 "$got"
+
+# ── Case 8: budget order invariant  default <= max < settings.json timeout ────
+# Claude Code hook timeouts are FAIL-OPEN (docs: "A timed-out command ... hook doesn't
+# block the tool call"). If the gate's own budget (or the env override cap) reaches
+# the settings.json timeout, a slow run is cancelled and the commit goes through
+# WITHOUT tests. A parse failure must FAIL here, never pass on empty values.
+# The cap also needs a 5-min reserve (RESERVE_SEC) under the settings timeout: the
+# hook runs `npm --prefix frontend test` (no timeout, ~47s on AC, 3-4x on battery)
+# BEFORE the gradle budget starts, then taskkill + `gradlew --stop` after it.
+RESERVE_SEC=300
+SETTINGS=".claude/settings.json"
+def_min=$(grep -E '^\$timeoutMs *= *[0-9]+ *\* *60 *\* *1000' "$HOOK" | head -1 | sed -E 's/^[^=]*= *([0-9]+).*/\1/')
+max_min=$(grep -E '^\$maxTimeoutMs *= *[0-9]+ *\* *60 *\* *1000' "$HOOK" | head -1 | sed -E 's/^[^=]*= *([0-9]+).*/\1/')
+set_sec=$(grep -A3 'require-tests-before-commit' "$SETTINGS" | grep -E '"timeout" *: *[0-9]+' | head -1 | sed -E 's/.*"timeout" *: *([0-9]+).*/\1/')
+case "$def_min$max_min$set_sec" in
+    ''|*[!0-9]*) parsed_ok=0 ;;
+    *) parsed_ok=1 ;;
+esac
+if [ "$parsed_ok" = 1 ] && [ -n "$def_min" ] && [ -n "$max_min" ] && [ -n "$set_sec" ] \
+   && [ $((def_min * 60000)) -le $((max_min * 60000)) ] \
+   && [ $((max_min * 60 + RESERVE_SEC)) -le "$set_sec" ]; then
+    echo "PASS: budget order default(${def_min}m) <= max(${max_min}m) + ${RESERVE_SEC}s reserve <= settings.json(${set_sec}s)"
+else
+    echo "FAIL: budget order (default='$def_min'm max='$max_min'm settings='$set_sec's) -- parse failure or default<=max, max+${RESERVE_SEC}s<=settings violated"
+    FAILED=1
+fi
+
+# ── Case 8b: the env override is clamped to $maxTimeoutMs ────────────────────
+# Structural check (not behavioral): a behavioral one would have to wait out the
+# 24-min cap. Without the clamp, BOOKTIMER_TEST_GATE_TIMEOUT_MS >= 1800s silently
+# turns the gate fail-open -- the exact hole Case 8 exists to close.
+if grep -qF '$timeoutMs = [math]::Min($parsed, $maxTimeoutMs)' "$HOOK"; then
+    echo "PASS: env override clamped by [math]::Min(\$parsed, \$maxTimeoutMs)"
+else
+    echo "FAIL: env override not clamped to \$maxTimeoutMs"
+    FAILED=1
+fi
+
+# ── Case 9: timeout message names both causes + current power state ───────────
+# The old message asserted "likely gradle daemon/lock contention" and sent two
+# diagnoses the wrong way (T-235). Reuse the hang fixture and read stderr.
+R9=$(make_repo); W9=$(to_win "$R9"); stage_java "$R9"; write_fake_gradlew "$R9" hang
+esc_cmd9=$(json_esc "git commit -m \"feat: x\""); esc_cwd9=$(json_esc "$W9")
+err9=$(printf '{"tool_input":{"command":"%s"},"cwd":"%s"}' "$esc_cmd9" "$esc_cwd9" \
+    | env BOOKTIMER_TEST_GATE_TIMEOUT_MS=3000 timeout 60 powershell.exe -NoProfile -File "$HOOK" 2>&1 >/dev/null)
+if printf '%s' "$err9" | grep -qF 'Two possible causes' && printf '%s' "$err9" | grep -qF 'Power now:'; then
+    echo "PASS: timeout message has 'Two possible causes' and 'Power now:'"
+else
+    echo "FAIL: timeout message missing 'Two possible causes' and/or 'Power now:'"
+    FAILED=1
+fi
 
 exit $FAILED

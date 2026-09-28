@@ -124,4 +124,10 @@ class SecurityConfigTest {
         assertThat(passwordEncoder.matches("rawpw1234", hash)).isTrue();
         assertThat(passwordEncoder.matches("WRONG", hash)).isFalse();
     }
+
+    @Test
+    @DisplayName("테스트 스위트 컨텍스트는 BCrypt 강도 4를 쓴다 (T-235 — 속성이 안 먹으면 속도 이득이 조용히 사라진다)")
+    void testSuiteContext_usesBcryptStrength4() {
+        assertThat(passwordEncoder.encode("rawpw1234")).startsWith("$2a$04$");
+    }
 }

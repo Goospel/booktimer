@@ -109,11 +109,21 @@ if (-not (Test-Path $gradlew)) { exit 0 }
 # $ErrorActionPreference='Stop' 상태에서 native stderr 는 terminating error 로
 # 승격되어(NativeCommandError) 테스트가 통과해도 스크립트가 죽는다.
 # → cmd.exe 자식 프로세스로 격리 실행하고 종료코드만 본다(redirection 은 cmd 내부 >nul).
-$timeoutMs = 8 * 60 * 1000   # 기본 8분 — 정상 전체 테스트(~2.5분)보다 충분히 큼
+#
+# 예산(T-235 4회차 실측): 배터리·모던 대기·부하면 같은 스위트가 3~4배 느리다 --
+# BCrypt 강도 4 적용 전 AC·화면 켜짐 약 4분 vs 배터리 대기 11~18분+ (적용 후 AC 약 2분 15초,
+# 배터리는 미측정). 그래서 기본 20분, 환경변수로도 24분까지만 (cap).
+# ⚠️ 상한 + 5분 예비가 .claude/settings.json 의 이 훅 "timeout"(1800초) 이하여야 한다 --
+# Claude Code 훅 타임아웃은 fail-open이다 (docs "A timed-out command ... hook doesn't
+# block the tool call"). 훅이 취소되면 테스트 없이 커밋이 통과한다. 예비 5분은 위의
+# 타임아웃 없는 npm frontend test와 타임아웃 뒤 taskkill + gradlew --stop 몫이다.
+# 순서 불변식(기본 <= 상한, 상한 + 300s <= settings)은 tests/test-require-tests-timeout.sh Case 8이 잡는다.
+$timeoutMs    = 20 * 60 * 1000   # 기본 20분
+$maxTimeoutMs = 24 * 60 * 1000   # 환경변수 상한 24분 (+ 예비 5분 = 29min <= settings.json 1800s)
 if ($env:BOOKTIMER_TEST_GATE_TIMEOUT_MS) {
     $parsed = 0
     if ([int]::TryParse($env:BOOKTIMER_TEST_GATE_TIMEOUT_MS, [ref]$parsed) -and $parsed -gt 0) {
-        $timeoutMs = $parsed
+        $timeoutMs = [math]::Min($parsed, $maxTimeoutMs)
     }
 }
 
@@ -144,13 +154,29 @@ $ErrorActionPreference = $prevEAP
 
 if ($timedOut) {
     $tmin = [math]::Round($timeoutMs / 60000.0, 1)
+    # 전원 상태 -- 느린 정상 실행인지 가르는 첫 단서 (T-235). 조회 실패는 unknown.
+    $power = 'unknown'
+    try {
+        $bs = @(Get-CimInstance -Namespace root/wmi -ClassName BatteryStatus -OperationTimeoutSec 5 -ErrorAction Stop)
+        if ($bs.Count -gt 0 -and $null -ne $bs[0].PowerOnline) {
+            if ($bs[0].PowerOnline) { $power = 'AC' } else { $power = 'battery' }
+        }
+    } catch { $power = 'unknown' }
     $msgTimeout = @"
-[BLOCKED] Test gate exceeded ${tmin} min -- commit aborted (likely gradle daemon/lock
-contention, T-078). The hung gradle process tree was killed and `gradlew --stop` was
-run to clear daemons.
+[BLOCKED] Test gate exceeded ${tmin} min -- commit aborted. The gradle process tree
+was killed and 'gradlew --stop' was run to clear daemons.
 
-This usually means another session (or a leftover bootRun daemon) is holding the gradle
-build lock. End stray builds (`./gradlew --stop`; free port 8080) and commit again.
+Two possible causes:
+  (1) A slow but healthy run. The full suite takes ~2-2.5 min on AC with the screen
+      on (after the BCrypt-4 test change; ~4 min before it). Battery / modern standby
+      / load was 3-4x slower (pre-change: 11-18 min; post-change unmeasured) (T-235).
+  (2) Gradle daemon / build lock contention with another session or a leftover
+      bootRun daemon (T-078).
+Power now: $power
+
+Recommended: if no stray java process is running, run './gradlew test' to completion
+OUTSIDE the gate, then commit again right away without touching sources -- the test
+task is up-to-date, so the gate passes in seconds.
 
 Override only when intentional: include the token SKIP_TESTS in the commit command.
 "@
