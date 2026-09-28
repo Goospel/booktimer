@@ -125,6 +125,10 @@ check "Korean before quote in command + gradle fails -> exit 2" 2 "$got"
 # block the tool call"). If the gate's own budget (or the env override cap) reaches
 # the settings.json timeout, a slow run is cancelled and the commit goes through
 # WITHOUT tests. A parse failure must FAIL here, never pass on empty values.
+# The cap also needs a 5-min reserve (RESERVE_SEC) under the settings timeout: the
+# hook runs `npm --prefix frontend test` (no timeout, ~47s on AC, 3-4x on battery)
+# BEFORE the gradle budget starts, then taskkill + `gradlew --stop` after it.
+RESERVE_SEC=300
 SETTINGS=".claude/settings.json"
 def_min=$(grep -E '^\$timeoutMs *= *[0-9]+ *\* *60 *\* *1000' "$HOOK" | head -1 | sed -E 's/^[^=]*= *([0-9]+).*/\1/')
 max_min=$(grep -E '^\$maxTimeoutMs *= *[0-9]+ *\* *60 *\* *1000' "$HOOK" | head -1 | sed -E 's/^[^=]*= *([0-9]+).*/\1/')
@@ -135,16 +139,16 @@ case "$def_min$max_min$set_sec" in
 esac
 if [ "$parsed_ok" = 1 ] && [ -n "$def_min" ] && [ -n "$max_min" ] && [ -n "$set_sec" ] \
    && [ $((def_min * 60000)) -le $((max_min * 60000)) ] \
-   && [ $((max_min * 60000)) -lt $((set_sec * 1000)) ]; then
-    echo "PASS: budget order default(${def_min}m) <= max(${max_min}m) < settings.json(${set_sec}s)"
+   && [ $((max_min * 60 + RESERVE_SEC)) -le "$set_sec" ]; then
+    echo "PASS: budget order default(${def_min}m) <= max(${max_min}m) + ${RESERVE_SEC}s reserve <= settings.json(${set_sec}s)"
 else
-    echo "FAIL: budget order (default='$def_min'm max='$max_min'm settings='$set_sec's) -- parse failure or default<=max<settings violated"
+    echo "FAIL: budget order (default='$def_min'm max='$max_min'm settings='$set_sec's) -- parse failure or default<=max, max+${RESERVE_SEC}s<=settings violated"
     FAILED=1
 fi
 
 # ── Case 8b: the env override is clamped to $maxTimeoutMs ────────────────────
 # Structural check (not behavioral): a behavioral one would have to wait out the
-# 24-min cap. Without the clamp, BOOKTIMER_TEST_GATE_TIMEOUT_MS >= 1500s silently
+# 24-min cap. Without the clamp, BOOKTIMER_TEST_GATE_TIMEOUT_MS >= 1800s silently
 # turns the gate fail-open -- the exact hole Case 8 exists to close.
 if grep -qF '$timeoutMs = [math]::Min($parsed, $maxTimeoutMs)' "$HOOK"; then
     echo "PASS: env override clamped by [math]::Min(\$parsed, \$maxTimeoutMs)"
