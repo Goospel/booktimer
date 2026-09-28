@@ -4,6 +4,7 @@ import com.booktimer.book.Book;
 import com.booktimer.book.BookRepository;
 import com.booktimer.book.StudyBookService;
 import com.booktimer.quote.QuoteService;
+import com.booktimer.retention.ReadingReminderService;
 import com.booktimer.security.CurrentUserService;
 import com.booktimer.session.ContributionDay;
 import com.booktimer.session.ContributionGraph;
@@ -64,6 +65,7 @@ public class DashboardApiController {
     private final GoalWaiverService goalWaiverService;
     private final StudySessionService studySessionService;
     private final StudyBookService studyBookService;
+    private final ReadingReminderService readingReminderService;
     private final Clock clock;
 
     public DashboardApiController(CurrentUserService currentUserService,
@@ -76,6 +78,7 @@ public class DashboardApiController {
                                   GoalWaiverService goalWaiverService,
                                   StudySessionService studySessionService,
                                   StudyBookService studyBookService,
+                                  ReadingReminderService readingReminderService,
                                   Clock clock) {
         this.currentUserService = currentUserService;
         this.dashboardModel = dashboardModel;
@@ -87,6 +90,7 @@ public class DashboardApiController {
         this.goalWaiverService = goalWaiverService;
         this.studySessionService = studySessionService;
         this.studyBookService = studyBookService;
+        this.readingReminderService = readingReminderService;
         this.clock = clock;
     }
 
@@ -113,7 +117,8 @@ public class DashboardApiController {
                 quotes,
                 user.isEmailVerified(),
                 goalWaiverService.availableFor(user),
-                StudyApiController.StudyState.of(studySessionService, studyBookService, user, clock.instant()));
+                StudyApiController.StudyState.of(studySessionService, studyBookService, user, clock.instant()),
+                readingReminderService.view(user));
     }
 
     @PostMapping("/api/sessions/start")
@@ -357,7 +362,12 @@ public class DashboardApiController {
              * 읽지 않는다) 웹 회귀가 0이다. 미니앱도 옛 서버(이 필드 없음)에 대비해 {@code ?? IDLE}로 읽는다 —
              * 배포 순서에 화면이 의존하지 않는다.
              */
-            StudyApiController.StudyState study
+            StudyApiController.StudyState study,
+            /**
+             * 독서 알림(N3) 설정·가용 — 미니앱 홈 제안 카드·설정 섹션의 재료. <b>맨 뒤에 붙인다</b>({@code study}와 같은
+             * 규약 — 웹 Vue 섬은 모르는 키를 무시하고, 미니앱은 이 필드가 없으면 옛 서버로 보고 숨긴다).
+             */
+            ReadingReminderService.View readingReminder
     ) {}
 
     /**

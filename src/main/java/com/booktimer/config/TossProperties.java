@@ -83,6 +83,42 @@ public class TossProperties {
         /** 운영자 알림 템플릿의 templateSetCode(콘솔 발급). 비어 있으면 발송하지 않는다. */
         private String opsAlertTemplateCode;
 
+        /**
+         * 사용자가 켜는 독서 알림(N3) 점등 — false면 매시 배치 빈이 없고 미니앱 화면도 숨는다(가용=false).
+         * 실발송엔 {@link #enabled}(클라이언트 빈)와 두 템플릿 코드도 있어야 한다.
+         */
+        private boolean readingReminderEnabled;
+
+        /** 「매일」 템플릿의 templateSetCode(콘솔 그룹 13045). 비어 있으면 가용=false·발송 0. */
+        private String readingReminderDailyTemplateCode;
+
+        /** 「3일 쉬면」 템플릿의 templateSetCode(콘솔 그룹 13047) — 미니앱의 동의 요청 코드이기도 하다. */
+        private String readingReminderRestTemplateCode;
+
+        public boolean isReadingReminderEnabled() {
+            return readingReminderEnabled;
+        }
+
+        public void setReadingReminderEnabled(boolean readingReminderEnabled) {
+            this.readingReminderEnabled = readingReminderEnabled;
+        }
+
+        public String getReadingReminderDailyTemplateCode() {
+            return readingReminderDailyTemplateCode;
+        }
+
+        public void setReadingReminderDailyTemplateCode(String readingReminderDailyTemplateCode) {
+            this.readingReminderDailyTemplateCode = readingReminderDailyTemplateCode;
+        }
+
+        public String getReadingReminderRestTemplateCode() {
+            return readingReminderRestTemplateCode;
+        }
+
+        public void setReadingReminderRestTemplateCode(String readingReminderRestTemplateCode) {
+            this.readingReminderRestTemplateCode = readingReminderRestTemplateCode;
+        }
+
         public boolean isOpsAlertEnabled() {
             return opsAlertEnabled;
         }

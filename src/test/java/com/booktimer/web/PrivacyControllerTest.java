@@ -80,4 +80,12 @@ class PrivacyControllerTest {
                 // 키는 render-env가 EC2 .env에도 쓰므로 「SSM에만」은 사실보다 강하다
                 .andExpect(content().string(containsString("데이터베이스·백업과 분리해")));
     }
+
+    @Test
+    @DisplayName("REQ-15 · GET /privacy: 독서 알림 설정 항목과 이용 목적을 고지한다")
+    void getPrivacy_disclosesReadingReminder() throws Exception {
+        mockMvc.perform(get("/privacy"))
+                .andExpect(content().string(containsString("독서 알림을 설정한 경우에만")))
+                .andExpect(content().string(containsString("이용자가 직접 켠 독서 알림")));
+    }
 }
