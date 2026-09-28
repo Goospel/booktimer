@@ -111,6 +111,21 @@ class DashboardApiControllerTest {
                 .andExpect(jsonPath("$.emailVerified").isBoolean());
     }
 
+    @Test
+    @DisplayName("REQ-04 · 대시보드에 readingReminder가 실린다 — 기본(토글 OFF)은 available=false·kind=OFF·everOn=false·agreementCode=null")
+    void get_includesReadingReminder_defaultDarkLaunch() throws Exception {
+        register("reminder@a.com", "reminder");
+
+        mockMvc.perform(get("/api/dashboard").with(user("reminder@a.com")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.readingReminder.available").value(false))
+                .andExpect(jsonPath("$.readingReminder.kind").value("OFF"))
+                .andExpect(jsonPath("$.readingReminder.hour").value(20))
+                .andExpect(jsonPath("$.readingReminder.everOn").value(false))
+                // doesNotExist()는 키가 빠져도 통과해 판별력이 없다 — 본문 문자열로 「키가 있고 값이 null」을 못 박는다
+                .andExpect(content().string(containsString("\"agreementCode\":null")));
+    }
+
     // ── 3. floor 음수 가드 + carryover ON ────────────────────────────────────
 
     @Test

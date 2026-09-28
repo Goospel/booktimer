@@ -564,6 +564,23 @@ class FlywayMigrationTest {
                 .isInstanceOf(DataIntegrityViolationException.class);
     }
 
+    /**
+     * V97 — 기존 사용자는 독서 알림이 꺼진 채(OFF · 20시)로 시작한다. 컬럼 DEFAULT는 마이그레이션에만 있어
+     * (메인 스위트는 엔티티 필드 초기값으로 스키마를 만든다) 여기서만 판정된다 — DEFAULT가 켬이면 동의 없이 켜진 사람이 생긴다.
+     */
+    @Test
+    void v97_reading_reminder_defaults_keep_existing_users_off() {
+        String kind = jdbcTemplate.queryForObject(
+                "select column_default from information_schema.columns where upper(table_name)='USERS' and upper(column_name)='READING_REMINDER_KIND'",
+                String.class);
+        String hour = jdbcTemplate.queryForObject(
+                "select column_default from information_schema.columns where upper(table_name)='USERS' and upper(column_name)='READING_REMINDER_HOUR'",
+                String.class);
+
+        assertThat(kind.replace("'", "").trim()).isEqualTo("OFF");
+        assertThat(hour.replace("'", "").trim()).isEqualTo("20");
+    }
+
     @Test
     void onboarded_user_can_change_login_id() {
         // 아이디 변경은 login_id를 null로 만들지 않으므로 V15 CHECK(onboarded ⟹ login_id IS NOT NULL)를

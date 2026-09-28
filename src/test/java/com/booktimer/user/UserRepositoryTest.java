@@ -203,4 +203,69 @@ class UserRepositoryTest {
 
         assertThat(result).hasSize(2);
     }
+
+    // ── 독서 알림(N3) — 후보 조회 · 선점 · 반납 ──────────────────────────────
+
+    private static final java.time.Instant ON_AT = java.time.Instant.parse("2026-09-20T01:00:00Z");
+    private static final java.time.Instant NOW = java.time.Instant.parse("2026-10-01T11:00:00Z");
+    private static final java.time.Instant THRESHOLD = java.time.Instant.parse("2026-09-30T15:00:00Z");
+
+    private User reminderUser(String email, ReadingReminderKind kind, String tossKey) {
+        User u = sampleUser(email);
+        if (tossKey != null) u.linkTossUserKey(tossKey);
+        u.configureReadingReminder(kind, 20, ON_AT);
+        return userRepository.saveAndFlush(u);
+    }
+
+    private java.time.Instant sentAtOf(User u) {
+        return userRepository.findById(u.getId()).orElseThrow().getReadingReminderSentAt();
+    }
+
+    @Test
+    @DisplayName("REQ-05 · 후보 조회: 켠 토스 사용자만 — OFF·토스 미연결은 빠진다")
+    void readingReminderCandidates_onlyEnabledTossUsers() {
+        reminderUser("off@booktimer.com", ReadingReminderKind.OFF, "tk-off");
+        User daily = reminderUser("daily@booktimer.com", ReadingReminderKind.DAILY, "tk-daily");
+        User rest = reminderUser("rest@booktimer.com", ReadingReminderKind.REST, "tk-rest");
+        reminderUser("notoss@booktimer.com", ReadingReminderKind.DAILY, null); // null-state: 켰지만 토스 미연결
+
+        List<User> result = userRepository.findByReadingReminderKindNotAndTossUserKeyIsNotNull(ReadingReminderKind.OFF);
+
+        assertThat(result).extracting(User::getId).containsExactlyInAnyOrder(daily.getId(), rest.getId());
+    }
+
+    @Test
+    @DisplayName("REQ-07 · 선점은 한 번만 성공한다 — 같은 기준으로 두 번째는 0")
+    void claimReadingReminder_onlyOnce() {
+        User u = reminderUser("claim1@booktimer.com", ReadingReminderKind.DAILY, "tk-c1");
+
+        assertThat(userRepository.claimReadingReminder(u.getId(), NOW, THRESHOLD)).isEqualTo(1);
+        assertThat(userRepository.claimReadingReminder(u.getId(), NOW, THRESHOLD)).isZero();
+        assertThat(sentAtOf(u)).isEqualTo(NOW);
+    }
+
+    @Test
+    @DisplayName("REQ-07 · 기준보다 앞선 발송 기록은 선점을 막지 않는다 / 기준 이후 기록은 막는다")
+    void claimReadingReminder_respectsThreshold() {
+        User before = reminderUser("claim2@booktimer.com", ReadingReminderKind.DAILY, "tk-c2");
+        userRepository.claimReadingReminder(before.getId(), THRESHOLD.minusSeconds(1), java.time.Instant.EPOCH);
+        User atThreshold = reminderUser("claim3@booktimer.com", ReadingReminderKind.DAILY, "tk-c3");
+        userRepository.claimReadingReminder(atThreshold.getId(), THRESHOLD, java.time.Instant.EPOCH);
+
+        assertThat(userRepository.claimReadingReminder(before.getId(), NOW, THRESHOLD)).isEqualTo(1);
+        assertThat(userRepository.claimReadingReminder(atThreshold.getId(), NOW, THRESHOLD)).isZero();
+        assertThat(sentAtOf(atThreshold)).isEqualTo(THRESHOLD);
+    }
+
+    @Test
+    @DisplayName("REQ-07 · 반납하면 같은 기준으로 다시 선점할 수 있다")
+    void releaseReadingReminder_allowsReclaim() {
+        User u = reminderUser("release@booktimer.com", ReadingReminderKind.REST, "tk-r");
+        assertThat(userRepository.claimReadingReminder(u.getId(), NOW, THRESHOLD)).isEqualTo(1);
+
+        userRepository.releaseReadingReminder(u.getId(), null);
+
+        assertThat(sentAtOf(u)).isNull();
+        assertThat(userRepository.claimReadingReminder(u.getId(), NOW, THRESHOLD)).isEqualTo(1);
+    }
 }

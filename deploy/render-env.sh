@@ -54,6 +54,13 @@ declare -A SECRET_MAP=(
   # 끄려면 SSM을 false로 바꾸고 재배포(workflow_dispatch) — 대화 자체는 살고 알림만 멎는다.
   [TOSS_DM_MESSAGE_ENABLED]=BOOKTIMER_TOSS_DM_MESSAGE_ENABLED
   [TOSS_DM_MESSAGE_TEMPLATE_CODE]=BOOKTIMER_TOSS_DM_MESSAGE_TEMPLATE_CODE
+  # 독서 알림(N3, 사용자가 켜는 리마인더) — 「안 읽은 날 독서 알림 동의문」 termsId 125828.
+  # 매일 = 콘솔 그룹 13045 `booktimer-reading-reminder-daily`, 3일 쉬면 = 13047 `booktimer-reading-reminder-rest`.
+  # 끄려면 ENABLED를 false로 바꾸고 재배포(workflow_dispatch) — 매시 배치가 멎고 미니앱 화면에서도 사라진다.
+  # 광고성으로 판정이 뒤집히면 문구 보정이 아니라 이 소등이 유일한 대응이다.
+  [TOSS_READING_REMINDER_ENABLED]=BOOKTIMER_TOSS_READING_REMINDER_ENABLED
+  [TOSS_READING_REMINDER_DAILY_TEMPLATE_CODE]=BOOKTIMER_TOSS_READING_REMINDER_DAILY_TEMPLATE_CODE
+  [TOSS_READING_REMINDER_REST_TEMPLATE_CODE]=BOOKTIMER_TOSS_READING_REMINDER_REST_TEMPLATE_CODE
 )
 
 # ── 평문 설정 (구 task-definition의 environment 블록) ──

@@ -216,6 +216,31 @@ public class User extends BaseTimeEntity {
     @Column(name = "chat_banned_at")
     private java.time.Instant chatBannedAt;
 
+    /**
+     * 독서 알림 방식(V97). 기본 {@link ReadingReminderKind#OFF}는 마이그레이션 DEFAULT와 짝이라 기존 전 유저가 꺼져 있다 —
+     * 동의는 토스가 정본이고, 미니앱은 동의 성공 뒤에만 이 값을 켠다.
+     */
+    @Enumerated(EnumType.STRING)
+    @Column(name = "reading_reminder_kind", nullable = false, length = 10)
+    private ReadingReminderKind readingReminderKind = ReadingReminderKind.OFF;
+
+    /** 보낼 현지 시(8~22). 꺼져 있어도 저장한다 — 설정에서 켜기 전에 시각을 먼저 고른다. */
+    @Column(name = "reading_reminder_hour", nullable = false)
+    private int readingReminderHour = 20;
+
+    /** 마지막으로 꺼짐→켬이 된 시각 — 3일 쉬면 카운트의 하한이자 「켠 적 있음」의 정본. 끄기는 지우지 않는다. */
+    @Column(name = "reading_reminder_on_at")
+    private java.time.Instant readingReminderOnAt;
+
+    /**
+     * 마지막 발송(선점) 시각 — 멱등. 배치는 컬럼 단독 UPDATE({@link UserRepository#claimReadingReminder}·반납)로만 쓰고
+     * 도메인 메서드도 이 필드를 건드리지 않는다. 다만 {@code @DynamicUpdate}가 없어 이 엔티티를 save하는 다른 트랜잭션
+     * (설정 저장 등)은 읽어 둔 옛 값으로 이 컬럼까지 다시 쓴다 — 선점과 수 ms 안에 겹치면 선점이 지워져 한 통 더 갈 수 있다
+     * (설계 §7이 수용한 창).
+     */
+    @Column(name = "reading_reminder_sent_at")
+    private java.time.Instant readingReminderSentAt;
+
     protected User() {
         // JPA
     }
@@ -440,6 +465,44 @@ public class User extends BaseTimeEntity {
 
     public java.time.Instant getChatBannedAt() {
         return chatBannedAt;
+    }
+
+    /** 독서 알림 시각의 하한(현지 시). */
+    public static final int READING_REMINDER_MIN_HOUR = 8;
+    /** 독서 알림 시각의 상한(현지 시) — 사용자 결정 2026-09-26(8~22시). 미니앱 {@code REMINDER_HOURS}와 짝. */
+    public static final int READING_REMINDER_MAX_HOUR = 22;
+
+    /**
+     * 독서 알림 설정을 통째로 바꾼다. 꺼짐→켬일 때만 켠 시각을 박는다(켠 채 바꾸거나 꺼진 채 시각만 바꾸면 그대로).
+     *
+     * @throws IllegalArgumentException 방식이 null이거나 시각이 {@value #READING_REMINDER_MIN_HOUR}~
+     *                                  {@value #READING_REMINDER_MAX_HOUR} 밖인 경우(상태는 건드리지 않는다)
+     */
+    public void configureReadingReminder(ReadingReminderKind kind, int hour, java.time.Instant now) {
+        if (kind == null || hour < READING_REMINDER_MIN_HOUR || hour > READING_REMINDER_MAX_HOUR) {
+            throw new IllegalArgumentException("invalid reading reminder: " + kind + "/" + hour);
+        }
+        if (this.readingReminderKind == ReadingReminderKind.OFF && kind != ReadingReminderKind.OFF) {
+            this.readingReminderOnAt = now;
+        }
+        this.readingReminderKind = kind;
+        this.readingReminderHour = hour;
+    }
+
+    public ReadingReminderKind getReadingReminderKind() {
+        return readingReminderKind;
+    }
+
+    public int getReadingReminderHour() {
+        return readingReminderHour;
+    }
+
+    public java.time.Instant getReadingReminderOnAt() {
+        return readingReminderOnAt;
+    }
+
+    public java.time.Instant getReadingReminderSentAt() {
+        return readingReminderSentAt;
     }
 
     /** 공부 AI 기능의 현재 승인 상태. 기본값은 {@link StudyAiAccess#NONE}이다. */

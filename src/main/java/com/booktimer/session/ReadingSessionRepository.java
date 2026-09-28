@@ -82,6 +82,13 @@ public interface ReadingSessionRepository extends JpaRepository<ReadingSession, 
     Optional<ReadingSession> findByUserAndEndedAtIsNull(User user);
 
     /**
+     * 마지막 독서 측정 시작 시각(진행 중·수동 입력 포함) — 독서 알림의 「읽었다」 기준. 측정이 없으면 {@code null}.
+     * 공부 측정은 넣지 않는다(사용자가 켠 것은 <b>독서</b> 알림이다).
+     */
+    @Query("select max(s.startedAt) from ReadingSession s where s.user = :user")
+    Instant findLastStartedAt(@Param("user") User user);
+
+    /**
      * 이 사용자가 <b>끝낸</b> 세션 수 — stop 직후 "이번이 첫 기록인가"(정확히 1)를 가리는 데 쓴다.
      * 수동 기록({@code recordManual})도 완료 세션이라 함께 세어진다 — 첫 "기록"의 의미를 지킨다.
      */

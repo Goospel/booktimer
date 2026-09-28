@@ -4,8 +4,10 @@ import jakarta.persistence.LockModeType;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Lock;
+import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.util.Collection;
 import java.util.List;
@@ -107,6 +109,32 @@ public interface UserRepository extends JpaRepository<User, Long> {
     /** 대화 제재 중인 사용자 수(영구 정지 + 아직 안 끝난 7일 정지) — 관리자 배너. */
     @Query("select count(u) from User u where u.chatBannedAt is not null or u.chatRestrictedUntil > :now")
     long countChatSanctioned(@Param("now") java.time.Instant now);
+
+    /** 독서 알림 매시 배치 후보 — 켠(OFF가 아닌) 토스 연결 사용자. OFF를 넘긴다. 현지 시 거르기는 서비스가 한다. */
+    List<User> findByReadingReminderKindNotAndTossUserKeyIsNotNull(ReadingReminderKind kind);
+
+    /**
+     * 독서 알림 선점 — 이번 차례(기준 {@code threshold} 이후)에 아직 안 보냈으면 발송 시각을 박고 1을 돌려준다.
+     *
+     * <p>「선점 후 발송」인 이유: 블루그린 겹침으로 두 컨테이너가 같은 정각에 배치를 돌려도 행 락이 이 UPDATE를
+     * 직렬화해 한쪽만 1을 받는다(성공 후 마킹이면 2통). 컬럼 단독 UPDATE인 이유: 엔티티 save는 요청 스레드의
+     * 다른 컬럼 변경을 덮는다. {@code @Transactional}은 호출부 배치가 트랜잭션 밖이라서다
+     * ({@code StudySessionRepository.markGoalNotified}와 같은 규율).
+     */
+    @Transactional
+    @Modifying(flushAutomatically = true, clearAutomatically = true)
+    @Query("""
+            update User u set u.readingReminderSentAt = :now
+            where u.id = :id and (u.readingReminderSentAt is null or u.readingReminderSentAt < :threshold)
+            """)
+    int claimReadingReminder(@Param("id") Long id, @Param("now") java.time.Instant now,
+                             @Param("threshold") java.time.Instant threshold);
+
+    /** 선점 반납 — 발송이 실패하면 선점 전 값으로 되돌려 다음 차례에 다시 보게 한다. */
+    @Transactional
+    @Modifying(flushAutomatically = true, clearAutomatically = true)
+    @Query("update User u set u.readingReminderSentAt = :previous where u.id = :id")
+    int releaseReadingReminder(@Param("id") Long id, @Param("previous") java.time.Instant previous);
 
     /** 운영자 알림 수신 대상 — 토스에 연결된 운영자(ADMIN). */
     List<User> findByRoleAndTossUserKeyIsNotNull(Role role);

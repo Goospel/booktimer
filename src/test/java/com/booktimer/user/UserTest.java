@@ -724,4 +724,74 @@ class UserTest {
         User normal = User.of("reader@booktimer.com", HASH, NICK, TZ, Role.USER);
         assertThat(normal.hasSyntheticEmail()).isFalse();
     }
+
+    // ── 독서 알림 설정(N3) ──────────────────────────────────────────────────
+
+    private static final java.time.Instant T1 = java.time.Instant.parse("2026-10-01T01:00:00Z");
+    private static final java.time.Instant T2 = java.time.Instant.parse("2026-10-02T01:00:00Z");
+    private static final java.time.Instant T3 = java.time.Instant.parse("2026-10-03T01:00:00Z");
+
+    @Test
+    @DisplayName("REQ-03 · 새 계정은 OFF · 20시 · 켠 시각 null로 시작한다")
+    void readingReminder_newAccountIsOff() {
+        User user = User.of(EMAIL, HASH, NICK, TZ, Role.USER);
+
+        assertThat(user.getReadingReminderKind()).isEqualTo(ReadingReminderKind.OFF);
+        assertThat(user.getReadingReminderHour()).isEqualTo(20);
+        assertThat(user.getReadingReminderOnAt()).isNull();
+        assertThat(user.getReadingReminderSentAt()).isNull();
+    }
+
+    @Test
+    @DisplayName("REQ-03 · 꺼짐→켬이면 켠 시각을 박고, 켠 채 시각·방식을 바꾸거나 꺼진 채 시각만 바꾸면 켠 시각은 그대로다")
+    void readingReminder_onAtStampedOnlyOnOffToOn() {
+        User user = User.of(EMAIL, HASH, NICK, TZ, Role.USER);
+
+        user.configureReadingReminder(ReadingReminderKind.OFF, 9, T1); // 꺼진 채 시각만
+        assertThat(user.getReadingReminderOnAt()).isNull();
+        assertThat(user.getReadingReminderHour()).isEqualTo(9);
+
+        user.configureReadingReminder(ReadingReminderKind.REST, 9, T2); // 꺼짐 → 켬
+        assertThat(user.getReadingReminderOnAt()).isEqualTo(T2);
+        assertThat(user.getReadingReminderKind()).isEqualTo(ReadingReminderKind.REST);
+
+        user.configureReadingReminder(ReadingReminderKind.DAILY, 21, T3); // 켠 채 방식·시각 변경
+        assertThat(user.getReadingReminderOnAt()).isEqualTo(T2);
+        assertThat(user.getReadingReminderKind()).isEqualTo(ReadingReminderKind.DAILY);
+        assertThat(user.getReadingReminderHour()).isEqualTo(21);
+    }
+
+    @Test
+    @DisplayName("REQ-03 · 시각 7·23과 방식 null은 거부하고 경계 8·22는 받는다")
+    void readingReminder_rejectsOutOfRange() {
+        User user = User.of(EMAIL, HASH, NICK, TZ, Role.USER);
+
+        assertThatThrownBy(() -> user.configureReadingReminder(ReadingReminderKind.DAILY, 7, T1))
+                .isInstanceOf(IllegalArgumentException.class);
+        assertThatThrownBy(() -> user.configureReadingReminder(ReadingReminderKind.DAILY, 23, T1))
+                .isInstanceOf(IllegalArgumentException.class);
+        assertThatThrownBy(() -> user.configureReadingReminder(null, 20, T1))
+                .isInstanceOf(IllegalArgumentException.class);
+        // 거부는 상태를 건드리지 않는다
+        assertThat(user.getReadingReminderKind()).isEqualTo(ReadingReminderKind.OFF);
+        assertThat(user.getReadingReminderOnAt()).isNull();
+
+        user.configureReadingReminder(ReadingReminderKind.DAILY, 8, T1);
+        assertThat(user.getReadingReminderHour()).isEqualTo(8);
+        user.configureReadingReminder(ReadingReminderKind.DAILY, 22, T1);
+        assertThat(user.getReadingReminderHour()).isEqualTo(22);
+    }
+
+    @Test
+    @DisplayName("REQ-03 · 켬→꺼짐→켬이면 켠 시각이 새로 박힌다")
+    void readingReminder_reenableRestampsOnAt() {
+        User user = User.of(EMAIL, HASH, NICK, TZ, Role.USER);
+
+        user.configureReadingReminder(ReadingReminderKind.REST, 20, T1);
+        user.configureReadingReminder(ReadingReminderKind.OFF, 20, T2);
+        assertThat(user.getReadingReminderOnAt()).isEqualTo(T1); // 끄기는 켠 시각을 지우지 않는다(everOn)
+
+        user.configureReadingReminder(ReadingReminderKind.REST, 20, T3);
+        assertThat(user.getReadingReminderOnAt()).isEqualTo(T3);
+    }
 }

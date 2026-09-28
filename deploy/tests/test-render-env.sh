@@ -47,7 +47,9 @@ case "\$*" in
                  TOSS_GOAL_MET_ENABLED TOSS_GOAL_MET_TEMPLATE_CODE \\
                  TOSS_STUDY_GOAL_ENABLED TOSS_STUDY_GOAL_TEMPLATE_CODE \\
                  CHAT_MESSAGE_KEY CHAT_ENABLED \\
-                 TOSS_DM_MESSAGE_ENABLED TOSS_DM_MESSAGE_TEMPLATE_CODE; do
+                 TOSS_DM_MESSAGE_ENABLED TOSS_DM_MESSAGE_TEMPLATE_CODE \\
+                 TOSS_READING_REMINDER_ENABLED TOSS_READING_REMINDER_DAILY_TEMPLATE_CODE \\
+                 TOSS_READING_REMINDER_REST_TEMPLATE_CODE; do
             printf '/booktimer/%s\tvalue-of-%s\n' "\$n" "\$n"
         done
         # 여러 줄 SecureString(PEM)도 같은 /booktimer 경로에 살아 이 목록에 함께 나온다.
@@ -136,6 +138,11 @@ assert_has "  .env 에 대화 킬스위치" "$env_out" "BOOKTIMER_CHAT_ENABLED=v
 # 화면은 멀쩡하고 대화도 되므로 아무도 모르는 무성 장애다(목표 달성·공부 푸시와 같은 부류).
 assert_has "  .env 에 대화 푸시 게이트" "$env_out" "BOOKTIMER_TOSS_DM_MESSAGE_ENABLED=value-of-TOSS_DM_MESSAGE_ENABLED"
 assert_has "  .env 에 대화 푸시 템플릿 코드" "$env_out" "BOOKTIMER_TOSS_DM_MESSAGE_TEMPLATE_CODE=value-of-TOSS_DM_MESSAGE_TEMPLATE_CODE"
+# 독서 알림(N3) — 토글이 빠지면 SSM을 true로 켜도 매시 배치 빈이 안 뜨고 화면도 숨은 채(가용=false)라 켠 줄 모른다.
+# 템플릿 코드가 빠지면 가용=false로 같은 무성 장애가 된다.
+assert_has "  .env 에 독서 알림 게이트" "$env_out" "BOOKTIMER_TOSS_READING_REMINDER_ENABLED=value-of-TOSS_READING_REMINDER_ENABLED"
+assert_has "  .env 에 독서 알림 매일 템플릿 코드" "$env_out" "BOOKTIMER_TOSS_READING_REMINDER_DAILY_TEMPLATE_CODE=value-of-TOSS_READING_REMINDER_DAILY_TEMPLATE_CODE"
+assert_has "  .env 에 독서 알림 3일 템플릿 코드" "$env_out" "BOOKTIMER_TOSS_READING_REMINDER_REST_TEMPLATE_CODE=value-of-TOSS_READING_REMINDER_REST_TEMPLATE_CODE"
 
 # ── Case 2: 인증서 누락 → 배포 실패, 파일도 안 남는다 ──
 r="$(run TOSS_MTLS_CERT)"; rc="${r%%$'\n'*}"; out="${r#*$'\n'}"

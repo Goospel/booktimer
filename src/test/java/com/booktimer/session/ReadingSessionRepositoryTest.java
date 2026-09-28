@@ -427,4 +427,23 @@ class ReadingSessionRepositoryTest {
         assertThat(sessionRepository.sumCompletedSeconds(me, T0, T0.plusSeconds(86400))).isZero();
     }
 
+    @Test
+    @DisplayName("REQ-06 · 마지막 독서 시작: 측정이 없으면 null, 여러 개면 가장 늦은 시작")
+    void findLastStartedAt_nullOrLatest() {
+        User me = persistedUser("last-start@booktimer.com");
+        User other = persistedUser("last-start-other@booktimer.com");
+        assertThat(sessionRepository.findLastStartedAt(me)).isNull();
+
+        ReadingSession early = ReadingSession.start(me, T0);
+        early.end(T0.plusSeconds(600));
+        sessionRepository.save(early);
+        sessionRepository.save(ReadingSession.start(me, T0.plusSeconds(86400))); // 가장 늦은 시작(진행 중이어도 시작은 시작)
+        ReadingSession middle = ReadingSession.start(me, T0.plusSeconds(3600));
+        middle.end(T0.plusSeconds(4000));
+        sessionRepository.save(middle);
+        sessionRepository.save(ReadingSession.start(other, T0.plusSeconds(999_999))); // 남의 기록은 섞이지 않는다
+
+        assertThat(sessionRepository.findLastStartedAt(me)).isEqualTo(T0.plusSeconds(86400));
+    }
+
 }
