@@ -275,7 +275,8 @@ powershell -File .claude/scripts/remove-worktree.ps1 ../BookTimer-<task>   # 또
 Claude Code 는 그 자식 프로세스 종료를 기다릴 뿐이라 **코어 버그가 아니다**(그래서 esc·머지로 안 풀리고 clear 로만 풀렸던 것).
 흔한 뿌리 = **멀티 세션이 gradle 데몬·빌드 락을 동시 점유**. esc 는 이미 뜬 gradle 자식·데몬을 안 죽여 **다음 커밋도 또 hang**한다.
 
-- **이젠 게이트가 자가차단(하드, 2026-07-01)**: 커밋 훅 `require-tests-before-commit.ps1` 의 `gradlew test` 가 **8분 타임아웃**(`BOOKTIMER_TEST_GATE_TIMEOUT_MS` 로 조정)으로 감싸여, 초과 시 **프로세스 트리 `taskkill /T` + `gradlew --stop` 자가복구 후 커밋 차단(exit 2)** 한다 → 45분 무한 freeze는 더 안 난다. **그래도 커밋이 8분+ 멈춰 있으면** 그건 게이트가 아닌 다른 빌드 hang일 수 있으니 아래 수동 정리로 간다.
+- **이젠 게이트가 자가차단(하드, 2026-07-01)**: 커밋 훅 `require-tests-before-commit.ps1` 의 `gradlew test` 가 **20분 타임아웃**(`BOOKTIMER_TEST_GATE_TIMEOUT_MS` 로 조정하되 **상한 24분** — `.claude/settings.json`의 이 훅 `timeout` 1500초보다 반드시 짧아야 한다. 넘으면 Claude Code가 훅을 취소하고 **테스트 없이 커밋을 통과**시킨다)으로 감싸여, 초과 시 **프로세스 트리 `taskkill /T` + `gradlew --stop` 자가복구 후 커밋 차단(exit 2)** 한다 → 45분 무한 freeze는 더 안 난다. **그래도 커밋이 20분+ 멈춰 있으면** 그건 게이트가 아닌 다른 빌드 hang일 수 있으니 아래 수동 정리로 간다.
+- **게이트가 느리면 먼저 전원(AC·화면 켜짐)을 본다** — 배터리·대기면 같은 스위트가 3~4배 느리다(T-235: AC 약 4분 vs 배터리 대기 11~18분).
 - **감별**: `git status` 가 빠르면(0.x초) git·레포 자체는 정상 → 코어·레포 문제 아님. 떠도는 `java`(gradle 데몬) 잔존이 단서.
 - **강제 정리**:
   ```powershell
