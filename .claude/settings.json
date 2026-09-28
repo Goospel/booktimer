@@ -38,7 +38,7 @@
           {
             "type": "command",
             "command": "powershell.exe -NoProfile -File \".claude\\hooks\\require-tests-before-commit.ps1\"",
-            "timeout": 600
+            "timeout": 1500
           },
           {
             "type": "command",
