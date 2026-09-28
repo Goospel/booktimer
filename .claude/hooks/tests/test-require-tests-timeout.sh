@@ -142,6 +142,17 @@ else
     FAILED=1
 fi
 
+# ── Case 8b: the env override is clamped to $maxTimeoutMs ────────────────────
+# Structural check (not behavioral): a behavioral one would have to wait out the
+# 24-min cap. Without the clamp, BOOKTIMER_TEST_GATE_TIMEOUT_MS >= 1500s silently
+# turns the gate fail-open -- the exact hole Case 8 exists to close.
+if grep -qF '$timeoutMs = [math]::Min($parsed, $maxTimeoutMs)' "$HOOK"; then
+    echo "PASS: env override clamped by [math]::Min(\$parsed, \$maxTimeoutMs)"
+else
+    echo "FAIL: env override not clamped to \$maxTimeoutMs"
+    FAILED=1
+fi
+
 # ── Case 9: timeout message names both causes + current power state ───────────
 # The old message asserted "likely gradle daemon/lock contention" and sent two
 # diagnoses the wrong way (T-235). Reuse the hang fixture and read stderr.
