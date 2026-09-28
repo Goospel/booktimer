@@ -518,4 +518,90 @@ class StudySessionServiceTest {
         verify(studyRepository, never()).findFirstByUserAndEndedAtAndIdNot(any(), any(), any());
         verify(studyRepository, never()).findFirstByUserAndStartedAtAndEndedAtIsNotNullAndIdNot(any(), any(), any());
     }
+
+    // ==========================================================================
+    // 탭을 떠나 멈춘 구간 — excludedSeconds 순수 함수 (조각으로 자르기 → 겹침 합치기 → 초 합)
+    // ==========================================================================
+
+    private static StudySessionService.AwayInterval away(Instant from, Instant to) {
+        return new StudySessionService.AwayInterval(from, to);
+    }
+
+    @Test
+    @DisplayName("excludedSeconds: 조각 안의 구간 1개는 그 길이 그대로")
+    void excludedSeconds_intervalInside() {
+        long s = StudySessionService.excludedSeconds(T0, T0.plusSeconds(3600),
+                List.of(away(T0.plusSeconds(600), T0.plusSeconds(900))));
+
+        assertThat(s).isEqualTo(300);
+    }
+
+    @Test
+    @DisplayName("excludedSeconds: 조각 밖으로 걸친 구간은 조각 경계로 잘린다(양쪽 끝·완전히 밖)")
+    void excludedSeconds_clipsToSegment() {
+        long s = StudySessionService.excludedSeconds(T0, T0.plusSeconds(3600), List.of(
+                away(T0.minusSeconds(600), T0.plusSeconds(120)),            // 앞으로 걸침 → 120
+                away(T0.plusSeconds(3500), T0.plusSeconds(4000)),           // 뒤로 걸침 → 100
+                away(T0.plusSeconds(5000), T0.plusSeconds(6000))));         // 완전히 밖 → 0
+
+        assertThat(s).isEqualTo(220);
+    }
+
+    @Test
+    @DisplayName("excludedSeconds: 겹친 두 구간은 합쳐 1회만 뺀다(순서 무관)")
+    void excludedSeconds_mergesOverlap() {
+        long s = StudySessionService.excludedSeconds(T0, T0.plusSeconds(3600), List.of(
+                away(T0.plusSeconds(800), T0.plusSeconds(1200)),
+                away(T0.plusSeconds(600), T0.plusSeconds(1000))));
+
+        assertThat(s).as("합집합 600..1200 = 600초 — 따로 더하면 800").isEqualTo(600);
+    }
+
+    @Test
+    @DisplayName("stop(away): 구간이 없으면 기존 stop과 같은 결과(미니앱 경로 회귀 방지)")
+    void stopWithAway_empty_sameAsBefore() {
+        StudySession active = StudySession.start(user, T0);
+        when(studyRepository.findByUserAndEndedAtIsNull(user)).thenReturn(Optional.of(active));
+        when(studyRepository.save(any(StudySession.class))).thenAnswer(returnsFirstArg());
+
+        StudySession stopped = service.stop(user, T0.plusSeconds(1800), List.of());
+
+        assertThat(stopped.getEndedAt()).isEqualTo(T0.plusSeconds(1800));
+        assertThat(stopped.getDurationSeconds()).isEqualTo(1800);
+    }
+
+    @Test
+    @DisplayName("stop(away): 구간 1개만큼 durationSeconds를 뺀다(endedAt은 그대로 now)")
+    void stopWithAway_subtractsInterval() {
+        StudySession active = StudySession.start(user, T0);
+        when(studyRepository.findByUserAndEndedAtIsNull(user)).thenReturn(Optional.of(active));
+        when(studyRepository.save(any(StudySession.class))).thenAnswer(returnsFirstArg());
+
+        StudySession stopped = service.stop(user, T0.plusSeconds(1800),
+                List.of(away(T0.plusSeconds(600), T0.plusSeconds(900))));
+
+        assertThat(stopped.getEndedAt()).isEqualTo(T0.plusSeconds(1800));
+        assertThat(stopped.getDurationSeconds()).isEqualTo(1500);
+    }
+
+    @Test
+    @DisplayName("stop(away): 6h 상한 뒤의 구간은 무시한다 — 클램프가 먼저라 이미 잘려 나간 시간이다")
+    void stopWithAway_ignoresIntervalAfterCap() {
+        Instant started = kst("2026-06-01T09:00");
+        StudySession active = StudySession.start(user, started);
+        when(studyRepository.findByUserAndEndedAtIsNull(user)).thenReturn(Optional.of(active));
+        when(studyRepository.save(any(StudySession.class))).thenAnswer(returnsFirstArg());
+
+        StudySession stopped = service.stop(user, started.plusSeconds(8 * 3600), List.of(
+                away(started.plusSeconds(5 * 3600 + 3000), started.plusSeconds(7 * 3600)))); // cap 안은 600초뿐
+
+        assertThat(stopped.getDurationSeconds())
+                .isEqualTo(ReadingSessionService.MAX_SESSION_DURATION.toSeconds() - 600);
+    }
+
+    @Test
+    @DisplayName("excludedSeconds: 빈 목록이면 0")
+    void excludedSeconds_empty() {
+        assertThat(StudySessionService.excludedSeconds(T0, T0.plusSeconds(3600), List.of())).isZero();
+    }
 }
