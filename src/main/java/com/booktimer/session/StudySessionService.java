@@ -7,9 +7,11 @@ import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.Duration;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneId;
+import java.util.Comparator;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -77,16 +79,22 @@ public class StudySessionService {
      * 조각마다 이어지지 않으면 자정을 넘긴 공부의 절반이 미태깅으로 남아 책별 누적이 조용히 반토막 난다
      * (독서 {@code ReadingSessionService}의 같은 자리와 동일).
      *
+     * <p>{@code away}(탭을 떠나 멈춘 구간)는 <b>조각마다 겹친 만큼씩</b> 뺀다 — 자정에 걸친 이탈이 두 날짜에
+     * 각자 정확히 나뉘게 하려고 합계가 아니라 구간으로 받는다.
+     *
      * @return 마지막 조각({@code endedAt}이 속한 쪽)
      */
-    private StudySession endSplitAndSave(StudySession open, Instant endedAt) {
+    private StudySession endSplitAndSave(StudySession open, Instant endedAt, List<AwayInterval> away) {
         List<ReadingSessionService.Segment> segments = ReadingSessionService.splitByMidnight(
                 open.getStartedAt(), endedAt, ZoneId.of(open.getUser().getTimezone()));
-        open.end(segments.get(0).end()); // 이미 종료된 세션이면 여기서 IllegalStateException(경합 가드 유지)
+        ReadingSessionService.Segment first = segments.get(0);
+        // 이미 종료된 세션이면 여기서 IllegalStateException(경합 가드 유지)
+        open.end(first.end(), excludedSeconds(first.start(), first.end(), away));
         StudySession last = studyRepository.save(open);
         for (int i = 1; i < segments.size(); i++) {
-            StudySession piece = StudySession.start(open.getUser(), segments.get(i).start(), open.getBook());
-            piece.end(segments.get(i).end());
+            ReadingSessionService.Segment seg = segments.get(i);
+            StudySession piece = StudySession.start(open.getUser(), seg.start(), open.getBook());
+            piece.end(seg.end(), excludedSeconds(seg.start(), seg.end(), away));
             last = studyRepository.save(piece);
         }
         return last;
@@ -103,9 +111,19 @@ public class StudySessionService {
      * @throws IllegalStateException 진행 중 세션이 없는 경우
      */
     public StudySession stop(User user, Instant now) {
+        return stop(user, now, List.of());
+    }
+
+    /**
+     * {@link #stop(User, Instant)}에 <b>탭을 떠나 멈춘 구간</b>을 얹는다(웹 공부 타이머). 클램프·분할 순서는
+     * 같고, 조각마다 겹친 만큼 {@code durationSeconds}에서 뺀다 — 상한 뒤 구간은 조각 밖이라 자연히 무시된다.
+     *
+     * @param away 멈춘 구간(빈 목록 = 기존 stop과 같은 결과)
+     */
+    public StudySession stop(User user, Instant now, List<AwayInterval> away) {
         StudySession active = studyRepository.findByUserAndEndedAtIsNull(user)
                 .orElseThrow(() -> new IllegalStateException("no active study session to stop"));
-        return endSplitAndSave(active, clampToCap(active.getStartedAt(), now));
+        return endSplitAndSave(active, clampToCap(active.getStartedAt(), now), away);
     }
 
     /**
@@ -119,7 +137,8 @@ public class StudySessionService {
         for (StudySession session : studyRepository.findByEndedAtIsNullAndStartedAtBefore(
                 now.minus(ReadingSessionService.MAX_SESSION_DURATION))) {
             try {
-                endSplitAndSave(session, session.getStartedAt().plus(ReadingSessionService.MAX_SESSION_DURATION));
+                endSplitAndSave(session, session.getStartedAt().plus(ReadingSessionService.MAX_SESSION_DURATION),
+                        List.of());
             } catch (IllegalStateException alreadyEnded) {
                 log.info("stale study session {} already ended, skipping: {}", session.getId(), alreadyEnded.getMessage());
                 continue;
@@ -263,6 +282,49 @@ public class StudySessionService {
         return studyRepository.findFirstByUserAndBookIsNotNullOrderByStartedAtDesc(user)
                 .map(s -> s.getBook().getId())
                 .orElse(null);
+    }
+
+    /**
+     * [{@code segStart}, {@code segEnd}] 조각 안에서 뺄 초 — 구간을 조각 경계로 자르고, 겹침을 합친 뒤 합산한다.
+     *
+     * <p>합친 뒤 더하므로 겹친 구간을 두 번 빼지 않고, 잘린 구간은 조각 안에 있으므로 결과가 조각 길이를
+     * 넘지 않는다(초 절삭도 작은 쪽 ≤ 큰 쪽). 조각 밖(측정 이전·이후·상한 뒤) 구간은 0으로 떨어진다.
+     */
+    static long excludedSeconds(Instant segStart, Instant segEnd, List<AwayInterval> away) {
+        List<AwayInterval> clipped = away.stream()
+                .map(a -> new AwayInterval(
+                        a.from().isBefore(segStart) ? segStart : a.from(),
+                        a.to().isAfter(segEnd) ? segEnd : a.to()))
+                .filter(a -> a.from().isBefore(a.to()))
+                .sorted(Comparator.comparing(AwayInterval::from))
+                .toList();
+        Duration total = Duration.ZERO;
+        Instant curFrom = null;
+        Instant curTo = null;
+        for (AwayInterval a : clipped) {
+            if (curTo != null && !a.from().isAfter(curTo)) {
+                if (a.to().isAfter(curTo)) {
+                    curTo = a.to();
+                }
+                continue;
+            }
+            if (curTo != null) {
+                total = total.plus(Duration.between(curFrom, curTo));
+            }
+            curFrom = a.from();
+            curTo = a.to();
+        }
+        if (curTo != null) {
+            total = total.plus(Duration.between(curFrom, curTo));
+        }
+        return total.toSeconds();
+    }
+
+    /**
+     * 탭을 떠나 멈춘 구간(웹 공부 타이머가 stop 때 보고). 컨트롤러가 {@code from < to}를 검증한 뒤 넘긴다.
+     * 측정 범위 밖으로 걸친 부분은 {@link #excludedSeconds}가 잘라낸다(시계 오차 흡수).
+     */
+    public record AwayInterval(Instant from, Instant to) {
     }
 
     /** 경과가 cap을 초과하면 {@code startedAt + cap}, 아니면 {@code now} 그대로. */

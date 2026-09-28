@@ -198,6 +198,128 @@ class StudyApiControllerTest {
                 .andExpect(jsonPath("$.todaySeconds").value(greaterThanOrEqualTo(1500)));
     }
 
+    // ── stop + 탭을 떠나 멈춘 구간(웹 공부 타이머) ───────────────────────────
+    // 고정 클락 09:00Z 기준 30분 전(08:30Z)에 시작한 측정을 끝낸다 — 차감이 없으면 정확히 1800초다.
+
+    /** 30분 전에 시작한 진행 중 공부 세션을 심는다. */
+    private void activeFor30Min(User u) {
+        studyRepository.save(StudySession.start(u, clock.instant().minus(Duration.ofMinutes(30))));
+    }
+
+    private static String awayBody(String... fromTo) {
+        StringBuilder sb = new StringBuilder("{\"awayIntervals\":[");
+        for (int i = 0; i < fromTo.length; i += 2) {
+            if (i > 0) sb.append(',');
+            sb.append("{\"from\":").append(fromTo[i]).append(",\"to\":").append(fromTo[i + 1]).append('}');
+        }
+        return sb.append("]}").toString();
+    }
+
+    @Test
+    @DisplayName("POST /api/study/stop: 본문 없이 부르면 200·차감 없는 기존 결과다(현 웹 번들 계약)")
+    void stop_withoutBody_keepsCurrentWebBundleContract() throws Exception {
+        User u = register("study-nobody@a.com", "studynobody");
+        activeFor30Min(u);
+
+        mockMvc.perform(post("/api/study/stop").with(user("studynobody")).with(csrf()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.hasActiveSession").value(false))
+                .andExpect(jsonPath("$.todaySeconds").value(1800));
+    }
+
+    /** 미니앱 {@code stopStudy}는 {@code body: {}}로 부른다(JSON {@code {}}) — {@code awayIntervals} 키가 없다. */
+    @Test
+    @DisplayName("POST /api/study/stop: 본문 {}이면 200·차감 없는 기존 결과다(미니앱 계약 — E12)")
+    void stop_withEmptyJsonBody_keepsMiniappContract() throws Exception {
+        User u = register("study-emptyjson@a.com", "studyemptyjson");
+        activeFor30Min(u);
+
+        mockMvc.perform(post("/api/study/stop").with(user("studyemptyjson")).with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.hasActiveSession").value(false))
+                .andExpect(jsonPath("$.todaySeconds").value(1800));
+    }
+
+    @Test
+    @DisplayName("POST /api/study/stop: 이탈 구간을 실으면 오늘 공부 시간에서 빠진다 — 측정 밖으로 걸친 부분은 400 아닌 잘라내기")
+    void stop_withAwayIntervals_subtractsClippedTime() throws Exception {
+        User u = register("study-away@a.com", "studyaway");
+        activeFor30Min(u);
+
+        // 08:20~08:40 → 시작(08:30) 앞은 잘려 600초 / 08:50~09:10 → 종료(09:00) 뒤는 잘려 600초
+        mockMvc.perform(post("/api/study/stop").with(user("studyaway")).with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(awayBody("\"2026-06-17T08:20:00Z\"", "\"2026-06-17T08:40:00Z\"",
+                                "\"2026-06-17T08:50:00Z\"", "\"2026-06-17T09:10:00Z\"")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.hasActiveSession").value(false))
+                .andExpect(jsonPath("$.todaySeconds").value(600));
+    }
+
+    @Test
+    @DisplayName("POST /api/study/stop: from >= to 구간은 400이고 측정은 그대로 돈다")
+    void stop_invertedInterval_badRequest() throws Exception {
+        User u = register("study-inv@a.com", "studyinv");
+        activeFor30Min(u);
+
+        mockMvc.perform(post("/api/study/stop").with(user("studyinv")).with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(awayBody("\"2026-06-17T08:50:00Z\"", "\"2026-06-17T08:50:00Z\"")))
+                .andExpect(status().isBadRequest());
+        assertThat(studySessionService.activeSession(u)).isNotNull();
+    }
+
+    @Test
+    @DisplayName("POST /api/study/stop: from·to가 null인 구간은 400")
+    void stop_nullBound_badRequest() throws Exception {
+        User u = register("study-null@a.com", "studynull");
+        activeFor30Min(u);
+
+        mockMvc.perform(post("/api/study/stop").with(user("studynull")).with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(awayBody("null", "\"2026-06-17T08:50:00Z\"")))
+                .andExpect(status().isBadRequest());
+        assertThat(studySessionService.activeSession(u)).isNotNull();
+    }
+
+    /** 같은 1분(08:40~08:41) 구간 n개 — 겹침은 합쳐지므로 몇 개든 60초만 빠진다. */
+    private static String sameMinuteIntervals(int n) {
+        String[] fromTo = new String[n * 2];
+        for (int i = 0; i < n; i++) {
+            fromTo[2 * i] = "\"2026-06-17T08:40:00Z\"";
+            fromTo[2 * i + 1] = "\"2026-06-17T08:41:00Z\"";
+        }
+        return awayBody(fromTo);
+    }
+
+    @Test
+    @DisplayName("POST /api/study/stop: 구간 201개는 400(200개까지)")
+    void stop_tooManyIntervals_badRequest() throws Exception {
+        User u = register("study-many@a.com", "studymany");
+        activeFor30Min(u);
+
+        mockMvc.perform(post("/api/study/stop").with(user("studymany")).with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(sameMinuteIntervals(201)))
+                .andExpect(status().isBadRequest());
+        assertThat(studySessionService.activeSession(u)).isNotNull();
+    }
+
+    @Test
+    @DisplayName("POST /api/study/stop: 구간 정확히 200개는 받는다(경계 — 겹침은 합쳐 60초만 빠진다)")
+    void stop_exactlyMaxIntervals_ok() throws Exception {
+        User u = register("study-max@a.com", "studymax");
+        activeFor30Min(u);
+
+        mockMvc.perform(post("/api/study/stop").with(user("studymax")).with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(sameMinuteIntervals(200)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.todaySeconds").value(1740));
+    }
+
     @Test
     @DisplayName("todaySeconds: 어제 시작한 세션은 빠진다(유저 타임존 하루 경계)")
     void todaySeconds_excludesYesterday() throws Exception {
@@ -1017,6 +1139,28 @@ class StudyApiControllerTest {
                 .andExpect(jsonPath("$.days[0].studiedSeconds").value(600))
                 .andExpect(jsonPath("$.days[1].date").value("2026-06-02"))
                 .andExpect(jsonPath("$.days[1].studiedSeconds").value(2400));
+    }
+
+    /**
+     * 자정에 걸친 이탈(23:55~00:10) — 조각마다 <b>겹친 만큼씩</b> 빠져야 두 날짜가 각자 맞는다.
+     * 한 조각에서 통째로 빼면 앞 조각(10분)이 15분을 못 감당해 터지거나 날짜가 뒤바뀐다(E9).
+     */
+    @Test
+    @DisplayName("자정 분할 + 이탈 구간: 23:50→00:40 중 23:55~00:10을 비우면 06-01은 5분, 06-02는 30분")
+    void midnightSplit_awayInterval_subtractsPerPiece() throws Exception {
+        User u = register("study-midaway@a.com", "studymidaway");
+        studySessionService.start(u, seoul("2026-06-01T23:50"), null);
+        studySessionService.stop(u, seoul("2026-06-02T00:40"), List.of(
+                new StudySessionService.AwayInterval(seoul("2026-06-01T23:55"), seoul("2026-06-02T00:10"))));
+
+        mockMvc.perform(get("/api/study/history").with(user("studymidaway")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.months[0].totalSeconds").value(2100))
+                .andExpect(jsonPath("$.months[0].days.length()").value(2))
+                .andExpect(jsonPath("$.months[0].days[0].date").value("2026-06-02"))
+                .andExpect(jsonPath("$.months[0].days[0].totalSeconds").value(1800))
+                .andExpect(jsonPath("$.months[0].days[1].date").value("2026-06-01"))
+                .andExpect(jsonPath("$.months[0].days[1].totalSeconds").value(300));
     }
 
     // ── 자정 분할 × 책 라벨 (실 DB 왕복) ────────────────────────────────────

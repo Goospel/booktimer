@@ -144,6 +144,49 @@ class StudySessionTest {
         assertThat(active.getBook()).isSameAs(book);
     }
 
+    // ── end(endedAt, excludedSeconds) — 탭을 떠나 멈춘 시간 빼기 ─────────────────
+
+    @Test
+    @DisplayName("end(excluded): 구간 길이에서 뺄 초만큼 줄여 durationSeconds를 계산한다")
+    void endWithExcluded_subtractsFromDuration() {
+        StudySession session = StudySession.start(user, T0);
+
+        session.end(T0.plusSeconds(1800), 300);
+
+        assertThat(session.getEndedAt()).isEqualTo(T0.plusSeconds(1800));
+        assertThat(session.getDurationSeconds()).isEqualTo(1500);
+    }
+
+    @Test
+    @DisplayName("end(excluded): 구간 전체를 빼면 0초 행이 된다(측정 내내 비움 — E11)")
+    void endWithExcluded_wholeInterval_zero() {
+        StudySession session = StudySession.start(user, T0);
+
+        session.end(T0.plusSeconds(1800), 1800);
+
+        assertThat(session.getDurationSeconds()).isZero();
+    }
+
+    @Test
+    @DisplayName("end(excluded): 음수는 거부한다 — 뺄 시간이 기록을 늘리는 길이 되면 안 된다")
+    void endWithExcluded_rejectsNegative() {
+        StudySession session = StudySession.start(user, T0);
+
+        assertThatThrownBy(() -> session.end(T0.plusSeconds(1800), -1))
+                .isInstanceOf(IllegalArgumentException.class);
+        assertThat(session.isActive()).isTrue();
+    }
+
+    @Test
+    @DisplayName("end(excluded): 구간 길이를 넘으면 거부한다(음수 기록 금지)")
+    void endWithExcluded_rejectsMoreThanInterval() {
+        StudySession session = StudySession.start(user, T0);
+
+        assertThatThrownBy(() -> session.end(T0.plusSeconds(1800), 1801))
+                .isInstanceOf(IllegalArgumentException.class);
+        assertThat(session.isActive()).isTrue();
+    }
+
     // ── start ────────────────────────────────────────────────────────────────
 
     @Test

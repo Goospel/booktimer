@@ -101,13 +101,23 @@ public class StudyApiController {
         return ResponseEntity.ok(state(user, now));
     }
 
+    /**
+     * 공부 측정 종료 — 웹은 탭을 떠나 멈춘 구간({@code awayIntervals})을 함께 보내 그만큼 뺀다.
+     *
+     * <p><b>하위호환 계약 두 갈래</b> — 미니앱은 {@code {}}(JSON)를, 현 웹 번들은 본문 없이 부른다. 둘 다
+     * {@code awayIntervals}가 없으니 차감 0 = 기존과 같은 결과다({@code required = false}가 본문 없음 쪽을 받는다).
+     * 형식 오류(구간 200개 초과·from/to null·{@code from >= to})는 세션을 건드리기 전에
+     * 400으로 끊는다. 측정 범위 밖으로 걸친 부분은 400이 아니라 서비스가 잘라낸다(시계 오차 흡수).
+     */
     @PostMapping("/api/study/stop")
-    public ResponseEntity<StudyState> stop(Principal principal) {
+    public ResponseEntity<StudyState> stop(Principal principal,
+                                           @RequestBody(required = false) StopRequest body) {
+        List<StudySessionService.AwayInterval> away = awayIntervalsOf(body);
         User user = currentUserService.resolve(principal);
         Instant now = clock.instant();
         StudySession stopped;
         try {
-            stopped = studyService.stop(user, now);
+            stopped = studyService.stop(user, now, away);
         } catch (IllegalStateException e) {
             throw new ResponseStatusException(HttpStatus.CONFLICT, "진행 중인 측정이 없습니다");
         }
@@ -215,6 +225,22 @@ public class StudyApiController {
         return ResponseEntity.ok(state(user, clock.instant()));
     }
 
+    /** stop 본문 → 서비스 구간. null·생략 = 없음. 형식 오류는 IAE → 전역 핸들러가 400(한국어 문구). */
+    private static List<StudySessionService.AwayInterval> awayIntervalsOf(StopRequest body) {
+        if (body == null || body.awayIntervals() == null) {
+            return List.of();
+        }
+        if (body.awayIntervals().size() > MAX_AWAY_INTERVALS) {
+            throw new IllegalArgumentException("자리 비움 구간이 너무 많아요");
+        }
+        return body.awayIntervals().stream().map(dto -> {
+            if (dto == null || dto.from() == null || dto.to() == null || !dto.from().isBefore(dto.to())) {
+                throw new IllegalArgumentException("자리 비움 구간이 올바르지 않아요");
+            }
+            return new StudySessionService.AwayInterval(dto.from(), dto.to());
+        }).toList();
+    }
+
     /** 내 공부 책일 때만 반환 — 아니면(없음/남의 것/독서 책장의 id) 404로 존재 비노출. */
     private StudyBook ownedBook(User user, Long bookId) {
         return studyBookRepository.findByIdAndUser(bookId, user)
@@ -315,6 +341,19 @@ public class StudyApiController {
 
     /** @param days <b>데이터 있는 날만</b>(측정이 있었거나 판정이 남은 날) 날짜순 */
     public record StudyCalendarResponse(List<StudyCalendarService.CalendarDay> days) {
+    }
+
+    /** stop 본문에 실을 수 있는 구간 수 상한 — 30초 유예를 넘긴 이탈만 쌓이므로 정상 사용은 훨씬 적다. */
+    private static final int MAX_AWAY_INTERVALS = 200;
+
+    /**
+     * @param awayIntervals 탭을 떠나 멈춘 구간(웹만 보낸다). null·생략 = 없음 — 미니앱은 {@code {}}(JSON),
+     *                      현 웹 번들은 본문 없음, 둘 다 차감 0
+     */
+    public record StopRequest(List<AwayIntervalDto> awayIntervals) {
+    }
+
+    public record AwayIntervalDto(Instant from, Instant to) {
     }
 
     /** @param bookId 대상 공부 책(null·body 자체 생략 = 책 없이 시작) */

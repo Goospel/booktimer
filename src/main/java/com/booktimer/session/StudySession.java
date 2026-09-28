@@ -19,8 +19,11 @@ import java.time.Instant;
 /**
  * 한 번의 <b>공부</b> 측정 기록. User와 N:1.
  *
- * <p>{@link ReadingSession}과 불변식은 같지만(시작 → 종료 시 {@code durationSeconds} 계산) 테이블이
- * 다르다 — 그것이 이 기능의 요구 그 자체다. 공부 시간은 잔디·부채·기록·홈피드·책 통계 어디에도 섞이면
+ * <p>{@link ReadingSession}과 모양은 같지만(시작 → 종료 시 {@code durationSeconds} 계산) 테이블이
+ * 다르다 — 그것이 이 기능의 요구 그 자체다. <b>길이 불변식은 다르다</b>: 독서는
+ * {@code durationSeconds = endedAt − startedAt}이지만 공부는 {@code durationSeconds ≤ endedAt − startedAt}이다 —
+ * 웹 공부 타이머가 탭을 떠나 멈춘 시간만큼 짧게 저장한다({@link #end(Instant, long)}). 그러니 공부 길이를
+ * 시각 차로 다시 계산하지 말고 반드시 {@code durationSeconds}를 읽는다. 공부 시간은 잔디·부채·기록·홈피드·책 통계 어디에도 섞이면
  * 안 되는데, 독서 집계 쿼리가 이 테이블을 <b>아예 모르므로</b> 섞일 경로가 구조적으로 없다.
  *
  * <p>독서에 있는 {@code manualEntry}는 없다(수동 기록은 범위 밖). {@code book}은 <b>공부 서재</b>의
@@ -30,7 +33,8 @@ import java.time.Instant;
  * <p><b>한 행은 유저 타임존 하루 안에 있다</b>(신규 저장분 한정). 종료 시각을 확정하는 유스케이스가
  * 자정 경계로 구간을 잘라 조각마다 한 행씩 저장하기 때문이다({@code StudySessionService}) — 날짜 귀속이
  * {@code startedAt}의 날짜라, 자정을 걸친 공부를 한 행으로 두면 통째로 시작일에 잡힌다. 이 엔티티는
- * 그 규칙을 <b>모른다</b>: 조각도 그냥 완료 세션 하나이고 불변식은 조각마다 그대로 성립한다. 분할 도입
+ * 그 규칙을 <b>모른다</b>: 조각도 그냥 완료 세션 하나이고 위 길이 불변식({@code ≤})도 조각마다 성립한다
+ * (자리 비운 시간은 조각마다 겹친 만큼씩 빠진다). 분할 도입
  * 전에 저장된 레거시 행은 여전히 자정을 걸칠 수 있다(소급 재분할 없음). <b>조각들은 같은 책을 든다</b> —
  * 분할은 시간의 문제라 라벨은 조각마다 그대로 이어진다({@code StudySessionService.endSplitAndSave}).
  */
@@ -126,6 +130,18 @@ public class StudySession extends BaseTimeEntity {
      * @throws IllegalStateException    이미 종료된 세션인 경우
      */
     public void end(Instant endedAt) {
+        end(endedAt, 0);
+    }
+
+    /**
+     * 세션을 종료하되 측정 길이에서 {@code excludedSeconds}를 뺀다 — 웹 공부 타이머가 탭을 떠나 멈춘 시간.
+     *
+     * @param endedAt         종료 시각(필수, startedAt 이상)
+     * @param excludedSeconds 이 구간 안에서 측정에서 뺄 초. 0 ≤ x ≤ 구간 길이
+     * @throws IllegalArgumentException endedAt 이 null·startedAt 보다 이르거나, excludedSeconds 가 범위 밖인 경우
+     * @throws IllegalStateException    이미 종료된 세션인 경우
+     */
+    public void end(Instant endedAt, long excludedSeconds) {
         if (this.endedAt != null) {
             throw new IllegalStateException("session already ended at " + this.endedAt);
         }
@@ -135,8 +151,12 @@ public class StudySession extends BaseTimeEntity {
         if (endedAt.isBefore(startedAt)) {
             throw new IllegalArgumentException("endedAt must not be before startedAt");
         }
+        long total = Duration.between(startedAt, endedAt).toSeconds();
+        if (excludedSeconds < 0 || excludedSeconds > total) {
+            throw new IllegalArgumentException("excludedSeconds must be within 0.." + total + ": " + excludedSeconds);
+        }
         this.endedAt = endedAt;
-        this.durationSeconds = Duration.between(startedAt, endedAt).toSeconds();
+        this.durationSeconds = total - excludedSeconds;
     }
 
     /**
