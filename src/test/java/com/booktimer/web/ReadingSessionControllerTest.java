@@ -8,6 +8,7 @@ import com.booktimer.session.ReadingSession;
 import com.booktimer.session.ReadingSessionRepository;
 import com.booktimer.session.ReadingSessionService;
 import com.booktimer.session.WeeklyDebt;
+import com.booktimer.testsupport.FixedClockConfig;
 import com.booktimer.timer.ReadingGoalChange;
 import com.booktimer.timer.ReadingGoalChangeRepository;
 import com.booktimer.user.Role;
@@ -18,6 +19,7 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.context.annotation.Import;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -47,19 +49,12 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
  */
 @SpringBootTest
 @AutoConfigureMockMvc
+@Import(FixedClockConfig.class)
 @Transactional
 class ReadingSessionControllerTest {
 
     // 통합 테스트는 운영 Clock.systemUTC()(실시간)를 쓰는데, "오늘 수동 입력"이 now 기준이라
     // 자정 경계(예: 06-08 00:0x KST)엔 now-30분이 전날로 넘어가 오늘 부채가 안 줄어 플레이키하게 깨진다. 결정적 날짜로 고정.
-    @org.springframework.boot.test.context.TestConfiguration
-    static class FixedClockConfig {
-        @org.springframework.context.annotation.Bean
-        @org.springframework.context.annotation.Primary
-        java.time.Clock fixedClock() {
-            return java.time.Clock.fixed(java.time.Instant.parse("2026-06-17T09:00:00Z"), java.time.ZoneOffset.UTC);
-        }
-    }
 
     private static final String SEOUL = "Asia/Seoul";
 
