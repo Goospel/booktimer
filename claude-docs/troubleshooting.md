@@ -24,6 +24,7 @@
      각 항목의 frontmatter(summary)에서 재생성합니다. 내용을 바꾸려면 그 항목의
      summary를 고치세요(단일 출처). 최신 항목이 위. -->
 
+- [T-258](troubleshooting/T-258.md) · 같은 측정의 시작 시각이 `/api/study/start` 응답(JVM Instant, 100ns — `…52.657934400Z`)과 `/api/dashboard` 재조회(DB, µs — `…52.657934Z`)에서 다른 문자열로 온다 — 이 문자열을 측정 식별자로 비교하면 재조회 한 번에 「다른 측정」으로 오인해 그 측정에 붙은 클라이언트 상태를 버린다(웹 공부 이탈 멈춤: 첫 이탈 구간·안내가 복귀 재조회에 지워짐, 2026-09-29 실 브라우저에서 발견) **→ 가드: `DashboardApp.vue` 이탈 추적 watch가 시작 시각을 `canonicalIso`(밀리초 ISO 정규 표기)로 맞춘 값을 식별자로 쓴다 + `dashboard-study-away.test.ts`의 기본 픽스처가 시작 응답과 재조회 응답에 **서로 다른 정밀도**의 같은 순간을 넣는다(같은 문자열이면 「어느 쪽을 읽었나」를 못 묻는다 — 이 결함이 단위 테스트를 통과한 이유)**
 - [T-257](troubleshooting/T-257.md) · 토스 기능성 푸시는 알림동의문 미동의자에게도 `resultType=SUCCESS`를 주고 조용히 버린다 — 서버 「발송 성공」·콘솔 검수 승인은 도달의 증거가 아니다(재참여 넛지 6주 도달 0, 2026-09-26 양성 대조로 확정) **→ 가드: `TossMessengerClient`가 성공 본문의 발송 수·도달 실패 사유를 로그로 남긴다(PR-1) + 동의 없이 보내는 캠페인을 두지 않는다(옛 넛지 SSM 소등 S-0·코드 삭제 PR-1, 독서 알림은 동의 성공 뒤에만 서버 설정이 켜진다 — PR-3)**
 - [T-256](troubleshooting/T-256.md) · 「두 분기의 `<Profile>`은 서로 다른 JSX라 재마운트된다」가 틀렸다 — React는 키 없는 최상위 프래그먼트를 배열로 풀어 맞추므로 두 분기가 같은 fiber로 이어진다
 - [T-255](troubleshooting/T-255.md) · CI에 없는 테스트는 깨져도 신호가 0이다 — 로컬 수동 스위트가 3일간 전면 실패인 채 머지가 계속됐다
@@ -46,7 +47,7 @@
 - [T-238](troubleshooting/T-238.md) · `@InjectMocks` 생성자 주입 서비스에 의존을 더하면 `@Mock` 한 줄이 없을 때 null이 주입되는데, 그 실패는 타깃 테스트만 돌리는 동안 영영 안 보인다
 - [T-237](troubleshooting/T-237.md) · `color-scheme: light`는 크롬 강제 다크를 못 막는다 — `only`가 붙어야 opt-out이고, 그 판정은 `getComputedStyle`이 아니라 화면 픽셀로만 갈린다
 - [T-236](troubleshooting/T-236.md) · `\uXXXX` 손 인코딩으로 쓴 한글은 한 음절만 어긋나도 에러 없이 통과한다 — 사용자 대면 랜딩 카피가 「쌓입니다」→「쌓팥니다」로 배포 직전까지 갔다 **→ CLAUDE.md**
-- [T-235](troubleshooting/T-235.md) · 커밋 테스트 게이트가 8분에 걸려 `.java`가 든 커밋이 전부 막혔다 — 훅 메시지의 「경합」 단정에 두 번 헛짚었고, 그다음엔 내가 1회 측정으로 「스위트가 예산 추월」이라 단정했다가 대조군에서 뒤집혔다
+- [T-235](troubleshooting/T-235.md) · 커밋 테스트 게이트가 8분에 걸려 `.java`가 든 커밋이 전부 막혔다 — 훅 메시지의 「경합」 단정에 두 번 헛짚었고, 그다음엔 내가 1회 측정으로 「스위트가 예산 추월」이라 단정했다가 대조군에서 뒤집혔다 **→ 가드: `.claude/hooks/tests/test-require-tests-timeout.sh` Case 8(게이트 기본 ≤ 상한, 상한 + 5분 예비 ≤ settings.json 훅 timeout — 순서가 깨지면 fail-open)·8b(환경변수 상한 클램프)·9(타임아웃 메시지 「원인 둘」·전원 상태) + `PasswordEncoderConfigTest`(운영 BCrypt 기본 강도 10)·`BcryptStrengthProductionGuardTest`(메인 설정 파일·`deploy/render-env.sh`에 강도 설정 없음)·`SecurityConfigTest`(스위트 컨텍스트가 강도 4를 실제로 쓰는지)**
 - [T-234](troubleshooting/T-234.md) · 콘솔 MCP `miniapp_update_screenshots`는 성공해도 `{"miniAppId":…,"appName":null}`만 돌려주고, 직후 `miniapp_get`·`miniapp_meta_status`는 옛값을 보여 「안 됐다」로 읽힌다 — 재호출하면 앱정보 검토가 두 번 접수될 수 있다
 - [T-233](troubleshooting/T-233.md) · React 중복 key는 경고로 끝나지 않는다 — 형제 목록을 통째로 갈아끼울 때 중복 key의 첫 노드가 고아 DOM으로 남아, 다른 탭에 남의 행이 하나씩 쌓인다
 - [T-232](troubleshooting/T-232.md) · Thymeleaf 템플릿 캐시가 기본 활성이라, `bootRun` 중 템플릿만 고치면 옛 화면이 그대로 나온다 — 증상이 「내 조건식이 틀렸나」로 읽혀 멀쩡한 코드를 고치게 만든다
