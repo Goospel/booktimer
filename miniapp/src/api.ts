@@ -348,7 +348,28 @@ export interface DashboardResponse extends TimerState {
   emailVerified: boolean;
   /** 공부 모드 상태 — `undefined`는 이 필드를 아직 안 주는 옛 서버다(화면은 {@link IDLE_STUDY}로 떨어진다). */
   study?: StudyState;
+  /** 독서 알림(N3) — `undefined`는 옛 서버다(홈 제안 카드·설정 섹션이 숨는다). */
+  readingReminder?: ReadingReminder;
 }
+
+export type ReminderKind = 'OFF' | 'DAILY' | 'REST';
+
+/**
+ * 서버 `ReadingReminderService.View` — 대시보드와 저장 응답이 같이 쓴다. `available`이 거짓이면 화면이 이 기능을
+ * 통째로 숨긴다(토글·템플릿 코드·토스 연동 중 하나라도 없음). `agreementCode`는 가용일 때만 있다(동의 요청 코드).
+ */
+export interface ReadingReminder {
+  available: boolean;
+  kind: ReminderKind;
+  hour: number;
+  /** 한 번이라도 켰다(서버 `reading_reminder_on_at`) — 홈 제안을 거두는 정본. */
+  everOn: boolean;
+  agreementCode: string | null;
+}
+
+/** `POST /api/miniapp/reading-reminder` — 400(값 오류)·409(토스 미연결)는 ApiError 평문. 꺼진 채 시각만 바꾸는 저장도 받는다. */
+export const saveReadingReminder = (body: { kind: ReminderKind; hour: number }): Promise<ReadingReminder> =>
+  request('/api/miniapp/reading-reminder', { body });
 
 export interface StopResponse {
   sessionId: number;

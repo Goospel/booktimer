@@ -159,6 +159,7 @@ function renderHome(
     mode?: TimerMode;
     chatUnread?: number;
     goalReached?: boolean;
+    readingReminderOffer?: Parameters<typeof Home>[0]['readingReminderOffer'];
   } = {},
 ) {
   return renderToStaticMarkup(
@@ -185,6 +186,7 @@ function renderHome(
         goalReached={props.goalReached}
         onContinueReading={() => {}}
         onGoHistory={() => {}}
+        readingReminderOffer={props.readingReminderOffer}
       />
     </TDSMobileProvider>,
   );
@@ -967,6 +969,37 @@ describe('알림 동의 카드 렌더 배선', () => {
     supportedMock.mockReturnValue(false);
 
     expect(labelsOf(renderHome())).not.toContain(NOTIFICATION_LABEL);
+  });
+});
+
+/** 독서 알림(N3) 제안 카드 — 측정 종료 직후 MainTabs가 켠다. 옛 114526 카드와 「알림 받기」 두 장이 나란히 서지 않게. */
+describe('독서 알림 제안 카드 자리', () => {
+  const OFFER_TITLE = '독서 알림을 받아 볼까요?';
+  const offer = { phase: { kind: 'idle' as const }, hour: 20, onPick: () => {}, onDismiss: () => {} };
+
+  it('REQ-10 · 독서 모드에서 제안 카드가 있는 동안 옛 「알림 받기」 카드는 숨는다', () => {
+    const withOffer = renderHome({}, { readingReminderOffer: offer });
+    expect(withOffer).toContain(OFFER_TITLE);
+    expect(withOffer).not.toContain(READING_CARD_COPY);
+
+    // 양성 대조: 제안이 없으면 옛 카드가 그대로 선다(숨김이 「언제나 숨김」 고장이 아니다)
+    const without = renderHome({}, { readingReminderOffer: null });
+    expect(without).toContain(READING_CARD_COPY);
+    expect(without).not.toContain(OFFER_TITLE);
+  });
+
+  it('REQ-10 · 공부 모드면 제안이 넘어와도 새 카드는 없고 공부 동의 카드는 그대로다', () => {
+    const markup = renderHome({}, { mode: 'study', readingReminderOffer: offer });
+
+    expect(markup).not.toContain(OFFER_TITLE);
+    expect(markup).toContain(STUDY_CARD_COPY);
+  });
+
+  it('REQ-10 · 제안 카드는 첫 기록 배너 다음, 옛 동의 카드 자리 앞에 선다', () => {
+    const markup = renderHome({}, { readingReminderOffer: offer, celebrate: true });
+
+    expect(markup.indexOf('첫 독서 기록이 심어졌어요')).toBeLessThan(markup.indexOf(OFFER_TITLE));
+    expect(markup.indexOf(OFFER_TITLE)).toBeLessThan(markup.indexOf(CAROUSEL_HEADER));
   });
 });
 

@@ -1,20 +1,30 @@
 import { Button, TextField } from '@toss/tds-mobile';
 import { useCallback, useEffect, useState } from 'react';
 
-import type { DashboardResponse, UserRow } from '../api';
+import type { DashboardResponse, ReadingReminder, ReminderKind, UserRow } from '../api';
 import {
   deleteAccount,
   fetchBlocks,
   issueWebLoginCode,
   logout,
+  saveReadingReminder,
   unblockUser,
   updateNickname,
   validateNicknameFormat,
 } from '../api';
 import { resetCoachmarks } from '../coachmark';
-import { openExternal } from '../toss';
-import { ErrorMessage, Screen, SectionTitle, Sheet, Text, sectionStyle } from '../ui';
+import {
+  REMINDER_HOURS,
+  agreementErrorMessage,
+  enableReadingReminder,
+  hourLabel,
+  reminderSummary,
+  writeOfferCache,
+} from '../readingReminder';
+import { notificationAgreementSupported, openExternal } from '../toss';
+import { ErrorMessage, SOFT_OUTLINE, Screen, SectionTitle, Sheet, Text, sectionStyle } from '../ui';
 import { HandleSheet } from './Bookshop';
+import { filterChipStyle } from './Profile';
 
 /** 웹에 공개된 문서들 — 둘 다 `permitAll`이라 로그인 없이 열린다. */
 const PRIVACY_URL = 'https://booktimer.app/privacy';
@@ -257,6 +267,104 @@ export function BlockedSection({
   );
 }
 
+const REMINDER_KINDS: { kind: ReminderKind; label: string }[] = [
+  { kind: 'OFF', label: '끄기' },
+  { kind: 'DAILY', label: '매일' },
+  { kind: 'REST', label: '3일 쉬면' },
+];
+
+/**
+ * 독서 알림(N3) — 방식(끄기·매일·3일 쉬면)과 보낼 시각을 고르는 자리. 「매일」은 <b>여기서만</b> 켠다(홈 제안
+ * 카드는 「3일 쉬면」 하나만 권한다 — 시각을 추측하지 않으려고). 시각은 꺼져 있어도 먼저 고를 수 있다.
+ *
+ * <p>가용이 아니거나 옛 서버면 섹션이 없다. 꺼짐 + 미지원 토스앱이면 켤 길이 없으니 업데이트 안내만 선다.
+ * 순수 표시인 이유는 이 파일의 다른 섹션들과 같다(정적 렌더 하니스).
+ */
+export function ReadingReminderSection({
+  reminder,
+  supported,
+  busy,
+  error,
+  notice,
+  onPickKind,
+  onPickHour,
+}: {
+  reminder: ReadingReminder | undefined;
+  supported: boolean;
+  busy: boolean;
+  error: string | null;
+  /** 거절처럼 오류는 아니지만 알려야 할 결과 — 회색 한 줄. */
+  notice: string | null;
+  onPickKind: (kind: ReminderKind) => void;
+  onPickHour: (hour: number) => void;
+}) {
+  if (reminder === undefined || !reminder.available) return null;
+
+  return (
+    <section style={sectionStyle}>
+      <SectionTitle style={{ marginBottom: 10 }}>독서 알림</SectionTitle>
+      {reminder.kind === 'OFF' && !supported ? (
+        <Text typography="st12" color="grey600" style={{ display: 'block', wordBreak: 'keep-all' }}>
+          이 토스 앱에서는 알림을 켤 수 없어요. 토스 앱을 최신으로 업데이트해 주세요.
+        </Text>
+      ) : (
+        <>
+          <div role="group" aria-label="알림 방식" style={{ display: 'flex', gap: 6 }}>
+            {REMINDER_KINDS.map(({ kind, label }) => (
+              <button
+                key={kind}
+                type="button"
+                aria-pressed={reminder.kind === kind}
+                disabled={busy}
+                onClick={() => onPickKind(kind)}
+                // 카드 바탕과 같은 색이라 안 눌린 칩엔 선을 둔다 — 없으면 글자만 떠 있어 고를 수 있는 칸으로 안 읽힌다(목 모드 실측).
+                style={{
+                  ...filterChipStyle(reminder.kind === kind),
+                  padding: '8px 14px',
+                  fontSize: 15,
+                  border: `1.5px solid ${reminder.kind === kind ? 'transparent' : 'var(--adaptiveGrey200, #DED8CA)'}`,
+                }}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+          <label style={{ display: 'block', marginTop: 14 }}>
+            <Text typography="st12" color="grey600" style={{ display: 'block', marginBottom: 6 }}>
+              보낼 시각
+            </Text>
+            {/* 네이티브 select — 신고 사유(Profile)와 같은 선례. 16px이라 iOS가 포커스 때 화면을 키우지 않는다. */}
+            <select
+              value={reminder.hour}
+              disabled={busy}
+              onChange={(e) => onPickHour(Number(e.target.value))}
+              style={{ ...SOFT_OUTLINE, width: '100%', padding: 10, fontSize: 16 }}
+            >
+              {REMINDER_HOURS.map((h) => (
+                <option key={h} value={h}>
+                  {hourLabel(h)}
+                </option>
+              ))}
+            </select>
+          </label>
+          <Text typography="st11" style={{ display: 'block', marginTop: 12, wordBreak: 'keep-all' }}>
+            {reminderSummary(reminder)}
+          </Text>
+          {notice !== null && (
+            <Text typography="st12" color="grey600" style={{ display: 'block', marginTop: 8 }}>
+              {notice}
+            </Text>
+          )}
+          <ErrorMessage message={error} />
+          <Text typography="st12" color="grey600" style={{ display: 'block', marginTop: 8 }}>
+            토스 앱 설정에서도 알림을 끌 수 있어요.
+          </Text>
+        </>
+      )}
+    </section>
+  );
+}
+
 /**
  * 프로필·설정 — 미니앱에서 내 계정에 손대는 유일한 화면.
  *
@@ -275,6 +383,7 @@ export function Settings({
   goalAdPending,
   onLogout,
   onError,
+  onReminderChange = () => {},
 }: {
   dashboard: DashboardResponse;
   onBack: () => void;
@@ -285,6 +394,8 @@ export function Settings({
   goalAdPending: boolean;
   onLogout: () => void;
   onError: (error: Error) => void;
+  /** 독서 알림 저장 성공 — App이 대시보드에 반영한다(홈 제안 카드가 같은 값을 봐야 한다). 옛 하니스는 안 넘긴다. */
+  onReminderChange?: (reminder: ReadingReminder) => void;
 }) {
   // 서버가 저장한 값을 즉시 반영한다(대시보드 재조회를 기다리지 않는다 — 핸들 배너와 같은 방식).
   const [nickname, setNickname] = useState(dashboard.nickname);
@@ -307,6 +418,44 @@ export function Settings({
   const [webCode, setWebCode] = useState<string | null>(null);
   const [webBusy, setWebBusy] = useState(false);
   const [webError, setWebError] = useState<string | null>(null);
+  const [reminder, setReminder] = useState(dashboard.readingReminder);
+  const [reminderBusy, setReminderBusy] = useState(false);
+  const [reminderError, setReminderError] = useState<string | null>(null);
+  const [reminderNotice, setReminderNotice] = useState<string | null>(null);
+  /** 렌더마다 SDK에 묻지 않게 한 번만 읽는다(홈 동의 카드와 같은 방식). */
+  const [agreementSupported] = useState(notificationAgreementSupported);
+
+  /**
+   * 독서 알림 저장 — 꺼짐에서 켜기만 토스 동의를 먼저 거친다(동의 성공 뒤에만 저장). 켠 채 방식 전환·끄기·시각 변경은
+   * 같은 동의문 안이라 저장만 한다. 결과는 서버 응답이 진실이다.
+   */
+  const changeReminder = (next: { kind: ReminderKind; hour: number }) => {
+    if (reminder === undefined) return;
+    const enabling = reminder.kind === 'OFF' && next.kind !== 'OFF';
+    setReminderBusy(true);
+    setReminderError(null);
+    setReminderNotice(null);
+    const saved: Promise<ReadingReminder | null> = enabling
+      ? enableReadingReminder(next.kind as 'DAILY' | 'REST', next.hour, reminder.agreementCode, 'settings').then((outcome) => {
+          if (outcome.status === 'rejected') {
+            writeOfferCache('agreementRejected'); // 여기서 거절한 사람에게 홈 카드가 다시 조르지 않게(카드 거절과 같은 캐시)
+            setReminderNotice('동의하지 않아 알림을 켜지 않았어요.');
+          }
+          return outcome.status === 'on' ? outcome.reminder : null;
+        })
+      : saveReadingReminder(next);
+    saved
+      .then((r) => {
+        if (r === null) return;
+        setReminder(r);
+        onReminderChange(r);
+      })
+      .catch((e: Error) => {
+        if (e.name === 'UnauthorizedError') onError(e);
+        else setReminderError(agreementErrorMessage(e));
+      })
+      .finally(() => setReminderBusy(false));
+  };
 
   /**
    * 차단 목록은 마운트 때 받는다. 401만 밖으로 올리고 나머지 실패는 <b>조용히 빈 목록</b>으로 둔다 —
@@ -463,6 +612,20 @@ export function Settings({
           처음 안내 다시 보기
         </Button>
       </section>
+
+      <ReadingReminderSection
+        reminder={reminder}
+        supported={agreementSupported}
+        busy={reminderBusy}
+        error={reminderError}
+        notice={reminderNotice}
+        onPickKind={(kind) => {
+          if (reminder !== undefined && kind !== reminder.kind) changeReminder({ kind, hour: reminder.hour });
+        }}
+        onPickHour={(hour) => {
+          if (reminder !== undefined) changeReminder({ kind: reminder.kind, hour });
+        }}
+      />
 
       <WebLoginSection
         code={webCode}

@@ -43,6 +43,7 @@ import {
   register,
   reportUser,
   request,
+  saveReadingReminder,
   searchBooks,
   searchUsers,
   setBookVisibility,
@@ -870,6 +871,34 @@ describe('닉네임 변경 API (updateNickname)', () => {
 
     expect(error.status).toBe(400);
     expect(error.message).toBe('닉네임은 공백 없이 30자 이내로 입력해 주세요.');
+  });
+});
+
+describe('독서 알림 저장 API (saveReadingReminder)', () => {
+  beforeEach(() => {
+    token.set('tok');
+  });
+
+  it('REQ-04 · saveReadingReminder는 POST /api/miniapp/reading-reminder에 kind·hour를 싣는다', async () => {
+    const view = '{"available":true,"kind":"REST","hour":20,"everOn":true,"agreementCode":"booktimer-reading-reminder-rest"}';
+    vi.mocked(globalThis.fetch).mockResolvedValue(response(200, view) as never);
+
+    const result = await saveReadingReminder({ kind: 'REST', hour: 20 });
+
+    const [url, init] = lastRequest();
+    expect(url).toBe('http://localhost:8080/api/miniapp/reading-reminder');
+    expect(init.method).toBe('POST');
+    expect(JSON.parse(init.body as string)).toEqual({ kind: 'REST', hour: 20 });
+    expect(result).toEqual(JSON.parse(view)); // 서버 View를 그대로 돌려준다(설정 화면·홈이 이 값으로 갱신)
+  });
+
+  it('409(토스 미연결)는 서버 평문을 그대로 올린다', async () => {
+    vi.mocked(globalThis.fetch).mockResolvedValue(response(409, '토스 계정이 연결되어 있지 않아요') as never);
+
+    const error = (await saveReadingReminder({ kind: 'DAILY', hour: 9 }).catch((e: unknown) => e)) as ApiError;
+
+    expect(error.status).toBe(409);
+    expect(error.message).toBe('토스 계정이 연결되어 있지 않아요');
   });
 });
 

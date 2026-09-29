@@ -233,11 +233,11 @@ describe('그림자 예산 — 큰 흐림은 허용표 자리에만', () => {
       'Goal.tsx': 1, // 목표 휠 카드
       'GuestHome.tsx': 4, // 잠긴 탭 카드 · 게스트 히어로 · 안내 스트립 · 섹션 1
       'History.tsx': 1, // 잔디 카드(GRASS_CARD 정의)
-      'Home.tsx': 6, // 히어로 · 섹션 5
+      'Home.tsx': 7, // 히어로 · 섹션 5 · 독서 알림 제안 카드(N3 — 측정 종료 뒤 한 장, 반복 행 아님)
       'HomeFeed.tsx': 1, // 피드 박스
       'Library.tsx': 2, // 여백 박스 · 섹션 1
       'Profile.tsx': 2, // 성향 카드 · 신고 패널
-      'Settings.tsx': 6, // 설정 섹션 6
+      'Settings.tsx': 7, // 설정 섹션 6 · 독서 알림 섹션(N3)
       'Story.tsx': 1, // 여백 게시판
       'StudyCalendar.tsx': 1, // 달력 카드
       'ui.tsx': 1, // sectionStyle 정의(= PUFF 펼치기)

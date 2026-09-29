@@ -308,6 +308,23 @@ describe('dev-mock 핸들러', () => {
   it('메서드까지 본다 — 같은 경로라도 계약에 없는 메서드는 404다', async () => {
     await expect(mockRequest('/api/dashboard', { method: 'DELETE' })).rejects.toMatchObject({ status: 404 });
   });
+
+  it('REQ-04 · 목: 저장하면 다음 대시보드가 새 설정(켠 적 있음 포함)을 준다 / 범위 밖은 400', async () => {
+    const before = await mockRequest<DashboardResponse>('/api/dashboard', {});
+    // 목 모드엔 동의 SDK가 없어 켠 상태로 시작한다 — 설정 섹션의 켠 화면을 브라우저로 보기 위한 초기값.
+    expect(before.readingReminder).toMatchObject({ available: true, kind: 'DAILY', hour: 20 });
+
+    const saved = await mockRequest('/api/miniapp/reading-reminder', { body: { kind: 'REST', hour: 21 } });
+    expect(saved).toMatchObject({ kind: 'REST', hour: 21, everOn: true });
+    const after = await mockRequest<DashboardResponse>('/api/dashboard', {});
+    expect(after.readingReminder).toMatchObject({ kind: 'REST', hour: 21, everOn: true });
+
+    for (const body of [{ kind: 'REST', hour: 7 }, { kind: 'REST', hour: 23 }, { kind: 'WEEKLY', hour: 20 }, { hour: 20 }]) {
+      await expect(mockRequest('/api/miniapp/reading-reminder', { body })).rejects.toMatchObject({ status: 400 });
+    }
+    const unchanged = await mockRequest<DashboardResponse>('/api/dashboard', {});
+    expect(unchanged.readingReminder).toMatchObject({ kind: 'REST', hour: 21 }); // 거절된 저장은 값을 안 바꾼다
+  });
 });
 
 /**
