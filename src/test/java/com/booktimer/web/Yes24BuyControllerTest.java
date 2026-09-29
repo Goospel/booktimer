@@ -7,13 +7,11 @@ import com.booktimer.book.Yes24LinkBuilder;
 import com.booktimer.user.Role;
 import com.booktimer.user.User;
 import com.booktimer.user.UserRepository;
+import com.booktimer.testsupport.MockedBoundaryTest;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.security.crypto.password.PasswordEncoder;
-import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -36,8 +34,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
  * 판별한 뒤 서비스에 넘기는 배선만 본다 — UA 판별 경계값 자체는 {@link Yes24LinkBuilderTest}가 이미 커버하므로
  * 여기서는 iPhone UA(모바일 대표) 1개 + 헤더 없음(데스크톱 기본 경로) 조합으로 최소화한다.
  */
-@SpringBootTest
-@AutoConfigureMockMvc
+@MockedBoundaryTest
 @Transactional
 class Yes24BuyControllerTest {
 
@@ -50,7 +47,7 @@ class Yes24BuyControllerTest {
     @Autowired
     private PasswordEncoder passwordEncoder;
 
-    @MockitoBean
+    @Autowired
     private Yes24LinkBuilder yes24LinkBuilder;
 
     private static final String YES24_LINK = "https://www.yes24.com/product/search?query=x&pid=LP1234567";

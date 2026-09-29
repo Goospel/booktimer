@@ -8,13 +8,11 @@ import com.booktimer.personality.ReadingPersonalityNarrator;
 import com.booktimer.user.Role;
 import com.booktimer.user.User;
 import com.booktimer.user.UserRegistrationService;
+import com.booktimer.testsupport.MockedBoundaryTest;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.mock.web.MockHttpSession;
-import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
-import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.MvcResult;
 import org.springframework.transaction.annotation.Transactional;
@@ -39,8 +37,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
  * <p>GET /personality 인증 게이트·셸 렌더만 확인한다.
  * 뮤테이션(refresh·select) 테스트는 {@link com.booktimer.web.api.PersonalityApiControllerTest}로 이관됨.
  */
-@SpringBootTest
-@AutoConfigureMockMvc
+@MockedBoundaryTest
 @Transactional
 class PersonalityControllerTest {
 
@@ -55,7 +52,7 @@ class PersonalityControllerTest {
     @Autowired
     private Clock clock;
 
-    @MockitoBean
+    @Autowired
     private ReadingPersonalityNarrator narrator;
 
     private LocalDate today() {

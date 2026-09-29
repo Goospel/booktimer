@@ -10,12 +10,10 @@ import com.booktimer.user.Role;
 import com.booktimer.user.User;
 import com.booktimer.user.UserRegistrationService;
 import com.booktimer.user.UserRepository;
+import com.booktimer.testsupport.MockedBoundaryTest;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
-import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -41,8 +39,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
  * <p>{@code BookSearchClient}를 이 클래스에서만 mock으로 갈아 끼운다 — 다른 API 테스트의 검색 동작에
  * 손대지 않으려고 별도 클래스로 뒀다.
  */
-@SpringBootTest
-@AutoConfigureMockMvc
+@MockedBoundaryTest
 @Transactional
 class BookRecommendApiControllerTest {
 
@@ -54,7 +51,7 @@ class BookRecommendApiControllerTest {
     @Autowired BookService bookService;
     @Autowired Clock clock;
 
-    @MockitoBean BookSearchClient searchClient;
+    @Autowired BookSearchClient searchClient;
 
     private User register(String email, String loginId) {
         registrationService.register(email, "pw1234qwer!!", loginId, "독자", SEOUL, Role.USER,

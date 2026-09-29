@@ -6,11 +6,10 @@ import com.booktimer.book.BookStatus;
 import com.booktimer.user.Role;
 import com.booktimer.user.User;
 import com.booktimer.user.UserRepository;
+import com.booktimer.testsupport.MockedBoundaryTest;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
@@ -24,12 +23,12 @@ import static org.mockito.Mockito.when;
 /**
  * 책BTI 오케스트레이션 서비스 통합 테스트(Phase 3) — 사실 집계(Phase 2) + LLM 서술 결합과 <b>폴백</b>을 본다.
  *
- * <p>서술 생성기(LLM 포트)는 {@code @MockitoBean}으로 가짜를 끼운다 — 외부 키·네트워크 없이 두 경로를 검증한다:
+ * <p>서술 생성기(LLM 포트)는 {@link MockedBoundaryTest} 세계의 목으로 가짜를 끼운다 — 외부 키·네트워크 없이 두 경로를 검증한다:
  * 서술이 나오면 사실+서술을, 못 나오면(비활성/실패) <b>사실만</b> 담은 폴백을 돌려줘야 한다.
  *
  * <p>책BTI는 <b>공개(PUBLIC)+완독 책만</b>으로 뽑히므로(공개/비공개 분기 폐지 2026-06-08) 픽스처 책은 공개로 만든다.
  */
-@SpringBootTest
+@MockedBoundaryTest
 @Transactional
 class ReadingPersonalityServiceTest {
 
@@ -42,7 +41,7 @@ class ReadingPersonalityServiceTest {
     @Autowired
     private ReadingPersonalityCacheRepository cacheRepository;
 
-    @MockitoBean
+    @Autowired
     private ReadingPersonalityNarrator narrator;
 
     private User newUser(String email) {

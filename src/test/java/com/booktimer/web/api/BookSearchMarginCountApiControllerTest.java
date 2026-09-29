@@ -13,13 +13,10 @@ import com.booktimer.user.Role;
 import com.booktimer.user.User;
 import com.booktimer.user.UserRegistrationService;
 import com.booktimer.user.UserRepository;
+import com.booktimer.testsupport.MockedBoundaryTest;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
-import org.springframework.test.context.bean.override.mockito.MockitoBean;
-import org.springframework.test.context.bean.override.mockito.MockitoSpyBean;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -47,8 +44,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
  * <p>여기서 재는 것 둘: ① 배지 숫자가 응답에 실리는가 ② <b>페이지당 집계 쿼리가 1회인가</b>.
  * ②를 재지 않으면 행마다 세는 N+1이 조용히 들어와도 응답만 보고는 알 수 없다.
  */
-@SpringBootTest
-@AutoConfigureMockMvc
+@MockedBoundaryTest
 @Transactional
 class BookSearchMarginCountApiControllerTest {
 
@@ -62,8 +58,8 @@ class BookSearchMarginCountApiControllerTest {
     @Autowired BookRepository bookRepository;
     @Autowired Clock clock;
 
-    @MockitoBean BookSearchClient searchClient;
-    @MockitoSpyBean StoryRepository storyRepository;
+    @Autowired BookSearchClient searchClient;
+    @Autowired StoryRepository storyRepository;
 
     private User register(String email, String loginId, String nickname) {
         registrationService.register(email, "pw1234qwer!!", loginId, nickname, SEOUL, Role.USER,

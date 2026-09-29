@@ -13,13 +13,11 @@ import com.booktimer.personality.ReadingPersonalityService;
 import com.booktimer.user.Role;
 import com.booktimer.user.User;
 import com.booktimer.user.UserRegistrationService;
+import com.booktimer.testsupport.MockedBoundaryTest;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.http.MediaType;
-import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -49,8 +47,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
  * ⑤ refresh 한도초과 429+상태불변, ⑥ select IDOR(남의 entry → 대표 안 바뀜).
  * LLM은 {@link ReadingPersonalityNarrator} mock으로 실호출 회피.
  */
-@SpringBootTest
-@AutoConfigureMockMvc
+@MockedBoundaryTest
 @Transactional
 class PersonalityApiControllerTest {
 
@@ -64,7 +61,7 @@ class PersonalityApiControllerTest {
     @Autowired ReadingPersonalityCacheRepository cacheRepository;
     @Autowired ApiTokenService apiTokenService;
 
-    @MockitoBean ReadingPersonalityNarrator narrator;
+    @Autowired ReadingPersonalityNarrator narrator;
 
     private LocalDate today() {
         return LocalDate.ofInstant(clock.instant(), ZoneId.of(SEOUL));

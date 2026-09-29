@@ -17,12 +17,10 @@ import com.booktimer.user.Role;
 import com.booktimer.user.User;
 import com.booktimer.user.UserRegistrationService;
 import com.booktimer.user.UserRepository;
+import com.booktimer.testsupport.MockedBoundaryTest;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.test.context.bean.override.mockito.MockitoBean;
-import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -43,8 +41,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
  * GET /api/profile · /api/profile/books · /api/profile/personality-tag 컨트롤러 통합 테스트.
  * 선별 SPA 단계 2d — ProfileApiController 신설 경계 테스트.
  */
-@SpringBootTest
-@AutoConfigureMockMvc
+@MockedBoundaryTest
 @Transactional
 class ProfileApiControllerTest {
 
@@ -80,10 +77,10 @@ class ProfileApiControllerTest {
     @Autowired
     private Clock clock;
 
-    @MockitoBean
+    @Autowired
     private CoupangLinkBuilder coupangLinkBuilder;
 
-    @MockitoBean
+    @Autowired
     private Yes24LinkBuilder yes24LinkBuilder;
 
     private LocalDate today() {

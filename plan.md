@@ -4098,7 +4098,7 @@ package-private static이라 호출이 공짜였고, 복제하면 0초 조각 �
 > 캐시 키 38개라 캐시 크기로는 못 줄이고 서명을 합쳐야 한다. 공용 「테스트 세계」(`src/test/java/com/booktimer/testsupport/`)로
 > 모으고, `build.gradle`의 컨텍스트 예산 가드가 예산을 넘는 빌드를 실패시켜 다시 불어나는 것을 막는다. 운영 코드 변경 0.
 - [x] **PR-1** — 예산 가드(빌드 실패 · 계측기 고장 감지) + 고정 시계 세계 `FixedClockConfig`(4클래스 공유) → 38 → 35, 예산 35
-- [ ] **PR-2** — 외부 경계 목 세계 `@MockedBoundaryTest`(23클래스, 타입 수준 `@MockitoBean`) → 35 → 21, 예산 21
+- [x] **PR-2** — 외부 경계 목 세계 `@MockedBoundaryTest`(23클래스, 타입 수준 `@MockitoBean`·`@MockitoSpyBean`) → 35 → 21, 예산 21 (추가 스텁 0)
 - [ ] **PR-3** — 메신저 세계 `@MessengerTest`(6클래스 + 공유 가변 시계 리셋 확장·`MutableClockResetTest`) → 21 → 16, 예산 16
 - ⏸ **보류 D1~D3**(광고·GA·대화 켬 흡수 / 미니앱 CORS 속성 / 실서버 2개 합치기, 합쳐 −5) — **왜 지금 안 하는가**: D1은 `AdsRenderingTest`가 의도한 「별도 컨텍스트에서만 광고를 켠다」 격리를 뒤집는 판단이 끼고(사용자 결정 2026-09-28: 이번엔 보류), D2·D3은 각 1번(약 2초)이라 해당 파일을 다른 일로 건드릴 때 같이 한다.
 

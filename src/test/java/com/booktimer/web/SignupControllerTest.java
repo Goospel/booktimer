@@ -6,13 +6,11 @@ import com.booktimer.user.UserRepository;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
-import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.transaction.annotation.Transactional;
 
 import com.booktimer.email.SignupNotificationService;
-import org.springframework.test.context.bean.override.mockito.MockitoBean;
+import com.booktimer.testsupport.MockedBoundaryTest;
 import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.security.web.csrf.CsrfToken;
 import org.springframework.ui.Model;
@@ -40,8 +38,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
  * <p>비로그인 상태에서 가입 화면이 공개되는지, 폼 제출이 검증을 거쳐 사용자를 영속화하고
  * 로그인으로 리다이렉트하는지, 입력 오류 시 화면을 다시 그리는지(영속화 없음) 검증한다.
  */
-@SpringBootTest
-@AutoConfigureMockMvc
+@MockedBoundaryTest
 @Transactional
 class SignupControllerTest {
 
@@ -52,7 +49,7 @@ class SignupControllerTest {
     private UserRepository userRepository;
 
     /** 중복 가입 통지는 실소유자 메일함으로 가는 부수효과 — 컨트롤러가 그 발송을 트리거하는지만 여기서 검증한다. */
-    @MockitoBean
+    @Autowired
     private SignupNotificationService signupNotificationService;
 
     @Autowired

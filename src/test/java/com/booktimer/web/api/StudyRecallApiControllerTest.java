@@ -14,16 +14,13 @@ import com.booktimer.user.StudyAiAccess;
 import com.booktimer.user.User;
 import com.booktimer.user.UserRegistrationService;
 import com.booktimer.user.UserRepository;
+import com.booktimer.testsupport.MockedBoundaryTest;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.http.MediaType;
 import org.springframework.mock.web.MockMultipartFile;
-import org.springframework.test.context.bean.override.mockito.MockitoBean;
-import org.springframework.test.context.bean.override.mockito.MockitoSpyBean;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -58,8 +55,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
  * <p>저장({@code POST /api/study/recall})은 <b>승인 없이도</b> 된다 — AI를 안 쓰는 글쓰기라 막을 이유가
  * 없고, 그래야 「AI 없이 저장만」 폴백이 성립한다.
  */
-@SpringBootTest
-@AutoConfigureMockMvc
+@MockedBoundaryTest
 @Transactional
 class StudyRecallApiControllerTest {
 
@@ -76,13 +72,13 @@ class StudyRecallApiControllerTest {
     @Autowired StudyNoteService noteService;
 
     /** 어댑터는 늘 목이다 — 네트워크 없이 「불렸나/안 불렸나」를 재는 것이 이 파일의 요점이다. */
-    @MockitoBean ClaudeStudyAssistant assistant;
+    @Autowired ClaudeStudyAssistant assistant;
 
     /**
      * 필기 리포지터리만 <b>스파이</b>다(목이 아니다) — 평소엔 진짜로 동작해 정답지가 실제로 조립되고,
      * 「조회 실패」 한 테스트에서만 터뜨려 <b>상한 선점보다 앞인가</b>를 잰다.
      */
-    @MockitoSpyBean StudyNoteRepository noteRepository;
+    @Autowired StudyNoteRepository noteRepository;
 
     private User register(String loginId) {
         registrationService.register(loginId + "@booktimer.com", "pw1234qwer!!", loginId,
