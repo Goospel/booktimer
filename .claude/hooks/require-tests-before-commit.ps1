@@ -101,12 +101,15 @@ if ($javaChanged.Count -eq 0) { exit 0 }
 $gradlew = Join-Path $cwd 'gradlew.bat'
 if (-not (Test-Path $gradlew)) { exit 0 }
 
-# 테스트 실행 — 종료코드만 사용. 무한 hang(T-078: gradle 데몬/빌드 락 경합) 방지를 위해
-# 타임아웃으로 감싼다. 멀티세션이거나 정리 안 된 bootRun 데몬이 빌드 락을 쥐고 있으면
-# `./gradlew test` 가 영영 안 끝나 커밋 게이트가 통째로 얼어붙는다(과거 45분 freeze).
-#   → Start(비동기) + WaitForExit(타임아웃). 초과 시 프로세스 트리(cmd→gradlew→java)를
-#     taskkill /T 로 죽이고 `gradlew --stop` 으로 데몬을 정리(자가복구)한 뒤,
-#     fail-closed(exit 2)로 차단한다 — 테스트 통과 여부를 알 수 없으니 차단이 안전.
+# 테스트 실행 — 종료코드만 사용. 무한 hang(T-078: gradle 데몬/빌드 락 경합) 방지를 위해 타임아웃으로 감싼다.
+#   → Start(비동기) + WaitForExit(타임아웃). 초과 시 **게이트 자신의** 프로세스 트리(cmd→gradlew→java 클라이언트
+#     →이 게이트가 새로 띄운 데몬)를 taskkill /T 로 죽이고 fail-closed(exit 2)로 차단한다 — 통과 여부를 모르니 차단이 안전.
+#     `gradlew --stop` 은 쓰지 않는다: 이 머신의 **모든** 데몬(다른 세션이 빌드 중인 것까지)을 멈춘다(T-235 곁다리).
+#     이미 떠 있던 데몬을 빌려 썼다면 클라이언트가 죽는 순간 그 데몬이 빌드를 취소하고 idle 로 돌아간다.
+# ShellExecute 로 띄운다(UseShellExecute=$true): CreateProcess(=$false)는 핸들 상속을 켜서 이 훅의 stdout/stderr
+#   파이프(Claude Code 가 준 것)가 cmd→java→**새 데몬**까지 내려간다. Claude Code 는 훅 종료가 아니라 파이프 EOF 를
+#   기다리고 데몬은 idle 로 최대 3시간 산다 — 2026-09-29 Bash 호출이 32분·3시간 38분 멈췄다(T-078 4회차).
+#   ShellExecuteEx 는 핸들을 물려주지 않는다. 회귀 가드: tests/test-require-tests-timeout.sh Case 10.
 # 주의(PowerShell 5.1): gradlew 는 JDK 경고 등을 stderr 로 내보내는데,
 # $ErrorActionPreference='Stop' 상태에서 native stderr 는 terminating error 로
 # 승격되어(NativeCommandError) 테스트가 통과해도 스크립트가 죽는다.
@@ -118,7 +121,7 @@ if (-not (Test-Path $gradlew)) { exit 0 }
 # ⚠️ 상한 + 5분 예비가 .claude/settings.json 의 이 훅 "timeout"(1800초) 이하여야 한다 --
 # Claude Code 훅 타임아웃은 fail-open이다 (docs "A timed-out command ... hook doesn't
 # block the tool call"). 훅이 취소되면 테스트 없이 커밋이 통과한다. 예비 5분은 위의
-# 타임아웃 없는 npm frontend test와 타임아웃 뒤 taskkill + gradlew --stop 몫이다.
+# 타임아웃 없는 npm frontend test와 타임아웃 뒤 taskkill 몫이다.
 # 순서 불변식(기본 <= 상한, 상한 + 300s <= settings)은 tests/test-require-tests-timeout.sh Case 8이 잡는다.
 $timeoutMs    = 20 * 60 * 1000   # 기본 20분
 $maxTimeoutMs = 24 * 60 * 1000   # 환경변수 상한 24분 (+ 예비 5분 = 29min <= settings.json 1800s)
@@ -137,8 +140,8 @@ $gateArgs = '/c ""' + $gradlew + '" -p "' + $cwd + '" test --console=plain >nul 
 $psi = New-Object System.Diagnostics.ProcessStartInfo
 $psi.FileName        = 'cmd.exe'
 $psi.Arguments       = $gateArgs
-$psi.UseShellExecute = $false
-$psi.CreateNoWindow  = $true
+$psi.UseShellExecute = $true    # 핸들 비상속 — 위 주석(T-078 4회차). CreateNoWindow 는 이 모드에서 무시된다
+$psi.WindowStyle     = [System.Diagnostics.ProcessWindowStyle]::Hidden
 $proc = [System.Diagnostics.Process]::Start($psi)
 
 $testExit = 0
@@ -147,9 +150,8 @@ if ($proc.WaitForExit($timeoutMs)) {
     $testExit = $proc.ExitCode
 } else {
     $timedOut = $true
-    # 매달린 프로세스 트리 강제 종료 + 데몬 정리(다음 커밋이 같은 경합에 또 안 걸리게)
+    # 게이트 자신의 트리만 죽인다(새로 띄운 데몬은 클라이언트의 자식이라 함께 잡힌다). --stop 은 머신 전역이라 안 쓴다.
     cmd.exe /c "taskkill /T /F /PID $($proc.Id) >nul 2>nul"
-    cmd.exe /c "`"$gradlew`" -p `"$cwd`" --stop >nul 2>nul"
 }
 
 $ErrorActionPreference = $prevEAP
@@ -165,8 +167,8 @@ if ($timedOut) {
         }
     } catch { $power = 'unknown' }
     $msgTimeout = @"
-[BLOCKED] Test gate exceeded ${tmin} min -- commit aborted. The gradle process tree
-was killed and 'gradlew --stop' was run to clear daemons.
+[BLOCKED] Test gate exceeded ${tmin} min -- commit aborted. The gate's own gradle
+process tree was killed; daemons of other sessions were left alone.
 
 Two possible causes:
   (1) A slow but healthy run. The full suite takes ~2-2.5 min on AC with the screen
@@ -179,6 +181,9 @@ Power now: $power
 Recommended: if no stray java process is running, run './gradlew test' to completion
 OUTSIDE the gate, then commit again right away without touching sources -- the test
 task is up-to-date, so the gate passes in seconds.
+
+Do not clean up with 'gradlew --stop': it stops every session's daemons, including
+builds running in other worktrees (T-235, T-078).
 
 Override only when intentional: include the token SKIP_TESTS in the commit command.
 "@
