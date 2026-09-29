@@ -361,28 +361,19 @@ async function remove(): Promise<void> {
         </p>
 
         <!-- 목록 열을 걷었다(설계 2026-09-17) — 편집기가 카드 폭 전체를 쓴다. 지난 필기로 가는 길은 셋:
-             공부 바 「필기」(전체) · 제목 줄 「최근 필기 ▾」 · 빈 필기의 「이어 쓰기」 칩. -->
+             공부 바 「필기」(전체) · 머리 줄 「최근 필기 ▾」 · 빈 필기의 「이어 쓰기」 칩. -->
         <template v-else>
-            <!-- 필기 책 — 고르는 곳이 아니라 알리는 줄이다(책은 타이머 카드가 정한다). ?note=로 다른 책의 장을 열었을 때 이 줄만이 실제 책을 말한다. -->
-            <p class="study-notes-book" data-testid="notes-book" :data-book-id="bookId">{{ bookTitle }}</p>
-
-            <div class="study-notes-titlerow">
-                <input
-                    v-model="draft.title"
-                    type="text"
-                    maxlength="200"
-                    placeholder="제목 (목록에 이름이 필요하면 적어 주세요)"
-                    aria-label="필기 제목"
-                    data-testid="notes-title"
-                    :disabled="locked"
-                    @input="onEdit"
-                >
+            <!-- 머리 줄 = 책 이름 + 지난 필기로 가는 두 버튼(2026-09-29). 버튼이 제목 칸 옆에 있을 땐 폭을 100%로 잡은
+                 제목 칸에 밀려 「최근 필기」가 한 글자씩 세로로 꺾였다 — 제목 칸은 이제 한 줄을 혼자 쓴다.
+                 책 이름은 고르는 곳이 아니라 알리는 줄이다(책은 타이머 카드가 정한다). ?note=로 다른 책의 장을 열었을 때 이 줄만이 실제 책을 말한다. -->
+            <div class="study-notes-head">
+                <p class="study-notes-book" data-testid="notes-book" :data-book-id="bookId">{{ bookTitle }}</p>
 
                 <div ref="recentRoot" class="study-notes-recent">
                     <button
                         ref="recentTrigger"
                         type="button"
-                        class="btn btn-ghost btn-small"
+                        class="study-notes-action"
                         data-testid="notes-recent"
                         :aria-expanded="menuOpen"
                         :aria-controls="menuId"
@@ -417,8 +408,23 @@ async function remove(): Promise<void> {
                     </div>
                 </div>
 
-                <button type="button" class="btn btn-ghost btn-small" data-testid="notes-new" @click="newNote">＋ 새 필기</button>
+                <span class="study-notes-sep" aria-hidden="true"></span>
+                <button type="button" class="study-notes-action" data-testid="notes-new" @click="newNote">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>
+                    새 필기
+                </button>
             </div>
+
+            <input
+                v-model="draft.title"
+                type="text"
+                maxlength="200"
+                placeholder="제목 (목록에 이름이 필요하면 적어 주세요)"
+                aria-label="필기 제목"
+                data-testid="notes-title"
+                :disabled="locked"
+                @input="onEdit"
+            >
             <!-- 오류는 팝오버 밖에 둔다 — ?note= 조회 실패는 팝오버를 열기 전에 알려야 한다. -->
             <p v-if="listError" class="status-line study-error">{{ listError }}</p>
 
