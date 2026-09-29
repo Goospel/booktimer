@@ -38,8 +38,8 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 /**
  * GET /api/books/search — 검색 행의 「여백 N」 배지 집계({@code marginCounts}).
  *
- * <p>{@code BookSearchClient}를 mock으로 갈아 끼우므로 다른 API 테스트의 검색 동작에 손대지 않게
- * 별도 클래스로 뒀다({@code BookRecommendApiControllerTest}와 같은 이유).
+ * <p>{@code BookSearchClient}는 {@link com.booktimer.testsupport.MockedBoundaryTest} 세계의 목이다(이 세계의
+ * 모든 클래스가 공유) — 목의 {@code search()}는 null이라 검색을 타는 테스트는 직접 스텁한다.
  *
  * <p>여기서 재는 것 둘: ① 배지 숫자가 응답에 실리는가 ② <b>페이지당 집계 쿼리가 1회인가</b>.
  * ②를 재지 않으면 행마다 세는 N+1이 조용히 들어와도 응답만 보고는 알 수 없다.

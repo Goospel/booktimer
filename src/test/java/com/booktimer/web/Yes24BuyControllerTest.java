@@ -26,7 +26,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 /**
- * Yes24 구매 엔드포인트 통합 테스트 (MockMvc + 실제 빈·H2) — 쿠팡 buy({@link CoupangBuyControllerTest})와 대칭.
+ * Yes24 구매 엔드포인트 통합 테스트 (MockMvc + H2, 외부 경계는 {@code MockedBoundaryTest} 목) — 쿠팡 buy({@link CoupangBuyControllerTest})와 대칭.
  *
  * <p>Yes24 링크 생성은 {@link Yes24LinkBuilder}에 위임하므로 빌더를 mock해 활성 시나리오(링크 반환)를 만든다.
  *

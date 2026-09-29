@@ -28,7 +28,9 @@ import java.lang.annotation.Target;
  * 이 애너테이션을 단 테스트 클래스는 스프링 컨텍스트 하나를 공유한다(T-235).
  *
  * <p><b>목은 여기서만 선언한다.</b> 테스트 클래스에 {@code @MockitoBean} 필드를 달면 필드 이름까지 캐시 키에
- * 들어가 컨텍스트가 하나 더 뜨고, build.gradle의 컨텍스트 예산 가드가 빌드를 막는다. 목이 더 필요하면
+ * 들어가 컨텍스트가 하나 더 뜨고, build.gradle의 컨텍스트 예산 가드가 빌드를 막는다. ⚠️ {@code types}에 타입을
+ * 하나 더하면 이 세계의 <b>모든</b> 클래스에서 그 실제 빈이 목이 된다 — 목 기본값과 실제 빈의 반환을 다시 대조한다.
+ * 목이 더 필요하면
  * 아래 {@code types}에 추가하고, 클래스에선 {@code @Autowired}로 받아 스텁한다.
  * 이 애너테이션을 단 클래스에 {@code @SpringBootTest}·{@code @AutoConfigureMockMvc}를 따로 달지 않는다 —
  * 클래스에 직접 단 쪽이 이것을 가려 속성·웹 환경이 조용히 바뀔 수 있다.

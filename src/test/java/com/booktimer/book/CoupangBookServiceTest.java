@@ -41,8 +41,6 @@ class CoupangBookServiceTest {
     private PasswordEncoder passwordEncoder;
 
     @Autowired
-    private BookSearchClient searchClient;
-    @Autowired
     private CoupangLinkBuilder coupangLinkBuilder;
     @Autowired
     private CoupangDeeplinkClient deeplinkClient;

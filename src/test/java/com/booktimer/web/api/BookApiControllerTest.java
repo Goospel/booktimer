@@ -5,7 +5,6 @@ import com.booktimer.book.BookRepository;
 import com.booktimer.book.BookSearchResult;
 import com.booktimer.book.BookService;
 import com.booktimer.book.BookStatus;
-import com.booktimer.book.CoupangLinkBuilder;
 import com.booktimer.session.ReadingSession;
 import com.booktimer.session.ReadingSessionRepository;
 import com.booktimer.story.Story;
@@ -53,7 +52,6 @@ class BookApiControllerTest {
     @Autowired ReadingSessionRepository sessionRepository;
     @Autowired StoryRepository storyRepository;
     @Autowired Clock clock;
-    @Autowired CoupangLinkBuilder coupangLinkBuilder;
 
     private LocalDate today() {
         return LocalDate.ofInstant(clock.instant(), ZoneId.of(SEOUL));

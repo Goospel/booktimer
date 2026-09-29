@@ -33,7 +33,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.view;
 
 /**
- * 회원가입 화면/처리 컨트롤러 통합 테스트 (MockMvc + 실제 빈·H2).
+ * 회원가입 화면/처리 컨트롤러 통합 테스트 (MockMvc + H2, 외부 경계는 {@code MockedBoundaryTest} 목).
  *
  * <p>비로그인 상태에서 가입 화면이 공개되는지, 폼 제출이 검증을 거쳐 사용자를 영속화하고
  * 로그인으로 리다이렉트하는지, 입력 오류 시 화면을 다시 그리는지(영속화 없음) 검증한다.

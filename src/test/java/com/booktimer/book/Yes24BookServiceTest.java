@@ -39,8 +39,6 @@ class Yes24BookServiceTest {
     private PasswordEncoder passwordEncoder;
 
     @Autowired
-    private BookSearchClient searchClient;
-    @Autowired
     private Yes24LinkBuilder yes24LinkBuilder;
 
     private static final String YES24_LINK = "https://www.yes24.com/product/search?query=x&pid=LP1234567";
