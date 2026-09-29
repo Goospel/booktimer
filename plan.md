@@ -3650,8 +3650,20 @@ package-private static이라 호출이 공짜였고, 복제하면 0초 조각 �
   `StudySessionService.stop(user, now, away)` — 상한 클램프 → 자정 분할 → 조각마다 겹친 만큼(`excludedSeconds`: 자르기·겹침 합치기·합산) 차감.
   `POST /api/study/stop`은 본문 선택(`awayIntervals`) — **미니앱은 `{}`(JSON), 현 웹 번들은 본문 없음 — 둘 다 차감 0(기존 결과 그대로)**, 200개 초과·from/to null·`from >= to`는 400,
   측정 범위 밖은 서버가 잘라낸다. 방치 스윕은 동작 불변. 아무도 구간을 안 보내므로 배포만으로는 무해하다.
-- [ ] **PR-2 웹** — `studyAway.ts`(원장·30초 유예·localStorage) + `DashboardApp`(`visibilitychange`·`pagehide`·stop 본문) + `StudyTimerCard`
-  (`elapsed` 소비처 4곳을 차감값으로, 카드 안 안내·되돌리기). 미검증 가정 U1~U5(실 브라우저)는 이 PR의 게이트다.
+- ✅ **PR-2 웹 — 본 기능 + ON/OFF 선택·화면 켜 두기(설계 §9) 구현·실 브라우저 검증 완료 (2026-09-29)** — `studyAway.ts`(원장 `bt.study.away`·30초 유예·localStorage try/catch)
+  + `DashboardApp`(`visibilitychange` · `pagehide`가 hidden보다 먼저 오는 실제 순서 대응(떠나는 중 표시, `pageshow`로 해제) · 보일 때만 로드 시 남은 대기 구간 닫기 ·
+    stop 본문 `awayIntervals`(최근 200개)+JSON 헤더, 성공·409면 원장 삭제·네트워크 실패면 보존·400이면 원장 비우고 본문 없이 1회 재시도)
+  + `StudyTimerCard`(`elapsed` 소비처 4곳을 `counted = max(0, elapsed − awaySeconds)`로, 카드 안 한 줄 안내·되돌리기·닫기, 상시 live region).
+  - [x] vitest — `study-away.test.ts`(경계 10) · `dashboard-study-away.test.ts`(통합 19)
+  - [x] 리뷰 반영 — pagehide 순서(Critical) · 400 탈출 · hidden 로드 원복 · live region
+  - [x] 미검증 가정 U1~U5 5/5(2026-09-29 실 크롬·로컬 bootTestRun) — 탭 전환 84초 차감·표시값 일치 / 필기 화면 57초 왕복은 차감 0 / 재로드 시 남은 대기 구간 닫힘(discard는 `chrome://discards`가 꺼져 있어 재현으로 확인) / 종료 기록 466초(=600−134) / **다른 앱 창이 크롬을 완전히 덮어도 멈춘다**(Windows 가림 판정 — 되돌리기로 복구).
+  - [x] **ON/OFF 선택(설계 §9, 오너 확정 2026-09-29)** — 컴퓨터(fine pointer)의 공부 **대기** 패널 맨 끝에 점선 + 체크박스 「자리 비우면 멈추기」.
+    기기별 localStorage `bt.study.awayPause`(`'on'`/`'off'`), **기본 꺼짐**(끈 사람·안 고른 사람은 기능 이전과 같다 — 종료 본문 `[]`). 측정 중엔 없다.
+    다른 탭의 변경(storage 이벤트)을 따르고, 측정 중 꺼지면 이번 측정의 멈춘 구간을 버리고, 끄는 탭은 원장도 지운다(추적 탭 없이 끈 뒤 다시 켜도 옛 구간이 안 살아난다).
+    vitest — 선택 저장 6 · 카드 7(접근성 이름·설명 분리 포함) · 배선 6 · 리뷰 보강 3
+  - [x] **화면 켜 두기(Screen Wake Lock)** — 켠 사람 · 측정 중 · 화면이 보이는 동안만 잡는다(윈도 크롬은 모니터가 꺼지면 탭을 hidden으로 만들어
+    종이책을 읽는 동안 절전이 「자리 비움」이 된다). 떠나면 풀고 돌아오면 다시 잡으며, 종료·꺼짐·언마운트면 푼다. 거절·미지원이어도 추적은 그대로. vitest 7
+  - [x] 미검증 가정 U6~U9 4/4(2026-09-29 실 크롬·로컬 bootTestRun) — 모니터 강제 끄기 → 멈춤(135초) / 웨이크 락 중 무입력 226초에도 60초 절전 안 걸림·종료로 풀자 58초 뒤 꺼짐 / 기본 꺼짐·새로고침 기억·터치 기기엔 없음(대조군 있음)·끔이면 원장·잠금 없음 / 두 탭 동기화. 검증 중 **첫 이탈이 복귀 재조회에 지워지던 결함**을 발견해 고쳤다(시작 응답과 DB 조회의 시각 정밀도 차이, T-258).
 
 
 ---
