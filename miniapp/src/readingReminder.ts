@@ -1,4 +1,4 @@
-import type { ReadingReminder } from './api';
+import type { ReadingReminder, ReminderKind } from './api';
 import { ApiError, NetworkError, saveReadingReminder } from './api';
 import { requestNotificationAgreement, trackEvent } from './toss';
 
@@ -77,6 +77,8 @@ export async function enableReadingReminder(
     }
     if (agreement === 'agreementRejected') {
       result = agreement;
+      // 거절 캐시는 여기 한 곳이 쓴다 — 카드에서 거절하든 설정에서 거절하든 다음 측정 종료 때 카드가 다시 조르지 않게.
+      writeOfferCache('agreementRejected');
       return { status: 'rejected' };
     }
     const reminder = await saveReadingReminder({ kind, hour });
@@ -87,14 +89,49 @@ export async function enableReadingReminder(
   }
 }
 
-/** SDK·API 오류 → 사용자 문구. 401(UnauthorizedError)은 호출부가 재로그인으로 보낸다(여기 오지 않는다). */
-export function agreementErrorMessage(e: unknown): string {
+/**
+ * SDK·API 오류 → 사용자 문구. 401(UnauthorizedError)은 호출부가 재로그인으로 보낸다(여기 오지 않는다).
+ * `enabling`이 거짓(끄기·시각 변경·켠 채 전환)이면 기본 문구가 「저장하지 못했어요」다 — 끄다 실패했는데 「켜지 못했어요」는 거짓말이다.
+ */
+export function agreementErrorMessage(e: unknown, enabling = true): string {
   const code = typeof e === 'object' && e !== null ? (e as { code?: unknown }).code : undefined;
   if (code === 'TERMS_DISAGREED_MEMBER')
     return '토스 설정 > 약관 및 개인정보 처리 동의에서 「사용자 최적화 제품 동의」를 켜야 알림을 받을 수 있어요.';
   if (code === 'UNSUPPORTED_APP_VERSION') return '토스 앱을 최신으로 업데이트하면 알림을 켤 수 있어요.';
   if (e instanceof ApiError || e instanceof NetworkError) return e.message;
-  return '알림을 켜지 못했어요. 잠시 후 다시 시도해 주세요.';
+  return enabling ? '알림을 켜지 못했어요. 잠시 후 다시 시도해 주세요.' : '알림 설정을 저장하지 못했어요. 잠시 후 다시 시도해 주세요.';
+}
+
+/** 이 변경이 토스 동의를 거쳐야 하는가 — 꺼짐에서 켜기(DAILY·REST)만. 켠 채 전환·끄기·시각 변경은 같은 동의문 안이다. */
+export function needsAgreement(current: Pick<ReadingReminder, 'kind'>, next: { kind: ReminderKind }): boolean {
+  return current.kind === 'OFF' && next.kind !== 'OFF';
+}
+
+export type ChangeOutcome = { status: 'saved'; reminder: ReadingReminder } | { status: 'rejected' } | { status: 'unsupported' };
+
+/**
+ * 설정 화면의 저장 한 번 — 꺼짐→켬이면 동의를 먼저 거치고({@link enableReadingReminder}), 그 밖은 저장만 한다.
+ * 화면 밖에 둔 이유: 「동의 없이 켜지는 사람 0」이 이 분기에 걸려 있는데 정적 렌더 하니스는 클릭을 못 돌린다.
+ */
+export async function changeReadingReminder(
+  current: ReadingReminder,
+  next: { kind: ReminderKind; hour: number },
+  entry: 'after_stop' | 'settings',
+): Promise<ChangeOutcome> {
+  if (!needsAgreement(current, next)) return { status: 'saved', reminder: await saveReadingReminder(next) };
+  const outcome = await enableReadingReminder(next.kind as 'DAILY' | 'REST', next.hour, current.agreementCode, entry);
+  return outcome.status === 'on' ? { status: 'saved', reminder: outcome.reminder } : outcome;
+}
+
+/**
+ * 홈 제안 카드의 「알림 받기」 — 「3일 쉬면」을 서버가 준 시각(기본 20시)으로 켠다. 시각을 추측하지 않는다.
+ * 결과는 카드 상태와(켰으면) 저장된 설정이다. 오류는 던진다(401 재로그인·문구 변환은 App이 한다).
+ */
+export async function acceptReminderOffer(
+  r: ReadingReminder | undefined,
+): Promise<{ phase: OfferPhase | null; reminder: ReadingReminder | null }> {
+  const outcome = await enableReadingReminder('REST', r?.hour ?? 20, r?.agreementCode ?? null, 'after_stop');
+  return { phase: offerPhaseFor(outcome), reminder: outcome.status === 'on' ? outcome.reminder : null };
 }
 
 export type OfferPhase =

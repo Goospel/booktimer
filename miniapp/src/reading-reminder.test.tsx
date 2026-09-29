@@ -9,7 +9,9 @@ import {
   READING_REMINDER_OFFER_KEY,
   READING_REMINDER_OFFER_TITLE,
   REMINDER_HOURS,
+  acceptReminderOffer,
   agreementErrorMessage,
+  changeReadingReminder,
   enableReadingReminder,
   hourLabel,
   offerPhaseFor,
@@ -206,6 +208,110 @@ describe('오류 문구 (agreementErrorMessage)', () => {
     expect(agreementErrorMessage(new ApiError(400, '알림 설정 값이 올바르지 않아요.'))).toBe('알림 설정 값이 올바르지 않아요.');
     expect(agreementErrorMessage(new Error('Bridge failed'))).toBe('알림을 켜지 못했어요. 잠시 후 다시 시도해 주세요.');
   });
+
+  it('REQ-12 · 켜기가 아닌 저장(끄기·시각 변경) 실패는 「켜지 못했어요」가 아니라 저장 실패 문구다 — 서버 평문은 그대로', () => {
+    expect(agreementErrorMessage(new Error('boom'), false)).toBe('알림 설정을 저장하지 못했어요. 잠시 후 다시 시도해 주세요.');
+    expect(agreementErrorMessage(new ApiError(400, '알림 설정 값이 올바르지 않아요.'), false)).toBe('알림 설정 값이 올바르지 않아요.');
+  });
+});
+
+describe('거절 캐시는 동의 흐름 한 곳이 쓴다', () => {
+  it('REQ-10 · enableReadingReminder가 거절이면 제안 캐시에 agreementRejected를 남긴다 — 카드·설정 어느 쪽 거절이든 다시 조르지 않는다', async () => {
+    requestMock.mockResolvedValue('agreementRejected');
+
+    await enableReadingReminder('DAILY', 20, 'c', 'settings');
+
+    expect(readOfferCache()).toBe('agreementRejected');
+  });
+
+  it('REQ-10 · 동의·미지원이면 캐시를 건드리지 않는다(양성 대조: 위 거절만 적는다)', async () => {
+    requestMock.mockResolvedValue('newAgreement');
+    saveMock.mockResolvedValue(reminder({ kind: 'REST', everOn: true }));
+    await enableReadingReminder('REST', 20, 'c', 'after_stop');
+    requestMock.mockResolvedValue(null);
+    await enableReadingReminder('REST', 20, 'c', 'after_stop');
+
+    expect(readOfferCache()).toBeNull();
+  });
+});
+
+describe('설정 저장 경로 (changeReadingReminder)', () => {
+  it('REQ-11 · 꺼짐→켬 + 동의면 동의를 먼저 묻고 저장 1회', async () => {
+    const saved = reminder({ kind: 'DAILY', hour: 9, everOn: true });
+    requestMock.mockResolvedValue('newAgreement');
+    saveMock.mockResolvedValue(saved);
+
+    await expect(changeReadingReminder(reminder(), { kind: 'DAILY', hour: 9 }, 'settings')).resolves.toEqual({
+      status: 'saved',
+      reminder: saved,
+    });
+    expect(requestMock).toHaveBeenCalledTimes(1);
+    expect(saveMock).toHaveBeenCalledTimes(1);
+    expect(saveMock).toHaveBeenCalledWith({ kind: 'DAILY', hour: 9 });
+  });
+
+  it('REQ-11 · 꺼짐→켬 + 거절이면 저장 0회이고 캐시가 agreementRejected다', async () => {
+    requestMock.mockResolvedValue('agreementRejected');
+
+    await expect(changeReadingReminder(reminder(), { kind: 'REST', hour: 20 }, 'settings')).resolves.toEqual({ status: 'rejected' });
+    expect(saveMock).not.toHaveBeenCalled();
+    expect(readOfferCache()).toBe('agreementRejected');
+  });
+
+  it('REQ-12 · 꺼진 채 시각만 바꾸면 동의 요청 0회 · {kind:OFF, hour} 저장', async () => {
+    saveMock.mockResolvedValue(reminder({ hour: 21 }));
+
+    const outcome = await changeReadingReminder(reminder(), { kind: 'OFF', hour: 21 }, 'settings');
+
+    expect(outcome.status).toBe('saved');
+    expect(requestMock).not.toHaveBeenCalled();
+    expect(saveMock).toHaveBeenCalledWith({ kind: 'OFF', hour: 21 });
+  });
+
+  it.each([
+    ['켠 채 방식 전환(매일→3일)', 'DAILY', { kind: 'REST', hour: 20 }],
+    ['끄기', 'REST', { kind: 'OFF', hour: 20 }],
+    ['켠 채 시각만 변경', 'DAILY', { kind: 'DAILY', hour: 19 }],
+  ] as const)('REQ-12 · %s는 같은 동의문 안이라 동의 요청 0회 · 저장 1회', async (_, from, next) => {
+    saveMock.mockResolvedValue(reminder({ ...next, everOn: true }));
+
+    await changeReadingReminder(reminder({ kind: from, everOn: true }), next, 'settings');
+
+    expect(requestMock).not.toHaveBeenCalled();
+    expect(saveMock).toHaveBeenCalledTimes(1);
+    expect(saveMock).toHaveBeenCalledWith(next);
+  });
+});
+
+describe('제안 카드 「알림 받기」 (acceptReminderOffer)', () => {
+  it('REQ-11 · 동의 먼저 — 동의하면 서버 기본 시각으로 「3일 쉬면」을 저장하고 켠 설정과 요약 상태를 돌려준다', async () => {
+    const saved = reminder({ kind: 'REST', hour: 20, everOn: true });
+    requestMock.mockResolvedValue('newAgreement');
+    saveMock.mockResolvedValue(saved);
+
+    await expect(acceptReminderOffer(reminder({ hour: 20 }))).resolves.toEqual({
+      phase: { kind: 'on', summary: '독서 기록 없이 3일째가 되면 오후 8시에 한 번 알려 드려요.' },
+      reminder: saved,
+    });
+    expect(requestMock).toHaveBeenCalledWith('booktimer-reading-reminder-rest');
+    expect(saveMock).toHaveBeenCalledWith({ kind: 'REST', hour: 20 });
+    expect(trackMock).toHaveBeenCalledWith('reading_reminder_consent', { result: 'newAgreement', entry: 'after_stop' });
+  });
+
+  it('REQ-11 · 거절이면 저장 없이 거절 상태 · 캐시 agreementRejected', async () => {
+    requestMock.mockResolvedValue('agreementRejected');
+
+    await expect(acceptReminderOffer(reminder())).resolves.toEqual({ phase: { kind: 'rejected' }, reminder: null });
+    expect(saveMock).not.toHaveBeenCalled();
+    expect(readOfferCache()).toBe('agreementRejected');
+  });
+
+  it('REQ-11 · 미지원이면 카드를 치운다(null) · 저장 없음', async () => {
+    requestMock.mockResolvedValue(null);
+
+    await expect(acceptReminderOffer(reminder())).resolves.toEqual({ phase: null, reminder: null });
+    expect(saveMock).not.toHaveBeenCalled();
+  });
 });
 
 describe('흐름 결과 → 카드 상태 (offerPhaseFor)', () => {
@@ -247,7 +353,8 @@ describe('측정 종료 제안 카드 (ReadingReminderOffer)', () => {
   });
 
   it('REQ-10 · 제안 카드(busy)는 버튼이 disabled · (error)는 문구를 띄운다', () => {
-    expect(offer({ kind: 'busy' })).toMatch(/<button[^>]*disabled/);
+    // 「알림 받기」·「괜찮아요」 둘 다 잠긴다 — 동의 창이 뜬 사이 「괜찮아요」가 눌리면 캐시와 결과가 엇갈린다
+    expect(offer({ kind: 'busy' }).match(/<button[^>]*disabled/g)).toHaveLength(2);
     expect(offer({ kind: 'idle' })).not.toMatch(/<button[^>]*disabled/); // 대조: idle은 누를 수 있다
     expect(offer({ kind: 'error', message: '알림을 켜지 못했어요. 잠시 후 다시 시도해 주세요.' })).toContain(
       '알림을 켜지 못했어요. 잠시 후 다시 시도해 주세요.',
@@ -322,6 +429,14 @@ describe('설정 섹션 (ReadingReminderSection)', () => {
     expect(markup).toMatch(/<option value="19" selected="">오후 7시<\/option>/);
     expect(markup).toContain('토스 앱 설정에서도 알림을 끌 수 있어요.');
     expect(markup).toContain('매일 오후 7시까지 그날 독서 기록이 없으면 알려 드려요.');
+  });
+
+  it('REQ-12 · 설정: 켬 + 미지원 토스앱이면 업데이트 안내가 아니라 정상 섹션이다 — 켠 사람은 끌 수 있어야 한다', () => {
+    const markup = section(reminder({ kind: 'DAILY', everOn: true }), false);
+
+    expect(markup).toMatch(/aria-pressed="false"[^>]*>끄기</);
+    expect(markup).toContain('<select');
+    expect(markup).not.toContain('이 토스 앱에서는 알림을 켤 수 없어요');
   });
 
   it('REQ-12 · 설정: 켬(3일 쉬면)이면 「3일 쉬면」만 pressed이고 요약이 3일째 문구다', () => {

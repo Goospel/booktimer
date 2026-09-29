@@ -7,7 +7,6 @@ import {
   fetchBlocks,
   issueWebLoginCode,
   logout,
-  saveReadingReminder,
   unblockUser,
   updateNickname,
   validateNicknameFormat,
@@ -16,10 +15,10 @@ import { resetCoachmarks } from '../coachmark';
 import {
   REMINDER_HOURS,
   agreementErrorMessage,
-  enableReadingReminder,
+  changeReadingReminder,
   hourLabel,
+  needsAgreement,
   reminderSummary,
-  writeOfferCache,
 } from '../readingReminder';
 import { notificationAgreementSupported, openExternal } from '../toss';
 import { ErrorMessage, SOFT_OUTLINE, Screen, SectionTitle, Sheet, Text, sectionStyle } from '../ui';
@@ -431,28 +430,19 @@ export function Settings({
    */
   const changeReminder = (next: { kind: ReminderKind; hour: number }) => {
     if (reminder === undefined) return;
-    const enabling = reminder.kind === 'OFF' && next.kind !== 'OFF';
     setReminderBusy(true);
     setReminderError(null);
     setReminderNotice(null);
-    const saved: Promise<ReadingReminder | null> = enabling
-      ? enableReadingReminder(next.kind as 'DAILY' | 'REST', next.hour, reminder.agreementCode, 'settings').then((outcome) => {
-          if (outcome.status === 'rejected') {
-            writeOfferCache('agreementRejected'); // 여기서 거절한 사람에게 홈 카드가 다시 조르지 않게(카드 거절과 같은 캐시)
-            setReminderNotice('동의하지 않아 알림을 켜지 않았어요.');
-          }
-          return outcome.status === 'on' ? outcome.reminder : null;
-        })
-      : saveReadingReminder(next);
-    saved
-      .then((r) => {
-        if (r === null) return;
-        setReminder(r);
-        onReminderChange(r);
+    changeReadingReminder(reminder, next, 'settings')
+      .then((outcome) => {
+        if (outcome.status === 'rejected') setReminderNotice('동의하지 않아 알림을 켜지 않았어요.');
+        if (outcome.status !== 'saved') return; // 미지원은 아무 일 없음
+        setReminder(outcome.reminder);
+        onReminderChange(outcome.reminder);
       })
       .catch((e: Error) => {
         if (e.name === 'UnauthorizedError') onError(e);
-        else setReminderError(agreementErrorMessage(e));
+        else setReminderError(agreementErrorMessage(e, needsAgreement(reminder, next)));
       })
       .finally(() => setReminderBusy(false));
   };

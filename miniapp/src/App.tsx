@@ -16,9 +16,8 @@ import {
 import { elapsedSeconds } from './format';
 import type { OfferPhase } from './readingReminder';
 import {
+  acceptReminderOffer,
   agreementErrorMessage,
-  enableReadingReminder,
-  offerPhaseFor,
   readOfferCache,
   shouldOfferReadingReminder,
   writeOfferCache,
@@ -1897,17 +1896,17 @@ export function MainTabs({
 
   /** 제안 카드 「알림 받기」 — 「3일 쉬면」을 서버 기본 시각으로 켠다(시각을 추측하지 않는다). 동의 먼저, 저장은 그다음. */
   const pickReminder = () => {
-    const r = dashboard.readingReminder;
     setReminderOffer({ kind: 'busy' });
-    enableReadingReminder('REST', r?.hour ?? 20, r?.agreementCode ?? null, 'after_stop')
-      .then((outcome) => {
-        if (outcome.status === 'on') onReminderChange(outcome.reminder);
-        if (outcome.status === 'rejected') writeOfferCache('agreementRejected');
-        setReminderOffer(offerPhaseFor(outcome));
+    // 답이 오는 사이 새 측정을 시작했으면 카드는 이미 치워졌다 — 늦은 결과로 되살리지 않는다(`prev === null`).
+    const settle = (next: OfferPhase | null) => setReminderOffer((prev) => (prev === null ? prev : next));
+    acceptReminderOffer(dashboard.readingReminder)
+      .then(({ phase, reminder }) => {
+        if (reminder !== null) onReminderChange(reminder); // 켠 사실은 카드와 무관하게 대시보드에 남긴다
+        settle(phase);
       })
       .catch((e: Error) => {
         if (e.name === 'UnauthorizedError') onError(e);
-        else setReminderOffer({ kind: 'error', message: agreementErrorMessage(e) });
+        else settle({ kind: 'error', message: agreementErrorMessage(e) });
       });
   };
 
