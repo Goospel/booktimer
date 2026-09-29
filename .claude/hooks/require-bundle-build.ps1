@@ -30,8 +30,11 @@ try {
 
 if ([string]::IsNullOrWhiteSpace($cmd)) { exit 0 }
 
-# Only interested in git commit commands
+# Only interested in git commit commands. Line 1 = cheap pre-filter (most calls end here without loading lib);
+# line 2 = subcommand position -- the bare words also match `rm -f .commit-msg-tmp && git add -A` (T-078 4th).
 if ($cmd -notmatch '\bgit\b' -or $cmd -notmatch '\bcommit\b') { exit 0 }
+. (Join-Path $PSScriptRoot 'lib\resolve-target-cwd.ps1')
+if (-not (Test-GitVerb $cmd 'commit')) { exit 0 }
 
 # Bypass tokens
 if ($cmd -match 'SKIP_TESTS' -or $cmd -match 'SKIP_BUNDLE_CHECK') { exit 0 }
@@ -39,7 +42,6 @@ if ($cmd -match 'SKIP_TESTS' -or $cmd -match 'SKIP_BUNDLE_CHECK') { exit 0 }
 $cwd = [string]$data.cwd
 if ([string]::IsNullOrWhiteSpace($cwd)) { $cwd = (Get-Location).Path }
 # Inspect the worktree the commit really runs in, not the session cwd (T-242)
-. (Join-Path $PSScriptRoot 'lib\resolve-target-cwd.ps1')
 $cwd = Resolve-HookTargetCwd $cmd $cwd 'commit'
 if ($null -eq $cwd) { Stop-UnresolvedTarget 'commit' }
 

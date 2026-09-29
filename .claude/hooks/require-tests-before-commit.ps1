@@ -24,8 +24,11 @@ try {
 
 if ([string]::IsNullOrWhiteSpace($cmd)) { exit 0 }
 
-# git commit 이 아니면 관심 없음
+# git commit 이 아니면 관심 없음. 첫 줄 = 빠른 거르기(대부분의 호출이 lib 를 안 읽고 끝난다),
+# 둘째 = 서브커맨드 자리 판정 — 낱말만 보면 `rm -f .commit-msg-tmp && git add -A` 에도 걸린다(T-078 4회차)
 if ($cmd -notmatch '\bgit\b' -or $cmd -notmatch '\bcommit\b') { exit 0 }
+. (Join-Path $PSScriptRoot 'lib\resolve-target-cwd.ps1')
+if (-not (Test-GitVerb $cmd 'commit')) { exit 0 }
 
 # 명시적 override 토큰
 if ($cmd -match 'SKIP_TESTS') { exit 0 }
@@ -33,7 +36,6 @@ if ($cmd -match 'SKIP_TESTS') { exit 0 }
 $cwd = [string]$data.cwd
 if ([string]::IsNullOrWhiteSpace($cwd)) { $cwd = (Get-Location).Path }
 # 세션 cwd 가 아니라 커밋이 실제로 도는 워크트리를 본다(`cd "<다른 워크트리>" && git commit`, T-242)
-. (Join-Path $PSScriptRoot 'lib\resolve-target-cwd.ps1')
 $cwd = Resolve-HookTargetCwd $cmd $cwd 'commit'
 if ($null -eq $cwd) { Stop-UnresolvedTarget 'commit' }
 

@@ -26,11 +26,26 @@
 #   - `--git-dir`/`--work-tree`, MSYS 마운트 경로(`/tmp/...`)
 #   - 따옴표 문자열 속 `git commit`·`&& cd T` 를 진짜 명령으로 읽는다(`echo "git commit later" && …`)
 #   - 의도된 차단: 변수로 여러 레포를 도는 루프(`for r in …; do git -C "$F/$r" commit`)
+#   - Test-GitVerb 가 커밋으로 못 읽는 것: 줄 이음(`git \` 개행 `commit`) · 따옴표로 감싼 git 전체 경로("C:\…\git.exe" commit)
+#     · 별칭(git ci — 옛 낱말 검사도 못 읽었다). 거꾸로 heredoc 본문 속 `git commit` 은 커밋으로 읽는다(넓은 쪽, T-228)
+
+# `git [전역옵션] <verb>` 의 verb 자리만 잡는다 — 커밋 훅 5개의 트리거(Test-GitVerb)와 아래 Resolve 가 같은 문법을 쓴다.
+# 낱말 commit 이 `.commit-msg-tmp`·`--no-commit`·`--grep=commit` 속에 있으면 git 바로 뒤(전역옵션만 허용) 자리가
+# 아니라 안 걸리고, verb 뒤에 [\w-] 가 이어지면(commit-tree·commit-graph) 다른 서브커맨드다(T-078 4회차).
+# 1번 그룹 = 전역옵션 — Resolve 가 여기서 -C 값만 읽는다(-c 와 대소문자 구분).
+function Get-GitVerbPattern([string]$Verb) {
+    $v = '(?:"[^"]*"|''[^'']*''|[^\s;&|]+)'   # 옵션 값: "…" | '…' | 맨 토큰(; & | 에서 끊는다)
+    '\bgit(?:\.exe)?((?:\s+(?:(?:-C|-c|--git-dir|--work-tree|--namespace)\s+' + $v + '|-{1,2}[\w-]+(?:=\S+)?))*)\s+' + $Verb + '(?![\w-])'
+}
+
+function Test-GitVerb([string]$Command, [string]$Verb) {
+    return [regex]::IsMatch($Command, (Get-GitVerbPattern $Verb))
+}
 
 function Resolve-HookTargetCwd([string]$Command, [string]$SessionCwd, [string]$Verb, [switch]$NoToplevel) {
     try {
         # 첫 `git [전역옵션] <verb>` — 전역옵션 중 -C 값만 모은다(-c 와 대소문자 구분)
-        $gitRe = '\bgit((?:\s+(?:-C\s+(?:"[^"]*"|''[^'']*''|[^\s;&|]+)|-c\s+\S+|-{1,2}[\w-]+(?:=\S+)?))*)\s+' + $Verb + '\b'
+        $gitRe = Get-GitVerbPattern $Verb
         $m = [regex]::Match($Command, $gitRe)
         $steps = @()
         if ($m.Success) {
