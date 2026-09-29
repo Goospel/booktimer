@@ -213,7 +213,7 @@ powershell -File .claude/scripts/remove-worktree.ps1 ../BookTimer-<task>   # 또
   Get-NetTCPConnection -LocalPort 8080 -State Listen -EA SilentlyContinue |
     ForEach-Object { Stop-Process -Id $_.OwningProcess -Force }
   ```
-  ⚠️ **포트로 죽여도 gradle 데몬은 살아남아** 다음 커밋의 테스트 게이트와 락을 경합한다(T-078) — **bootRun 정리 = 8080 반납 + `./gradlew --stop`** 을 한 쌍으로.
+  ⚠️ **bootRun 정리는 8080 반납까지다 — `./gradlew --stop`을 붙이지 않는다.** `--stop`은 이 머신의 **모든** gradle 데몬을 멈춰 다른 세션이 돌리던 빌드까지 죽인다(T-235 곁다리). 포트로 앱을 죽이면 그 빌드가 끝나 데몬은 idle로 돌아가고, idle 데몬은 빌드 락을 쥐지 않으며 3시간 뒤 스스로 내려간다. 옛 「한 쌍」 규칙의 근거(남은 데몬이 게이트와 락 경합)는 4회차 실측에서 확인되지 않았고, 오히려 `--stop` 뒤의 첫 커밋이 새 데몬을 띄워 파이프 hang을 불렀다(T-078 4회차).
 - **bootRun docker-compose 컨테이너** — 컨테이너를 만드는 건 `bootRun`이다(테스트는 H2). 워크트리마다 따로 쌓이니 **8080 반납 때 함께 내린다**: `bash .claude/scripts/docker-cleanup.sh`(기본 Exited만 — 멀티세션 안전, `--all`이면 Up 포함·주의). `SessionEnd` 훅이 기본 모드를 자동 호출하므로 일상 누적은 방치해도 청소된다. (라벨 보호·훅 상세는 [참조](claude-docs/claude-md-reference.md).)
 - **gradle 데몬·빌드 락** — 두 세션이 동시에 `./gradlew`를 돌리면 **무한 hang** 가능 → 한 세션에서만 빌드/커밋. hang 대처는 「🧪 TDD → ⚠️ 커밋이 무한 hang 하면」 절(T-078).
 - **"File modified since read" 가드는 버그가 아니라 덮어쓰기 직전 보호** — 재읽기 → 그쪽 변경 보존 → 내 것만 재적용이 정답
@@ -273,18 +273,21 @@ powershell -File .claude/scripts/remove-worktree.ps1 ../BookTimer-<task>   # 또
 
 이 게이트가 `./gradlew test` 를 돌리므로 **"git 이 멈춘" 것처럼 보여도 실제론 gradle 테스트가 hang** 한 것일 때가 많다 —
 Claude Code 는 그 자식 프로세스 종료를 기다릴 뿐이라 **코어 버그가 아니다**(그래서 esc·머지로 안 풀리고 clear 로만 풀렸던 것).
-흔한 뿌리 = **멀티 세션이 gradle 데몬·빌드 락을 동시 점유**. esc 는 이미 뜬 gradle 자식·데몬을 안 죽여 **다음 커밋도 또 hang**한다.
+뿌리는 둘이었다 — **멀티 세션의 gradle 데몬·빌드 락 경합**, 그리고 **게이트가 새로 띄운 데몬이 훅의 출력 파이프를 물고 사는 것**(2026-09-29 T-078 4회차 — Claude Code는 훅 프로세스가 아니라 파이프 EOF를 기다린다. 게이트를 ShellExecute로 띄워 막았다). esc 는 이미 뜬 gradle 자식·데몬을 안 죽여 **다음 커밋도 또 hang**한다.
 
-- **이젠 게이트가 자가차단(하드, 2026-07-01)**: 커밋 훅 `require-tests-before-commit.ps1` 의 `gradlew test` 가 **20분 타임아웃**(`BOOKTIMER_TEST_GATE_TIMEOUT_MS` 로 조정하되 **상한 24분** — 상한에 5분 예비(앞서 도는 타임아웃 없는 프론트 테스트·taskkill·`gradlew --stop` 몫)를 더해도 `.claude/settings.json`의 이 훅 `timeout` 1800초 이하여야 한다. 넘으면 Claude Code가 훅을 취소하고 **테스트 없이 커밋을 통과**시킨다)으로 감싸여, 초과 시 **프로세스 트리 `taskkill /T` + `gradlew --stop` 자가복구 후 커밋 차단(exit 2)** 한다 → 45분 무한 freeze는 더 안 난다. **그래도 커밋이 20분+ 멈춰 있으면** 그건 게이트가 아닌 다른 빌드 hang일 수 있으니 아래 수동 정리로 간다.
+- **이젠 게이트가 자가차단(하드, 2026-07-01)**: 커밋 훅 `require-tests-before-commit.ps1` 의 `gradlew test` 가 **20분 타임아웃**(`BOOKTIMER_TEST_GATE_TIMEOUT_MS` 로 조정하되 **상한 24분** — 상한에 5분 예비(앞서 도는 타임아웃 없는 프론트 테스트·taskkill 몫)를 더해도 `.claude/settings.json`의 이 훅 `timeout` 1800초 이하여야 한다. 넘으면 Claude Code가 훅을 취소하고 **테스트 없이 커밋을 통과**시킨다)으로 감싸여, 초과 시 **게이트 자신의 프로세스 트리만 `taskkill /T`로 끄고 커밋 차단(exit 2)** 한다(머신 전역 `gradlew --stop`은 2026-09-29에 뺐다 — 다른 세션의 빌드를 죽였다) → 45분 무한 freeze는 더 안 난다. **그래도 커밋이 20분+ 멈춰 있으면** 그건 게이트가 아닌 다른 빌드 hang일 수 있으니 아래 수동 정리로 간다.
 - **게이트가 느리면 먼저 전원(AC·화면 켜짐)을 본다** — 배터리·대기면 같은 스위트가 3~4배 느리다(T-235 적용 전 실측: AC 약 4분 vs 배터리 대기 11~18분 — BCrypt 강도 4 적용 후 AC 약 2분 15초 → 스프링 테스트 컨텍스트 통합 38 → 16 뒤 AC 약 1분 35초(2026-09-30), 배터리는 미측정).
 - **감별**: `git status` 가 빠르면(0.x초) git·레포 자체는 정상 → 코어·레포 문제 아님. 떠도는 `java`(gradle 데몬) 잔존이 단서.
-- **강제 정리**:
+- **강제 정리 — 자기 워크트리 것만**(게이트는 이제 자기 트리를 스스로 끄므로 여기까지 올 일은 드물다):
   ```powershell
-  Get-Process java, git -EA SilentlyContinue | Stop-Process -Force
-  Remove-Item .git\index.lock -EA SilentlyContinue
-  ./gradlew --stop
+  # 명령줄을 보고 이 워크트리의 java(gradle 클라이언트·bootRun 앱·테스트 워커)만 PID로 끈다.
+  # 데몬(GradleDaemon)은 명령줄에 워크트리가 없다 — 클라이언트가 끊기면 그 빌드를 취소하고 idle로 돌아간다.
+  Get-CimInstance Win32_Process -Filter "Name='java.exe'" | Select-Object ProcessId, CommandLine | Format-List
+  Stop-Process -Id <PID> -Force
+  Remove-Item (git rev-parse --git-path index.lock) -EA SilentlyContinue   # 워크트리에선 .git 이 파일이다
   ```
-- **예방**: 멀티 세션일 땐 **한 세션에서만 커밋/빌드**(gradle 은 워크트리를 나눠도 데몬·캐시를 공유해 경합). **bootRun 정리는 8080 반납에 더해 `./gradlew --stop` 까지**(포트만 죽이면 데몬이 남아 다음 게이트와 경합 — 위 「🪢 8080」 절). 배경: [troubleshooting T-078](claude-docs/troubleshooting.md), 다중 세션 N-032.
+  ⚠️ 메인 체크아웃 경로는 모든 워크트리 경로의 앞부분이다 — `…\BookTimer\.claude\worktrees\<다른 이름>`으로 이어지면 남의 것이다. `Get-Process java | Stop-Process`·`./gradlew --stop`은 머신 전역이라 다른 세션의 빌드를 함께 죽인다(T-235 곁다리·T-078 4회차).
+- **예방**: 멀티 세션일 땐 **한 세션에서만 커밋/빌드**(gradle 은 워크트리를 나눠도 데몬·캐시를 공유해 경합). **bootRun 정리는 8080 반납까지**(`--stop`은 다른 세션의 빌드를 죽인다 — 위 「🪢 8080」 절). 배경: [troubleshooting T-078](claude-docs/troubleshooting.md), 다중 세션 N-032.
 
 ### 예외 (override)
 
