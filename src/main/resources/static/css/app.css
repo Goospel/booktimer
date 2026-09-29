@@ -2929,6 +2929,15 @@ body .focus-stack.is-merged > .dash-card.is-study { border: 0; border-image: non
 .focus-bar .dash-btn-outline { width: auto; margin: 0; padding: 9px 20px; font-size: 15px; }
 .focus-bar .dash-bookless { align-self: auto; }
 .focus-top .dash-goal-edit { flex-basis: 100%; justify-content: flex-start; margin-top: 10px; }
+/* 탭을 떠나 멈춘 안내 — 폼과 같은 자리(막대 아래 한 줄)의 조용한 문장. 움직임 없음(정적 표현이 기본값, T-176). */
+.focus-away { flex-basis: 100%; margin: 10px 0 0; font-size: 13px; color: var(--muted); }
+.focus-away .dash-bookless { display: inline; padding: 0 2px; }
+.focus-away .focus-away-close { margin-left: 10px; }
+/* 자리 비움 선택(설계 §9) — 대기 패널 맨 끝 조용한 설정 줄. 점선 구분은 .dash-forgive-note, 체크박스는 .auth-check와 같은 꼴. */
+.dash-away-pref { display: flex; align-items: flex-start; gap: 8px; padding-top: 12px; border-top: 1px dashed var(--border); cursor: pointer; }
+.dash-away-pref input { width: 16px; height: 16px; margin: 2px 0 0; flex-shrink: 0; accent-color: var(--accent); }
+.dash-away-pref-title { display: block; font-size: 13px; color: var(--text); }
+.dash-away-pref-desc { display: block; margin-top: 3px; font-size: 12px; line-height: 1.5; color: var(--muted); word-break: keep-all; }
 .focus-stack.is-merged .study-editor .ProseMirror { min-height: max(300px, calc(100vh - 464px)); font-size: 16px; }
 /* 전환 — 히어로는 먼저 빠지고 막대는 조금 늦게 들어온다(둘이 반투명으로 겹쳐 뿌예지는 구간 제거, 시안 실측) */
 ::view-transition-group(*) { animation-duration: .6s; animation-timing-function: cubic-bezier(.22, .9, .24, 1); }

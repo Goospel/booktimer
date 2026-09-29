@@ -1,11 +1,13 @@
 <script setup lang="ts">
-import { ref, watch, computed, nextTick, onUnmounted } from 'vue'
+import { ref, watch, computed, nextTick, onUnmounted, useId } from 'vue'
 import { useReadingTimer } from './useReadingTimer'
 import { fmtMSS, goalLabel } from './timerProgress'
 import { sessionGoalView, minutesToSessionGoal } from './sessionGoal'
 import { initialOf, coverColor, hasCover } from '../books/pure'
 import { defaultStudyBookOf } from './defaultBook'
 import type { StudyBookRow } from '../study/api'
+import type { AwayInterval } from './studyAway'
+import { AWAY_GRACE_MS } from './studyAway'
 
 const props = withDefaults(defineProps<{
     /** 오늘 공부한 초(완료 세션 합) — 측정 중 몫은 elapsed로 얹는다(독서와 같은 분업). */
@@ -26,12 +28,22 @@ const props = withDefaults(defineProps<{
     activeBook?: StudyBookRow | null
     /** 책 교체 왕복 중 — 「책 바꾸기」를 잠근다. */
     changing?: boolean
-}>(), { books: () => [], recentBookId: null, pickedBook: null, activeBook: null })
+    /** 탭을 떠나 멈춘 초(studyAway) — 표시·회당 판정 전부 elapsed에서 뺀다. */
+    awaySeconds?: number
+    /** 방금 닫힌 멈춤 구간 — 있으면 카드 안 한 줄 안내(되돌리기·닫기). */
+    awayNotice?: AwayInterval | null
+    /** 자리 비움 선택을 보일지 — 컴퓨터만 true(터치 기기는 체크박스 없음, 설계 §9.4-4). */
+    awayAvailable?: boolean
+    /** 이 기기의 자리 비움 선택(기본 꺼짐). */
+    awayOn?: boolean
+}>(), { books: () => [], recentBookId: null, pickedBook: null, activeBook: null, awaySeconds: 0, awayNotice: null, awayAvailable: false, awayOn: false })
 
 const emit = defineEmits<{
     start: [bookId: number | null]; stop: []
     setSessionGoal: [bookId: number, seconds: number | null]
     openSheet: []; changeBook: []
+    undoAway: []; dismissAway: []
+    setAwayOn: [on: boolean]
 }>()
 
 // 칩에 설 책 = 시트에서 고른 책 → 최근 걸고 잰 책 → 첫 책(독서 BookPickForm과 같은 규칙). 셋 다 없으면 null.
@@ -53,12 +65,18 @@ watch(() => props.hasActiveSession, v => active.value = v)
 watch(() => props.activeStartedAt, v => startedAtIso.value = v)
 
 const { elapsed } = useReadingTimer(ref(0), active, startedAtIso)
+// 화면의 모든 「잰 시간」은 이 값이다 — elapsed를 직접 쓰면 오늘 합계와 이번 측정이 어긋난다.
+const counted = computed(() => Math.max(0, elapsed.value - props.awaySeconds))
+const prefId = useId()
+const showAway = computed(() => props.hasActiveSession && props.awayNotice !== null)
+const awayMinutes = computed(() => props.awayNotice
+    ? Math.max(1, Math.round((Date.parse(props.awayNotice.to) - Date.parse(props.awayNotice.from)) / 60_000)) : 0)
 
 // ── 책별 회당 시간 ──────────────────────────────────────────────────────────────
 // 대상 책 = 측정 중이면 activeBook, 아니면 칩 책. 기준은 그 책의 **현재 값**(설계 §4.1 — 세션 스냅샷 없음).
 const goalBook = computed(() => props.hasActiveSession ? props.activeBook : defaultBook.value)
 const view = computed(() => props.hasActiveSession
-    ? sessionGoalView(props.activeBook?.sessionGoalSeconds, elapsed.value)
+    ? sessionGoalView(props.activeBook?.sessionGoalSeconds, counted.value)
     : sessionGoalView(null, 0))
 
 // 탭 제목 알림 — 다른 탭을 보고 있어도 닿았음을 안다. 브라우저 Notification은 쓰지 않는다(사용자 기각).
@@ -105,10 +123,10 @@ defineExpose({ closeEdit })
         <div v-if="hasActiveSession" class="focus-bar" data-testid="focus-bar">
             <span class="dash-pill dash-pill-pulse"><span class="dash-pulse-dot"></span>측정 중</span>
             <!-- .vt-clock은 두 상태에 **하나씩만** — 둘 다 그리면 전환 이름이 겹쳐 브라우저가 전환을 통째로 건너뛴다. -->
-            <span class="dash-timer-num vt-clock" data-testid="focus-today">{{ fmtMSS(todaySeconds + elapsed) }}</span>
+            <span class="dash-timer-num vt-clock" data-testid="focus-today">{{ fmtMSS(todaySeconds + counted) }}</span>
             <div class="focus-kv" data-testid="focus-session">
                 <span class="dash-kv-k">이번 측정</span>
-                <span class="dash-kv-v dash-kv-v-num">{{ fmtMSS(elapsed) }}</span>
+                <span class="dash-kv-v dash-kv-v-num">{{ fmtMSS(counted) }}</span>
             </div>
             <!-- 회당 시간이 없는 책·책 없이 = 스톱워치라 이 칸이 없다. 닿아도 측정은 계속된다(색·문구만 바뀐다). -->
             <div v-if="view.kind === 'countdown'" class="focus-kv dash-session-line">
@@ -151,10 +169,21 @@ defineExpose({ closeEdit })
                     :disabled="savingSessionGoal" @click="submitGoal(null)">회당 시간 없이</button>
         </form>
 
+        <!-- 탭을 떠나 멈춘 안내 — 막대 아래 한 줄(회당 시간 폼과 같은 자리 관용구). 오버레이·모달이 아니다.
+             되돌리기 = 인강·PDF처럼 다른 탭이 곧 공부였던 경우. -->
+        <!-- live region은 늘 둔다 — 내용과 함께 삽입되면 일부 스크린리더가 읽지 않는다. 비었을 땐 .sr-only라 자리를 차지하지 않는다. -->
+        <p class="focus-away" :class="{ 'sr-only': !showAway }" role="status">
+            <span v-if="showAway" data-testid="away-notice">
+                {{ awayMinutes }}분 자리를 비워 타이머를 멈췄어요 ·
+                <button type="button" class="dash-bookless" @click="emit('undoAway')">되돌리기</button>
+                <button type="button" class="dash-bookless focus-away-close" aria-label="안내 닫기" @click="emit('dismissAway')">닫기</button>
+            </span>
+        </p>
+
         <template v-if="!hasActiveSession">
         <div class="dash-timer-left">
             <span class="dash-pill">오늘 공부한 시간</span>
-            <div class="dash-timer-num vt-clock">{{ fmtMSS(todaySeconds + elapsed) }}</div>
+            <div class="dash-timer-num vt-clock">{{ fmtMSS(todaySeconds + counted) }}</div>
         </div>
 
         <div class="dash-timer-right">
@@ -215,6 +244,18 @@ defineExpose({ closeEdit })
                     </button>
                     <button type="button" class="dash-btn-link dash-bookless" :disabled="starting" @click="emit('start', null)">책 없이 시작</button>
                 </template>
+
+                <!-- 자리 비움 선택(설계 §9) — 패널 맨 끝 = 책 있음·서재 빔 공통 자리. 이번 측정의 옵션이 아니라 기기 설정이라
+                     시작 묶음과 점선으로 가른다. 측정 중엔 없다(바꾸지 않는다, §9.4-5). 줄 안에 button을 두지 않는다. -->
+                <label v-if="awayAvailable" class="dash-away-pref">
+                    <!-- 이름은 제목만, 설명은 따로 — label 통째가 이름이면 긴 문장이 체크박스 이름이 된다. -->
+                    <input type="checkbox" :checked="awayOn" :aria-labelledby="`${prefId}-t`" :aria-describedby="`${prefId}-d`"
+                           @change="emit('setAwayOn', ($event.target as HTMLInputElement).checked)">
+                    <span>
+                        <span :id="`${prefId}-t`" class="dash-away-pref-title">자리 비우면 멈추기</span>
+                        <span :id="`${prefId}-d`" class="dash-away-pref-desc">다른 탭이나 앱에 {{ AWAY_GRACE_MS / 1000 }}초 넘게 가 있으면 그동안은 재지 않아요. 측정 중엔 화면을 켜 둬요.</span>
+                    </span>
+                </label>
             </div>
         </div>
         </template>

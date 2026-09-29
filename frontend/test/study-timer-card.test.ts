@@ -4,6 +4,7 @@
 import { describe, test, expect, vi, afterEach } from 'vitest';
 import { mount, flushPromises } from '@vue/test-utils';
 import StudyTimerCard from '../src/dashboard/StudyTimerCard.vue';
+import { AWAY_GRACE_MS } from '../src/dashboard/studyAway';
 
 afterEach(() => { vi.useRealTimers(); document.body.innerHTML = ''; });
 
@@ -471,5 +472,66 @@ describe('StudyTimerCard — 탭 제목 알림', () => {
 
         w.unmount();
         expect(document.title).toBe('북타이머');
+    });
+});
+
+// 자리 비움 선택(설계 §9) — 컴퓨터 대기 패널 맨 끝의 기기 설정 한 줄.
+//  · 통과가 확정하는 것: 두 분기(책 있음·서재 빔) 모두 패널 마지막 자식 · awayAvailable 기본 false면 없음 ·
+//    측정 중엔 없음 · 체크가 awayOn을 비추고 바뀐 값을 낸다 · 문구(30초·화면 켜 둠)·이모지 0.
+//  · 실패가 배제하는 것: 터치 기기에 새기 · 측정 중 바꾸기 · 반전된 값 emit · 유예 초 하드코딩 불일치.
+describe('StudyTimerCard — 자리 비움 선택', () => {
+    const pref = (w: ReturnType<typeof mountCard>) => w.find('label.dash-away-pref');
+
+    test('REQ-01 · awayAvailable이면 대기 패널의 마지막 자식이 체크박스 줄이다(책 있음)', () => {
+        const w = mountCard({ books: [STUDY_BOOK(5, '헌법')], recentBookId: 5, awayAvailable: true });
+        expect(w.find('.dash-state-panel').element.lastElementChild).toBe(pref(w).element);
+    });
+
+    test('REQ-01 · 서재가 비어도 같은 자리(패널 마지막)에 선다', () => {
+        const w = mountCard({ awayAvailable: true });
+        expect(w.find('a[href="/study/books"]').exists()).toBe(true);
+        expect(w.find('.dash-state-panel').element.lastElementChild).toBe(pref(w).element);
+    });
+
+    test('REQ-01 · awayAvailable이 없으면(기본) 체크박스가 없다', () => {
+        const w = mountCard({ books: [STUDY_BOOK(5, '헌법')], recentBookId: 5 });
+        expect(pref(w).exists()).toBe(false);
+    });
+
+    test('REQ-01 · 측정 중엔 awayAvailable이어도 체크박스가 없다', () => {
+        vi.useFakeTimers();
+        const w = mountCard({ hasActiveSession: true, activeStartedAt: new Date().toISOString(), awayAvailable: true, awayOn: true });
+        expect(pref(w).exists()).toBe(false);
+    });
+
+    test('REQ-02 · awayOn을 그대로 비추고, 누르면 바뀐 값으로 setAwayOn을 낸다', async () => {
+        const off = mountCard({ awayAvailable: true, awayOn: false });
+        const offBox = off.find('.dash-away-pref input[type="checkbox"]');
+        expect((offBox.element as HTMLInputElement).checked).toBe(false);
+        await offBox.trigger('click');
+        expect(off.emitted('setAwayOn')).toEqual([[true]]);
+
+        const on = mountCard({ awayAvailable: true, awayOn: true });
+        const onBox = on.find('.dash-away-pref input[type="checkbox"]');
+        expect((onBox.element as HTMLInputElement).checked).toBe(true);
+        await onBox.trigger('click');
+        expect(on.emitted('setAwayOn')).toEqual([[false]]);
+    });
+
+    test('REQ-08 · 제목 「자리 비우면 멈추기」, 설명에 유예 초와 「화면을 켜 둬요」, 이모지 없음', () => {
+        const w = mountCard({ awayAvailable: true });
+        expect(w.find('.dash-away-pref-title').text()).toBe('자리 비우면 멈추기');
+        const desc = w.find('.dash-away-pref-desc').text();
+        expect(desc).toContain(`${AWAY_GRACE_MS / 1000}초`);
+        expect(desc).toContain('화면을 켜 둬요');
+        expect(pref(w).text()).not.toMatch(/\p{Extended_Pictographic}/u);
+    });
+
+    test('접근성 · 체크박스 이름은 제목만, 설명은 aria-describedby로 따로 읽힌다', () => {
+        const w = mountCard({ awayAvailable: true });
+        const box = w.find('.dash-away-pref input').element;
+        const byId = (id: string | null) => (id ? document.getElementById(id) : null);
+        expect(byId(box.getAttribute('aria-labelledby'))).toBe(w.find('.dash-away-pref-title').element);
+        expect(byId(box.getAttribute('aria-describedby'))).toBe(w.find('.dash-away-pref-desc').element);
     });
 });
