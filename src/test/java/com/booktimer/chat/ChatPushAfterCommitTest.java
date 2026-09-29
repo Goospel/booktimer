@@ -3,6 +3,8 @@ package com.booktimer.chat;
 import com.booktimer.block.BlockService;
 import com.booktimer.follow.Follow;
 import com.booktimer.follow.FollowRepository;
+import com.booktimer.testsupport.MessengerTest;
+import com.booktimer.testsupport.MutableClock;
 import com.booktimer.toss.TossMessengerClient;
 import com.booktimer.user.Role;
 import com.booktimer.user.User;
@@ -11,22 +13,13 @@ import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.boot.test.context.TestConfiguration;
-import org.springframework.context.annotation.Bean;
-import org.springframework.context.annotation.Primary;
 import org.springframework.jdbc.core.JdbcTemplate;
-import org.springframework.test.context.TestPropertySource;
-import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.TransactionDefinition;
 import org.springframework.transaction.support.TransactionTemplate;
 
-import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
-import java.time.ZoneId;
-import java.time.ZoneOffset;
 import java.time.temporal.ChronoUnit;
 import java.util.Map;
 
@@ -51,46 +44,10 @@ import static org.mockito.Mockito.when;
  * 차단(CLOSED)을 OPEN으로 되돌리는 것 ② 롤백된 발송인데 푸시가 나가는 것 ③ 30분 판정이 원자적이지 않아
  * 동시 발송 둘이 둘 다 보내는 것 ④ 발송 실패가 30분 창을 삼켜 다음 메시지도 안 보내는 것.
  */
-@SpringBootTest
-@TestPropertySource(properties = {
-        "booktimer.toss.messenger.dm-message-enabled=true",
-        "booktimer.toss.messenger.dm-message-template-code=DM_TEST"
-})
+@MessengerTest
 class ChatPushAfterCommitTest {
 
     static final Instant NOW = Instant.parse("2026-09-18T03:00:00Z");
-
-    static class MutableClock extends Clock {
-        private Instant now = NOW;
-
-        void set(Instant instant) {
-            now = instant;
-        }
-
-        @Override
-        public ZoneId getZone() {
-            return ZoneOffset.UTC;
-        }
-
-        @Override
-        public Clock withZone(ZoneId zone) {
-            return this;
-        }
-
-        @Override
-        public Instant instant() {
-            return now;
-        }
-    }
-
-    @TestConfiguration
-    static class ClockConfig {
-        @Bean
-        @Primary
-        Clock pushTestClock() {
-            return new MutableClock();
-        }
-    }
 
     @Autowired ChatRoomService service;
     @Autowired ChatRoomRepository roomRepository;
@@ -99,9 +56,9 @@ class ChatPushAfterCommitTest {
     @Autowired BlockService blockService;
     @Autowired JdbcTemplate jdbc;
     @Autowired PlatformTransactionManager txManager;
-    @Autowired Clock clock;
+    @Autowired MutableClock clock;
 
-    @MockitoBean TossMessengerClient messenger;
+    @Autowired TossMessengerClient messenger;
 
     private TransactionTemplate newTx() {
         TransactionTemplate t = new TransactionTemplate(txManager);
@@ -111,7 +68,7 @@ class ChatPushAfterCommitTest {
 
     @BeforeEach
     void reset() {
-        ((MutableClock) clock).set(NOW);
+        clock.set(NOW);
         when(messenger.sendMessage(anyString(), anyString(), anyMap())).thenReturn(true);
     }
 
@@ -127,8 +84,7 @@ class ChatPushAfterCommitTest {
     }
 
     private void advance(Duration d) {
-        MutableClock c = (MutableClock) clock;
-        c.set(c.instant().plus(d));
+        clock.set(clock.instant().plus(d));
     }
 
     private User toss(String name) {

@@ -1,5 +1,7 @@
 package com.booktimer.session;
 
+import com.booktimer.testsupport.MessengerTest;
+import com.booktimer.testsupport.MutableClock;
 import com.booktimer.timer.ReadingTimer;
 import com.booktimer.timer.ReadingTimerRepository;
 import com.booktimer.toss.TossMessengerClient;
@@ -10,19 +12,11 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.boot.test.context.TestConfiguration;
-import org.springframework.context.annotation.Bean;
-import org.springframework.context.annotation.Primary;
-import org.springframework.test.context.TestPropertySource;
-import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.time.Clock;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneId;
-import java.time.ZoneOffset;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
@@ -48,9 +42,8 @@ import static org.mockito.Mockito.when;
  *
  * <p>시계는 <b>전진 가능한</b> 것을 주입한다 — 자정을 넘겨 "다음 날 다시 발송"을 보려면 {@code Clock.fixed}로는 안 된다.
  */
-@SpringBootTest
+@MessengerTest
 @Transactional
-@TestPropertySource(properties = "booktimer.toss.messenger.goal-met-template-code=DAILY_GOAL_MET")
 class GoalMetPushServiceTest {
 
     private static final String SEOUL = "Asia/Seoul";
@@ -58,55 +51,23 @@ class GoalMetPushServiceTest {
     private static final Instant NOW = Instant.parse("2026-06-17T09:00:00Z");
     private static final long GOAL = 3600L;
 
-    /** 전진 가능한 시계 — 다음 날 재발송 검증에 필요(Clock.fixed는 못 움직인다). */
-    static class MutableClock extends Clock {
-        private Instant now = NOW;
-
-        void set(Instant instant) {
-            this.now = instant;
-        }
-
-        @Override
-        public ZoneId getZone() {
-            return ZoneOffset.UTC;
-        }
-
-        @Override
-        public Clock withZone(ZoneId zone) {
-            return this;
-        }
-
-        @Override
-        public Instant instant() {
-            return now;
-        }
-    }
-
-    @TestConfiguration
-    static class MutableClockConfig {
-        @Bean
-        @Primary
-        Clock mutableClock() {
-            return new MutableClock();
-        }
-    }
-
     @Autowired GoalMetPushService pushService;
     @Autowired UserRepository userRepository;
     @Autowired ReadingSessionRepository sessionRepository;
     @Autowired ReadingTimerRepository timerRepository;
     @Autowired com.booktimer.config.TossProperties tossProperties;
-    @Autowired Clock clock;
+    /** 전진 가능한 시계 — 다음 날 재발송 검증에 필요(Clock.fixed는 못 움직인다). */
+    @Autowired MutableClock clock;
 
-    @MockitoBean TossMessengerClient messengerClient;
+    @Autowired TossMessengerClient messengerClient;
 
     private MutableClock clock() {
-        return (MutableClock) clock;
+        return clock;
     }
 
     /**
-     * 시계 빈은 컨텍스트에 공유돼 다음 날 테스트가 전진시킨 값이 <b>다른 테스트로 샌다</b>(실행 순서 의존 =
-     * 플레이키). 매 테스트를 같은 "지금"에서 시작시킨다.
+     * 리셋 뒤 시계 값은 시스템 시각이라 이 클래스의 NOW가 아니다 — 날짜 판정이 흔들리지 않게 매 테스트를
+     * 같은 "지금"에서 시작시킨다.
      */
     @BeforeEach
     void resetClock() {
