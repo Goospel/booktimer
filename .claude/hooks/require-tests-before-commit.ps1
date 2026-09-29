@@ -142,7 +142,12 @@ $psi.FileName        = 'cmd.exe'
 $psi.Arguments       = $gateArgs
 $psi.UseShellExecute = $true    # 핸들 비상속 — 위 주석(T-078 4회차). CreateNoWindow 는 이 모드에서 무시된다
 $psi.WindowStyle     = [System.Diagnostics.ProcessWindowStyle]::Hidden
-$proc = [System.Diagnostics.Process]::Start($psi)
+# 시작 실패는 fail-closed — EAP=Continue 라 $proc 가 $null 이면 아래 WaitForExit 가 문장째 건너뛰어 exit 0(무검사 커밋)이 된다
+try { $proc = [System.Diagnostics.Process]::Start($psi) } catch { $proc = $null }
+if ($null -eq $proc) {
+    [Console]::Error.WriteLine('[BLOCKED] Could not start the gradle test gate (cmd.exe) -- commit aborted. Override: SKIP_TESTS.')
+    exit 2
+}
 
 $testExit = 0
 $timedOut = $false

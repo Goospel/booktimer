@@ -26,8 +26,11 @@
 #   - `--git-dir`/`--work-tree`, MSYS 마운트 경로(`/tmp/...`)
 #   - 따옴표 문자열 속 `git commit`·`&& cd T` 를 진짜 명령으로 읽는다(`echo "git commit later" && …`)
 #   - 의도된 차단: 변수로 여러 레포를 도는 루프(`for r in …; do git -C "$F/$r" commit`)
-#   - Test-GitVerb 가 커밋으로 못 읽는 것: 줄 이음(`git \` 개행 `commit`) · 따옴표로 감싼 git 전체 경로("C:\…\git.exe" commit)
-#     · 별칭(git ci — 옛 낱말 검사도 못 읽었다). 거꾸로 heredoc 본문 속 `git commit` 은 커밋으로 읽는다(넓은 쪽, T-228)
+#   - Test-GitVerb = 엄격한 서브커맨드 자리 패턴 OR 넓은 벨트. 벨트가 받아 주는 것: 값 중간 따옴표(`-c k="a b"`)·
+#     `--opt="a b"`·백슬래시 이스케이프(`-C my\ repo`)·대문자(`GIT commit`)·줄 이음(`git \` 개행 `commit`) — 엄격 패턴만으론
+#     놓쳐 테스트 없이 커밋됐다(PR #1219 리뷰). 여전히 못 읽는 것: 따옴표로 감싼 git 전체 경로("C:\…\git.exe" commit)
+#     · 별칭(git ci — 옛 낱말 검사도 못 읽었다). 대가(헛돎, 수용): 같은 명령 안의 낱말 `git log --grep commit`·
+#     `git add commit.txt`, heredoc·따옴표 본문 속 `git commit` 도 커밋으로 읽는다(놓침보다 헛돎, T-228)
 
 # `git [전역옵션] <verb>` 의 verb 자리만 잡는다 — 커밋 훅 5개의 트리거(Test-GitVerb)와 아래 Resolve 가 같은 문법을 쓴다.
 # 낱말 commit 이 `.commit-msg-tmp`·`--no-commit`·`--grep=commit` 속에 있으면 git 바로 뒤(전역옵션만 허용) 자리가
@@ -35,11 +38,16 @@
 # 1번 그룹 = 전역옵션 — Resolve 가 여기서 -C 값만 읽는다(-c 와 대소문자 구분).
 function Get-GitVerbPattern([string]$Verb) {
     $v = '(?:"[^"]*"|''[^'']*''|[^\s;&|]+)'   # 옵션 값: "…" | '…' | 맨 토큰(; & | 에서 끊는다)
-    '\bgit(?:\.exe)?((?:\s+(?:(?:-C|-c|--git-dir|--work-tree|--namespace)\s+' + $v + '|-{1,2}[\w-]+(?:=\S+)?))*)\s+' + $Verb + '(?![\w-])'
+    # 옵션 이름은 `--?[A-Za-z]` 로 시작 — 옛 `-{1,2}[\w-]+` 는 `--no-pager` 하나를 두 가지로 쪼개 매치 실패 시
+    # 2^n 역추적(n=20 에 8초)을 냈다. 이제 한 가지로만 읽힌다(PR #1219 리뷰)
+    '\bgit(?:\.exe)?((?:\s+(?:(?:-C|-c|--git-dir|--work-tree|--namespace)\s+' + $v + '|--?[A-Za-z][\w-]*(?:=\S+)?))*)\s+' + $Verb + '(?![\w-])'
 }
 
 function Test-GitVerb([string]$Command, [string]$Verb) {
-    return [regex]::IsMatch($Command, (Get-GitVerbPattern $Verb))
+    if ([regex]::IsMatch($Command, (Get-GitVerbPattern $Verb))) { return $true }
+    # 넓은 쪽(대소문자 무시 — 옛 -notmatch 와 같다): git 낱말 뒤, ; & | 줄바꿈 전까지 안에서 공백 하나 뒤에 오는
+    # verb 토큰. 끝의 \s 는 개행도 받아서 줄 이음(`git \` 개행 `commit`)까지 잡는다
+    return [regex]::IsMatch($Command, '(?i)\bgit(?:\.exe)?["'']?(?=\s)[^;&|\r\n]*?\s["'']?' + $Verb + '(?![\w-])')
 }
 
 function Resolve-HookTargetCwd([string]$Command, [string]$SessionCwd, [string]$Verb, [switch]$NoToplevel) {

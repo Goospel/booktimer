@@ -272,7 +272,7 @@ powershell -File .claude/scripts/remove-worktree.ps1 ../BookTimer-<task>   # 또
 ### ⚠️ 커밋이 무한 hang 하면 — esc 말고 강제 정리 (자주 재발)
 
 이 게이트가 `./gradlew test` 를 돌리므로 **"git 이 멈춘" 것처럼 보여도 실제론 gradle 테스트가 hang** 한 것일 때가 많다 —
-Claude Code 는 그 자식 프로세스 종료를 기다릴 뿐이라 **코어 버그가 아니다**(그래서 esc·머지로 안 풀리고 clear 로만 풀렸던 것).
+Claude Code 는 훅의 출력 파이프가 닫히기(EOF)를 기다릴 뿐이라 — 파이프를 쥔 자손(gradle 테스트·데몬)이 살아 있으면 훅이 끝나도 계속 기다린다 — **코어 버그가 아니다**(그래서 esc·머지로 안 풀리고 clear 로만 풀렸던 것).
 뿌리는 둘이었다 — **멀티 세션의 gradle 데몬·빌드 락 경합**, 그리고 **게이트가 새로 띄운 데몬이 훅의 출력 파이프를 물고 사는 것**(2026-09-29 T-078 4회차 — Claude Code는 훅 프로세스가 아니라 파이프 EOF를 기다린다. 게이트를 ShellExecute로 띄워 막았다). esc 는 이미 뜬 gradle 자식·데몬을 안 죽여 **다음 커밋도 또 hang**한다.
 
 - **이젠 게이트가 자가차단(하드, 2026-07-01)**: 커밋 훅 `require-tests-before-commit.ps1` 의 `gradlew test` 가 **20분 타임아웃**(`BOOKTIMER_TEST_GATE_TIMEOUT_MS` 로 조정하되 **상한 24분** — 상한에 5분 예비(앞서 도는 타임아웃 없는 프론트 테스트·taskkill 몫)를 더해도 `.claude/settings.json`의 이 훅 `timeout` 1800초 이하여야 한다. 넘으면 Claude Code가 훅을 취소하고 **테스트 없이 커밋을 통과**시킨다)으로 감싸여, 초과 시 **게이트 자신의 프로세스 트리만 `taskkill /T`로 끄고 커밋 차단(exit 2)** 한다(머신 전역 `gradlew --stop`은 2026-09-29에 뺐다 — 다른 세션의 빌드를 죽였다) → 45분 무한 freeze는 더 안 난다. **그래도 커밋이 20분+ 멈춰 있으면** 그건 게이트가 아닌 다른 빌드 hang일 수 있으니 아래 수동 정리로 간다.

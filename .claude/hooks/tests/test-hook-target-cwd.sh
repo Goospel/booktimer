@@ -213,6 +213,19 @@ for c in 'git -c "user.name=a b" commit -m x' 'git.exe commit -m x' 'git --no-pa
     tg "[REQ-02 ctrl] still a commit: $c" 2 "$c" "$TW"
 done
 tg '[REQ-02 ctrl] git -C <T> commit from session S' 2 "git -C \"$TW\" commit -F .commit-msg-tmp" "$SW"
+# review (PR #1219): the subcommand-position pattern alone missed these -- old trigger 2, new 0 = a commit
+# with no tests. Mid-value quotes, `--opt="a b"`, backslash-escaped spaces, upper case, line continuation.
+for c in 'git -c user.name="Goospel Kim" commit -m x' 'git -c core.editor="code --wait" commit' \
+         'git --work-tree="C:/a b" commit -m x' 'git -C my\ repo commit -m x' 'GIT commit -m x' \
+         $'git \\\ncommit -m x'; do
+    tg "[REQ-02 ctrl] still a commit: $c" 2 "$c" "$TW"
+done
+# review (PR #1219): `-{1,2}[\w-]+` split each --no-pager two ways -> 2^n backtracking when the pattern
+# fails (n=20: 8s). This commit makes the strict pattern fail, so it pays the full search before the belt
+# answers; run_hook's `timeout 90` turns a blow-up into 124 instead of a hang.
+NP=$(printf -- '--no-pager %.0s' $(seq 25))
+tg '[REQ-02 perf] 25x --no-pager + quoted -c value -> no regex blow-up, still a commit' 2 \
+    "git ${NP}-c user.name=\"a b\" commit -m x" "$TW"
 # every other commit hook: silent on a non-commit, still awake on the real commit (pairs)
 check '[REQ-03 RED] css: incident command -> not checked'        0 "$(run_hook require-css-comment-safe.ps1 "$INC" "$(win "$CT")")"
 check '[REQ-03 ctrl] css: real commit -> blocks'                  2 "$(run_hook require-css-comment-safe.ps1 "$C" "$(win "$CT")")"
