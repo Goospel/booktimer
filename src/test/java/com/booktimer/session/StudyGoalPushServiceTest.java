@@ -3,6 +3,8 @@ package com.booktimer.session;
 import com.booktimer.book.StudyBook;
 import com.booktimer.book.StudyBookRepository;
 import com.booktimer.config.TossProperties;
+import com.booktimer.testsupport.MessengerTest;
+import com.booktimer.testsupport.MutableClock;
 import com.booktimer.toss.TossMessengerClient;
 import com.booktimer.user.Role;
 import com.booktimer.user.User;
@@ -11,24 +13,16 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.boot.test.context.TestConfiguration;
-import org.springframework.context.annotation.Bean;
-import org.springframework.context.annotation.Primary;
 import org.springframework.jdbc.core.JdbcTemplate;
-import org.springframework.test.context.TestPropertySource;
-import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.TransactionDefinition;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.support.TransactionTemplate;
 
-import java.time.Clock;
 import java.time.Instant;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
-import java.time.ZoneOffset;
 import java.util.List;
 import java.util.Map;
 
@@ -53,47 +47,14 @@ import static org.mockito.Mockito.when;
  *   <li>마킹이 전 컬럼 UPDATE라 스케줄러와 {@code stop}이 겹칠 때 {@code endedAt}이 되살아나는 것(F16).</li>
  * </ul>
  */
-@SpringBootTest
+@MessengerTest
 @Transactional
-@TestPropertySource(properties = "booktimer.toss.messenger.study-goal-template-code=STUDY_GOAL_MET")
 class StudyGoalPushServiceTest {
 
     private static final ZoneId SEOUL = ZoneId.of("Asia/Seoul");
     /** 2026-06-17 18:00 KST — 자정에서 멀다. */
     private static final Instant NOW = Instant.parse("2026-06-17T09:00:00Z");
     private static final int GOAL = 50 * 60;
-
-    static class MutableClock extends Clock {
-        private Instant now = NOW;
-
-        void set(Instant instant) {
-            this.now = instant;
-        }
-
-        @Override
-        public ZoneId getZone() {
-            return ZoneOffset.UTC;
-        }
-
-        @Override
-        public Clock withZone(ZoneId zone) {
-            return this;
-        }
-
-        @Override
-        public Instant instant() {
-            return now;
-        }
-    }
-
-    @TestConfiguration
-    static class MutableClockConfig {
-        @Bean
-        @Primary
-        Clock mutableClock() {
-            return new MutableClock();
-        }
-    }
 
     @Autowired StudyGoalPushService pushService;
     @Autowired StudySessionService studySessionService;
@@ -103,13 +64,13 @@ class StudyGoalPushServiceTest {
     @Autowired TossProperties tossProperties;
     @Autowired PlatformTransactionManager transactionManager;
     @Autowired JdbcTemplate jdbcTemplate;
-    @Autowired Clock clock;
+    @Autowired MutableClock clock;
 
-    @MockitoBean TossMessengerClient messengerClient;
+    @Autowired TossMessengerClient messengerClient;
 
     @BeforeEach
     void resetClock() {
-        ((MutableClock) clock).set(NOW);
+        clock.set(NOW);
     }
 
     private User user(String email, boolean linkToss) {
@@ -295,7 +256,7 @@ class StudyGoalPushServiceTest {
     @DisplayName("자정 분할 뒤 원본 행만 goalNotifiedAt을 갖고 조각은 null이다")
     void midnightSplit_pieceHasNoNotifiedAt() {
         Instant started = LocalDateTime.parse("2026-06-17T23:40").atZone(SEOUL).toInstant();
-        ((MutableClock) clock).set(started.plusSeconds(15 * 60));
+        clock.set(started.plusSeconds(15 * 60));
         User u = user("sg11@booktimer.com", true);
         when(messengerClient.sendMessage(anyString(), anyString(), any())).thenReturn(true);
         StudySession original = active(u, book(u, 10 * 60), started);

@@ -3,6 +3,7 @@ package com.booktimer.chat;
 import com.booktimer.config.TossProperties;
 import com.booktimer.follow.Follow;
 import com.booktimer.follow.FollowRepository;
+import com.booktimer.testsupport.MessengerTest;
 import com.booktimer.toss.TossMessengerClient;
 import com.booktimer.user.Role;
 import com.booktimer.user.User;
@@ -11,10 +12,7 @@ import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.jdbc.core.JdbcTemplate;
-import org.springframework.test.context.TestPropertySource;
-import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.TransactionDefinition;
 import org.springframework.transaction.support.TransactionTemplate;
@@ -38,11 +36,7 @@ import static org.mockito.Mockito.when;
  * <p>단독으로 잡는 실패: 토스 연결된 ADMIN이 아닌 사람(일반 사용자·토스 없는 운영자)에게 가는 것 · 롤백된 신고에도
  * 가는 것 · 템플릿·스위치 없이도 나가려는 것(콘솔 미등록 템플릿 호출).
  */
-@SpringBootTest
-@TestPropertySource(properties = {
-        "booktimer.toss.messenger.ops-alert-enabled=true",
-        "booktimer.toss.messenger.ops-alert-template-code=OPS_TEST"
-})
+@MessengerTest
 class ChatOpsAlertTest {
 
     @Autowired ChatSafetyService safety;
@@ -52,7 +46,7 @@ class ChatOpsAlertTest {
     @Autowired JdbcTemplate jdbc;
     @Autowired PlatformTransactionManager txManager;
 
-    @MockitoBean TossMessengerClient messenger;
+    @Autowired TossMessengerClient messenger;
 
     @BeforeEach
     void stub() {

@@ -1,5 +1,6 @@
 package com.booktimer.book;
 
+import com.booktimer.testsupport.MessengerTest;
 import com.booktimer.toss.TossMessengerClient;
 import com.booktimer.user.Role;
 import com.booktimer.user.User;
@@ -7,10 +8,7 @@ import com.booktimer.user.UserRepository;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.security.crypto.password.PasswordEncoder;
-import org.springframework.test.context.TestPropertySource;
-import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.transaction.annotation.Transactional;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -36,9 +34,8 @@ import static org.mockito.Mockito.when;
  * <p>{@code TossMessengerClient}를 mock으로 등록해 게이트 OFF(빈 없음) 상태를 우회하고, 실제
  * {@link FinishCelebrationService} 배선을 그대로 통과시킨다 — 전환 감지부터 발송까지가 한 줄로 이어지는지 본다.
  */
-@SpringBootTest
+@MessengerTest
 @Transactional
-@TestPropertySource(properties = "booktimer.toss.messenger.finish-template-code=FINISH_CELEBRATION")
 class BookServiceCelebrationTest {
 
     @Autowired
@@ -48,7 +45,7 @@ class BookServiceCelebrationTest {
     @Autowired
     private PasswordEncoder passwordEncoder;
 
-    @MockitoBean
+    @Autowired
     private TossMessengerClient messengerClient;
 
     private User tossUser(String email) {

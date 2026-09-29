@@ -3,6 +3,8 @@ package com.booktimer.chat;
 import com.booktimer.block.BlockService;
 import com.booktimer.follow.Follow;
 import com.booktimer.follow.FollowRepository;
+import com.booktimer.testsupport.MessengerTest;
+import com.booktimer.testsupport.MutableClock;
 import com.booktimer.toss.TossMessengerClient;
 import com.booktimer.user.Role;
 import com.booktimer.user.User;
@@ -11,22 +13,13 @@ import jakarta.persistence.EntityManager;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.boot.test.context.TestConfiguration;
-import org.springframework.context.annotation.Bean;
-import org.springframework.context.annotation.Primary;
 import org.springframework.http.HttpStatus;
 import org.springframework.jdbc.core.JdbcTemplate;
-import org.springframework.test.context.TestPropertySource;
-import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.nio.charset.StandardCharsets;
-import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
-import java.time.ZoneId;
-import java.time.ZoneOffset;
 import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -42,47 +35,11 @@ import static org.mockito.Mockito.when;
  * 가장 자연스럽고, 그러면 언팔·차단 뒤에도 메시지가 계속 간다. 그래서 언팔·차단·재맞팔을 전부 실제 관계
  * 테이블로 밟는다. 멤버가 아닌 사용자의 모든 경로(목록·조회·발송·읽음·숨김)가 404인지도 전수로 본다.
  */
-@SpringBootTest
+@MessengerTest
 @Transactional
-@TestPropertySource(properties = {
-        "booktimer.toss.messenger.dm-message-enabled=true",
-        "booktimer.toss.messenger.dm-message-template-code=DM_TEST"
-})
 class ChatRoomServiceTest {
 
     static final Instant NOW = Instant.parse("2026-09-18T03:00:00Z");
-
-    static class MutableClock extends Clock {
-        private Instant now = NOW;
-
-        void set(Instant instant) {
-            now = instant;
-        }
-
-        @Override
-        public ZoneId getZone() {
-            return ZoneOffset.UTC;
-        }
-
-        @Override
-        public Clock withZone(ZoneId zone) {
-            return this;
-        }
-
-        @Override
-        public Instant instant() {
-            return now;
-        }
-    }
-
-    @TestConfiguration
-    static class ClockConfig {
-        @Bean
-        @Primary
-        Clock mutableClock() {
-            return new MutableClock();
-        }
-    }
 
     @Autowired ChatRoomService service;
     @Autowired UserRepository userRepository;
@@ -90,19 +47,18 @@ class ChatRoomServiceTest {
     @Autowired BlockService blockService;
     @Autowired EntityManager em;
     @Autowired JdbcTemplate jdbc;
-    @Autowired Clock clock;
+    @Autowired MutableClock clock;
 
-    @MockitoBean TossMessengerClient messenger;
+    @Autowired TossMessengerClient messenger;
 
     @BeforeEach
     void reset() {
-        ((MutableClock) clock).set(NOW);
+        clock.set(NOW);
         when(messenger.sendMessage(anyString(), anyString(), anyMap())).thenReturn(true);
     }
 
     private void advance(Duration d) {
-        MutableClock c = (MutableClock) clock;
-        c.set(c.instant().plus(d));
+        clock.set(clock.instant().plus(d));
     }
 
     private User toss(String name) {
