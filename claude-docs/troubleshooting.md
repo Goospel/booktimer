@@ -192,7 +192,7 @@
 - [T-093](troubleshooting/T-093.md) · 워크트리 `npm run build`가 무관 9개 번들을 CRLF-only로 ` M` 표시 — `git diff --numstat`로 감별, 변경 파일만 stage **→ hookify/warn-inplace-replace-crlf.md**
 - [T-092](troubleshooting/T-092.md) · minified Vue 프로덕션 번들은 `setupState` 키가 숨겨짐 — 루트 `_vnode.component`에서 `subTree` BFS+props 변이
 - [T-091](troubleshooting/T-091.md) · `pr-merge.sh`가 머지 성공 후 `git push origin --delete`에서 hang → 백그라운드 머지 안 끝남
-- [T-090](troubleshooting/T-090.md) · Windows preview `launch.json`으로 `gradlew bootRun` 못 띄움 — `cmd /c <절대경로>gradlew.bat -p <절대경로> bootRun`
+- [T-090](troubleshooting/T-090.md) · 경로 없는 `gradlew.bat`을 cmd가 「not recognized」로 못 찾는다 — Claude Code가 켠 `NoDefaultCurrentDirectoryInExePath=1`이 cmd의 현재 폴더 탐색을 끈다. 전체 경로 + `-p`로 부른다(preview `launch.json` bootRun·`cmd /c`·Start-Process 공통)
 - [T-089](troubleshooting/T-089.md) · 반응형 재현 하니스 mock이 production worst-case(최장 문자열)를 안 담으면 RED가 안 떠 레이아웃 버그를 놓침
 - [T-088](troubleshooting/T-088.md) · 백그라운드 PR 머지 태스크를 띄우고 완료 후속(exit 코드 확인)을 안 챙겨 머지 방치
 - [T-087](troubleshooting/T-087.md) · CSS 주석 속 `*/`가 주석을 조기 종료해 다음 규칙을 침묵 드랍
