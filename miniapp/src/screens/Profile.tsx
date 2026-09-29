@@ -1310,7 +1310,7 @@ export function SafetyPanel({
  * 상태 필터 칩 — 성향 태그 칩과 같은 문법(알약·13px)이되 <b>걸린 것만 배경이 반전</b>된다.
  * 지금 무엇으로 좁혔는지는 소제목도 말하지만, 줄 안에서 "어느 칩이 눌렸나"는 색이 져야 한 눈에 읽힌다.
  */
-const filterChipStyle = (active: boolean) =>
+export const filterChipStyle = (active: boolean) =>
   ({
     display: 'inline-block',
     padding: '6px 10px',

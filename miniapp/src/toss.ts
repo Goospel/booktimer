@@ -90,6 +90,9 @@ export const PERSONALITY_AD_GROUP_ID: string = import.meta.env.VITE_PERSONALITY_
 /**
  * 알림 동의문의 콘솔 발송(템플릿) 코드. 캠페인 2종(완독 축하·하루 목표 달성)이 **같은 동의문 한 장**을
  * 쓰므로 한 번만 물어보면 둘 다 커버된다 — 동의 단위는 캠페인이 아니라 동의문이다.
+ *
+ * <p>v1 코드지만 서버가 보내는 v2(`-v2`)와 같은 동의문(114526)이라 요청 결과가 같다. 콘솔 템플릿은 삭제가 안 돼
+ * v1이 사라지지 않는다 — 바꿀 이유가 없다.
  */
 export const GOAL_MET_TEMPLATE_CODE = 'booktimer-daily-goal-met';
 

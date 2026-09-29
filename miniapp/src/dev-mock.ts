@@ -34,7 +34,10 @@ import type {
   StudyState,
   TimerState,
   UserRow,
+  ReadingReminder,
+  ReminderKind,
 } from './api';
+import { REMINDER_HOURS } from './readingReminder';
 
 /**
  * 브라우저 dev 목(mock) 서버 — `npm run dev:mock`에서만 로드된다(`api.ts`의 dynamic import).
@@ -201,6 +204,17 @@ const books: MyBookSummary[] = [
 ];
 
 const state = {
+  /**
+   * 독서 알림(N3) — <b>켠 상태로 시작한다</b>. 목 모드엔 동의 SDK가 없어 꺼짐→켬(동의 창)을 밟을 수 없으므로,
+   * 설정 섹션의 켠 화면(칩·시각·요약)을 브라우저로 보려면 이 값이어야 한다. 홈 제안 카드도 같은 이유로 목에선 안 선다.
+   */
+  readingReminder: {
+    available: true,
+    kind: 'DAILY',
+    hour: 20,
+    everOn: true,
+    agreementCode: 'booktimer-reading-reminder-rest',
+  } as ReadingReminder,
   goalSeconds: 1_800,
   remainingSeconds: 900,
   /**
@@ -1190,7 +1204,20 @@ const routes: [Method, RegExp, (ctx: Ctx) => unknown][] = [
     graph: buildGraph(),
     emailVerified: true,
     study: studyState(),
+    readingReminder: { ...state.readingReminder },
   })],
+
+  // 독서 알림 저장 — 서버 검증을 흉내낸다(방식 셋 · 시각 8~22 밖이면 400, 상태는 그대로). 꺼짐→켬이면 켠 적 있음.
+  ['POST', /^\/api\/miniapp\/reading-reminder$/, ({ body }) => {
+    const kind = body.kind as ReminderKind;
+    const hour = body.hour as number;
+    if (!['OFF', 'DAILY', 'REST'].includes(kind) || !REMINDER_HOURS.includes(hour)) {
+      throw new ApiError(400, '알림 설정 값이 올바르지 않아요.');
+    }
+    const everOn = state.readingReminder.everOn || kind !== 'OFF';
+    state.readingReminder = { ...state.readingReminder, kind, hour, everOn };
+    return { ...state.readingReminder };
+  }],
 
   // 웹 history 섬이 쓰던 그 엔드포인트 — 미니앱 기록 탭이 잔디 아래 목록에 쓴다(서버 무변경).
   ['GET', /^\/api\/history$/, () => ({ months: buildMonths() })],

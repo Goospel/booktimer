@@ -2,7 +2,7 @@ import { Button } from '@toss/tds-mobile';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
 
-import type { BookOption, ChatMe, ChatPartner, DashboardResponse, MarginBook, SessionRow, StudyState, TimerState } from './api';
+import type { BookOption, ChatMe, ChatPartner, DashboardResponse, MarginBook, ReadingReminder, SessionRow, StudyState, TimerState } from './api';
 import { IDLE_STUDY, changeActiveBook, changeActiveStudyBook, fetchChatMe, fetchDashboard, setSessionBook, setStudySessionBook, setStudySessionGoal, startSession, startStudy, stopSession, stopStudy, tagBook, tagStudyBook, token } from './api';
 import { nativeBack, useBackClose } from './back';
 import { CACHE_HISTORY, CACHE_STUDY_HISTORY, cacheDrop } from './cache';
@@ -14,6 +14,14 @@ import {
   setCoachmarkWalking,
 } from './coachmark';
 import { elapsedSeconds } from './format';
+import type { OfferPhase } from './readingReminder';
+import {
+  acceptReminderOffer,
+  agreementErrorMessage,
+  readOfferCache,
+  shouldOfferReadingReminder,
+  writeOfferCache,
+} from './readingReminder';
 import { Bookshop } from './screens/Bookshop';
 import type { ChatEntry } from './screens/Bookshop';
 import { ChatInbox, ChatRoomScreen, initialChat } from './screens/Chat';
@@ -32,7 +40,7 @@ import { StudyCalendar } from './screens/StudyCalendar';
 import { StudyHistory } from './screens/StudyHistory';
 import { StudyLibrary } from './screens/StudyLibrary';
 import { BookMargin, BookMarginAll, StoryComposer } from './screens/Story';
-import { showInterstitialAd, subscribeNativeBack, trackEvent, trackScreen } from './toss';
+import { notificationAgreementSupported, showInterstitialAd, subscribeNativeBack, trackEvent, trackScreen } from './toss';
 import { flushTrial } from './trial';
 import { CoverInitial, ErrorMessage, Loading, PUFF, SERIF_VALUE, Screen, Sheet } from './ui';
 
@@ -1030,6 +1038,11 @@ export function App() {
     setDashboard((prev) => (prev === null ? prev : { ...prev, graph }));
   }, []);
 
+  /** 독서 알림 저장 응답 반영 — 홈 제안 조건(`everOn`)과 설정 화면이 같은 값을 본다. */
+  const applyReminder = useCallback((readingReminder: ReadingReminder) => {
+    setDashboard((prev) => (prev === null ? prev : { ...prev, readingReminder }));
+  }, []);
+
   /** 여백 문을 열면서 도는 종료 왕복 — 연타하면 두 번째 stop을 서버가 409로 거절한다. */
   const stoppingForMargin = useRef(false);
 
@@ -1119,6 +1132,7 @@ export function App() {
         goalAdPending={goalAdPending}
         onLogout={toLogin}
         onError={handleError}
+        onReminderChange={applyReminder}
       />
     );
   }
@@ -1421,6 +1435,7 @@ export function App() {
       onShelfChanged={() => silentRefresh(true)}
       onHandleCreated={() => silentRefresh(true)}
       chat={chatEntry}
+      onReminderChange={applyReminder}
     />,
   );
 }
@@ -1493,6 +1508,7 @@ export function MainTabs({
   onShelfChanged,
   onHandleCreated,
   chat,
+  onReminderChange = () => {},
 }: {
   tab: TabKey;
   onTabChange: (tab: TabKey) => void;
@@ -1539,6 +1555,8 @@ export function MainTabs({
   onHandleCreated: () => void;
   /** 대화 진입점 — 대화가 꺼져 있으면 없다(홈 카드·책방 대화함·남의 책방 「메시지」가 함께 사라진다). */
   chat?: ChatEntry;
+  /** 독서 알림을 켰다 — App이 대시보드에 반영한다. 선택 프롭(옛 하니스는 안 넘긴다). */
+  onReminderChange?: (reminder: ReadingReminder) => void;
 }) {
   /** 액션 처리 중 — 연타로 세션이 두 번 시작·종료되지 않게 원을 흐리고 핸들러를 잠근다. */
   const [busy, setBusy] = useState(false);
@@ -1583,6 +1601,11 @@ export function MainTabs({
    * ({@link crossedGoal}), 다시 재기 시작하거나 홈·독서를 떠나면 꺼진다(달성 표식은 새싹 머리말이 이어받는다).
    */
   const [goalReached, setGoalReached] = useState(false);
+  /**
+   * 독서 알림 제안 카드(N3) — 켜는 건 <b>독서</b> 측정 종료 응답 한 번뿐이고({@link shouldOfferReadingReminder}),
+   * 다음 측정 시작(독서·공부)이나 「괜찮아요」에 치운다. 공부 종료·여백 문 종료는 배선하지 않는다(설계 §3-9).
+   */
+  const [reminderOffer, setReminderOffer] = useState<OfferPhase | null>(null);
   // 끄는 자리를 한 곳에 모은다 — 탭이 바뀌는 길(탭바·코치마크·기록 보기)과 모드가 뒤집히는 길(토글·공부 시작·
   // 다른 기기)이 전부 이 두 값을 지난다. 바뀔 때만 도므로 다른 탭에서 끝낸 달성은 홈에 돌아오면 그대로 뜬다.
   useEffect(() => {
@@ -1803,6 +1826,7 @@ export function MainTabs({
     }
     // 무엇을 잴지는 홈 캐러셀 선택이 정한다 — 독서와 같은 규칙(`timerStartBookId`)을 공부 목록에 그대로 쓴다.
     // 서재에서 빠진 id는 「책 없이」로 강등되므로 어떤 조합에서도 원이 죽지 않는다.
+    setReminderOffer(null); // 지난 독서 종료의 제안은 새 측정에서 거둔다
     startStudy(timerStartBookId(study.books ?? [], study.recentBookId ?? null, studyBookId))
       .then((next) => {
         onStudyChange(next);
@@ -1839,6 +1863,14 @@ export function MainTabs({
           setGoalReached(crossedGoal(dashboard, result.timer));
           // 이 앱의 핵심 전환 — 콘솔 대표 전환이 이 이벤트라, 빠지면 지표 자체가 죽는다.
           trackEvent('reading_session_completed', { duration_seconds: duration });
+          // 독서 알림 제안 — 측정을 마친 뒤, 아직 켠 적 없고 답하지 않은 사람에게만(화면 안 카드, T-183).
+          const offer = shouldOfferReadingReminder({
+            reminder: dashboard.readingReminder,
+            supported: notificationAgreementSupported(),
+            cached: readOfferCache(),
+          });
+          setReminderOffer(offer ? { kind: 'idle' } : null);
+          if (offer) trackEvent('reading_reminder_offered');
           // 종료 직후 시트를 저절로 연다(태깅은 지금 기억이 가장 선명하다). 붙일 책이 0권이면 열지 않는다 —
           // 빈 시트는 닫는 것 말고 할 수 있는 게 없는 막다른 길이다. 후보는 읽는 중만이 아니라 세 상태다(R2 P8) —
           // 읽고 싶어요만 담은 사람에게도 붙일 책이 있다.
@@ -1850,6 +1882,7 @@ export function MainTabs({
     } else {
       setCelebrate(false); // 지난 세션의 축하가 새 측정 화면에 남아 있으면 거짓말이 된다.
       setGoalReached(false);
+      setReminderOffer(null);
       onStartTimer()
         .then((timer) => {
           // 책은 서버가 확정한 값을 쓴다(`?? null`은 이 필드를 안 주는 옛 서버 방어 — api.ts의 기존 규약).
@@ -1859,6 +1892,29 @@ export function MainTabs({
         .catch(fail)
         .finally(() => setBusy(false));
     }
+  };
+
+  /** 제안 카드 「알림 받기」 — 「3일 쉬면」을 서버 기본 시각으로 켠다(시각을 추측하지 않는다). 동의 먼저, 저장은 그다음. */
+  const pickReminder = () => {
+    setReminderOffer({ kind: 'busy' });
+    // 답이 오는 사이 새 측정을 시작했으면 카드는 이미 치워졌다 — 늦은 결과로 되살리지 않는다(`prev === null`).
+    const settle = (next: OfferPhase | null) => setReminderOffer((prev) => (prev === null ? prev : next));
+    acceptReminderOffer(dashboard.readingReminder)
+      .then(({ phase, reminder }) => {
+        if (reminder !== null) onReminderChange(reminder); // 켠 사실은 카드와 무관하게 대시보드에 남긴다
+        settle(phase);
+      })
+      .catch((e: Error) => {
+        if (e.name === 'UnauthorizedError') onError(e);
+        else settle({ kind: 'error', message: agreementErrorMessage(e) });
+      });
+  };
+
+  /** 「괜찮아요」 — 한 번이면 끝이다(캐시). 다시 켜고 싶으면 설정에서. */
+  const dismissReminder = () => {
+    writeOfferCache('dismissed');
+    trackEvent('reading_reminder_dismissed');
+    setReminderOffer(null);
   };
 
   /**
@@ -2010,6 +2066,16 @@ export function MainTabs({
             onContinueReading={timerAction}
             onGoHistory={() => changeTab('history')}
             onChangeActiveBook={() => setChanging(true)}
+            readingReminderOffer={
+              reminderOffer === null
+                ? null
+                : {
+                    phase: reminderOffer,
+                    hour: dashboard.readingReminder?.hour ?? 20,
+                    onPick: pickReminder,
+                    onDismiss: dismissReminder,
+                  }
+            }
           />
         )}
         {/* 서재 탭은 두 모드 공통이지만 화면은 갈린다 — 공부 책과 독서 책이 섞이지 않는 것이 요구 그 자체다. */}

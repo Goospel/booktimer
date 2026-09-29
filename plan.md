@@ -2015,7 +2015,9 @@ SNS 토대(팔로우·공개범위·프로필)가 깔려 있어 ②의 사용자
   - [x] PR-1 옛 넛지 폐기 + 발송 결과 관측
   - [x] 콘솔 — 「안 읽은 날 독서 알림 동의문」 termsId 125828 · 매일 그룹 13045 `booktimer-reading-reminder-daily` · 3일 그룹 13047 `booktimer-reading-reminder-rest`(둘 다 AI 검수 APPROVED) · SSM 선생성(`TOSS_READING_REMINDER_*`, ENABLED=false)
   - [x] PR-2 서버 다크런치 — `users` 컬럼 4개(V97) · `POST /api/miniapp/reading-reminder`(400·409 평문) · 대시보드 `readingReminder` 동봉 · 매시 정각 배치(`ReadingReminderScheduler`, 선점 후 발송·실패 반납) · 처리방침 수집 항목·목적. 토글 `TOSS_READING_REMINDER_ENABLED=false`라 배치 빈이 없고 화면도 숨는다(가용=false)
-  - [ ] 점등(S-2 SSM true → 재배포 → 정시 로그 `독서 알림 배치`) → PR-3 미니앱 → 실기기 → 검수
+  - [x] 점등 S-2 — SSM `TOSS_READING_REMINDER_ENABLED` true → 재배포 → 컨테이너 env `true`(2026-09-29). 정시 로그 `독서 알림 배치`(U-13)는 확인 대기
+  - [x] PR-3 미니앱 — 독서 측정 종료 직후 홈 제안 카드(「3일 쉬면」 하나 · 「괜찮아요」 · 옛 114526 카드는 독서 모드에서 이 카드가 서 있는 동안만 숨김) + 설정 「독서 알림」 섹션(끄기·매일·3일 쉬면 칩 · 보낼 시각 8~22시 select — 꺼져 있어도 먼저 고른다 · 요약 · 토스 설정 각주). 동의 성공 뒤에만 저장, 이벤트 `reading_reminder_offered`·`_dismissed`·`_consent`. 목 모드 실측(진입 직후 덮는 요소 = 탭바뿐 · 설정 칩·시각·전환 저장)
+  - [ ] 테스트 번들 업로드(`deploy.sh --expect "독서 알림을 받아 볼까요?"`) → 실기기 한 바퀴(U-3·U-4·U-7②·U-8·U-9·U-10) → 검수
 
 - **스마트 발송 현황 — 절반을 쓰고 있었고, 그 절반은 플랫폼이 접었다** ✅ 기능성 운영 중(재참여 넛지는 2026-09-26 폐기) /
   ⛔ **광고성은 2026-10-01 플랫폼 종료**(08-25 등록 → 08-28 종료 공지) — 「스마트발송을 도입하자」에서

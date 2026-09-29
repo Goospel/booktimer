@@ -42,6 +42,8 @@ import {
   Text,
   sectionStyle,
 } from '../ui';
+import type { OfferPhase } from '../readingReminder';
+import { READING_REMINDER_OFFER_TITLE, REST_DAYS, hourLabel } from '../readingReminder';
 import { HomeFeedBox } from './HomeFeed';
 import { SessionGoalSheet } from './SessionGoalSheet';
 
@@ -247,6 +249,87 @@ export function FirstSessionBanner({ show }: { show: boolean }) {
         <SproutMark size={14} /> 첫 독서 기록이 심어졌어요! 기록 탭에 첫 칸이 생겼어요.
       </Text>
     </div>
+  );
+}
+
+/** 카드 안 글자 버튼 — 채움도 테두리도 없는 보조 동작(「괜찮아요」·설정으로). 홈의 채움은 탭바 원 하나다. */
+const TEXT_BUTTON: CSSProperties = {
+  display: 'block',
+  width: '100%',
+  marginTop: 4,
+  padding: '10px 0',
+  border: 'none',
+  background: 'none',
+  font: 'inherit',
+  cursor: 'pointer',
+};
+
+/**
+ * 독서 알림 제안(N3) — <b>독서 측정을 끝낸 직후에만</b> 홈 안에 서는 카드. 권하는 것은 「3일 안 읽으면 한 번」
+ * 하나다(시각을 추측하지 않는다 — 「매일」은 설정에서 시각을 고른 뒤 켠다).
+ *
+ * <p>화면을 덮지 않는다(T-183) — position·z-index 없는 섹션 한 장이고, 사용자가 「알림 받기」를 눌러야 토스 동의
+ * 창이 뜬다. 상태(`phase`)를 프롭으로 받는 이유는 이 파일의 다른 카드와 같다: 정적 렌더 하니스가 클릭을 못 돌린다.
+ */
+export function ReadingReminderOffer({
+  phase,
+  hour,
+  onPick,
+  onDismiss,
+  onGoSettings,
+}: {
+  phase: OfferPhase;
+  /** 켤 때 쓸 시각 — 서버 기본값(20시). 본문이 이 값을 말한다. */
+  hour: number;
+  onPick: () => void;
+  onDismiss: () => void;
+  onGoSettings: () => void;
+}) {
+  // 한 장의 카드가 상태에 따라 속만 갈아 끼운다(카드가 사라졌다 다시 서면 자리가 흔들린다).
+  return (
+    <section style={sectionStyle}>
+      {phase.kind === 'on' ? (
+        <>
+          <Text typography="st11" style={{ display: 'block', wordBreak: 'keep-all' }}>
+            {phase.summary}
+          </Text>
+          <button type="button" onClick={onGoSettings} style={TEXT_BUTTON}>
+            <Text typography="st12" color="grey600">
+              매일 알림·시각은 설정에서 바꿀 수 있어요 ›
+            </Text>
+          </button>
+        </>
+      ) : phase.kind === 'rejected' ? (
+        <Text typography="st12" color="grey600" style={{ display: 'block', wordBreak: 'keep-all' }}>
+          동의하지 않아 알림을 켜지 않았어요. 설정에서 언제든 다시 켤 수 있어요.
+        </Text>
+      ) : (
+        <>
+          <Text typography="st11" fontWeight="bold" style={{ display: 'block' }}>
+            {READING_REMINDER_OFFER_TITLE}
+          </Text>
+          <Text typography="st12" color="grey600" style={{ display: 'block', marginTop: 6, wordBreak: 'keep-all' }}>
+            독서 기록 없이 {REST_DAYS}일째가 되면 {hourLabel(hour)}에 토스 알림으로 한 번 알려 드려요.
+          </Text>
+          <ErrorMessage message={phase.kind === 'error' ? phase.message : null} />
+          <Button
+            display="block"
+            variant="weak"
+            size="medium"
+            style={{ marginTop: 14 }}
+            disabled={phase.kind === 'busy'}
+            onClick={onPick}
+          >
+            알림 받기
+          </Button>
+          <button type="button" onClick={onDismiss} disabled={phase.kind === 'busy'} style={TEXT_BUTTON}>
+            <Text typography="st12" color="grey600">
+              괜찮아요
+            </Text>
+          </button>
+        </>
+      )}
+    </section>
   );
 }
 
@@ -1443,6 +1526,7 @@ export function Home({
   onContinueReading = () => {},
   onGoHistory = () => {},
   onChangeActiveBook = () => {},
+  readingReminderOffer = null,
 }: {
   dashboard: DashboardResponse;
   /** 지금 재는 것 — 히어로 한 장이 이 값으로 두 얼굴을 갖는다(파생은 App이 한다). */
@@ -1506,6 +1590,11 @@ export function Home({
   onGoHistory?: () => void;
   /** 측정 중 [책 바꾸기] — 교체 시트는 App이 연다(토스트의 [바꾸기]와 같은 시트). 옛 하니스는 안 넘긴다. */
   onChangeActiveBook?: () => void;
+  /**
+   * 독서 알림 제안(N3) — 상태는 `MainTabs`가 든다(독서 측정 종료 응답에서만 켜고, 다음 시작에 끈다).
+   * `null`이면 카드가 없다. 선택 프롭인 이유는 옛 하니스들이다.
+   */
+  readingReminderOffer?: { phase: OfferPhase; hour: number; onPick: () => void; onDismiss: () => void } | null;
 }) {
   /**
    * 측정할 책 — 탭바 원이 시작할 대상과 <b>같은 함수</b>로 정한다(아직 안 골랐으면 이어 읽기, 서재에서 빠진 id면
@@ -1968,6 +2057,11 @@ export function Home({
           `celebrate`는 `MainTabs`가 들어 탭 전환에 살아남으므로, 켜진 채 토글만 넘기면 공부 화면에 떴다. */}
       {mode === 'reading' && <FirstSessionBanner show={celebrate} />}
 
+      {/* 독서 알림 제안 — 측정을 끝낸 뒤 화면 안에 선다(진입 직후 덮는 것 금지, T-183). 눌러야 동의 창이 뜬다. */}
+      {mode === 'reading' && readingReminderOffer !== null && (
+        <ReadingReminderOffer {...readingReminderOffer} onGoSettings={onGoSettings} />
+      )}
+
       {/* 새 메시지 — 화면 안 카드다(진입 직후 덮는 것 금지, T-183). 눌러야 대화함이 열린다. */}
       {chatUnread !== undefined && chatUnread > 0 && onOpenChat !== undefined && (
         <section style={sectionStyle}>
@@ -1998,7 +2092,9 @@ export function Home({
       )}
 
       {/* 알림 동의 — 발송은 동의한 유저에게만 가능하고, 동의를 받는 주체는 미니앱이다(콘솔 심사 조건). */}
-      {shouldShowNotificationCard(agreements[mode], agreementSupported) && (
+      {/* 독서 모드에서 새 제안 카드가 서 있는 동안만 숨긴다 — 「알림 받기」 두 장이 뜻이 다른 채 나란히 서지 않게(N3 Q6).
+          옛 카드는 모드별이라 공부 모드의 공부 동의 카드는 그대로 둔다. */}
+      {shouldShowNotificationCard(agreements[mode], agreementSupported) && !(mode === 'reading' && readingReminderOffer !== null) && (
         <section style={sectionStyle}>
           <Text typography="st11" color="grey600" style={{ display: 'block', marginBottom: 10 }}>
             {notificationAgreementTarget(mode).copy}
