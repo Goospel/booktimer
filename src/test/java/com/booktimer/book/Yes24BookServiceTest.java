@@ -3,12 +3,11 @@ package com.booktimer.book;
 import com.booktimer.user.Role;
 import com.booktimer.user.User;
 import com.booktimer.user.UserRepository;
+import com.booktimer.testsupport.MockedBoundaryTest;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.security.crypto.password.PasswordEncoder;
-import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.transaction.annotation.Transactional;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -28,7 +27,7 @@ import static org.mockito.Mockito.when;
  * <p>모바일 UA 분기(T-128)는 컨트롤러가 판별한 {@code mobileDevice}를 그대로 빌더에 전달하는지만 본다 —
  * UA 판별 자체(경계값)는 {@link Yes24LinkBuilderTest#isMobileUserAgent_detectsKnownMobileDevices()}가 담당.
  */
-@SpringBootTest
+@MockedBoundaryTest
 @Transactional
 class Yes24BookServiceTest {
 
@@ -39,9 +38,7 @@ class Yes24BookServiceTest {
     @Autowired
     private PasswordEncoder passwordEncoder;
 
-    @MockitoBean
-    private BookSearchClient searchClient;
-    @MockitoBean
+    @Autowired
     private Yes24LinkBuilder yes24LinkBuilder;
 
     private static final String YES24_LINK = "https://www.yes24.com/product/search?query=x&pid=LP1234567";

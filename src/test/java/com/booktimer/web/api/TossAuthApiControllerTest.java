@@ -10,14 +10,12 @@ import com.booktimer.user.Role;
 import com.booktimer.user.TossLinkCodeService;
 import com.booktimer.user.User;
 import com.booktimer.user.UserRepository;
+import com.booktimer.testsupport.MockedBoundaryTest;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.http.MediaType;
-import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -37,8 +35,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
  * <b>세션·CSRF 없이</b> 호출된다는 점이 핵심이다(Bearer 체인이 라우팅) — CSRF 토큰을 붙이지 않은
  * 이 테스트들이 통과한다는 사실 자체가 체인 분리의 증명이다.
  */
-@SpringBootTest
-@AutoConfigureMockMvc
+@MockedBoundaryTest
 @Transactional
 class TossAuthApiControllerTest {
 
@@ -47,7 +44,7 @@ class TossAuthApiControllerTest {
     @Autowired TossLinkCodeService linkCodeService;
     @Autowired RateLimitService rateLimitService;
 
-    @MockitoBean TossLoginClient tossLoginClient;
+    @Autowired TossLoginClient tossLoginClient;
 
     @BeforeEach
     void resetRateLimit() {

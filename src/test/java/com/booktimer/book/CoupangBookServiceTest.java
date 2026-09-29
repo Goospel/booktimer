@@ -3,12 +3,11 @@ package com.booktimer.book;
 import com.booktimer.user.Role;
 import com.booktimer.user.User;
 import com.booktimer.user.UserRepository;
+import com.booktimer.testsupport.MockedBoundaryTest;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.security.crypto.password.PasswordEncoder;
-import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.transaction.annotation.Transactional;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -30,7 +29,7 @@ import java.util.Optional;
  * {@code Optional.empty()})이라, 별도 스텁 없는 기존 테스트는 "딥링크 API 미설정/실패 → raw URL 폴백"
  * 경로를 그대로 검증한다(회귀). 딥링크 API가 성공하는 경로는 별도 테스트로 명시적으로 스텁한다.
  */
-@SpringBootTest
+@MockedBoundaryTest
 @Transactional
 class CoupangBookServiceTest {
 
@@ -41,11 +40,9 @@ class CoupangBookServiceTest {
     @Autowired
     private PasswordEncoder passwordEncoder;
 
-    @MockitoBean
-    private BookSearchClient searchClient;
-    @MockitoBean
+    @Autowired
     private CoupangLinkBuilder coupangLinkBuilder;
-    @MockitoBean
+    @Autowired
     private CoupangDeeplinkClient deeplinkClient;
 
     private static final String COUPANG_LINK = "https://www.coupang.com/np/search?q=x&lptag=AF1234567";

@@ -7,13 +7,11 @@ import com.booktimer.book.CoupangLinkBuilder;
 import com.booktimer.user.Role;
 import com.booktimer.user.User;
 import com.booktimer.user.UserRepository;
+import com.booktimer.testsupport.MockedBoundaryTest;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.security.crypto.password.PasswordEncoder;
-import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -26,12 +24,11 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 /**
- * 쿠팡 구매 엔드포인트 통합 테스트 (MockMvc + 실제 빈·H2) — 알라딘 buy({@link BookControllerTest})와 대칭.
+ * 쿠팡 구매 엔드포인트 통합 테스트 (MockMvc + H2, 외부 경계는 {@code MockedBoundaryTest} 목) — 알라딘 buy({@link BookControllerTest})와 대칭.
  *
  * <p>쿠팡 링크 생성은 {@link CoupangLinkBuilder}에 위임하므로 빌더를 mock해 활성 시나리오(링크 반환)를 만든다.
  */
-@SpringBootTest
-@AutoConfigureMockMvc
+@MockedBoundaryTest
 @Transactional
 class CoupangBuyControllerTest {
 
@@ -44,7 +41,7 @@ class CoupangBuyControllerTest {
     @Autowired
     private PasswordEncoder passwordEncoder;
 
-    @MockitoBean
+    @Autowired
     private CoupangLinkBuilder coupangLinkBuilder;
 
     private static final String COUPANG_LINK = "https://www.coupang.com/np/search?q=x&lptag=AF1234567";

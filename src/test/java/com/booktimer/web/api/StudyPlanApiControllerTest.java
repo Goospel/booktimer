@@ -18,13 +18,11 @@ import com.booktimer.user.StudyAiAccess;
 import com.booktimer.user.User;
 import com.booktimer.user.UserRegistrationService;
 import com.booktimer.user.UserRepository;
+import com.booktimer.testsupport.MockedBoundaryTest;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.http.MediaType;
-import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -60,8 +58,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
  * {@code /api/**}는 세션 체인」 규칙에 얹혀 있어, 규칙이 바뀌면 화면이 통째로 죽는다 — 코드 판독이 아니라
  * 실제 200으로 못 박는다(U-11).
  */
-@SpringBootTest
-@AutoConfigureMockMvc
+@MockedBoundaryTest
 @Transactional
 class StudyPlanApiControllerTest {
 
@@ -78,7 +75,7 @@ class StudyPlanApiControllerTest {
     @Autowired Clock clock;
 
     /** 어댑터는 늘 목이다 — 「불렸나/안 불렸나」가 게이트 테스트의 판정 근거라 네트워크를 태우지 않는다. */
-    @MockitoBean GeminiStudyPlanner planner;
+    @Autowired GeminiStudyPlanner planner;
 
     private User register(String loginId) {
         registrationService.register(loginId + "@booktimer.com", "pw1234qwer!!", loginId,

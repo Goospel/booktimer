@@ -5,12 +5,11 @@ import com.booktimer.session.ReadingSessionRepository;
 import com.booktimer.user.Role;
 import com.booktimer.user.User;
 import com.booktimer.user.UserRepository;
+import com.booktimer.testsupport.MockedBoundaryTest;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.security.crypto.password.PasswordEncoder;
-import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Instant;
@@ -26,7 +25,7 @@ import static org.mockito.Mockito.when;
  * <p>검색은 포트에 위임하므로 외부 API 없이 mock으로 검증하고, 등록/조회/상태변경/삭제는
  * 소유권(IDOR 방지)과 유저 격리를 본다.
  */
-@SpringBootTest
+@MockedBoundaryTest
 @Transactional
 class BookServiceTest {
 
@@ -39,7 +38,7 @@ class BookServiceTest {
     @Autowired
     private ReadingSessionRepository sessionRepository;
 
-    @MockitoBean
+    @Autowired
     private BookSearchClient searchClient;
 
     private User newUser(String email) {

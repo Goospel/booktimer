@@ -11,14 +11,12 @@ import com.booktimer.user.TossLinkCodeService;
 import com.booktimer.user.TossUserProvisioningService;
 import com.booktimer.user.User;
 import com.booktimer.user.UserRepository;
+import com.booktimer.testsupport.MockedBoundaryTest;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.http.MediaType;
-import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.ResultActions;
 import org.springframework.transaction.annotation.Transactional;
@@ -45,8 +43,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
  * 버리고 로그인 화면으로 튕겨, 탈퇴하려던 사용자가 대신 로그아웃당한다 — 토스 인증 실패는 400, 신원
  * 불일치는 403이다.
  */
-@SpringBootTest
-@AutoConfigureMockMvc
+@MockedBoundaryTest
 @Transactional
 class MiniappAccountApiControllerTest {
 
@@ -57,7 +54,7 @@ class MiniappAccountApiControllerTest {
     @Autowired RateLimitService rateLimitService;
     @Autowired TossLinkCodeService linkCodeService;
 
-    @MockitoBean TossLoginClient tossLoginClient;
+    @Autowired TossLoginClient tossLoginClient;
 
     @BeforeEach
     void resetRateLimit() {

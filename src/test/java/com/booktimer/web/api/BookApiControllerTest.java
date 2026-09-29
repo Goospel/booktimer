@@ -5,7 +5,6 @@ import com.booktimer.book.BookRepository;
 import com.booktimer.book.BookSearchResult;
 import com.booktimer.book.BookService;
 import com.booktimer.book.BookStatus;
-import com.booktimer.book.CoupangLinkBuilder;
 import com.booktimer.session.ReadingSession;
 import com.booktimer.session.ReadingSessionRepository;
 import com.booktimer.story.Story;
@@ -14,13 +13,11 @@ import com.booktimer.user.Role;
 import com.booktimer.user.User;
 import com.booktimer.user.UserRegistrationService;
 import com.booktimer.user.UserRepository;
+import com.booktimer.testsupport.MockedBoundaryTest;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.http.MediaType;
-import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -41,8 +38,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
  * /api/books/* JSON API 통합 테스트 (선별 SPA 단계 3).
  * IDOR·DTO 화이트리스트·멱등·FK 정리·CSRF가 핵심 경계.
  */
-@SpringBootTest
-@AutoConfigureMockMvc
+@MockedBoundaryTest
 @Transactional
 class BookApiControllerTest {
 
@@ -56,7 +52,6 @@ class BookApiControllerTest {
     @Autowired ReadingSessionRepository sessionRepository;
     @Autowired StoryRepository storyRepository;
     @Autowired Clock clock;
-    @MockitoBean CoupangLinkBuilder coupangLinkBuilder;
 
     private LocalDate today() {
         return LocalDate.ofInstant(clock.instant(), ZoneId.of(SEOUL));

@@ -72,7 +72,7 @@ tasks.named('test') {
 	// 재사용하고, 새 세계가 정말 필요하면 이 숫자를 올리고 PR 본문에 이유를 적는다.
 	// 전제: 단일 포크(포크를 늘리면 포크마다 따로 떠서 수가 곱해진다) · 구성 캐시 미사용(클로저 리스너 —
 	// 구성 캐시를 켜는 날 이 가드를 태스크 클래스로 옮긴다).
-	def contextBudget = 35
+	def contextBudget = 21
 	def contextLoads = 0
 	def contextSeconds = 0d
 	def appTestRan = false

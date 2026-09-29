@@ -3,11 +3,10 @@ package com.booktimer.book;
 import com.booktimer.user.Role;
 import com.booktimer.user.User;
 import com.booktimer.user.UserRepository;
+import com.booktimer.testsupport.MockedBoundaryTest;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.Optional;
@@ -25,7 +24,7 @@ import static org.mockito.Mockito.when;
  * 건드리지 않는다(멱등·null-state 제외, N-055 정신), (2) 외부 비활성/조회 실패면 안전하게 건너뛴다,
  * (3) limit으로 한 번에 처리량을 제한한다(외부 호출량·요청 시간 통제).
  */
-@SpringBootTest
+@MockedBoundaryTest
 @Transactional
 class BookCatalogBackfillServiceTest {
 
@@ -36,7 +35,7 @@ class BookCatalogBackfillServiceTest {
     @Autowired
     private UserRepository userRepository;
 
-    @MockitoBean
+    @Autowired
     private BookSearchClient searchClient;
 
     private User newUser(String email) {

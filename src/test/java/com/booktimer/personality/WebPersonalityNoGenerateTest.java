@@ -7,11 +7,10 @@ import com.booktimer.user.Role;
 import com.booktimer.user.User;
 import com.booktimer.user.UserRegistrationService;
 import com.booktimer.user.UserRepository;
+import com.booktimer.testsupport.MockedBoundaryTest;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDate;
@@ -38,7 +37,7 @@ import static org.mockito.Mockito.never;
  * <p>재는 것은 <b>쌍</b>이다: ① 없으면 안 만든다 ② <b>있으면 그대로 보여준다</b>. ①만 재면
  * 「기능을 통째로 죽였다」도 초록이고, 그건 사용자가 이미 돈 주고 만든 서술을 버리는 것이다.
  */
-@SpringBootTest
+@MockedBoundaryTest
 @Transactional
 class WebPersonalityNoGenerateTest {
 
@@ -48,7 +47,7 @@ class WebPersonalityNoGenerateTest {
     @Autowired BookRepository bookRepository;
 
     /** narrator를 목으로 둬야 「부르지 않았다」를 잴 수 있다 — 진짜는 키가 없어 조용히 빈 결과를 준다. */
-    @MockitoBean ReadingPersonalityNarrator narrator;
+    @Autowired ReadingPersonalityNarrator narrator;
 
     private User userWithFinishedBook(String loginId) {
         registrationService.register(loginId + "@booktimer.com", "pw1234qwer!!", loginId,

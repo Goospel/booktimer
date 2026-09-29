@@ -10,12 +10,10 @@ import com.booktimer.user.Role;
 import com.booktimer.user.User;
 import com.booktimer.user.UserRegistrationService;
 import com.booktimer.user.UserRepository;
+import com.booktimer.testsupport.MockedBoundaryTest;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
-import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -38,11 +36,10 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
  * <p>어떤 책이 뽑히는지는 {@code BookRecommendationServiceTest}가 이미 판다. 여기서 재는 것은
  * ① 인증 경계 ② 화면이 의지하는 계약(제목·근거·행 모양) ③ <b>추천이 없을 때 화면이 카드를 안 그릴 근거</b>다.
  *
- * <p>{@code BookSearchClient}를 이 클래스에서만 mock으로 갈아 끼운다 — 다른 API 테스트의 검색 동작에
- * 손대지 않으려고 별도 클래스로 뒀다.
+ * <p>{@code BookSearchClient}는 {@link com.booktimer.testsupport.MockedBoundaryTest} 세계의 목이다(이 세계의
+ * 모든 클래스가 공유) — 목의 {@code search()}는 null이라 검색을 타는 테스트는 직접 스텁한다.
  */
-@SpringBootTest
-@AutoConfigureMockMvc
+@MockedBoundaryTest
 @Transactional
 class BookRecommendApiControllerTest {
 
@@ -54,7 +51,7 @@ class BookRecommendApiControllerTest {
     @Autowired BookService bookService;
     @Autowired Clock clock;
 
-    @MockitoBean BookSearchClient searchClient;
+    @Autowired BookSearchClient searchClient;
 
     private User register(String email, String loginId) {
         registrationService.register(email, "pw1234qwer!!", loginId, "독자", SEOUL, Role.USER,

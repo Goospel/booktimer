@@ -3,12 +3,11 @@ package com.booktimer.book;
 import com.booktimer.user.Role;
 import com.booktimer.user.User;
 import com.booktimer.user.UserRepository;
+import com.booktimer.testsupport.MockedBoundaryTest;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.security.crypto.password.PasswordEncoder;
-import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
@@ -25,7 +24,7 @@ import static org.mockito.Mockito.when;
  * <p>이 서비스에는 <b>추천 알고리즘이 없다</b>. 이미 있는 조각(성향 집계기 · 알라딘 저자 검색 · owned 판정)을
  * 잇는 배선이라, 여기서 재는 것도 「무엇을 근거로 삼는가」와 「근거가 없을 때 무엇을 하는가」 둘이다.
  */
-@SpringBootTest
+@MockedBoundaryTest
 @Transactional
 class BookRecommendationServiceTest {
 
@@ -38,7 +37,7 @@ class BookRecommendationServiceTest {
     @Autowired
     private PasswordEncoder passwordEncoder;
 
-    @MockitoBean
+    @Autowired
     private BookSearchClient searchClient;
 
     private User newUser(String email) {

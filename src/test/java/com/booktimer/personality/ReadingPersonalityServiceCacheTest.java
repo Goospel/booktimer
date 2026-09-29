@@ -6,11 +6,10 @@ import com.booktimer.book.BookStatus;
 import com.booktimer.user.Role;
 import com.booktimer.user.User;
 import com.booktimer.user.UserRepository;
+import com.booktimer.testsupport.MockedBoundaryTest;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
@@ -32,7 +31,7 @@ import static org.mockito.Mockito.when;
  *
  * <p>"다시 분석"(reanalyze)·히스토리 교체·대표 선택·IDOR는 {@code ReadingPersonalityHistoryTest}가 본다.
  */
-@SpringBootTest
+@MockedBoundaryTest
 @Transactional
 class ReadingPersonalityServiceCacheTest {
 
@@ -45,7 +44,7 @@ class ReadingPersonalityServiceCacheTest {
     @Autowired
     private BookRepository bookRepository;
 
-    @MockitoBean
+    @Autowired
     private ReadingPersonalityNarrator narrator;
 
     private User newUser(String email) {
