@@ -9,6 +9,7 @@ import com.booktimer.session.ReadingSessionService;
 import com.booktimer.session.StudySession;
 import com.booktimer.session.StudySessionRepository;
 import com.booktimer.session.StudySessionService;
+import com.booktimer.testsupport.FixedClockConfig;
 import com.booktimer.user.Role;
 import com.booktimer.user.User;
 import com.booktimer.user.UserRegistrationService;
@@ -18,6 +19,7 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
+import org.springframework.context.annotation.Import;
 import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.transaction.annotation.Transactional;
@@ -46,6 +48,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
  */
 @SpringBootTest
 @AutoConfigureMockMvc
+@Import(FixedClockConfig.class)
 @Transactional
 class StudyApiControllerTest {
 
@@ -54,14 +57,6 @@ class StudyApiControllerTest {
     // changeActiveBook_movesAllSecondsToNewBook이 1799 < 1800으로 실패). now-30분이 전날로 넘어가면
     // stop이 세션을 자정에서 두 행으로 쪼개고(endSplitAndSave) 행마다 durationSeconds를 따로
     // 내림해 1초가 샌다. 18:00 KST로 고정해 그 창을 없앤다 — 한낮이라 ±6시간 세션이 같은 날에 머문다.
-    @org.springframework.boot.test.context.TestConfiguration
-    static class FixedClockConfig {
-        @org.springframework.context.annotation.Bean
-        @org.springframework.context.annotation.Primary
-        java.time.Clock fixedClock() {
-            return java.time.Clock.fixed(java.time.Instant.parse("2026-06-17T09:00:00Z"), java.time.ZoneOffset.UTC);
-        }
-    }
 
     private static final String SEOUL = "Asia/Seoul";
 

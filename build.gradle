@@ -62,7 +62,41 @@ tasks.named('test') {
 	// 다르면 각각 별개 컨텍스트를 띄우고, 그것들이 캐시에 **동시에 살아 있다**(캐시가 목적이다).
 	// 2026-09-08에 AI 상한 테스트가 컨텍스트를 둘 더하자(daily-cap=0 + 목 어댑터) 실제로 터졌다 —
 	// 실패 지점이 무작위 테스트라 원인이 코드에 있는 것처럼 보이는 부류다.
+	// 컨텍스트 수는 아래 예산 가드가 막는다.
 	maxHeapSize = '2g'
+
+	// ── 스프링 테스트 컨텍스트 예산 (T-235 후속, 설계 2026-09-28) ──
+	// 컨텍스트 로드가 테스트 시간의 약 70%다(2026-09-28 실측: 38번 로드 = 서로 다른 서명 38개).
+	// 새 @MockitoBean 필드·@TestPropertySource/@SpringBootTest(properties)·중첩 @TestConfiguration·
+	// @DynamicPropertySource는 캐시 키를 갈라 컨텍스트를 하나 더 띄운다. testsupport 패키지의 공용 세계를
+	// 재사용하고, 새 세계가 정말 필요하면 이 숫자를 올리고 PR 본문에 이유를 적는다.
+	// 전제: 단일 포크(포크를 늘리면 포크마다 따로 떠서 수가 곱해진다) · 구성 캐시 미사용(클로저 리스너 —
+	// 구성 캐시를 켜는 날 이 가드를 태스크 클래스로 옮긴다).
+	def contextBudget = 35
+	def contextLoads = 0
+	def contextSeconds = 0d
+	def appTestRan = false
+	onOutput { descriptor, event ->
+		(event.message =~ /Started \S+ in ([\d.]+) seconds/).each { match ->
+			contextLoads++
+			contextSeconds += (match[1] as double)
+		}
+	}
+	afterSuite { descriptor, result ->
+		if (descriptor.className == 'com.booktimer.BooktimerApplicationTests') {
+			appTestRan = true
+		}
+	}
+	doLast {
+		logger.lifecycle(String.format('Spring test contexts: %d loaded, %.1f s startup total (budget %d)',
+				contextLoads, contextSeconds, contextBudget))
+		if (appTestRan && contextLoads == 0) {
+			throw new GradleException('Context probe is broken: BooktimerApplicationTests ran but no "Started ... in ... seconds" line was seen. Was spring.main.log-startup-info turned off? See T-235.')
+		}
+		if (contextLoads > contextBudget) {
+			throw new GradleException("Spring test contexts ${contextLoads} > budget ${contextBudget}. Reuse a shared world in src/test/java/com/booktimer/testsupport instead of new @MockitoBean fields, @TestPropertySource or nested @TestConfiguration. If a new world is really needed, raise contextBudget in build.gradle and say why in the PR. See T-235.")
+		}
+	}
 }
 
 tasks.named('bootRun') {
