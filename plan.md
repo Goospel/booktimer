@@ -4097,7 +4097,7 @@ package-private static이라 호출이 공짜였고, 복제하면 0초 조각 �
 ### ✅ 훅 대상 레포 해석 — 한글 경로 fail-open (2026-09-30, T-259)
 - ✅ lib `Resolve-HookTargetCwd` — git의 최상위가 실제로 없으면(비 ASCII 경로가 CP949로 깨짐) `--show-cdup`만큼 올라간다. ASCII는 같은 분기라 불변
 - ✅ `test-hook-target-cwd.sh` 「T-259」 6행(한글 최상위·하위 폴더·`cd` · 대조군 · 콘솔 없음 · main push)
-- ⏸ 실제 훅 러너 E2E(한글 경로 스크래치 레포에서 Bash 도구로 커밋·bare push → 차단) — **왜 지금 안 하나**: 워크트리 세션의 훅 러너는 cwd·`CLAUDE_PROJECT_DIR`가 메인 체크아웃이라 상대 경로 훅 명령(`.claude\hooks\…`)이 메인의 수정 전 lib을 부른다(2026-09-30 hookify 발동 로그로 확인). 브랜치의 훅은 실러너로 잴 수 없다. 재개: 머지 뒤 메인 체크아웃을 당기고 같은 트리거 1회
+- ✅ 실제 훅 러너 E2E(2026-09-30, 머지 뒤 메인 체크아웃을 당긴 다음) — 한글 경로 스크래치 레포(원격 없음·main·`Foo.java` 스테이징)에서 Bash 도구로 `git commit` → `[BLOCKED] Tests failed`, 가짜 gradlew 마커 생성, 커밋 미생성 / 같은 레포 bare push → `[BLOCKED] Direct push to main/master`. 수정 전엔 둘 다 통과했다. ⚠️ 워크트리 세션의 훅 러너는 cwd·`CLAUDE_PROJECT_DIR`가 메인 체크아웃이라 상대 경로 훅 명령(`.claude\hooks\…`)이 **메인의** 훅을 부른다 — 브랜치에서 고친 훅은 머지하고 메인을 당기기 전엔 실러너로 잴 수 없다
 - ⏸ 훅의 파일명 목록(`diff --cached --name-only` 등)이 비 ASCII 파일명에서 빗나간다 — 기본 `core.quotepath=true`면 `"\355…"`로 인용돼 `\.java$`·`^frontend/`가 안 맞는다. **왜 지금 안 하나**: 추적 파일 1,424개 중 비 ASCII 이름 0개(2026-09-30)이고, 고치면 훅 5개의 수집부를 모두 바꿔야 한다. 재개: 비 ASCII 파일명이 처음 추적될 때
 - ⏸ `require-css-comment-safe`가 blob 본문을 CP949로 읽는다(한글 바로 뒤 `*`·`"`를 삼킬 수 있음) — **왜 지금 안 하나**: CSS 3개 모두 한글 주석이지만 한글 바로 뒤 `*/`는 0건. 재개: 오탐·미탐 1회
 - ⏸ `block-main-push` 브랜치 이름 디코딩 — **왜 지금 안 하나**: 브랜치 39개 중 비 ASCII 0. 재개: 한글 브랜치명을 쓸 때
