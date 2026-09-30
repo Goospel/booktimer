@@ -20,7 +20,9 @@
 # BookTimer 레이아웃(src/main/resources/static)이 없는 레포는 건너뛴다.
 #
 # 알려진 한계(→ 세션 cwd 폴백 또는 오판, 테스트로 잠그지 않음):
-#   - 훅 대부분이 stdin 을 [Console]::In(CP949)으로 읽어 한글 경로·명령에서 판독이 빗나간다
+#   - 한글 같은 비 ASCII 최상위를 정션 너머로 가리키는 폴더(정션이 다른 레포 안을 가리킬 때)는 --show-cdup 폴백이
+#     논리 경로로 올라가 다른 레포를 본다(T-259). 필요해지면 Process + StandardOutputEncoding=UTF8 로 --show-toplevel 을 읽는다
+#   - 공백이 있고 `\` 로 끝나는 경로(`Set-Location "C:\a b\"`)는 PS 5.1 의 native 인자 인용 탓에 git 이 못 읽어 세션 cwd 로 폴백
 #   - 한 명령 속 두 번째 커밋(`cd T && git commit && cd O && git commit` 은 T 만 본다)
 #   - 래퍼 속 이동(`cmd /c "cd /d T && git commit"`, `bash -c '…'`), 옵션 붙은 이동(`cd -P T`), `popd`
 #   - `--git-dir`/`--work-tree`, MSYS 마운트 경로(`/tmp/...`)
@@ -84,9 +86,15 @@ function Resolve-HookTargetCwd([string]$Command, [string]$SessionCwd, [string]$V
         # 성패는 종료코드가 아니라 출력으로 판정한다(`2>$null` 뒤 $LASTEXITCODE 는 믿을 수 없다, T-206)
         $prevEAP = $ErrorActionPreference
         $ErrorActionPreference = 'Continue'
-        try { $top = [string](& git -C $dir rev-parse --show-toplevel 2>$null) } finally { $ErrorActionPreference = $prevEAP }
-        if ([string]::IsNullOrWhiteSpace($top)) { return $SessionCwd }
-        return ($top.Trim() -replace '/', '\')
+        try { $rp = @(& git -C $dir rev-parse --show-toplevel --show-cdup 2>$null) } finally { $ErrorActionPreference = $prevEAP }
+        if ($rp.Count -eq 0 -or [string]::IsNullOrWhiteSpace($rp[0])) { return $SessionCwd }
+        $top = ([string]$rp[0]).Trim() -replace '/', '\'
+        if (Test-Path -LiteralPath $top -PathType Container) { return $top }   # git 의 답 그대로 — 정션 너머 실제 레포까지
+        # 여기 오면 $top 이 깨졌다(T-259): 경로에 한글 같은 비 ASCII 가 있으면 git 은 UTF-8 로 쓰는데 PS 5.1 은 native 출력을
+        # 콘솔 코드페이지(CP949)로 읽고, 콘솔 없는 프로세스에선 [Console]::OutputEncoding 을 바꿀 수도 없다.
+        # --show-cdup 은 `../` 반복뿐(ASCII)이라 안 깨진다 — 그만큼 $dir 에서 올라간다(최상위면 빈 줄 -> $dir 그대로)
+        $cdup = if ($rp.Count -ge 2) { [string]$rp[1] } else { '' }
+        return [System.IO.Path]::GetFullPath([System.IO.Path]::Combine($dir, $cdup + '.'))
     } catch {
         return $SessionCwd
     }

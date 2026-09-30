@@ -20,6 +20,8 @@
 #   [ctrl] holds before AND after, so "block everything" cannot pass
 # Also (T-078 4th): the commit hooks' TRIGGER -- only a real `git [global opts] commit` wakes them,
 # not the word inside `.commit-msg-tmp` / `--no-commit` / `commit-tree` (REQ-01..03 rows).
+# Also (T-259): a Korean folder in the repo path -- git's toplevel came back mangled (PS 5.1 decodes native
+# output as CP949) and every git-state gate passed silently ([T-259 REQ-01..04] rows at the end).
 
 HOOKS="${HOOKS:-.claude/hooks}"   # overridable: run against a mutated copy
 FAILED=0
@@ -266,5 +268,41 @@ EOF
 else
     echo "SKIP: node not in PATH -- bundle wiring cases skipped"
 fi
+
+# ══ T-259: Korean folder in the repo path ════════════════════════════════════
+# git prints the toplevel as UTF-8, but PS 5.1 decodes native output with the console code page (CP949):
+# a Korean folder came back mangled, the gate looked for gradlew.bat in a folder that does not exist and
+# passed with exit 0 -- no tests ran. The lib now climbs by --show-cdup (ASCII only) when git's toplevel
+# does not exist. The fake gradlew writes a marker next to itself: '2 yes' = the gate really ran it (not a
+# T-242 block, not a cmd that failed to start). The folder name (U+D55C U+AE00) was measured RED before the fix.
+# Whole-suite check (manual): TMPDIR=<a Korean folder> bash .claude/hooks/tests/test-<suite>.sh stays green.
+KO=$'\xed\x95\x9c\xea\xb8\x80'
+KT="$P/$KO/T"; init_repo "$KT"; mkdir -p "$KT/sub"
+printf '@echo off\r\necho ran> "%%~dp0gate-ran.txt"\r\nexit /b 1\r\n' > "$KT/gradlew.bat"
+echo 'class Foo {}' > "$KT/Foo.java"; git -C "$KT" add Foo.java
+ran() { if [ -f "$KT/gate-ran.txt" ]; then echo yes; else echo no; fi; rm -f "$KT/gate-ran.txt"; }
+kg()  { local got; got=$(run_unresolved require-tests-before-commit.ps1 "$1" "$2"); echo "$got $(ran)"; }
+check '[T-259 REQ-01 RED] session=<Korean repo> top -> gate ran gradlew'          '2 yes' "$(kg "$C" "$(win "$KT")")"
+check '[T-259 REQ-01 RED] session=<Korean repo>/sub -> top level found, gate ran' '2 yes' "$(kg "$C" "$(win "$KT/sub")")"
+check '[T-259 REQ-01 RED] session=S, cd "<Korean repo>" && commit -> gate ran'    '2 yes' "$(kg "cd \"$(mixed "$KT")\" && $C" "$SW")"
+KC="$P/$KO/clean"; init_repo "$KC"; printf '@echo off\r\nexit /b 1\r\n' > "$KC/gradlew.bat"
+check '[T-259 REQ-02 ctrl] session=<Korean repo, nothing staged> -> skip, exit 0' 0 \
+    "$(run_hook require-tests-before-commit.ps1 "$C" "$(win "$KC")")"
+# REQ-03: no console. [Console]::OutputEncoding cannot be set before the first native call there, so a fix
+# that only switches the console encoding passes every row above (the harness has a console) but not this one.
+NOCON="$P/nocon"; mkdir -p "$NOCON"
+cat > "$NOCON/run.ps1" <<'EOF'
+param([string]$Hook)
+Add-Type -Namespace W -Name K -MemberDefinition '[DllImport("kernel32.dll")] public static extern bool FreeConsole();'
+[void][W.K]::FreeConsole()
+try { & $Hook; exit $LASTEXITCODE } catch { [Console]::Error.WriteLine("UNCAUGHT: $($_.Exception.Message)"); exit 1 }
+EOF
+got=$(printf '{"tool_input":{"command":"%s"},"cwd":"%s"}' "$C" "$(json_esc "$(win "$KT/sub")")" \
+    | timeout 90 powershell.exe -NoProfile -File "$(win "$NOCON/run.ps1")" \
+        -Hook "$(win "$(cd "$HOOKS" && pwd)/require-tests-before-commit.ps1")" >/dev/null 2>"$ERRF"; echo $?)
+check '[T-259 REQ-03 RED] no console, session=<Korean repo>/sub -> gate ran gradlew' '2 yes' "$got $(ran)"
+KM="$P/$KO/mainrepo"; init_repo "$KM"
+check '[T-259 REQ-04 RED] push: session=feat, cd "<Korean repo on main>" && git push -> main block (not T-242)' 2 \
+    "$(run_unresolved block-main-push.ps1 "cd \"$(mixed "$KM")\" && git push" "$(win "$FT")")"
 
 exit $FAILED
