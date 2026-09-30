@@ -4740,6 +4740,9 @@ package-private static이라 호출이 공짜였고, 복제하면 0초 조각 �
         `try/catch(RuntimeException) { refund; throw; }`로 감싼다.
   - ⏸ **책BTI 하루 한도(`User.tryConsumePersonalityRefresh`) 과허용 가능성** — 읽고-고치고-저장이라 동시
         요청이면 한도를 넘길 수 있다(형제 코드 검증에서 발견, 미재현). AI 비용 경로인지부터 확인해야 해서 미뤘다.
+- **다음 세션 시작점**: 이 절은 완료 — 이어서 할 일 없음. 위 ⏸ 둘의 재개 조건은 이렇다 — 미환불은 「AI 몫이
+      줄었는데 호출 기록이 없다」는 제보나 락 타임아웃 로그 1건, 책BTI는 그 기능을 다른 일로 건드릴 때(먼저 AI를
+      부르는지 확인). `StudyAiUsageServiceTest` 경합 테스트가 다시 깨지면 T-261 끝에 회차 줄을 달고 H2 잔여 창부터 본다.
 - ✅ **선재 결함(리뷰 8번) 해소** (2026-09-13): `StudyAiAccessApiController.handleAlreadyRequested`가
       `IllegalStateException`을 전부 409로 옮겨, `CurrentUserService.resolve`가 던지는 ISE(인증 주체는 있는데
       도메인 사용자가 없음 = 서버 결함)까지 「이미 신청했거나 승인된 상태예요」 409가 됐다. **같은 결함이
