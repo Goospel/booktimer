@@ -4094,6 +4094,17 @@ package-private static이라 호출이 공짜였고, 복제하면 0초 조각 �
 
 ## 🧹 기술 부채 / 후속 정리
 
+### ✅ 훅 대상 레포 해석 — 한글 경로 fail-open (2026-09-30, T-259)
+- ✅ lib `Resolve-HookTargetCwd` — git의 최상위가 실제로 없으면(비 ASCII 경로가 CP949로 깨짐) `--show-cdup`만큼 올라간다. ASCII는 같은 분기라 불변
+- ✅ `test-hook-target-cwd.sh` 「T-259」 6행(한글 최상위·하위 폴더·`cd` · 대조군 · 콘솔 없음 · main push)
+- ⏸ 실제 훅 러너 E2E(한글 경로 스크래치 레포에서 Bash 도구로 커밋·bare push → 차단) — **왜 지금 안 하나**: 워크트리 세션의 훅 러너는 cwd·`CLAUDE_PROJECT_DIR`가 메인 체크아웃이라 상대 경로 훅 명령(`.claude\hooks\…`)이 메인의 수정 전 lib을 부른다(2026-09-30 hookify 발동 로그로 확인). 브랜치의 훅은 실러너로 잴 수 없다. 재개: 머지 뒤 메인 체크아웃을 당기고 같은 트리거 1회
+- ⏸ 훅의 파일명 목록(`diff --cached --name-only` 등)이 비 ASCII 파일명에서 빗나간다 — 기본 `core.quotepath=true`면 `"\355…"`로 인용돼 `\.java$`·`^frontend/`가 안 맞는다. **왜 지금 안 하나**: 추적 파일 1,424개 중 비 ASCII 이름 0개(2026-09-30)이고, 고치면 훅 5개의 수집부를 모두 바꿔야 한다. 재개: 비 ASCII 파일명이 처음 추적될 때
+- ⏸ `require-css-comment-safe`가 blob 본문을 CP949로 읽는다(한글 바로 뒤 `*`·`"`를 삼킬 수 있음) — **왜 지금 안 하나**: CSS 3개 모두 한글 주석이지만 한글 바로 뒤 `*/`는 0건. 재개: 오탐·미탐 1회
+- ⏸ `block-main-push` 브랜치 이름 디코딩 — **왜 지금 안 하나**: 브랜치 39개 중 비 ASCII 0. 재개: 한글 브랜치명을 쓸 때
+- ⏸ `warn-multi-session`의 `worktree list` 경로 파싱 — 한글·공백 레포 경로에서 등록된 워크트리를 「orphaned」로 잘못 안내(권고 전용). 재개: 거짓 안내 1회
+- ⏸ `Test-Path`·`Get-Content -Path`가 `-LiteralPath`가 아니다 — 레포 경로에 `[`·`]`가 있으면 와일드카드로 읽혀 게이트가 조용히 통과한다(뿌리가 디코딩이 아니라 와일드카드). **왜 지금 안 하나**: 대괄호 경로 사용 0이고, 훅 7곳 + 대괄호 픽스처가 필요하다. 재개: 대괄호 경로를 쓸 때, 또는 이 훅들을 다른 일로 만질 때 함께
+- ⏸ 훅 테스트를 CI에 — **왜 지금 안 하나**: 훅은 Windows PowerShell 5.1 전용이라 ubuntu `ci.yml`에 못 얹고, windows 잡 신설은 별도 설계 감이다(T-255의 「같은 PR에서 배선」 규칙에서 의식적으로 벗어남). 재개: 훅 회귀가 로컬 미실행으로 한 번 더 새면
+
 ### ✅ 커밋 게이트 — 트리거 오발동 · 데몬 파이프 hang · `--stop` 제거 (2026-09-29, T-078 4회차)
 - ✅ 커밋 훅 5개 트리거 = lib `Test-GitVerb`(서브커맨드 자리) — `.commit-msg-tmp`·`--no-commit`·`commit-tree` 오발동 제거
 - ✅ 게이트 gradle을 ShellExecute로(핸들 비상속) — 새 데몬이 훅 파이프를 물고 사는 hang 차단

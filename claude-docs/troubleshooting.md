@@ -24,6 +24,7 @@
      각 항목의 frontmatter(summary)에서 재생성합니다. 내용을 바꾸려면 그 항목의
      summary를 고치세요(단일 출처). 최신 항목이 위. -->
 
+- [T-259](troubleshooting/T-259.md) · 레포 경로에 한글 폴더가 있으면 커밋·push·rebase 게이트 훅 7개가 대상 레포를 못 찾고 조용히 통과했다 — lib `Resolve-HookTargetCwd`가 `git rev-parse --show-toplevel`의 UTF-8 출력을 PS 5.1 기본(CP949)으로 읽어 없는 경로를 돌려줬다(스테이징된 .java가 있어도 gradlew를 안 돌림 · main bare push 차단도 뚫림) **→ 가드: lib가 git의 최상위가 실제로 없으면 ASCII뿐인 `--show-cdup`만큼 올라간다(콘솔 유무 무관) + `test-hook-target-cwd.sh` 끝의 「T-259」 6행이 한글 폴더 픽스처에서 게이트가 gradlew를 실제로 돌렸는지(옆에 남긴 마커)·콘솔 없는 프로세스·main push 차단을 단언한다(수정 전 5행 RED 확인)**
 - [T-258](troubleshooting/T-258.md) · 같은 측정의 시작 시각이 `/api/study/start` 응답(JVM Instant, 100ns — `…52.657934400Z`)과 `/api/dashboard` 재조회(DB, µs — `…52.657934Z`)에서 다른 문자열로 온다 — 이 문자열을 측정 식별자로 비교하면 재조회 한 번에 「다른 측정」으로 오인해 그 측정에 붙은 클라이언트 상태를 버린다(웹 공부 이탈 멈춤: 첫 이탈 구간·안내가 복귀 재조회에 지워짐, 2026-09-29 실 브라우저에서 발견) **→ 가드: `DashboardApp.vue` 이탈 추적 watch가 시작 시각을 `canonicalIso`(밀리초 ISO 정규 표기)로 맞춘 값을 식별자로 쓴다 + `dashboard-study-away.test.ts`의 기본 픽스처가 시작 응답과 재조회 응답에 **서로 다른 정밀도**의 같은 순간을 넣는다(같은 문자열이면 「어느 쪽을 읽었나」를 못 묻는다 — 이 결함이 단위 테스트를 통과한 이유)**
 - [T-257](troubleshooting/T-257.md) · 토스 기능성 푸시는 알림동의문 미동의자에게도 `resultType=SUCCESS`를 주고 조용히 버린다 — 서버 「발송 성공」·콘솔 검수 승인은 도달의 증거가 아니다(재참여 넛지 6주 도달 0, 2026-09-26 양성 대조로 확정) **→ 가드: `TossMessengerClient`가 성공 본문의 발송 수·도달 실패 사유를 로그로 남긴다(PR-1) + 동의 없이 보내는 캠페인을 두지 않는다(옛 넛지 SSM 소등 S-0·코드 삭제 PR-1, 독서 알림은 동의 성공 뒤에만 서버 설정이 켜진다 — PR-3)**
 - [T-256](troubleshooting/T-256.md) · 「두 분기의 `<Profile>`은 서로 다른 JSX라 재마운트된다」가 틀렸다 — React는 키 없는 최상위 프래그먼트를 배열로 풀어 맞추므로 두 분기가 같은 fiber로 이어진다
@@ -192,7 +193,7 @@
 - [T-093](troubleshooting/T-093.md) · 워크트리 `npm run build`가 무관 9개 번들을 CRLF-only로 ` M` 표시 — `git diff --numstat`로 감별, 변경 파일만 stage **→ hookify/warn-inplace-replace-crlf.md**
 - [T-092](troubleshooting/T-092.md) · minified Vue 프로덕션 번들은 `setupState` 키가 숨겨짐 — 루트 `_vnode.component`에서 `subTree` BFS+props 변이
 - [T-091](troubleshooting/T-091.md) · `pr-merge.sh`가 머지 성공 후 `git push origin --delete`에서 hang → 백그라운드 머지 안 끝남
-- [T-090](troubleshooting/T-090.md) · 경로 없는 `gradlew.bat`을 cmd가 「not recognized」로 못 찾는다 — Claude Code가 켠 `NoDefaultCurrentDirectoryInExePath=1`이 cmd의 현재 폴더 탐색을 끈다. 전체 경로 + `-p`로 부른다(preview `launch.json` bootRun·`cmd /c`·Start-Process 공통)
+- [T-090](troubleshooting/T-090.md) · 경로 없는 `gradlew.bat`을 cmd가 「not recognized」로 못 찾는다 — Claude Code가 켠 `NoDefaultCurrentDirectoryInExePath=1`이 cmd의 현재 폴더 탐색을 끈다. 전체 경로 + `-p`로 부른다(preview `launch.json` bootRun·`cmd /c`·Start-Process 공통) **→ 가드: 글로벌 hookify warn 룰 `warn-bare-gradlew-bat`(goospel-claude-config #116, 2026-09-30) — 줄 머리 · `; & | (` 뒤 · `cmd /c` · `Start-Process`에 온 경로 없는 `gradlew.bat`에 경고하고, 옛 결과 오독(3회차)도 메시지로 짚는다**
 - [T-089](troubleshooting/T-089.md) · 반응형 재현 하니스 mock이 production worst-case(최장 문자열)를 안 담으면 RED가 안 떠 레이아웃 버그를 놓침
 - [T-088](troubleshooting/T-088.md) · 백그라운드 PR 머지 태스크를 띄우고 완료 후속(exit 코드 확인)을 안 챙겨 머지 방치
 - [T-087](troubleshooting/T-087.md) · CSS 주석 속 `*/`가 주석을 조기 종료해 다음 규칙을 침묵 드랍
