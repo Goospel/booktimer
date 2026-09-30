@@ -110,6 +110,10 @@ if (-not (Test-Path $gradlew)) { exit 0 }
 #   파이프(Claude Code 가 준 것)가 cmd→java→**새 데몬**까지 내려간다. Claude Code 는 훅 종료가 아니라 파이프 EOF 를
 #   기다리고 데몬은 idle 로 최대 3시간 산다 — 2026-09-29 Bash 호출이 32분·3시간 38분 멈췄다(T-078 4회차).
 #   ShellExecuteEx 는 핸들을 물려주지 않는다. 회귀 가드: tests/test-require-tests-timeout.sh Case 10.
+#   기각한 대안(2026-09-29 실측, 바꾸기 전에 읽는다): `--no-daemon` — 상속이라는 뿌리를 그대로 두고(오래 사는 자손이
+#   하나라도 생기면 재발) 매번 콜드 스타트(트리비얼 프로젝트 7초대 vs warm 데몬 1.4초) · `Start-Process -PassThru` — PS 5.1
+#   에서 ExitCode 가 null 로 오고 `-Wait` 는 자손(데몬)까지 기다린다 · 자기 표준 핸들을 SetHandleInformation 으로 비상속 —
+#   P/Invoke 코드 증가(Add-Type 약 0.3초)에 자식에 무효 핸들 값이 남는 반쪽 상태.
 # 주의(PowerShell 5.1): gradlew 는 JDK 경고 등을 stderr 로 내보내는데,
 # $ErrorActionPreference='Stop' 상태에서 native stderr 는 terminating error 로
 # 승격되어(NativeCommandError) 테스트가 통과해도 스크립트가 죽는다.
