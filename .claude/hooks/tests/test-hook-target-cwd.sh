@@ -18,6 +18,8 @@
 #   [RED]  fails before the fix
 #   [dir]  reverse direction (session=T, cd S) -- also fails before the fix
 #   [ctrl] holds before AND after, so "block everything" cannot pass
+# Also (T-078 4th): the commit hooks' TRIGGER -- only a real `git [global opts] commit` wakes them,
+# not the word inside `.commit-msg-tmp` / `--no-commit` / `commit-tree` (REQ-01..03 rows).
 
 HOOKS="${HOOKS:-.claude/hooks}"   # overridable: run against a mutated copy
 FAILED=0
@@ -192,6 +194,48 @@ check '[W-P4 ctrl] push: cd "$WT" && push origin feat/x -> explicit ref, passes'
 check '[W-P5 RED] push: cd "$WT" && git push ALLOW_MAIN_PUSH -> token still honored' 0 \
     "$(run_hook block-main-push.ps1 'cd "$WT" && git push ALLOW_MAIN_PUSH' "$(win "$FT")")"
 
+# ══ Trigger: only a real `git [global opts] commit` wakes the commit hooks (T-078 4th) ═══════
+# The old trigger ('\bgit\b' and '\bcommit\b' anywhere) fired on the word inside `.commit-msg-tmp`:
+# `rm -f .commit-msg-tmp && git add -A && git status` ran the full test gate (2026-09-29).
+# Session T (staged .java + failing gradlew): exit 2 = the gate ran, exit 0 = it stayed asleep.
+INC='rm -f .commit-msg-tmp && git add -A && git status'
+for c in "$INC" \
+         'git push -u origin fix/x && rm -f .commit-msg-tmp' \
+         'git add -A && cat .commit-msg-tmp' \
+         'git merge --no-commit feat/x' \
+         'git log --grep=commit --oneline' \
+         'git commit-tree HEAD^{tree} -m x'; do
+    tg "[REQ-01 RED] not a commit: $c" 0 "$c" "$TW"
+done
+# forms the old trigger caught must stay caught (a miss here = a commit with no tests)
+for c in 'git -c "user.name=a b" commit -m x' 'git.exe commit -m x' 'git --no-pager commit -m x' \
+         "git --work-tree \"$TM\" commit -m x"; do
+    tg "[REQ-02 ctrl] still a commit: $c" 2 "$c" "$TW"
+done
+tg '[REQ-02 ctrl] git -C <T> commit from session S' 2 "git -C \"$TW\" commit -F .commit-msg-tmp" "$SW"
+# review (PR #1219): the subcommand-position pattern alone missed these -- old trigger 2, new 0 = a commit
+# with no tests. Mid-value quotes, `--opt="a b"`, backslash-escaped spaces, upper case, line continuation.
+for c in 'git -c user.name="Goospel Kim" commit -m x' 'git -c core.editor="code --wait" commit' \
+         'git --work-tree="C:/a b" commit -m x' 'git -C my\ repo commit -m x' 'GIT commit -m x' \
+         $'git \\\ncommit -m x'; do
+    tg "[REQ-02 ctrl] still a commit: $c" 2 "$c" "$TW"
+done
+# review (PR #1219): `-{1,2}[\w-]+` split each --no-pager two ways -> 2^n backtracking when the pattern
+# fails (n=20: 8s). This commit makes the strict pattern fail, so it pays the full search before the belt
+# answers; run_hook's `timeout 90` turns a blow-up into 124 instead of a hang.
+NP=$(printf -- '--no-pager %.0s' $(seq 25))
+tg '[REQ-02 perf] 25x --no-pager + quoted -c value -> no regex blow-up, still a commit' 2 \
+    "git ${NP}-c user.name=\"a b\" commit -m x" "$TW"
+# every other commit hook: silent on a non-commit, still awake on the real commit (pairs)
+check '[REQ-03 RED] css: incident command -> not checked'        0 "$(run_hook require-css-comment-safe.ps1 "$INC" "$(win "$CT")")"
+check '[REQ-03 ctrl] css: real commit -> blocks'                  2 "$(run_hook require-css-comment-safe.ps1 "$C" "$(win "$CT")")"
+check '[REQ-03 RED] msg: git tag -F .commit-msg-tmp -> not read'  0 "$(run_hook check-commit-message.ps1 'git tag -a v1 -F .commit-msg-tmp' "$(win "$MT")")"
+check '[REQ-03 ctrl] msg: real commit -> (#123) blocks'           2 "$(run_hook check-commit-message.ps1 "$C" "$(win "$MT")")"
+TT4="$P/toc4"; toc_repo "$TT4"; run_hook require-troubleshooting-toc.ps1 "$INC" "$(win "$TT4")" >/dev/null
+check '[REQ-03 RED] toc: incident command -> index untouched' no  "$(marked "$TT4")"
+TT5="$P/toc5"; toc_repo "$TT5"; run_hook require-troubleshooting-toc.ps1 "$C" "$(win "$TT5")" >/dev/null
+check '[REQ-03 ctrl] toc: real commit -> index rebuilt'       yes "$(marked "$TT5")"
+
 # -- require-bundle-build.ps1: needs node
 if command -v node >/dev/null 2>&1; then
     BT="$P/bundle"; init_repo "$BT"
@@ -217,6 +261,8 @@ EOF
     git -C "$OB" add frontend
     check '[W-B4 RED] bundle: cd <repo without src/main/resources/static> -> skipped, not built' 0 \
         "$(run_hook require-bundle-build.ps1 "cd \"$(mixed "$OB")\" && $C" "$SW")"
+    check '[REQ-03 RED] bundle: incident command -> not built'   0 "$(run_hook require-bundle-build.ps1 "$INC" "$(win "$BT")")"
+    check '[REQ-03 ctrl] bundle: real commit -> stale bundle blocks' 2 "$(run_hook require-bundle-build.ps1 "$C" "$(win "$BT")")"
 else
     echo "SKIP: node not in PATH -- bundle wiring cases skipped"
 fi

@@ -25,13 +25,15 @@ try {
 
 if ([string]::IsNullOrWhiteSpace($cmd)) { exit 0 }
 
-# git commit 명령에만 관심.
+# git commit 이 아니면 관심 없음. 첫 줄 = 빠른 거르기(대부분의 호출이 lib 를 안 읽고 끝난다),
+# 둘째 = 서브커맨드 자리 판정 — 낱말만 보면 `rm -f .commit-msg-tmp && git add -A` 에도 걸린다(T-078 4회차)
 if ($cmd -notmatch '\bgit\b' -or $cmd -notmatch '\bcommit\b') { exit 0 }
+. (Join-Path $PSScriptRoot 'lib\resolve-target-cwd.ps1')
+if (-not (Test-GitVerb $cmd 'commit')) { exit 0 }
 
 $cwd = [string]$data.cwd
 if ([string]::IsNullOrWhiteSpace($cwd)) { $cwd = (Get-Location).Path }
 # 커밋이 실제로 도는 워크트리를 본다(T-242). 확장식 경로면 세션 cwd 로 폴백.
-. (Join-Path $PSScriptRoot 'lib\resolve-target-cwd.ps1')
 $target = Resolve-HookTargetCwd $cmd $cwd 'commit'
 if ($target) { $cwd = $target }
 

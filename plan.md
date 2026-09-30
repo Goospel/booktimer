@@ -4094,6 +4094,15 @@ package-private static이라 호출이 공짜였고, 복제하면 0초 조각 �
 
 ## 🧹 기술 부채 / 후속 정리
 
+### ✅ 커밋 게이트 — 트리거 오발동 · 데몬 파이프 hang · `--stop` 제거 (2026-09-29, T-078 4회차)
+- ✅ 커밋 훅 5개 트리거 = lib `Test-GitVerb`(서브커맨드 자리) — `.commit-msg-tmp`·`--no-commit`·`commit-tree` 오발동 제거
+- ✅ 게이트 gradle을 ShellExecute로(핸들 비상속) — 새 데몬이 훅 파이프를 물고 사는 hang 차단
+- ✅ 타임아웃 자가복구에서 머신 전역 `gradlew --stop` 삭제 + CLAUDE.md bootRun 정리·강제 정리 개정
+- ⏸ 프론트 `npm test`·번들 `npm run build` 호출도 같은 상속 경로 — **왜 지금 안 하나**: 오래 사는 자식이 없어 무해(사고 0). 재개: npm 게이트 직후 Bash가 늦게 돌아오는 증상 1회
+- ⏸ push 트리거(`require-changelog-no-dup.ps1`)도 낱말 검사 — **왜 지금 안 하나**: 오발동 비용이 파일 읽기 한 번. 재개: 오발동 차단 사례
+- ⏸ rebase 훅의 `$globalOpt` 사본을 lib 함수로 합치기 — 다음에 전역옵션 문법을 또 고칠 때
+- ⏸ `gradlew --stop` 하드 가드(hookify) — 문서 개정 뒤에도 에이전트가 또 쓰면(2회) 승격
+
 ### ✅ 테스트 컨텍스트 통합 (T-235 후속) — 38 → 16 (2026-09-28~30)
 > `./gradlew test` 한 번에 스프링 컨텍스트가 38번 뜨고 그 기동이 테스트 시간의 약 70%다. 재로드가 아니라 서로 다른
 > 캐시 키 38개라 캐시 크기로는 못 줄이고 서명을 합쳐야 한다. 공용 「테스트 세계」(`src/test/java/com/booktimer/testsupport/`)로

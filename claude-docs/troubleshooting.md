@@ -204,7 +204,7 @@
 - [T-081](troubleshooting/T-081.md) · SPA 전환에서 form 래퍼 제거 → 전역 button width 100%가 flex-row 액션을 풀폭 세로로 깨뜨림
 - [T-080](troubleshooting/T-080.md) · Service Worker가 에러 응답(500/503)을 캐싱 → 서버 fix 후에도 stale
 - [T-079](troubleshooting/T-079.md) · Vue 섬 번들이 book-detail 라우트에 가로채여 무한로딩 — 경로변수 숫자 제한
-- [T-078](troubleshooting/T-078.md) · git/commit 무한 로딩 = 커밋 훅의 gradle test hang(멀티세션 경합) — Claude Code 코어 아님
+- [T-078](troubleshooting/T-078.md) · git/commit 무한 로딩 = 커밋 훅의 gradle — 멀티세션 경합이거나, 게이트가 새로 띄운 데몬이 훅의 출력 파이프를 물고 산다(4회차) — Claude Code 코어 아님 **→ 가드: `.claude/hooks/tests/test-require-tests-timeout.sh` Case 3(타임아웃이 `gradlew --stop`을 안 부르고 자기 트리를 죽인다)·Case 10(훅보다 오래 사는 손주가 있어도 훅 파이프가 닫힌다) + `test-hook-target-cwd.sh` 트리거 절(`.commit-msg-tmp`·`--no-commit`·`commit-tree` 등 커밋 아닌 명령에서 커밋 훅 5개가 깨지 않는다)**
 - [T-077](troubleshooting/T-077.md) · jsdom에선 scroll-snap 컴포넌트의 scroll 계측이 모두 0 — 실 브라우저 게이트로 위임
 - [T-076](troubleshooting/T-076.md) · `inlineDynamicImports:true`를 멀티 input과 함께 쓰면 Rollup 에러 — 페이지별 독립 빌드로 분리
 - [T-075](troubleshooting/T-075.md) · 파일명 고정 자산(pwa-install.js·app.css)을 SW cache-first로 두면 배포 후에도 stale 서빙

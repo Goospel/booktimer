@@ -4,9 +4,9 @@
 # The gradle test gate must NOT hang forever on a build-lock/daemon deadlock.
 # It runs gradlew under a timeout (BOOKTIMER_TEST_GATE_TIMEOUT_MS, default 20min,
 # capped at 24min -- must stay below the settings.json hook timeout, T-235);
-# on timeout it kills the gradle process tree, runs `gradlew --stop` to self-heal,
-# and blocks the commit (fail-closed, exit 2) naming both possible causes.
-# Case 8 pins the budget order, Case 9 the message markers.
+# on timeout it kills ITS OWN gradle process tree -- never `gradlew --stop`, which stops every
+# daemon on the machine -- and blocks the commit (fail-closed, exit 2) naming both possible causes.
+# Case 8 pins the budget order, Case 9 the message markers, Case 10 the hook's pipes (T-078 4th).
 #
 # Cases 1-3 use a FAKE gradlew.bat so no real JDK/build is needed:
 #   1. fast exit 0  -> hook exit 0   (passing tests allowed)         [red+green]
@@ -67,17 +67,19 @@ stage_java() {
     git -C "$repo" add Foo.java >/dev/null 2>&1
 }
 
-# Write a fake gradlew.bat. $2 = "pass" | "fail" | "hang".
-#  - pass: exit 0 fast
-#  - fail: exit 1 fast
-#  - hang: sleep ~12s on `test`, but exit 0 fast on `--stop` (so the hook's
-#          self-heal call doesn't also block the test)
+# Write a fake gradlew.bat. $2 = "pass" | "fail" | "hang" | "linger".
+#  - pass:   exit 0 fast
+#  - fail:   exit 1 fast
+#  - hang:   `--stop` -> records stop-called.txt and exits fast (the gate must never call it, REQ-05);
+#            `test`   -> test-started.txt, ~12s sleep, test-finished.txt (absent = tree killed, REQ-06)
+#  - linger: leaves a grandchild living ~20s (linger-started.txt now, linger-done.txt at its end); exit 0
 write_fake_gradlew() {
     local repo="$1" mode="$2"
     case "$mode" in
-        pass) printf '@echo off\r\nexit /b 0\r\n' > "$repo/gradlew.bat" ;;
-        fail) printf '@echo off\r\nexit /b 1\r\n' > "$repo/gradlew.bat" ;;
-        hang) printf '@echo off\r\necho %%* | findstr /C:"--stop" >nul && exit /b 0\r\nping -n 13 127.0.0.1 >nul\r\nexit /b 0\r\n' > "$repo/gradlew.bat" ;;
+        pass)   printf '@echo off\r\nexit /b 0\r\n' > "$repo/gradlew.bat" ;;
+        fail)   printf '@echo off\r\nexit /b 1\r\n' > "$repo/gradlew.bat" ;;
+        hang)   printf '@echo off\r\necho %%* | findstr /C:"--stop" >nul && (echo x> "%%~dp0stop-called.txt" & exit /b 0)\r\necho x> "%%~dp0test-started.txt"\r\nping -n 13 127.0.0.1 >nul\r\necho x> "%%~dp0test-finished.txt"\r\nexit /b 0\r\n' > "$repo/gradlew.bat" ;;
+        linger) printf '@echo off\r\nstart "" /b cmd /c "echo x> "%%~dp0linger-started.txt" & ping -n 21 127.0.0.1 >nul & echo x> "%%~dp0linger-done.txt""\r\nexit /b 0\r\n' > "$repo/gradlew.bat" ;;
     esac
 }
 
@@ -95,6 +97,19 @@ check "staged .java + gradle test fails -> exit 2" 2 "$got"
 R3=$(make_repo); W3=$(to_win "$R3"); stage_java "$R3"; write_fake_gradlew "$R3" hang
 got=$(run_cmd "git commit -m \"feat: x\"" "$W3" "BOOKTIMER_TEST_GATE_TIMEOUT_MS=3000")
 check "staged .java + gradle test HANGS -> timeout -> exit 2" 2 "$got"
+# REQ-05: no `gradlew --stop` -- it stops every daemon on the machine, other sessions' builds included (T-235, T-078 4th)
+[ -e "$R3/stop-called.txt" ] && got=called || got=not-called
+check "[REQ-05 RED] timeout does not run 'gradlew --stop'" not-called "$got"
+# REQ-06: the gate's own tree still dies (the launcher changed). The fake writes test-finished.txt ~12s
+# after test-started.txt -- wait past that; present = the tree survived taskkill.
+if [ -e "$R3/test-started.txt" ]; then
+    t3=$(stat -c %Y "$R3/test-started.txt")
+    while [ "$(date +%s)" -lt $((t3 + 15)) ]; do sleep 1; done
+    [ -e "$R3/test-finished.txt" ] && got=survived || got=killed
+else
+    got=never-started
+fi
+check "[REQ-06 guard] timeout kills the gate's own process tree" killed "$got"
 
 # ── Case 4: doc-only commit (no staged .java) -> early exit 0 ─────────────────
 R4=$(make_repo); W4=$(to_win "$R4")
@@ -127,7 +142,7 @@ check "Korean before quote in command + gradle fails -> exit 2" 2 "$got"
 # WITHOUT tests. A parse failure must FAIL here, never pass on empty values.
 # The cap also needs a 5-min reserve (RESERVE_SEC) under the settings timeout: the
 # hook runs `npm --prefix frontend test` (no timeout, ~47s on AC, 3-4x on battery)
-# BEFORE the gradle budget starts, then taskkill + `gradlew --stop` after it.
+# BEFORE the gradle budget starts, then taskkill after it.
 RESERVE_SEC=300
 SETTINGS=".claude/settings.json"
 def_min=$(grep -E '^\$timeoutMs *= *[0-9]+ *\* *60 *\* *1000' "$HOOK" | head -1 | sed -E 's/^[^=]*= *([0-9]+).*/\1/')
@@ -170,5 +185,22 @@ else
     echo "FAIL: timeout message missing 'Two possible causes' and/or 'Power now:'"
     FAILED=1
 fi
+
+# ── Case 10: a process that outlives the gate must not hold the hook's stdout/stderr (REQ-04) ──
+# Claude Code waits for EOF on the hook's pipes, not for the hook to exit. Launched with handle
+# inheritance (UseShellExecute=$false) the pipe went down cmd -> java -> a NEW gradle daemon that idles
+# up to 3h: Bash calls hung 32 min and 3h38m (2026-09-29, T-078 4th). Only a PIPED read can see this --
+# every other case sends output to /dev/null, where there is no pipe to hold.
+R10=$(make_repo); W10=$(to_win "$R10"); stage_java "$R10"; write_fake_gradlew "$R10" linger
+esc_cmd10=$(json_esc "git commit -m \"feat: x\""); esc_cwd10=$(json_esc "$W10")
+s10=$SECONDS
+printf '{"tool_input":{"command":"%s"},"cwd":"%s"}' "$esc_cmd10" "$esc_cwd10" \
+    | timeout 60 powershell.exe -NoProfile -File "$HOOK" 2>&1 | cat >/dev/null
+el10=$((SECONDS - s10))
+st10=no; [ -e "$R10/linger-started.txt" ] && st10=yes
+dn10=no; [ -e "$R10/linger-done.txt" ] && dn10=yes
+# started=yes is the positive control (the grandchild really ran); done=no = EOF came while it was alive
+check "[REQ-04 RED] hook pipes close with the hook, not with a lingering grandchild (EOF after ${el10}s)" \
+    "yes no" "$st10 $dn10"
 
 exit $FAILED
