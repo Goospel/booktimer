@@ -4729,6 +4729,17 @@ package-private static이라 호출이 공짜였고, 복제하면 0초 조각 �
       `study`·`dashboard` 번들을 재생성했다. RED는 문구 단언 테스트(`RecallPanel.test.ts`)를 먼저 바꿔 확인
       (762건 GREEN). `pure.ts`엔 이 문구가 없었다 — 429 본문을 그대로 통과시키는 함수라 서버 문구만 바꾸면
       족했고, 옛 문구를 픽스처로 쓴 `pure.test.ts`만 갱신했다.
+- ✅ **선점 경합 창 수정** (2026-09-30, T-261): 「원자적」이라던 `tryConsume`·`tryConsumeGlobal`에 **과소 허용** 창이
+      있었다 — 첫 UPDATE가 「행 없음」으로 0을 받은 직후 남이 행을 만들면 `exists`만 보고 소진으로 판정해
+      몫이 남았는데 거절했다(그날 첫 요청이 동시에 몰릴 때, MySQL에서도). 경합 테스트가 CI에서 한 번 깨진
+      것이 단서였고 로컬 1000회에 1회 재현(`granted=2 remaining=1`, 예외 0). 판정을 행이 있는 게 확실한
+      두 번째 UPDATE에만 맡겼다. 상한 초과 쪽은 원래 막혀 있었다(판정이 WHERE 안).
+  - ⏸ **`tryConsumeBoth` 예외 시 사용자 몫 미환불** — 전역 선점이 `false`가 아니라 예외(락 타임아웃·연결
+        오류)로 끝나면 사용자 몫이 안 돌아온다(ANALYZE는 그날 1회를 잃는다). 단일 행 잠금이 수십 초 붙잡히는
+        DB 병리가 있어야 나서 실확률이 매우 낮고 이번 경합과 별개라 미뤘다 — 고친다면 전역 선점을
+        `try/catch(RuntimeException) { refund; throw; }`로 감싼다.
+  - ⏸ **책BTI 하루 한도(`User.tryConsumePersonalityRefresh`) 과허용 가능성** — 읽고-고치고-저장이라 동시
+        요청이면 한도를 넘길 수 있다(형제 코드 검증에서 발견, 미재현). AI 비용 경로인지부터 확인해야 해서 미뤘다.
 - ✅ **선재 결함(리뷰 8번) 해소** (2026-09-13): `StudyAiAccessApiController.handleAlreadyRequested`가
       `IllegalStateException`을 전부 409로 옮겨, `CurrentUserService.resolve`가 던지는 ISE(인증 주체는 있는데
       도메인 사용자가 없음 = 서버 결함)까지 「이미 신청했거나 승인된 상태예요」 409가 됐다. **같은 결함이
