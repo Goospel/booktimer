@@ -78,13 +78,13 @@ public class StudyAiUsageService {
         if (dailyTotalRepository.consume(day, dailyCap) == 1) {
             return true;
         }
-        if (dailyTotalRepository.existsByUsageDate(day)) {
-            return false; // 행은 있는데 못 늘렸다 = 그 날 전체 몫 소진
-        }
-        try {
-            dailyTotalRepository.save(StudyAiDailyTotal.of(day));
-        } catch (DataAccessException e) {
-            log.debug("전역 상한 카운터 생성 경합 — 다시 선점 시도: {}", e.toString());
+        // 첫 0은 「행이 없었다」일 수도 있다 — tryConsume과 같은 경합 창이다(T-261).
+        if (!dailyTotalRepository.existsByUsageDate(day)) {
+            try {
+                dailyTotalRepository.save(StudyAiDailyTotal.of(day));
+            } catch (DataAccessException e) {
+                log.debug("전역 상한 카운터 생성 경합 — 다시 선점 시도: {}", e.toString());
+            }
         }
         return dailyTotalRepository.consume(day, dailyCap) == 1;
     }
@@ -165,13 +165,16 @@ public class StudyAiUsageService {
         if (usageRepository.consume(user, day, kind, kind.max()) == 1) {
             return true;
         }
-        if (usageRepository.existsByUserAndUsageDateAndKind(user, day, kind)) {
-            return false; // 행은 있는데 못 늘렸다 = 오늘 몫 소진
-        }
-        try {
-            usageRepository.save(StudyAiUsage.of(user, day, kind));
-        } catch (DataAccessException e) {
-            log.debug("상한 카운터 생성 경합 — 다시 선점 시도: {}", e.toString());
+        // 첫 0은 「소진」이 아니라 「그때 행이 없었다」일 수 있다 — 그 사이 남이 행을 만들었으면 여기서
+        // 거절하면 몫이 남았는데 막는다(T-261). 판정은 아래 두 번째 UPDATE만 한다 — MySQL에선 그때 행이
+        // 반드시 보인다(진 INSERT도 UPDATE도 이긴 쪽 커밋을 기다린다). H2는 미커밋 중복을 즉시 던져
+        // 이론상 좁은 창이 남는다(테스트 DB 한정).
+        if (!usageRepository.existsByUserAndUsageDateAndKind(user, day, kind)) {
+            try {
+                usageRepository.save(StudyAiUsage.of(user, day, kind));
+            } catch (DataAccessException e) {
+                log.debug("상한 카운터 생성 경합 — 다시 선점 시도: {}", e.toString());
+            }
         }
         return usageRepository.consume(user, day, kind, kind.max()) == 1;
     }
