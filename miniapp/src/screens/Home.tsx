@@ -1877,6 +1877,9 @@ export function Home({
                     display: 'flex',
                     alignItems: 'center',
                     gap: 4,
+                    // 손가락 몫 44 — 글자 줄은 23px라 위아래 -10 마진이 늘어난 몫을 거둬 타일이 안 부푼다(타일 패딩 12 안).
+                    minHeight: 44,
+                    margin: '-10px 0',
                     padding: 0,
                     border: 0,
                     background: 'transparent',

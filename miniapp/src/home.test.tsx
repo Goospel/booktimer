@@ -2015,6 +2015,20 @@ describe('Soft 히어로 (PR-2)', () => {
     expect(tag).not.toContain('1.5px solid');
   });
 
+  /**
+   * 「남은 시간 ⓘ」는 `padding: 0`이라 터치 높이가 23px였다(#1194 리뷰 발견). 타일 줄 높이는 그대로 두고 히트 영역만
+   * 44로 넓힌다 — 위아래 음수 마진이 늘어난 몫을 도로 거둬 들인다. 마진이 빠지면 타일이 20px 부푼다.
+   */
+  it('「남은 시간 ⓘ」는 손가락 몫 44를 들고, 늘어난 몫은 음수 마진이 거둬 타일이 안 부푼다', () => {
+    const markup = renderHome();
+    const at = markup.indexOf('>남은 시간<svg');
+    const tag = markup.slice(markup.lastIndexOf('<button', at), at);
+
+    expect(at).toBeGreaterThan(-1);
+    expect(tag).toContain('min-height:44px');
+    expect(tag).toContain('margin:-10px 0');
+  });
+
   it('남은 시간 타일은 버터다 — 정보색', () => {
     const markup = renderHome();
 
