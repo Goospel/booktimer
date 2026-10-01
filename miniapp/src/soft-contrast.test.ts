@@ -100,10 +100,25 @@ const FILLED_INK = /--button-color:\s*var\((--[\w-]+)/.exec(filledRule)?.[1];
 const FILLED_BG = /(?:^|[\s;{])background-color:\s*var\((--[\w-]+)/.exec(filledRule)?.[1];
 PAIRS.push([FILLED_INK ?? '(채움 글자 토큰 없음)', FILLED_BG ?? '(채움 바탕 토큰 없음)']);
 
+/**
+ * 홈 피드 「다 읽음」 배지(채움 톤) — 같은 이유로 `HomeFeed.tsx`의 `badgeStyle`에서 뽑는다. 밤은 `--adaptiveBlue800`을
+ * 재정의하지 않아 낮의 진한 세이지 위에 밤 면색(어두운 글자)이 서서 거의 안 읽혔다(Soft PR-2 목 모드에서 발견).
+ */
+const feed = readFileSync(new URL('./screens/HomeFeed.tsx', import.meta.url), 'utf8');
+const solidBadge = /tone === 'solid'\s*\?\s*\{([^}]*)\}/.exec(feed)?.[1] ?? '';
+const BADGE_BG = /background:\s*'var\((--[\w-]+)/.exec(solidBadge)?.[1];
+const BADGE_INK = /color:\s*'var\((--[\w-]+)/.exec(solidBadge)?.[1];
+PAIRS.push([BADGE_INK ?? '(배지 글자 토큰 없음)', BADGE_BG ?? '(배지 바탕 토큰 없음)']);
+
 describe('채움 버튼 규칙에서 글자·바탕 토큰을 뽑는다', () => {
   it('둘 다 var(--토큰)이다 — 뽑기가 비면 아래 대비 쌍이 엉뚱한 이름을 잰다', () => {
     expect(FILLED_INK).toMatch(/^--/);
     expect(FILLED_BG).toMatch(/^--/);
+  });
+
+  it('피드 채움 배지도 둘 다 var(--토큰)이다', () => {
+    expect(BADGE_INK).toMatch(/^--/);
+    expect(BADGE_BG).toMatch(/^--/);
   });
 });
 

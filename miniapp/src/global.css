@@ -539,6 +539,8 @@ body.reading-lamp main {
   --adaptiveBlue500: #8FB087;
   --adaptiveBlue600: #9BB893;
   --adaptiveBlue700: #A6C09C;
+  /* 피드 「다 읽음」 채움 배지 바탕 — 밤 사다리의 다음 칸. 낮값(#334A31)이 새면 밤 면색 글자와 1.39:1 */
+  --adaptiveBlue800: #B1C8A6;
 
   --adaptiveBackground: #322E27;
   --adaptiveGrey100: #322E27; /* 밤의 면 — 면 구분은 그림자가 맡는다 */
@@ -576,6 +578,7 @@ body.reading-lamp .lamp-page {
   --adaptiveBlue500: #5B7F55;
   --adaptiveBlue600: #4D6E49;
   --adaptiveBlue700: #3F5A3C;
+  --adaptiveBlue800: #334A31;
 
   --adaptiveBackground: #FBF9F4;
   --adaptiveGrey100: #FBF9F4; /* 등불 밑 페이지는 낮 표면 */

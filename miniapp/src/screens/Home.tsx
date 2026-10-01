@@ -1877,6 +1877,10 @@ export function Home({
                     display: 'flex',
                     alignItems: 'center',
                     gap: 4,
+                    // 손가락 몫 44 — 위아래 -10 마진으로 바깥 높이가 24라 옆 값 줄(세리프 24px, 목 모드 실측 36)보다 낮아
+                    // 타일이 안 부푼다(실측 60 그대로). 넘친 히트 영역은 타일 패딩 12 안에 머문다.
+                    minHeight: 44,
+                    margin: '-10px 0',
                     padding: 0,
                     border: 0,
                     background: 'transparent',
