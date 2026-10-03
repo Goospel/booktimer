@@ -23,20 +23,20 @@
     "@vue/test-utils": "^2",
     "cross-env": "^7",
     "jsdom": "^26",
-    "sharp": "^0.35.3",
+    "sharp": "^0.35.5",
     "typescript": "^5",
     "vite": "^6",
     "vitest": "^4",
     "vue": "^3.5"
   },
   "dependencies": {
-    "@tiptap/core": "^3.31.3",
-    "@tiptap/extension-highlight": "^3.31.3",
+    "@tiptap/core": "^3.31.4",
+    "@tiptap/extension-highlight": "^3.31.4",
     "@tiptap/extension-list": "^3.31.3",
-    "@tiptap/markdown": "^3.31.3",
-    "@tiptap/pm": "^3.31.3",
-    "@tiptap/starter-kit": "^3.31.3",
-    "@tiptap/suggestion": "^3.31.3",
-    "@tiptap/vue-3": "^3.31.3"
+    "@tiptap/markdown": "^3.31.4",
+    "@tiptap/pm": "^3.31.4",
+    "@tiptap/starter-kit": "^3.31.4",
+    "@tiptap/suggestion": "^3.31.4",
+    "@tiptap/vue-3": "^3.31.4"
   }
 }
