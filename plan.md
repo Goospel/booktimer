@@ -4098,10 +4098,18 @@ package-private static이라 호출이 공짜였고, 복제하면 0초 조각 �
 
 ## 🧹 기술 부채 / 후속 정리
 
+### ✅ 훅 등록 경로 — cwd와 무관하게 `${CLAUDE_PROJECT_DIR}` exec form (2026-10-05, T-262)
+- ✅ 회귀 테스트 `test-settings-hook-paths.sh` — 수정 전 `[REQ-01 RED]` 13건 FAIL 확인
+- ✅ `.claude/settings.json` 훅 13개 exec form 전환(이벤트·matcher·순번·timeout 불변 — 1회 비교 SAME) · Case 8 PASS
+- ✅ 실러너 — 워크트리에서 시작한 `claude -p`가 `cd miniapp` 뒤 `(#999)` 제목 dry-run 커밋을 막고 127 0건 · SessionEnd 정상(CLI 2.1.289 · 데스크톱 번들 2.1.286, 대조군 옛 설정 = 안 막힘 + 127 16건, 양성 대조군 옛 설정·루트 = 막힘)
+- ✅ T-262 신설 · T-260 정정(「러너 cwd가 메인」 → 「세션을 시작한 체크아웃」) · 목차 재생성
+- ⏸ 세션을 레포 루트가 아닌 곳(하위 폴더 · 스크래치 워크스페이스 + 추가 디렉터리)에서 시작하면 프로젝트 settings.json이 안 읽혀 훅이 하나도 안 돈다(2026-10-05: `miniapp`에서 시작한 `claude -p`, `BookTimer\.claude`에서 시작한 CLI 세션). **왜 지금 안 하나**: 설정 파일 자체가 안 읽히니 프로젝트 쪽 수정으로는 못 막는다 — 사용자 전역 훅(SessionStart 경고, 또는 PreToolUse에서 대상 레포의 프로젝트 훅 대행)이 필요하고 그건 `~/.claude` 쪽 별도 설계다. 재개: 미로드 세션에서 게이트가 막았어야 할 커밋·push가 1회 새거나, 사용자가 전역 가드를 원할 때
+- ⏸ 데스크톱 세션 1건(2026-10-02~03)은 하위 폴더 cwd Bash 82회에도 127 기록이 0 — 같은 2.1.286 바이너리를 CLI·stream-json 모드로 돌리면 재현돼 원인 미확정. **왜 지금 안 하나**: 수정 후엔 cwd와 무관해져 결과에 영향이 없다. 재개: 수정 뒤에도 데스크톱 세션에서 게이트가 새는 사례 1회
+
 ### ✅ 훅 대상 레포 해석 — 한글 경로 fail-open (2026-09-30, T-259)
 - ✅ lib `Resolve-HookTargetCwd` — git의 최상위가 실제로 없으면(비 ASCII 경로가 CP949로 깨짐) `--show-cdup`만큼 올라간다. ASCII는 같은 분기라 불변
 - ✅ `test-hook-target-cwd.sh` 「T-259」 6행(한글 최상위·하위 폴더·`cd` · 대조군 · 콘솔 없음 · main push)
-- ✅ 실제 훅 러너 E2E(2026-09-30, 머지 뒤 메인 체크아웃을 당긴 다음) — 한글 경로 스크래치 레포(원격 없음·main·`Foo.java` 스테이징)에서 Bash 도구로 `git commit` → `[BLOCKED] Tests failed`, 가짜 gradlew 마커 생성, 커밋 미생성 / 같은 레포 bare push → `[BLOCKED] Direct push to main/master`. 수정 전엔 둘 다 통과했다. ⚠️ 워크트리 세션의 훅 러너는 cwd·`CLAUDE_PROJECT_DIR`가 메인 체크아웃이라 상대 경로 훅 명령(`.claude\hooks\…`)이 **메인의** 훅을 부른다 — 브랜치에서 고친 훅은 머지하고 메인을 당기기 전엔 실러너로 잴 수 없다
+- ✅ 실제 훅 러너 E2E(2026-09-30, 머지 뒤 메인 체크아웃을 당긴 다음) — 한글 경로 스크래치 레포(원격 없음·main·`Foo.java` 스테이징)에서 Bash 도구로 `git commit` → `[BLOCKED] Tests failed`, 가짜 gradlew 마커 생성, 커밋 미생성 / 같은 레포 bare push → `[BLOCKED] Direct push to main/master`. 수정 전엔 둘 다 통과했다. ⚠️ 워크트리 세션의 훅 러너는 cwd·`CLAUDE_PROJECT_DIR`가 메인 체크아웃이라 상대 경로 훅 명령(`.claude\hooks\…`)이 **메인의** 훅을 부른다 — 브랜치에서 고친 훅은 머지하고 메인을 당기기 전엔 실러너로 잴 수 없다 (2026-10-05 정정: 도는 훅은 「세션을 시작한 체크아웃」의 것이다 — T-260·T-262)
 - ⏸ 훅의 파일명 목록(`diff --cached --name-only` 등)이 비 ASCII 파일명에서 빗나간다 — 기본 `core.quotepath=true`면 `"\355…"`로 인용돼 `\.java$`·`^frontend/`가 안 맞는다. **왜 지금 안 하나**: 추적 파일 1,424개 중 비 ASCII 이름 0개(2026-09-30)이고, 고치면 훅 5개의 수집부를 모두 바꿔야 한다. 재개: 비 ASCII 파일명이 처음 추적될 때
 - ⏸ `require-css-comment-safe`가 blob 본문을 CP949로 읽는다(한글 바로 뒤 `*`·`"`를 삼킬 수 있음) — **왜 지금 안 하나**: CSS 3개 모두 한글 주석이지만 한글 바로 뒤 `*/`는 0건. 재개: 오탐·미탐 1회
 - ⏸ `block-main-push` 브랜치 이름 디코딩 — **왜 지금 안 하나**: 브랜치 39개 중 비 ASCII 0. 재개: 한글 브랜치명을 쓸 때

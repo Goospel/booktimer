@@ -5,11 +5,13 @@
         "hooks": [
           {
             "type": "command",
-            "command": "powershell.exe -NoProfile -File \".claude\\hooks\\warn-multi-session.ps1\""
+            "command": "powershell.exe",
+            "args": ["-NoProfile", "-File", "${CLAUDE_PROJECT_DIR}/.claude/hooks/warn-multi-session.ps1"]
           },
           {
             "type": "command",
-            "command": "powershell.exe -NoProfile -File \".claude\\hooks\\link-node-modules-on-session-start.ps1\"",
+            "command": "powershell.exe",
+            "args": ["-NoProfile", "-File", "${CLAUDE_PROJECT_DIR}/.claude/hooks/link-node-modules-on-session-start.ps1"],
             "timeout": 120
           }
         ]
@@ -21,7 +23,8 @@
         "hooks": [
           {
             "type": "command",
-            "command": "powershell.exe -NoProfile -File \".claude\\hooks\\cleanup-docker-on-session-end.ps1\"",
+            "command": "powershell.exe",
+            "args": ["-NoProfile", "-File", "${CLAUDE_PROJECT_DIR}/.claude/hooks/cleanup-docker-on-session-end.ps1"],
             "timeout": 30
           }
         ]
@@ -33,29 +36,35 @@
         "hooks": [
           {
             "type": "command",
-            "command": "powershell.exe -NoProfile -File \".claude\\hooks\\block-main-push.ps1\""
+            "command": "powershell.exe",
+            "args": ["-NoProfile", "-File", "${CLAUDE_PROJECT_DIR}/.claude/hooks/block-main-push.ps1"]
           },
           {
             "type": "command",
-            "command": "powershell.exe -NoProfile -File \".claude\\hooks\\require-tests-before-commit.ps1\"",
+            "command": "powershell.exe",
+            "args": ["-NoProfile", "-File", "${CLAUDE_PROJECT_DIR}/.claude/hooks/require-tests-before-commit.ps1"],
             "timeout": 1800
           },
           {
             "type": "command",
-            "command": "powershell.exe -NoProfile -File \".claude\\hooks\\check-commit-message.ps1\""
+            "command": "powershell.exe",
+            "args": ["-NoProfile", "-File", "${CLAUDE_PROJECT_DIR}/.claude/hooks/check-commit-message.ps1"]
           },
           {
             "type": "command",
-            "command": "powershell.exe -NoProfile -File \".claude\\hooks\\require-bundle-build.ps1\"",
+            "command": "powershell.exe",
+            "args": ["-NoProfile", "-File", "${CLAUDE_PROJECT_DIR}/.claude/hooks/require-bundle-build.ps1"],
             "timeout": 600
           },
           {
             "type": "command",
-            "command": "powershell.exe -NoProfile -File \".claude\\hooks\\require-css-comment-safe.ps1\""
+            "command": "powershell.exe",
+            "args": ["-NoProfile", "-File", "${CLAUDE_PROJECT_DIR}/.claude/hooks/require-css-comment-safe.ps1"]
           },
           {
             "type": "command",
-            "command": "powershell.exe -NoProfile -File \".claude\\hooks\\require-troubleshooting-toc.ps1\""
+            "command": "powershell.exe",
+            "args": ["-NoProfile", "-File", "${CLAUDE_PROJECT_DIR}/.claude/hooks/require-troubleshooting-toc.ps1"]
           }
         ]
       },
@@ -64,11 +73,13 @@
         "hooks": [
           {
             "type": "command",
-            "command": "powershell.exe -NoProfile -File \".claude\\hooks\\require-changelog-no-dup.ps1\""
+            "command": "powershell.exe",
+            "args": ["-NoProfile", "-File", "${CLAUDE_PROJECT_DIR}/.claude/hooks/require-changelog-no-dup.ps1"]
           },
           {
             "type": "command",
-            "command": "powershell.exe -NoProfile -File \".claude\\hooks\\require-single-changelog-commit-before-rebase.ps1\""
+            "command": "powershell.exe",
+            "args": ["-NoProfile", "-File", "${CLAUDE_PROJECT_DIR}/.claude/hooks/require-single-changelog-commit-before-rebase.ps1"]
           }
         ]
       }
@@ -78,7 +89,8 @@
         "hooks": [
           {
             "type": "command",
-            "command": "powershell.exe -NoProfile -File \".claude\\hooks\\remind-screenshot-on-review.ps1\"",
+            "command": "powershell.exe",
+            "args": ["-NoProfile", "-File", "${CLAUDE_PROJECT_DIR}/.claude/hooks/remind-screenshot-on-review.ps1"],
             "timeout": 5
           }
         ]
@@ -89,7 +101,8 @@
         "hooks": [
           {
             "type": "command",
-            "command": "powershell.exe -NoProfile -File \".claude\\hooks\\notify-when-waiting.ps1\"",
+            "command": "powershell.exe",
+            "args": ["-NoProfile", "-File", "${CLAUDE_PROJECT_DIR}/.claude/hooks/notify-when-waiting.ps1"],
             "timeout": 5
           }
         ]
