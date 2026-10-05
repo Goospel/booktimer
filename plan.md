@@ -4105,6 +4105,8 @@ package-private static이라 호출이 공짜였고, 복제하면 0초 조각 �
 - ✅ T-262 신설 · T-260 정정(「러너 cwd가 메인」 → 「세션을 시작한 체크아웃」) · 목차 재생성
 - ⏸ 세션을 레포 루트가 아닌 곳(하위 폴더 · 스크래치 워크스페이스 + 추가 디렉터리)에서 시작하면 프로젝트 settings.json이 안 읽혀 훅이 하나도 안 돈다(2026-10-05: `miniapp`에서 시작한 `claude -p`, `BookTimer\.claude`에서 시작한 CLI 세션). **왜 지금 안 하나**: 설정 파일 자체가 안 읽히니 프로젝트 쪽 수정으로는 못 막는다 — 사용자 전역 훅(SessionStart 경고, 또는 PreToolUse에서 대상 레포의 프로젝트 훅 대행)이 필요하고 그건 `~/.claude` 쪽 별도 설계다. 재개: 미로드 세션에서 게이트가 막았어야 할 커밋·push가 1회 새거나, 사용자가 전역 가드를 원할 때
 - ⏸ 데스크톱 세션 1건(2026-10-02~03)은 하위 폴더 cwd Bash 82회에도 127 기록이 0 — 같은 2.1.286 바이너리를 CLI·stream-json 모드로 돌리면 재현돼 원인 미확정. **왜 지금 안 하나**: 수정 후엔 cwd와 무관해져 결과에 영향이 없다. 재개: 수정 뒤에도 데스크톱 세션에서 게이트가 새는 사례 1회
+- ✅ 같은 세션 후속(2026-10-05) — 헤드리스 `claude -p` 실측이 「OAuth session expired」로 막힌 원인은 데스크톱 env 상속이 아니라 기본 설정 폴더 `~/.claude`의 로그인 만료였다(`CLAUDE_CONFIG_DIR='C:\Users\kimsa\.claude-b'`만 주면 성공). 글로벌 hookify 룰 `warn-headless-claude-auth`(설정 레포 PR, 머지)가 이 꼴을 경고하고, 새 헤드리스 세션에서 실발동을 확인했다
+- **다음 세션 시작점**: 이 절은 완료 — 이어서 할 일 없음. 위 ⏸ 둘은 재개 조건이 올 때. ⚠️ 이 수정 전에 갈라진 워크트리(`.claude/worktrees/quirky-meitner-2e4e61`·`study-ai-usage-flaky`)에서 시작한 세션은 rebase 전까지 옛 상대 경로 설정을 쓴다 — 거기서 하위 폴더로 cd하면 게이트가 다시 꺼진다. 훅을 실러너로 잴 땐 `CLAUDE_CONFIG_DIR='C:\Users\kimsa\.claude-b' claude -p …`를 워크트리 루트에서 시작한다(T-262 guard의 절차)
 
 ### ✅ 훅 대상 레포 해석 — 한글 경로 fail-open (2026-09-30, T-259)
 - ✅ lib `Resolve-HookTargetCwd` — git의 최상위가 실제로 없으면(비 ASCII 경로가 CP949로 깨짐) `--show-cdup`만큼 올라간다. ASCII는 같은 분기라 불변
