@@ -3,6 +3,7 @@ import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 
 import { App } from './App';
+import { loadWebFonts } from './fonts';
 import './global.css';
 
 /**
@@ -27,3 +28,4 @@ createRoot(document.getElementById('root')!).render(
     </TDSMobileProvider>
   </StrictMode>,
 );
+loadWebFonts(document, window);
