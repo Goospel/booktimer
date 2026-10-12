@@ -638,7 +638,8 @@ class FlywayMigrationTest {
     @Test
     @DisplayName("REQ-02 · 운영처럼 role이 네이티브 ENUM인 users도 V98 뒤엔 varchar(20) NOT NULL이고 값이 남는다")
     void v98_convergesProductionNativeEnumRoleToVarchar() throws Exception {
-        // 실행마다 새 DB — DB_CLOSE_DELAY=-1이라 이름을 재사용하면 같은 JVM의 재실행이 이미 V98까지 간 DB를 집어 RED가 사라진다
+        // 실행마다 새 DB — DB_CLOSE_DELAY=-1이라 이름을 재사용하면 같은 JVM의 재실행이 이전 실행의 DB(이미 V98 적용·같은
+        // 이메일 행)를 집어 INSERT가 UNIQUE(uk_users_email) 위반으로 깨진다(@RepeatedTest(3) + 고정 이름 실측: 2·3회차 실패)
         String url = "jdbc:h2:mem:v98_role_" + UUID.randomUUID() + ";MODE=MySQL;DB_CLOSE_DELAY=-1";
         Flyway.configure().dataSource(url, "sa", "").target("97").load().migrate();
         try (Connection c = DriverManager.getConnection(url, "sa", ""); Statement st = c.createStatement()) {
@@ -674,7 +675,10 @@ class FlywayMigrationTest {
         // 이름으로 다루면 H2·새 DB에선 통과하고 운영에서만 Flyway가 실패해 배포가 막힌다 — information_schema로 찾아 쓴다.
         List<String> v1OnlyNames = List.of("fk_reading_timer_user", "uk_reading_timer_user", "fk_reading_session_user");
         List<String> violations = new ArrayList<>();
-        for (Resource r : new PathMatchingResourcePatternResolver().getResources("classpath:db/migration/V*.sql")) {
+        // classpath*: — classpath:는 db/migration이 든 첫 루트 하나만 훑어, 테스트 루트에 그 폴더가 생기면 main이 빠진다
+        Resource[] scanned = new PathMatchingResourcePatternResolver().getResources("classpath*:db/migration/V*.sql");
+        assertThat(scanned).as("스캔이 비거나 모자라면 가드가 공허하다").hasSize(flyway.info().all().length);
+        for (Resource r : scanned) {
             String file = r.getFilename();
             if (file.startsWith("V1__")) {
                 continue; // 그 이름을 만드는 쪽(새 DB 전용)
