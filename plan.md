@@ -4098,6 +4098,14 @@ package-private static이라 호출이 공짜였고, 복제하면 0초 조각 �
 
 ## 🧹 기술 부채 / 후속 정리
 
+### ✅ 프로젝트 훅을 못 찾는 세션의 git 커밋·푸시 차단 — 전역 가드 (2026-10-12, T-262 2회차)
+- ✅ 가드·테스트 — 설정 레포 #166(머지 `83a23c2`): 전역 PreToolUse 훅 `~/.claude/hooks/block-projdir-mismatch.ps1`. git commit·push·rebase(`pull -r` 포함)를 찾으면 그 git이 돌 레포(입력 cwd → cd → `-C`)의 settings PreToolUse 훅이 `${CLAUDE_PROJECT_DIR}`로 가리키는 파일을 세션 폴더에서 `Test-Path`한다. 전부 없음 → 거부 A(새 세션 안내) · 세션 폴더 settings에 등록됐는데 파일이 없음 → 거부 B · 대상 브랜치가 새로 추가한 훅만 없음 → 통과(`new-hook-not-in-session`) · env 없음 → 거부 C. 우회 토큰 없음. 테스트 82건 · 돌연변이 13종 사살
+- ✅ hookify 러너 폴백(결정 3) — 세션 폴더에 `.claude\hookify`가 없으면 편집 파일·cwd 쪽 프로젝트 룰로 폴백한다(사고 세션에서 V98 DROP 경고 2종이 빠졌던 구멍). 러너 테스트 434건
+- ✅ 실러너 E1(머지 전) · 배포(settings.json 런북, `~/.claude`·`.claude-b` 각 1줄, `-Check` exit 0) · E3(배포 뒤 실제 등록): 스크래치 시작 = deny/all-missing · 워크트리 시작 = allow/ok · 러너 폴백 `[hookify:fx-pdg]` 차단. 원장 7/8 + ABANDON U5(데스크톱 `change_directory` 실물 E2는 사용자 세션 필요 — 같은 판정 경로를 사고 기록 env 값과 E1·E3a가 덮는다)
+- ⏸ 조기 경고(UserPromptSubmit·CwdChanged) — **왜 지금 안 하나**: 서브에이전트는 UserPromptSubmit을 안 거치고, `change_directory`가 CwdChanged를 쏘는지 미실측이다. 거부만으로 「무검사 커밋」은 0이 된다. 재개: 막힌 세션이 다시 생겨 재시작 비용이 문제가 될 때
+- ⏸ 1주 뒤 기록 대조(2026-10-19~) — `~/.claude/logs/block-projdir-mismatch.jsonl`을 `Group-Object decision,reason`으로 집계해, `deny`마다 정말 어긋난 세션인지(project ≠ 대상 레포 계열), `new-hook-not-in-session`·`some-missing` 건수와 처방 마찰을 본다
+- **다음 세션 시작점**: 이 절은 완료 — 1주 뒤 기록 대조만 남았다. ⚠️ git 커밋·푸시가 `[block-projdir-mismatch]`로 막히면 우회하지 말고 레포 폴더(또는 그 워크트리)에서 새 세션을 연다. 한계(체크아웃 X에서 시작해 더 새 훅이 있는 체크아웃 Y로 옮긴 세션 · 다른 프로젝트 세션의 히어독 본문 속 커밋 명령 글자 오탐)는 설정 레포 `docs/claude-md-reference.md` 「block-projdir-mismatch.ps1」 절
+
 ### ✅ 운영 users 스키마 수렴 — V98 · User `@DynamicUpdate` (2026-10-12, T-263)
 - ✅ (PR-A) V98 — `users.role`을 운영 네이티브 ENUM에서 `varchar(20) NOT NULL`로 수렴(새 DB 무변경) · 웹 푸시 죽은 열 5개 DROP(운영 값 0건 실측)
 - ✅ (PR-A) FlywayMigrationTest REQ-01~03(5열 부재 · 운영 ENUM 재현 수렴·값 보존 · V1 제약 이름 참조 금지) · T-263
@@ -4114,10 +4122,10 @@ package-private static이라 호출이 공짜였고, 복제하면 0초 조각 �
 - ✅ `.claude/settings.json` 훅 13개 exec form 전환(이벤트·matcher·순번·timeout 불변 — 1회 비교 SAME) · Case 8 PASS
 - ✅ 실러너 — 워크트리에서 시작한 `claude -p`가 `cd miniapp` 뒤 `(#999)` 제목 dry-run 커밋을 막고 127 0건 · SessionEnd 정상(CLI 2.1.289 · 데스크톱 번들 2.1.286, 대조군 옛 설정 = 안 막힘 + 127 16건, 양성 대조군 옛 설정·루트 = 막힘)
 - ✅ T-262 신설 · T-260 정정(「러너 cwd가 메인」 → 「세션을 시작한 체크아웃」) · 목차 재생성
-- ⏸ 세션을 레포 루트가 아닌 곳(하위 폴더 · 스크래치 워크스페이스 + 추가 디렉터리)에서 시작하면 프로젝트 settings.json이 안 읽혀 훅이 하나도 안 돈다(2026-10-05: `miniapp`에서 시작한 `claude -p`, `BookTimer\.claude`에서 시작한 CLI 세션). **왜 지금 안 하나**: 설정 파일 자체가 안 읽히니 프로젝트 쪽 수정으로는 못 막는다 — 사용자 전역 훅(SessionStart 경고, 또는 PreToolUse에서 대상 레포의 프로젝트 훅 대행)이 필요하고 그건 `~/.claude` 쪽 별도 설계다. 재개: 미로드 세션에서 게이트가 막았어야 할 커밋·push가 1회 새거나, 사용자가 전역 가드를 원할 때
+- ✅ (2026-10-12 해소 — 재개 조건 충족: T-262 2회차에서 실제로 샜다) 세션을 레포 루트가 아닌 곳(하위 폴더 · 스크래치 워크스페이스 + 추가 디렉터리)에서 시작하면 프로젝트 settings.json이 안 읽히거나 `${CLAUDE_PROJECT_DIR}`가 시작 폴더로 남아 훅이 안 돈다 → 전역 가드 `block-projdir-mismatch`가 그 세션의 git 커밋·푸시·리베이스를 막는다. 위 「✅ 프로젝트 훅을 못 찾는 세션의 git 커밋·푸시 차단」 절
 - ⏸ 데스크톱 세션 1건(2026-10-02~03)은 하위 폴더 cwd Bash 82회에도 127 기록이 0 — 같은 2.1.286 바이너리를 CLI·stream-json 모드로 돌리면 재현돼 원인 미확정. **왜 지금 안 하나**: 수정 후엔 cwd와 무관해져 결과에 영향이 없다. 재개: 수정 뒤에도 데스크톱 세션에서 게이트가 새는 사례 1회
 - ✅ 같은 세션 후속(2026-10-05) — 헤드리스 `claude -p` 실측이 「OAuth session expired」로 막힌 원인은 데스크톱 env 상속이 아니라 기본 설정 폴더 `~/.claude`의 로그인 만료였다(`CLAUDE_CONFIG_DIR='C:\Users\kimsa\.claude-b'`만 주면 성공). 글로벌 hookify 룰 `warn-headless-claude-auth`(설정 레포 PR, 머지)가 이 꼴을 경고하고, 새 헤드리스 세션에서 실발동을 확인했다
-- **다음 세션 시작점**: 이 절은 완료 — 이어서 할 일 없음. 위 ⏸ 둘은 재개 조건이 올 때. ⚠️ 이 수정 전에 갈라진 워크트리(`.claude/worktrees/quirky-meitner-2e4e61`·`study-ai-usage-flaky`)에서 시작한 세션은 rebase 전까지 옛 상대 경로 설정을 쓴다 — 거기서 하위 폴더로 cd하면 게이트가 다시 꺼진다. 훅을 실러너로 잴 땐 `CLAUDE_CONFIG_DIR='C:\Users\kimsa\.claude-b' claude -p …`를 워크트리 루트에서 시작한다(T-262 guard의 절차)
+- **다음 세션 시작점**: 이 절은 완료 — 이어서 할 일 없음. 위 ⏸ 하나는 재개 조건이 올 때(나머지 하나는 2026-10-12 전역 가드로 해소). ⚠️ 이 수정 전에 갈라진 워크트리(`.claude/worktrees/quirky-meitner-2e4e61`·`study-ai-usage-flaky`)에서 시작한 세션은 rebase 전까지 옛 상대 경로 설정을 쓴다 — 거기서 하위 폴더로 cd하면 게이트가 다시 꺼진다. 훅을 실러너로 잴 땐 `CLAUDE_CONFIG_DIR='C:\Users\kimsa\.claude-b' claude -p …`를 워크트리 루트에서 시작한다(T-262 guard의 절차)
 
 ### ✅ 훅 대상 레포 해석 — 한글 경로 fail-open (2026-09-30, T-259)
 - ✅ lib `Resolve-HookTargetCwd` — git의 최상위가 실제로 없으면(비 ASCII 경로가 CP949로 깨짐) `--show-cdup`만큼 올라간다. ASCII는 같은 분기라 불변
