@@ -1252,7 +1252,7 @@ SNS 토대(팔로우·공개범위·프로필)가 깔려 있어 ②의 사용자
 
 > **동기**: iPad 가로에서 브라우저 주소창·탭바가 화면을 잡아먹어 마을 게임 영역이 좁아지는 문제 해소. `display: standalone`으로 홈 화면 설치 시 브라우저 UI 제거(상태바=시계·배터리 유지). 단계별 출하 내역은 아래 항목 + [changelog.md](claude-docs/changelog.md).
 >
-> **❌ 웹 푸시 제거 (2026-07-09)**: **매일 독서 알림(L3a)·복귀 알림(L3b) 웹 푸시를 제품에서 제거**했다 — 웹 푸시는 사실상 네이티브 앱 기능(iOS PWA 푸시 제약·설치 강제·구독 관리 부담)이라, 웹에선 미점등으로 UI만 마스킹돼 있던 것을 걷어내고 **네이티브 패키징 백로그로 강등**([[native-packaging-backlog]]). 대신 **이메일 재참여 넛지(복귀 안내 메일)만 유지**(SES 점등 완료). 제거 범위: `push/` 패키지·`retention/RetentionPush*`·`User` 푸시 필드·`ReadingSessionRepository.findRetentionPushTargets`·`notification-settings.js`·`sw.js` 푸시 핸들러·`build.gradle` 푸시 의존성(web-push·bcprov·jose4j·httpcore). **DB(V50·V51)는 forward-only라 보존**(dead — 두 NOT NULL 컬럼은 `DEFAULT FALSE`라 매핑 제거 후에도 INSERT 무해). **아래 L3a·L3b·알림 설정 통합 항목은 구현 이력(근거 보존)이며 현재 코드에서 제거됨.** L1(풀스크린)·L2(오프라인 SW)·L3c(설치 유도 칩)·정적자산 해시는 유지.
+> **❌ 웹 푸시 제거 (2026-07-09)**: **매일 독서 알림(L3a)·복귀 알림(L3b) 웹 푸시를 제품에서 제거**했다 — 웹 푸시는 사실상 네이티브 앱 기능(iOS PWA 푸시 제약·설치 강제·구독 관리 부담)이라, 웹에선 미점등으로 UI만 마스킹돼 있던 것을 걷어내고 **네이티브 패키징 백로그로 강등**([[native-packaging-backlog]]). 대신 **이메일 재참여 넛지(복귀 안내 메일)만 유지**(SES 점등 완료). 제거 범위: `push/` 패키지·`retention/RetentionPush*`·`User` 푸시 필드·`ReadingSessionRepository.findRetentionPushTargets`·`notification-settings.js`·`sw.js` 푸시 핸들러·`build.gradle` 푸시 의존성(web-push·bcprov·jose4j·httpcore). **DB(V50·V51)는 forward-only라 보존**(dead — 두 NOT NULL 컬럼은 `DEFAULT FALSE`라 매핑 제거 후에도 INSERT 무해) → `push_subscriptions`는 V68(2026-08-15), users 열 5개는 V98(2026-10-12)에서 DROP. **아래 L3a·L3b·알림 설정 통합 항목은 구현 이력(근거 보존)이며 현재 코드에서 제거됨.** L1(풀스크린)·L2(오프라인 SW)·L3c(설치 유도 칩)·정적자산 해시는 유지.
 
 - **L1 풀스크린 ✅ (2026-06-20)**: `static/manifest.json`(name·short_name·start_url=/(최초 `/dashboard`였으나 매핑 없는 경로라 콜드 런치 404 → `/`로 수정. 단 **이미 설치된 PWA는 start_url을 동결**해 manifest만 고치면 구 install은 여전히 `/dashboard` 콜드 런치 404 → 서버가 `/dashboard`를 `/` 별칭으로 수신(`DashboardController` 매핑 확장 + permitAll)해 동결 install 구제, changelog 2026-06-24)·display=standalone·scope=/·theme_color=#6E8A6A·background_color=#F3EEE4·icons 3종) + 임시 아이콘 4종(`icons/` — 192·512·maskable-512·apple-touch-icon 180, sharp SVG→PNG) + `templates/fragments/pwa-head.html`(manifest link·theme-color·apple 메타·apple-touch-icon 공통 fragment) → garden·dashboard·landing·login 주입 + `SecurityConfig` `/manifest.json`·`/icons/**` permitAll. TDD: vitest `pwa-manifest.test.ts` 8종 RED→GREEN + `PwaStaticAccessTest`(MockMvc 미인증 200) RED→GREEN.
 - **L2 설치형/오프라인 ✅ (2026-06-20)**: `static/sw.js` 신설(CACHE='shell-v1'·install precache·activate 구 캐시 삭제·clients.claim·fetch: HTML navigate = network-first·garden.js = network-first·정적자산 = cache-first) + `pwa-head` fragment에 `serviceWorker.register('/sw.js')` 전역 등록 + SecurityConfig `/sw.js` permitAll. vitest `pwa-sw.test.ts` 7종 + `PwaStaticAccessTest.swJs_isPublic` RED→GREEN. 실 브라우저 게이트(오프라인 셸·갱신·설치 배너) 필요.
@@ -4097,6 +4097,16 @@ package-private static이라 호출이 공짜였고, 복제하면 0초 조각 �
 ---
 
 ## 🧹 기술 부채 / 후속 정리
+
+### 🔜 운영 users 스키마 수렴 — V98 · User `@DynamicUpdate` (2026-10-12, T-263)
+- ✅ (PR-A) V98 — `users.role`을 운영 네이티브 ENUM에서 `varchar(20) NOT NULL`로 수렴(새 DB 무변경) · 웹 푸시 죽은 열 5개 DROP(운영 값 0건 실측)
+- ✅ (PR-A) FlywayMigrationTest REQ-01~03(5열 부재 · 운영 ENUM 재현 수렴·값 보존 · V1 제약 이름 참조 금지) · T-263
+- 🔜 (PR-B) `User`에 `@DynamicUpdate` — 배치 마커 저장이 다른 트랜잭션이 커밋한 열(DM 제재 등)을 되돌리던 창 — PR-B에서 이 줄과 절 제목을 ✅로 바꾼다
+- ⏸ 진행 중 세션 1개 보장(시작 경로 사용자 행 잠금) — **왜 지금 안 하나**: 「조회 후 삽입」 경합 창은 있지만 운영 실측 중복 0건(2026-10-12, 독서·공부). 재개: 중복 1건, 또는 진행 중 세션 조회의 `IncorrectResultSizeDataAccessException` 1회
+- ⏸ UNIQUE와 겹치는 단일 인덱스 4개(`ix_block_blocker`·`ix_follow_follower`·`ix_report_reporter`·`idx_book_news_isbn13`) + `email_token.token_hash` UNIQUE — **왜**: 이 규모에서 이득 0. 재개: 그 테이블을 다른 이유로 만질 때
+- ⏸ CHECK(`chat_room.status`·`report.status`) ↔ Java enum 동기화 가드 — **왜**: 두 enum을 바꿀 계획이 없다. 재개: 그 enum에 값을 더할 때 같은 PR에서
+- ⏸ 만료 토큰 청소(`api_token` 90일·`email_token`·`toss_link_code`) — **왜**: 용량 무의미. 재개: 개인정보 보관 점검 때
+- **다음 세션 시작점**: PR-B가 남았으면 그것부터. ⚠️ V1 세 테이블의 제약은 이름으로 다루지 않는다(T-263 — 운영 이름은 Hibernate 해시, REQ-03 가드)
 
 ### ✅ 훅 등록 경로 — cwd와 무관하게 `${CLAUDE_PROJECT_DIR}` exec form (2026-10-05, T-262)
 - ✅ 회귀 테스트 `test-settings-hook-paths.sh` — 수정 전 `[REQ-01 RED]` 13건 FAIL 확인

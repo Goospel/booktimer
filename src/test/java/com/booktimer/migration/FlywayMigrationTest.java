@@ -13,19 +13,30 @@ import com.booktimer.user.Role;
 import com.booktimer.user.User;
 import com.booktimer.user.UserRepository;
 
+import java.nio.charset.StandardCharsets;
+import java.sql.Connection;
+import java.sql.DriverManager;
+import java.sql.ResultSet;
+import java.sql.Statement;
 import java.time.Instant;
 import org.flywaydb.core.Flyway;
 import org.flywaydb.core.api.MigrationInfo;
+import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.core.io.Resource;
+import org.springframework.core.io.support.PathMatchingResourcePatternResolver;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.test.context.TestPropertySource;
 
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashSet;
+import java.util.List;
 import java.util.Locale;
 import java.util.Set;
+import java.util.UUID;
 import java.util.stream.Collectors;
 
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -606,5 +617,78 @@ class FlywayMigrationTest {
 
         assertThat(a.getPreviousLoginId()).isNull();
         assertThat(b.getPreviousLoginId()).isNull();
+    }
+
+    // ── V98 운영 users 수렴 (T-263) ──
+
+    @Test
+    @DisplayName("REQ-01 · V98이 웹 푸시 시절 죽은 users 열 5개를 지운다")
+    void v98_dropsDeadPushColumns() {
+        Integer columns = jdbcTemplate.queryForObject("""
+                SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS
+                WHERE UPPER(TABLE_NAME) = 'USERS' AND UPPER(COLUMN_NAME) IN (
+                  'MARKETING_PUSH_CONSENT', 'MARKETING_PUSH_CONSENT_AT', 'MARKETING_PUSH_NUDGE_SENT_AT',
+                  'DAILY_REMINDER_ENABLED', 'LAST_REMINDER_SENT_AT')
+                """, Integer.class);
+        assertThat(columns)
+                .as("V98이 users의 웹 푸시 열 5개를 drop 했어야 한다(validate는 남는 열을 못 잡는다)")
+                .isZero();
+    }
+
+    @Test
+    @DisplayName("REQ-02 · 운영처럼 role이 네이티브 ENUM인 users도 V98 뒤엔 varchar(20) NOT NULL이고 값이 남는다")
+    void v98_convergesProductionNativeEnumRoleToVarchar() throws Exception {
+        // 실행마다 새 DB — DB_CLOSE_DELAY=-1이라 이름을 재사용하면 같은 JVM의 재실행이 이전 실행의 DB(이미 V98 적용·같은
+        // 이메일 행)를 집어 INSERT가 UNIQUE(uk_users_email) 위반으로 깨진다(@RepeatedTest(3) + 고정 이름 실측: 2·3회차 실패)
+        String url = "jdbc:h2:mem:v98_role_" + UUID.randomUUID() + ";MODE=MySQL;DB_CLOSE_DELAY=-1";
+        Flyway.configure().dataSource(url, "sa", "").target("97").load().migrate();
+        try (Connection c = DriverManager.getConnection(url, "sa", ""); Statement st = c.createStatement()) {
+            st.executeUpdate("""
+                    insert into users (email, nickname, timezone, role, created_at, updated_at)
+                    values ('v98-admin@example.com', 'v98', 'Asia/Seoul', 'ADMIN', current_timestamp, current_timestamp)""");
+            // 운영 상태 재현 — ddl-auto 시절 Hibernate가 만든 네이티브 ENUM(2026-10-12 실측, T-263)
+            st.executeUpdate("alter table users modify role enum('ADMIN','USER') not null");
+        }
+
+        Flyway.configure().dataSource(url, "sa", "").load().migrate(); // V98~
+
+        try (Connection c = DriverManager.getConnection(url, "sa", ""); Statement st = c.createStatement()) {
+            try (ResultSet col = st.executeQuery("""
+                    select data_type, character_maximum_length, is_nullable from information_schema.columns
+                    where upper(table_name) = 'USERS' and upper(column_name) = 'ROLE'""")) {
+                assertThat(col.next()).isTrue();
+                assertThat(col.getString(1)).as("운영 ENUM이 varchar로 수렴해야 한다").isEqualTo("CHARACTER VARYING");
+                assertThat(col.getLong(2)).isEqualTo(20L);
+                assertThat(col.getString(3)).isEqualTo("NO");
+            }
+            try (ResultSet row = st.executeQuery("select role from users where email = 'v98-admin@example.com'")) {
+                assertThat(row.next()).isTrue();
+                assertThat(row.getString(1)).as("수렴이 값을 잃으면 안 된다").isEqualTo("ADMIN");
+            }
+        }
+    }
+
+    @Test
+    @DisplayName("REQ-03 · V1 이후 마이그레이션은 운영에 없는 V1 제약 이름을 참조하지 않는다")
+    void laterMigrationsDoNotReferenceV1OnlyConstraintNames() throws Exception {
+        // 운영의 V1 세 테이블은 ddl-auto가 만들어 이 이름들 대신 Hibernate 해시 이름이 있다(T-263).
+        // 이름으로 다루면 H2·새 DB에선 통과하고 운영에서만 Flyway가 실패해 배포가 막힌다 — information_schema로 찾아 쓴다.
+        List<String> v1OnlyNames = List.of("fk_reading_timer_user", "uk_reading_timer_user", "fk_reading_session_user");
+        List<String> violations = new ArrayList<>();
+        // classpath*: — classpath:는 db/migration이 든 첫 루트 하나만 훑어, 테스트 루트에 그 폴더가 생기면 main이 빠진다
+        Resource[] scanned = new PathMatchingResourcePatternResolver().getResources("classpath*:db/migration/V*.sql");
+        assertThat(scanned).as("스캔이 비거나 모자라면 가드가 공허하다").hasSize(flyway.info().all().length);
+        for (Resource r : scanned) {
+            String file = r.getFilename();
+            if (file.startsWith("V1__")) {
+                continue; // 그 이름을 만드는 쪽(새 DB 전용)
+            }
+            String sql = r.getContentAsString(StandardCharsets.UTF_8).lines()
+                    .filter(line -> !line.strip().startsWith("--")) // 주석의 언급은 허용
+                    .collect(Collectors.joining("\n"))
+                    .toLowerCase(Locale.ROOT);
+            v1OnlyNames.stream().filter(sql::contains).forEach(n -> violations.add(file + " → " + n));
+        }
+        assertThat(violations).as("V1 제약은 환경마다 이름이 다르다(T-263)").isEmpty();
     }
 }

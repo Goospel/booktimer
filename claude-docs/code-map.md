@@ -173,7 +173,7 @@ com.booktimer/
 - **핵심**: `retention/RetentionNudgeScheduler`(cron 10시 KST)·`retention/RetentionNudgeService`(7일 비활동·`ReadingSessionRepository.findNudgeTargets`·(광고) 표기·서명 수신거부 링크)·`retention/UnsubscribeService`
 - **⚠️ 배선 주의**: 스케줄러는 `config/SchedulingConfig` 활성 전제(@Scheduled, Asia/Seoul) + `booktimer.nudge.enabled` 게이트(기본 OFF, 법무 9박스 후 점등). 발송은 §12 이메일 인프라 재사용. (웹 푸시 `push/`·`retention/RetentionPush*`는 제거됨.)
 - **템플릿**: `unsubscribe-confirm.html`·`unsubscribe-done.html`
-- **DB**: `V32`(marketing nudge 컬럼) · ~~`V50`(push subscriptions & reminder)·`V51`(push consent)~~ → 웹 푸시 제거로 dead(테이블·컬럼 보존, forward-only·`DEFAULT FALSE`)
+- **DB**: `V32`(marketing nudge 컬럼) · ~~`V50`(push subscriptions & reminder)·`V51`(push consent)~~ → 웹 푸시 제거로 dead — `push_subscriptions`는 V68, users 열 5개는 V98에서 DROP
 - **설계**: memory: pwa-adoption(웹 푸시 제거 반영)·native-packaging-backlog · README 로드맵
 
 ## 📜 14. 격언 (작가 명언)
