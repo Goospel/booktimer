@@ -10,6 +10,7 @@ import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.Table;
 import jakarta.persistence.UniqueConstraint;
+import org.hibernate.annotations.DynamicUpdate;
 
 import java.time.DateTimeException;
 import java.time.ZoneId;
@@ -26,8 +27,12 @@ import java.util.regex.Pattern;
  *
  * <p>비밀번호는 평문을 받지 않는다 — 해싱(BCrypt)은 서비스 책임이고, 엔티티는
  * 이미 해시된 문자열({@code passwordHash})만 보관한다.
+ *
+ * <p><b>{@code @DynamicUpdate}</b>: 바뀐 열만 쓴다 — 배치·운영자·사용자 설정이 같은 행을 저마다 저장해, 전 열 UPDATE면
+ * 서로의 다른 열을 옛 값으로 덮는다(REQ-04, ChatRoom #1167과 같은 이유).
  */
 @Entity
+@DynamicUpdate
 @Table(name = "users", uniqueConstraints = {
         @UniqueConstraint(name = "uk_users_email", columnNames = "email")
 })
@@ -234,9 +239,8 @@ public class User extends BaseTimeEntity {
 
     /**
      * 마지막 발송(선점) 시각 — 멱등. 배치는 컬럼 단독 UPDATE({@link UserRepository#claimReadingReminder}·반납)로만 쓰고
-     * 도메인 메서드도 이 필드를 건드리지 않는다. 다만 {@code @DynamicUpdate}가 없어 이 엔티티를 save하는 다른 트랜잭션
-     * (설정 저장 등)은 읽어 둔 옛 값으로 이 컬럼까지 다시 쓴다 — 선점과 수 ms 안에 겹치면 선점이 지워져 한 통 더 갈 수 있다
-     * (설계 §7이 수용한 창).
+     * 도메인 메서드도 이 필드를 건드리지 않는다. {@code @DynamicUpdate}라 이 필드를 바꾸지 않은 save는 이 열을 쓰지 않는다
+     * — 선점이 다른 저장(설정 저장 등)에 지워지지 않는다.
      */
     @Column(name = "reading_reminder_sent_at")
     private java.time.Instant readingReminderSentAt;
