@@ -528,4 +528,54 @@ describe('채움 주 버튼 개수 (설계 D5)', () => {
       'StudyLibrary.tsx',
     ]);
   });
+
+  /**
+   * 에디토리얼(PR-1)에서 TDS `<Button>`의 primary(기본) 재색칠이 곧 검정 알약이 됐다 — 위 `FILLED`는 Soft 시절 전제라
+   * 이것을 세지 않았다(리뷰: 남의 책방 「팔로우」 + 신고 패널 「신고하기」가 검정 둘로 섰고, Goal 「나중에 정할래요」의
+   * `variant="weak"`를 지운 돌연변이가 전부 초록으로 살아남았다). 그래서 파일별로 primary(`variant="weak"`·`color="danger"`가
+   * 없는 여는 태그) 개수를 <b>지금 수치로 고정</b>한다 — primary를 새로 세우는 일이 이 표 한 줄을 지나게 해 리뷰 지점이 된다
+   * (`FLOAT_USES` 표와 같은 수법). 화면 단위 실측(U-17)은 PR-4 몫이다.
+   */
+  it('TDS primary 버튼(검정 알약)은 파일별 허용표를 넘지 않는다', () => {
+    /** `<Button` 여는 태그를 `>`까지 — 중괄호 안의 `=>`는 건너뛴다. */
+    const openTags = (src: string) => {
+      const tags: string[] = [];
+      for (const m of src.matchAll(/<Button[\s>]/g)) {
+        let i = m.index + 7;
+        for (let depth = 0; i < src.length; i++) {
+          if (src[i] === '{') depth++;
+          else if (src[i] === '}') depth--;
+          else if (src[i] === '>' && depth === 0) break;
+        }
+        tags.push(src.slice(m.index, i + 1));
+      }
+      return tags;
+    };
+    const primaryOf = (rel: string) =>
+      openTags(read(rel)).filter((t) => !t.includes('variant="weak"') && !t.includes('color="danger"')).length;
+
+    const files = [
+      ...readdirSync(new URL('./screens', import.meta.url))
+        .filter((f) => f.endsWith('.tsx'))
+        .map((f) => `./screens/${f}`),
+      './App.tsx',
+    ];
+    const counts = Object.fromEntries(
+      files.map((f) => [f.replace(/^\.\/(screens\/)?/, ''), primaryOf(f)] as const).filter(([, n]) => n > 0),
+    );
+
+    expect(counts).toEqual({
+      'App.tsx': 1, // 불러오기 실패 「다시 시도」 — 그 화면엔 그것뿐
+      'Bookshop.tsx': 1, // 책방 이름 저장
+      'Chat.tsx': 1, // 보내기
+      // 상태가 배타적이다 — 잠긴 탭 「토스로 시작하기」 / 체험 전 「읽기 시작」 / 재는 중 「끝내기」 / 끝난 뒤 「토스로 시작하기」. 한 번에 하나만 선다.
+      'GuestHome.tsx': 4,
+      'Library.tsx': 1, // 책 메뉴 시트의 공개 전환(시트 안이라 서재의 「여백에 글쓰기」와 같은 면에 서지 않는다)
+      'LinkAccount.tsx': 1,
+      'LoginBridge.tsx': 1,
+      'Profile.tsx': 1, // 남의 책방 「팔로우」 — 신고 패널의 「신고하기」는 weak로 내렸다(신고가 주 동작처럼 보이지 않게)
+      'Settings.tsx': 1,
+      'Story.tsx': 1,
+    });
+  });
 });

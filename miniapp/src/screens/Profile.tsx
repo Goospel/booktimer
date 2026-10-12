@@ -1282,7 +1282,7 @@ export function SafetyPanel({
         />
       </div>
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginTop: 12 }}>
-        <Button style={{ flex: 1 }} size="small" disabled={busy} onClick={() => onReport(reason, detail.trim())}>
+        <Button style={{ flex: 1 }} size="small" variant="weak" disabled={busy} onClick={() => onReport(reason, detail.trim())}>
           신고하기
         </Button>
         {/* 차단은 되돌리기 비싸다 — 그 순간 상대 책방이 404가 되고 이 화면도 닫힌다. 한 탭 더 받는다. */}

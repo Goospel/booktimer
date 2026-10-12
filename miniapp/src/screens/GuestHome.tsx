@@ -36,7 +36,6 @@ import {
   Screen,
   SectionTitle,
   Text,
-  coverColor,
   sectionStyle,
 } from '../ui';
 import {
@@ -494,9 +493,12 @@ export function GuestHome({
             width: 38,
             height: 38,
             padding: 0,
-            border: 'none',
+            boxSizing: 'border-box',
+            // 로그인 홈 `Avatar`와 같은 문법 — 채움 없음 + 잉크 1px 테 + 잉크 획(§6-4).
+            border: '1px solid var(--adaptiveGrey800, #1D1B18)',
             borderRadius: '50%',
-            background: coverColor('북타이머'),
+            background: 'transparent',
+            color: 'var(--adaptiveGrey800, #1D1B18)',
             cursor: 'pointer',
           }}
         >
@@ -505,7 +507,7 @@ export function GuestHome({
             height="22"
             viewBox="0 0 24 24"
             fill="none"
-            stroke="rgba(44,42,36,0.5)"
+            stroke="currentColor"
             strokeWidth="1.8"
             strokeLinecap="round"
             strokeLinejoin="round"
