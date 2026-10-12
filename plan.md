@@ -4098,10 +4098,10 @@ package-private static이라 호출이 공짜였고, 복제하면 0초 조각 �
 
 ## 🧹 기술 부채 / 후속 정리
 
-### ✅ 운영 users 스키마 수렴 — V98 · User `@DynamicUpdate` (2026-10-12, T-263)
+### 🔜 운영 users 스키마 수렴 — V98 · User `@DynamicUpdate` (2026-10-12, T-263)
 - ✅ (PR-A) V98 — `users.role`을 운영 네이티브 ENUM에서 `varchar(20) NOT NULL`로 수렴(새 DB 무변경) · 웹 푸시 죽은 열 5개 DROP(운영 값 0건 실측)
 - ✅ (PR-A) FlywayMigrationTest REQ-01~03(5열 부재 · 운영 ENUM 재현 수렴·값 보존 · V1 제약 이름 참조 금지) · T-263
-- 🔜 (PR-B) `User`에 `@DynamicUpdate` — 배치 마커 저장이 다른 트랜잭션이 커밋한 열(DM 제재 등)을 되돌리던 창
+- 🔜 (PR-B) `User`에 `@DynamicUpdate` — 배치 마커 저장이 다른 트랜잭션이 커밋한 열(DM 제재 등)을 되돌리던 창 — PR-B에서 이 줄과 절 제목을 ✅로 바꾼다
 - ⏸ 진행 중 세션 1개 보장(시작 경로 사용자 행 잠금) — **왜 지금 안 하나**: 「조회 후 삽입」 경합 창은 있지만 운영 실측 중복 0건(2026-10-12, 독서·공부). 재개: 중복 1건, 또는 진행 중 세션 조회의 `IncorrectResultSizeDataAccessException` 1회
 - ⏸ UNIQUE와 겹치는 단일 인덱스 4개(`ix_block_blocker`·`ix_follow_follower`·`ix_report_reporter`·`idx_book_news_isbn13`) + `email_token.token_hash` UNIQUE — **왜**: 이 규모에서 이득 0. 재개: 그 테이블을 다른 이유로 만질 때
 - ⏸ CHECK(`chat_room.status`·`report.status`) ↔ Java enum 동기화 가드 — **왜**: 두 enum을 바꿀 계획이 없다. 재개: 그 enum에 값을 더할 때 같은 PR에서
