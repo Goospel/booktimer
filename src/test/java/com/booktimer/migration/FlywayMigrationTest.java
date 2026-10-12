@@ -25,6 +25,8 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.core.io.Resource;
+import org.springframework.core.io.support.PathMatchingResourcePatternResolver;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.test.context.TestPropertySource;
 
@@ -663,5 +665,26 @@ class FlywayMigrationTest {
                 assertThat(row.getString(1)).as("수렴이 값을 잃으면 안 된다").isEqualTo("ADMIN");
             }
         }
+    }
+
+    @Test
+    @DisplayName("REQ-03 · V1 이후 마이그레이션은 운영에 없는 V1 제약 이름을 참조하지 않는다")
+    void laterMigrationsDoNotReferenceV1OnlyConstraintNames() throws Exception {
+        // 운영의 V1 세 테이블은 ddl-auto가 만들어 이 이름들 대신 Hibernate 해시 이름이 있다(T-263).
+        // 이름으로 다루면 H2·새 DB에선 통과하고 운영에서만 Flyway가 실패해 배포가 막힌다 — information_schema로 찾아 쓴다.
+        List<String> v1OnlyNames = List.of("fk_reading_timer_user", "uk_reading_timer_user", "fk_reading_session_user");
+        List<String> violations = new ArrayList<>();
+        for (Resource r : new PathMatchingResourcePatternResolver().getResources("classpath:db/migration/V*.sql")) {
+            String file = r.getFilename();
+            if (file.startsWith("V1__")) {
+                continue; // 그 이름을 만드는 쪽(새 DB 전용)
+            }
+            String sql = r.getContentAsString(StandardCharsets.UTF_8).lines()
+                    .filter(line -> !line.strip().startsWith("--")) // 주석의 언급은 허용
+                    .collect(Collectors.joining("\n"))
+                    .toLowerCase(Locale.ROOT);
+            v1OnlyNames.stream().filter(sql::contains).forEach(n -> violations.add(file + " → " + n));
+        }
+        assertThat(violations).as("V1 제약은 환경마다 이름이 다르다(T-263)").isEmpty();
     }
 }
