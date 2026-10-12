@@ -32,7 +32,7 @@
 | onboarded / emailVerified | `boolean` | 온보딩 완료 / 이메일 검증 |
 | createdAt / updatedAt | auditing | `@CreatedDate` / `@LastModifiedDate` |
 
-> 그 외 retention/PWA 부가 필드(`marketingEmailConsent`·`marketingPushConsent`·`dailyReminderEnabled`·`lastNudgeSentAt` 등)는 코드 참조 — 설계 결정은 각 기능 문서·changelog에 있다.
+> 그 외 retention/PWA 부가 필드(`marketingEmailConsent`·`lastNudgeSentAt` 등)는 코드 참조 — 설계 결정은 각 기능 문서·changelog에 있다.
 
 ### 2. `ReadingTimer` — 하루 목표 (User와 1:1)
 
