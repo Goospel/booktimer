@@ -7,6 +7,7 @@ import { describe, expect, it } from 'vitest';
 
 import type { DashboardResponse } from './api';
 import { IDLE_STUDY } from './api';
+import { FONT_CSS_URL } from './fonts';
 import { History } from './screens/History';
 import { Home } from './screens/Home';
 import {
@@ -508,8 +509,8 @@ describe('웹 브랜드 재테마 (global.css)', () => {
     // TDS도 `body`에 폰트 스택을 주입하므로 여기도 `html body`(0-0-2)로 눌러야 한다.
     // 글꼴은 두 벌이다 — 고운돋움(본문) + 고운바탕(값·제목). 손글씨는 톤 조율 A에서 걷었다(warm-palette.test).
     expect(css).toMatch(/html\s+body\s*\{[^}]*font-family:\s*'Gowun Dodum'/);
-    expect(css).toContain('family=Gowun+Dodum');
-    expect(css).toContain('family=Gowun+Batang');
+    expect(FONT_CSS_URL).toContain('family=Gowun+Dodum'); // 받아오는 자리는 fonts.ts(load 뒤 주입)
+    expect(FONT_CSS_URL).toContain('family=Gowun+Batang');
   });
 });
 
