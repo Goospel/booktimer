@@ -40,7 +40,7 @@ const rules = css.replace(/\/\*[\s\S]*?\*\//g, '');
  * 나머지는 값(시계·카운트·통계) 자리다.
  */
 const SERIF_SPREADS = {
-  'App.tsx': 2,
+  'App.tsx': 1, // 에디토리얼 PR-1: 시작 토스트의 책 이름은 `style={SERIF_VALUE}` 직접 참조가 됐다(굵기 덮기가 사라져 펼칠 이유가 없다)
   'GuestHome.tsx': 5,
   'History.tsx': 6, // 2026-09-25 펼친 책별 시간(세리프 16)이 측정 줄(비세리프)로 바뀌며 한 자리 줄었다(R2 PR-5)
   'Home.tsx': 6, // 2026-09-24 하루 목표 세리프 값이 회색 캡션으로 내려가 한 자리 줄었다
@@ -50,7 +50,7 @@ const SERIF_SPREADS = {
   'Story.tsx': 3,
   'StudyCalendar.tsx': 2,
   'StudyHistory.tsx': 1,
-  'ui.tsx': 2,
+  'ui.tsx': 5, // 아바타·표지 이니셜 + 에디토리얼 PR-1의 명조 머리 셋(SectionTitle H1 · Sheet 제목 · Screen 제목)
 };
 
 function render(node: ReactNode): string {
@@ -79,24 +79,43 @@ describe('굵기는 자리로 정해지지 않는다', () => {
     expect(rules).toMatch(/\bbutton\s*\{[^}]*font-weight:\s*inherit/);
   });
 
-  it('로드되지 않은 굵기를 선언하지 않는다 — 500·600·900은 조용히 다른 값으로 떨어진다', () => {
-    // 이 앱이 **실제로 받아오는 굵기는 400(고운돋움)과 700(고운바탕·개구)뿐**이다. 그 사이 값을 부르면
-    // 브라우저가 가진 face로 반올림하거나 합성해, 엔진마다 다른 결과가 나온다 — 「강조를 선언했는데
-    // 화면은 그대로(혹은 폰마다 다름)」다. 자리마다 고치는 대신 소스를 훑어 다시 새지 않게 한다.
-    // (개구가 본문이던 시절엔 500이 400으로 떨어져 **본문 700보다 얇아지는** 형태로 드러났다 —
-    //  책방 카운트 숫자가 자기 라벨보다 얇던 자리. 전제는 바뀌었어도 금지 목록은 같다.)
+  /**
+   * REQ-03 · 굵기는 400·500만 — 이 앱이 <b>실제로 받아오는 face는 400(Noto Sans KR)과 500(Noto Sans KR · Noto Serif
+   * KR)뿐</b>이다(`fonts.ts`). 600·700을 부르면 `font-synthesis: none` 아래에선 500 face로 반올림되고, 그 줄이 빠지면
+   * 브라우저가 합성 볼드를 그린다 — 「강조를 선언했는데 화면은 엔진마다 다름」이다. 값 자리(`fontWeight: … ? 700 : 400`
+   * 같은 삼항)까지 보도록 선언 뒤의 식 전체에서 굵기 토큰을 캔다.
+   */
+  it('REQ-03 · 굵기는 400·500만 — 인라인·TDS prop·css 전부', () => {
     const offenders: string[] = [];
-    for (const file of sourceFiles(fileURLToPath(new URL('.', import.meta.url)))) {
+    const files = [...sourceFiles(fileURLToPath(new URL('.', import.meta.url))), fileURLToPath(new URL('./global.css', import.meta.url))];
+    expect(files.some((f) => f.endsWith('global.css'))).toBe(true); // css도 훑는다(TDS 휠 고른 행·강조 규칙이 거기 산다)
+    for (const file of files) {
       readFileSync(file, 'utf8')
         .split('\n')
         .forEach((line, i) => {
-          if (/^\s*(\*|\/\/)/.test(line)) return; // 주석은 규칙 밖이다
-          if (/font-?[Ww]eight[:=]?\s*['"]?(100|200|500|600|800|900|bolder|lighter)\b/.test(line.replace(/\s/g, ''))) {
-            offenders.push(`${file.split(/[\\/]/).pop()}:${i + 1}  ${line.trim()}`);
+          if (/^\s*(\*|\/\/|\/\*)/.test(line)) return; // 주석은 규칙 밖이다
+          for (const m of line.matchAll(/font-?[Ww]eight\s*[:=]\s*([^,;}\n]*)/g)) {
+            const bad = m[1].match(/\b([1-9]00|bold|bolder|semibold|lighter)\b/g)?.filter((w) => w !== '400' && w !== '500');
+            if (bad && bad.length > 0) offenders.push(`${file.split(/[\\/]/).pop()}:${i + 1}  ${line.trim()}`);
           }
         });
     }
     expect(offenders).toEqual([]);
+  });
+
+  it('REQ-03 · 굵기 계측기 자기검증 — 삼항 속 700과 TDS bold를 잡고 500은 통과시킨다', () => {
+    const scan = (line: string) =>
+      [...line.matchAll(/font-?[Ww]eight\s*[:=]\s*([^,;}\n]*)/g)].some((m) =>
+        (m[1].match(/\b([1-9]00|bold|bolder|semibold|lighter)\b/g) ?? []).some((w) => w !== '400' && w !== '500'),
+      );
+    expect(scan('fontWeight: selected ? 700 : 400,')).toBe(true);
+    expect(scan('<Text fontWeight="bold">')).toBe(true);
+    expect(scan('font-weight: 600;')).toBe(true);
+    expect(scan('fontWeight: selected ? 500 : 400, maxWidth: 300')).toBe(false);
+  });
+
+  it('REQ-03 · 가짜 볼드 0 — html body가 font-synthesis: none이다', () => {
+    expect(rules).toMatch(/html body\s*\{[^}]*font-synthesis:\s*none/);
   });
 });
 
@@ -107,7 +126,7 @@ describe('굵기는 자리로 정해지지 않는다', () => {
  * 두 체급이 산다. 값 하나하나를 눈으로 지키는 대신 <b>계단을 벗어난 값이 있는가</b>를 묻는다 —
  * 오늘 이 가드가 `10`·`12.5`·`13.5`를 찾아냈다.
  */
-const SCALE = [13, 14, 15, 16, 17, 18, 19, 20, 21, 24, 26, 28, 62];
+const SCALE = [13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 24, 26, 28, 32, 62, 68, 84]; // 22·32·68·84 = 에디토리얼 H2·D2·D1(§6-7)
 
 describe('인라인 크기도 같은 계단 위에 온다', () => {
   // Soft 재테마(2026-09-23) — 규칙 1 「최소 13px」. 누가 「배지니까」 11·12를 계단에 되넣는 돌연변이를 잡는다.
@@ -143,7 +162,8 @@ describe('계단이 Soft 눈금이다 — 본문 16 · 보조 14 · 최소 13', 
 
   it('제목은 본문과의 간격으로 위계를 만든다 — 히어로만 크게 벌린다', () => {
     expect(css).toMatch(/--tds-t-st10-text-fontSize:\s*18px/); // 섹션 제목
-    expect(css).toMatch(/--tds-t-t3-text-fontSize:\s*28px/); //  화면 제목
+    expect(css).toMatch(/--tds-t-t3-text-fontSize:\s*32px/); //  화면 제목(에디토리얼 D2 32/40)
+    expect(css).toMatch(/--tds-t-t3-text-lineHeight:\s*40px/);
     expect(css).toMatch(/--tds-t-t2-text-fontSize:\s*62px/); //  홈 히어로 (h:mm:ss가 카드 폭 안에 남는 값)
   });
 
@@ -160,8 +180,8 @@ describe('계단이 Soft 눈금이다 — 본문 16 · 보조 14 · 최소 13', 
  * 손글씨(개구)는 부푼 면 위에서 「어린이 앱 글씨」로 읽혀 걷었다. 부재 가드는 `warm-palette.test`.
  */
 describe('서체 축은 기능=돋움 · 값·인용=바탕이다', () => {
-  it('본문 스택이 고운돋움으로 시작한다 — 맨 앞이 아니면 영영 안 잡힌다', () => {
-    expect(rules).toMatch(/html\s+body\s*\{[^}]*font-family:\s*'Gowun Dodum'/);
+  it('본문 스택이 Noto Sans KR로 시작한다 — 맨 앞이 아니면 영영 안 잡힌다', () => {
+    expect(rules).toMatch(/html\s+body\s*\{[^}]*font-family:\s*'Noto Sans KR'/);
   });
 
   // ⚠️ 부재 단언은 **주석 걷은 소스**에 건다 — 안 그러면 규칙을 주석 처리해도 통과한다(T-205).
@@ -185,15 +205,15 @@ describe('서체 축은 기능=돋움 · 값·인용=바탕이다', () => {
    * 이니셜은 상속이 아니라 <b>명시</b>로 온다 — 본문(돋움)을 물려받으면 표지 자리 글자가 라벨처럼 읽힌다.
    * 손글씨를 걷을 때 이 자리를 빈손으로 두지 않고 값·인용 축(세리프)으로 옮겼다(톤 조율 A).
    */
-  it('표지 이니셜이 세리프 700이다 — 명시가 없으면 조용히 본문 서체로 떨어진다', () => {
+  it('표지 이니셜이 세리프 500이다 — 명시가 없으면 조용히 본문 서체로 떨어진다', () => {
     const markup = render(<CoverInitial title="데미안" />);
 
-    expect(markup).toContain('Gowun Batang');
-    expect(markup).toContain('font-weight:700');
+    expect(markup).toContain('Noto Serif KR');
+    expect(markup).toContain('font-weight:500');
   });
 
   it('아바타 이니셜도 같다 — 표지와 한 몸이라 한쪽만 남으면 화면에 서체가 둘이 된다', () => {
-    expect(render(<Avatar nickname="구스펠" />)).toContain('Gowun Batang');
+    expect(render(<Avatar nickname="구스펠" />)).toContain('Noto Serif KR');
   });
 
   /**
@@ -244,33 +264,21 @@ describe('채움 주 버튼', () => {
     expect(tag).toContain('--btn-filled');
   });
 
-  it('css에 그 마커 규칙이 있다', () => {
-    expect(rules).toMatch(/\.tds-mobile-button\[style\*='--btn-filled'\]/);
-  });
-
   /**
-   * ⚠️ <b>순서가 곧 결과다.</b> `FilledButton`도 TDS primary variant라 인라인에 primary hex를 그대로
-   * 들고 있어 두 규칙에 <b>동시 매칭</b>된다. 명시도·`!important`가 동급이라 나중 규칙이 이긴다.
-   * 톤 조율 A 이후 두 규칙은 바탕(옅은 세이지)과 글자색이 같아서, 순서가 가르는 것은 <b>모서리 20 대 18</b>과
-   * 로딩 점 색(700 대 500)뿐이다 — 그림자는 primary 규칙에 선언이 없어 순서와 무관하게 남는다.
+   * 에디토리얼(PR-1)에서 마커 규칙은 지웠다 — 검정 알약이 TDS primary 재색칠과 같아져 따로 칠할 것이 없다.
+   * 마커는 「화면 주 동작」 표지로 남는다(아래 개수 가드가 `<FilledButton`을 센다). 규칙이 되살아나면 primary와 두 벌이 된다.
    */
-  it('마커 규칙이 primary 재색칠보다 뒤에 온다 — 앞서면 채움 버튼 모서리가 primary의 18로 떨어진다', () => {
-    const primary = rules.indexOf("--button-background-color:#3182f6");
-    const filled = rules.indexOf("[style*='--btn-filled']");
-
-    expect(primary).toBeGreaterThan(-1);
-    expect(filled).toBeGreaterThan(primary);
+  it('css에 마커 규칙이 없다 — 검정 알약은 primary 규칙 한 벌이다', () => {
+    expect(rules).toContain("--button-background-color:#3182f6"); // primary 규칙은 있다(부재 단언이 공허하지 않음)
+    expect(rules).not.toMatch(/\[style\*='--btn-filled'\]/);
   });
 });
 
-describe('본문 속 강조는 색이 진다', () => {
-  it('<b>·<strong>을 세이지로 칠한다 — 개구엔 700 위가 없어 굵기로는 아무 일도 안 일어난다', () => {
-    // TDS 리셋이 `b,strong{font-weight:bolder}`를 넣는데 개구엔 900이 없어 700, 즉 주변과 같아진다.
-    // 탈퇴·아이디 변경 경고문의 강조가 통째로 보이지 않던 자리다. 웹 app.css가 `strong`을
-    // --accent-hover로 칠하는 것과 같은 처방이다(같은 앱이 강조를 한 가지로 말한다).
-    // `html` 접두는 명시도(0-0-2)다 — TDS 리셋이 우리 css 뒤에 주입돼 같은 0-0-1로는 순서에서 진다.
-    expect(rules).toMatch(/html b,\s*html strong\s*\{[^}]*font-weight:\s*700/);
-    expect(rules).toMatch(/html b,\s*html strong\s*\{[^}]*color:\s*var\(--adaptiveBlue700/);
+describe('본문 속 강조는 잉크 500이다', () => {
+  it('<b>·<strong>을 잉크 500으로 — 굵기 축이 400·500뿐이라 500이 최대다(spec §5.2)', () => {
+    // `html` 접두는 명시도(0-0-2)다 — TDS 리셋(`b,strong{font-weight:bolder}`)이 우리 css 뒤에 주입돼 0-0-1로는 진다.
+    expect(rules).toMatch(/html b,\s*html strong\s*\{[^}]*font-weight:\s*500/);
+    expect(rules).toMatch(/html b,\s*html strong\s*\{[^}]*color:\s*var\(--adaptiveGrey800/);
   });
 });
 
@@ -294,17 +302,17 @@ describe('값(수)은 세리프로 온다', () => {
   // 「적어 둔 값」으로 읽혀, 크기를 덜 키우고도 눈에 먼저 든다.
   it('기록 통계값이 세리프다 — 카드에 담긴 게 그 수 하나인데 라벨과 3px 차이였다', () => {
     const history = render(<History graph={graph} />);
-    expect(tagOf(history, `${graph.activeDays}일`)).toContain('Gowun Batang');
+    expect(tagOf(history, `${graph.activeDays}일`)).toContain('Noto Serif KR');
   });
 
   it('연속 일수도 세리프다 — 같은 줄에 선 세 값이 서체가 갈리면 줄이 아니라 파편으로 읽힌다', () => {
     const history = render(<History graph={graph} />);
-    expect(tagOf(history, `${graph.currentStreak}일`)).toContain('Gowun Batang');
+    expect(tagOf(history, `${graph.currentStreak}일`)).toContain('Noto Serif KR');
   });
 
   it('책방 카운트 숫자가 세리프다 — 500을 부르다 400으로 떨어져 라벨보다 얇던 자리', () => {
     const stat = render(<StatItem label="팔로워" count={42} />);
-    expect(tagOf(stat, '42')).toContain('Gowun Batang');
+    expect(tagOf(stat, '42')).toContain('Noto Serif KR');
   });
 });
 
@@ -452,7 +460,7 @@ function sourceFiles(dir: string, out: string[] = []): string[] {
  */
 describe('목표 휠 선택 행 (시안 2e)', () => {
   it('선택 행만 세리프로 집는다 — 해시 클래스에 기대면 TDS 업그레이드에 조용히 끊긴다', () => {
-    expect(cssCode).toMatch(/\.goal-wheels[^{]*\[aria-checked='true'\][^{]*\{[^}]*Gowun Batang/);
+    expect(cssCode).toMatch(/\.goal-wheels[^{]*\[aria-checked='true'\][^{]*\{[^}]*'Noto Serif KR'[^}]*font-weight:\s*500/);
   });
 
   it('선택 행 크기는 !important다 — TDS가 인라인 커스텀 프로퍼티로 크기를 박는다', () => {
@@ -491,7 +499,8 @@ describe('채움 주 버튼 개수 (설계 D5)', () => {
   /** 주석을 걷는다 — 주석이 지표 문자열을 인용하면 거짓 실패한다(설계 D5가 요구한 절차). */
   const codeOnly = (src: string) => src.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/.*/g, '');
 
-  const FILLED = /<FilledButton|background: 'var\(--adaptiveBlue700|boxShadow: 'var\(--puffShadow\)'/g;
+  // 에디토리얼(PR-1): 주 동작 = 검정 알약이라 「부푼 그림자」 갈래는 지웠다(REQ-06 #10). 남은 두 형태 — TDS 래퍼와 맨 버튼의 잉크 바탕.
+  const FILLED = /<FilledButton|background: 'var\(--adaptiveBlue700/g;
 
   const read = (rel: string) => codeOnly(readFileSync(new URL(rel, import.meta.url), 'utf8'));
 

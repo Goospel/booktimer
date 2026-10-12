@@ -1392,62 +1392,61 @@ describe('책방 「책 | 여백」 탭', () => {
  * `border-image` 부재는 직전 main에서 실제로 연필선이 있던 태그에만 건다(헤더 손잡이 2 · 정사각 버튼 2 ·
  * 성향 카드 · 신고 select).
  */
-describe('Soft 표면 — 책방·프로필 (PR-4)', () => {
-  const SOFT_LINE = '1.5px solid var(--adaptiveBlue700';
+describe('에디토리얼 표면 — 책방·프로필 (PR-1)', () => {
+  const PILL = '1px solid var(--adaptiveBlue700'; // 외곽선 알약(OUTLINE_PILL)
+  const FIELD_LINE = '1px solid var(--adaptiveGrey600'; // 입력칸·선택 상자(FIELD)
 
-  it('헤더 손잡이(친구 찾기·대화함)는 1.5px 세이지 실선이다 — 연필선이 아니다', () => {
+  it('헤더 — 친구 찾기는 검색바라 입력칸 경계(FIELD), 대화함은 외곽선 알약이다', () => {
     const html = render(<BookshopHeader onSearch={() => {}} inbox={{ unread: 2, onOpen: () => {} }} />);
-    for (const marker of ['aria-label="아이디로 친구 찾기"', 'aria-label="대화함"']) {
-      const tag = tagWith(html, marker);
-      expect(tag).not.toBe('');
-      expect(tag).toContain(SOFT_LINE);
-      expect(tag).not.toContain('border-image');
-    }
+    const search = tagWith(html, 'aria-label="아이디로 친구 찾기"');
+    const inbox = tagWith(html, 'aria-label="대화함"');
+    expect(search).toContain(FIELD_LINE);
+    expect(inbox).toContain(PILL);
+    expect(inbox).toContain('border-radius:999px');
   });
 
-  it('팔로우 옆 정사각 버튼(종이비행기·신고·차단)은 1.5px 세이지 실선이다', () => {
+  it('팔로우 옆 정사각 버튼(종이비행기·신고·차단)은 외곽선 알약이다', () => {
     const html = card(profile({ following: true, followsMe: true, dmAvailable: true }), [], null, {});
     const more = tagWith(html, 'aria-label="신고·차단"');
     expect(more).not.toBe('');
-    expect(more).toContain(SOFT_LINE);
-    expect(more).not.toContain('border-image');
+    expect(more).toContain(PILL);
   });
 
-  it('성향 카드는 부푼 면이다 — 한 장뿐인 카드라 큰 그림자 예산 안이다', () => {
+  it('성향 카드는 면 없이 가는 선 테 상자다 — 그림자 없음', () => {
     const tag = tagWith(card(profile({ personality: '밑줄을 아끼지 않는 완독형이에요.' })), 'data-bio-card=""');
-    expect(tag).not.toBe('');
-    expect(tag).toContain('box-shadow:var(--puffShadow');
-    expect(tag).not.toContain('border-image');
+    expect(tag).toContain('border:1px solid var(--adaptiveGrey200');
+    expect(tag).not.toContain('box-shadow');
   });
 
-  it('신고 사유 select는 1.5px 세이지 실선이다', () => {
+  it('신고 사유 select는 입력칸 경계(muted 1px)다', () => {
     const html = render(
       <SafetyPanel busy={false} confirmBlock={false} onConfirmBlock={() => {}} onBlock={() => {}} onReport={() => {}} />,
     );
     const select = tagWith(html, '<select');
     expect(select).not.toBe('');
-    expect(select).toContain(SOFT_LINE);
-    expect(select).not.toContain('border-image');
+    expect(select).toContain(FIELD_LINE);
   });
 
-  it('신고·차단 패널은 부푼 면이다 — 한 장뿐인 패널이라 큰 그림자 예산 안이다', () => {
+  it('신고·차단 패널은 면 없이 가는 선 테 상자다', () => {
     const html = render(
       <SafetyPanel busy={false} confirmBlock={false} onConfirmBlock={() => {}} onBlock={() => {}} onReport={() => {}} />,
     );
-    expect(tagWith(html, 'data-safety-panel=""')).toContain('box-shadow:var(--puffShadow');
+    const panel = tagWith(html, 'data-safety-panel=""');
+    expect(panel).toContain('border:1px solid var(--adaptiveGrey200');
+    expect(panel).not.toContain('box-shadow');
   });
 
-  it('사용자 목록 행은 옅은 실선 행(SOFT_ROW)이고 큰 그림자가 없다 — 반복 행이다', () => {
+  it('사용자 목록 행은 아래 가는 선 행(RULE_ROW)이고 그림자가 없다 — 반복 행이다', () => {
     const html = render(<UserList users={[user('a'), user('b')]} emptyMessage="없어요" onSelect={() => {}} />);
     const rows = html.match(/<button[^>]*>/g) ?? [];
     expect(rows).toHaveLength(2);
     for (const row of rows) {
-      expect(row).toContain('1.5px solid var(--adaptiveGrey200');
+      expect(row).toContain('border-bottom:1px solid var(--adaptiveGrey200');
       expect(bigShadow(row)).toBe(false);
     }
   });
 
-  it('보관함 카드는 옅은 실선 행이고, 대표 카드만 세이지 테두리다', () => {
+  it('보관함 카드는 가는 선 테 상자이고, 대표 카드만 강조 테두리다', () => {
     const html = render(
       <ArchiveSheet
         entries={[entry(9, '2026-08-15T10:00:00Z', true), entry(4, '2026-08-01T10:00:00Z', false)]}
@@ -1458,8 +1457,8 @@ describe('Soft 표면 — 책방·프로필 (PR-4)', () => {
     );
     const cards = html.match(/<div[^>]*data-archive-entry[^>]*>/g) ?? [];
     expect(cards).toHaveLength(2);
-    expect(cards.filter((c) => c.includes('1.5px solid var(--adaptiveBlue500'))).toHaveLength(1);
-    expect(cards.filter((c) => c.includes('1.5px solid var(--adaptiveGrey200'))).toHaveLength(1);
+    expect(cards.filter((c) => c.includes('1px solid var(--adaptiveBlue700'))).toHaveLength(1);
+    expect(cards.filter((c) => c.includes('1px solid var(--adaptiveGrey200'))).toHaveLength(1);
     expect(cards.every((c) => !bigShadow(c))).toBe(true);
   });
 });

@@ -14,7 +14,7 @@ import {
   sendChatMessage,
 } from '../api';
 import { DM_TEMPLATE_CODE, notificationAgreementSupported, requestNotificationAgreement } from '../toss';
-import { DENT, ErrorMessage, Loading, SOFT_ROW, Screen, Text, UnreadBadge, sectionStyle } from '../ui';
+import { ErrorMessage, FIELD, Loading, RULE_ROW, Screen, Text, UnreadBadge, sectionStyle } from '../ui';
 import type { SafetyState } from './Profile';
 import { SafetyPanel, toggleSafety } from './Profile';
 
@@ -228,15 +228,14 @@ export function InboxView({
             key={room.roomId}
             type="button"
             onClick={() => onOpen(room)}
-            // 반복 행 — 사용자 목록(`UserList`)과 같은 옅은 실선 행이다. 그림자는 없다(설계 §6 예산).
+            // 반복 행 — 사용자 목록(`UserList`)과 같은 아래 가는 선(RULE_ROW). 면·그림자 없음.
             style={{
-              ...SOFT_ROW,
+              ...RULE_ROW,
               display: 'flex',
               alignItems: 'center',
               gap: 10,
               width: '100%',
-              padding: 16,
-              marginBottom: 8,
+              padding: '14px 0',
               textAlign: 'left',
               cursor: 'pointer',
             }}
@@ -246,7 +245,7 @@ export function InboxView({
                 {room.partner.nickname}
                 {/* 평범한 span — TDS Text를 겹치면 블록으로 떨어져 이름 아래 줄로 밀린다(목 모드 실측). */}
                 {!room.writable && (
-                  <span style={{ fontSize: 13, color: 'var(--adaptiveGrey600, #6F6A5E)' }}> · 잠김</span>
+                  <span style={{ fontSize: 13, color: 'var(--adaptiveGrey600, #645E54)' }}> · 잠김</span>
                 )}
               </Text>
               <Text
@@ -461,7 +460,7 @@ export function RoomView({
         </Text>
       )}
       {hasFlaggedFromPartner(messages) && (
-        <div style={{ marginTop: 12, padding: 12, borderRadius: 10, background: 'var(--adaptiveGrey200, #E4DDD0)' }}>
+        <div style={{ marginTop: 12, padding: 12, borderRadius: 10, background: 'var(--adaptiveGrey200, #D9D1C3)' }}>
           <Text typography="st12" style={{ display: 'block', wordBreak: 'keep-all' }}>
             연락처·외부 링크·금전을 요구하는 상대는 신고해 주세요
           </Text>
@@ -486,8 +485,8 @@ export function RoomView({
                   maxWidth: '78%',
                   padding: '8px 12px',
                   borderRadius: 14,
-                  background: m.mine ? 'var(--adaptiveBlue50, #E1E8D4)' : 'var(--softDent, #EAE5D9)',
-                  color: 'var(--adaptiveGrey800, #2A2921)',
+                  background: m.mine ? 'var(--adaptiveBlue50, #ECE5D8)' : 'var(--softDent, #ECE5D8)',
+                  color: 'var(--adaptiveGrey800, #1D1B18)',
                   fontSize: 15,
                   lineHeight: 1.45,
                   whiteSpace: 'pre-wrap',
@@ -517,21 +516,20 @@ export function RoomView({
           placeholder={writable ? '메시지 입력' : undefined}
           aria-label="메시지 입력"
           onChange={(e) => onDraft(e.target.value)}
-          // 입력 자리는 눌린 면이다(규칙 3) — 테두리 없이 안으로 파인 그림자로 「여기 적는다」를 말한다.
-          // 잠긴 방은 파인 자리를 거둔다(평평한 흐린 면 + 흐린 글자): 인라인 배경·글자색이 브라우저의 disabled
+          // 입력 자리는 muted 1px 경계(FIELD — 종이 대비 5.65)다. 면이 없어도 「여기 적는다」가 선으로 선다.
+          // 잠긴 방은 옅은 면 + 흐린 글자로 바꾼다: 인라인 배경·글자색이 브라우저의 disabled
           // 기본 모양을 덮어, 그대로 두면 잠긴 입력줄이 열린 것과 computed 값까지 똑같았다(목 모드 실측).
           // 잠김 판정은 `writable`만 본다 — 첫 응답 전(`loading`)의 잠깐 disabled까지 바꾸면 방을 열 때마다 깜빡인다.
           style={{
-            ...DENT,
+            ...FIELD,
             flex: 1,
             padding: 10,
-            border: 'none',
-            color: 'var(--adaptiveGrey800, #2A2921)',
+            color: 'var(--adaptiveGrey800, #1D1B18)',
             fontSize: 15,
             resize: 'none',
             ...(writable
               ? {}
-              : { background: 'var(--adaptiveGrey200, #DED8CA)', boxShadow: 'none', color: 'var(--adaptiveGrey600, #5B5A4D)' }),
+              : { background: 'var(--softDent, #ECE5D8)', color: 'var(--adaptiveGrey600, #645E54)' }),
           }}
         />
         <Button size="medium" disabled={!writable || loading || busy || draft.trim() === ''} onClick={onSend}>

@@ -145,13 +145,14 @@ describe('목표 화면 렌더', () => {
    * 캔버스가 아니라 <b>카드 면</b>(`--adaptiveGrey100`)과 같아야 한다 — 어긋나면 카드 안에 옅은 띠 두 줄이 진다.
    * 회당 시간 시트도 같은 휠이 시트 패널(= 같은 `--adaptiveGrey100`) 위에 서므로 한 규칙이 둘 다 맞춘다.
    */
-  it('휠은 부푼 카드 안에 선다', () => {
+  it('휠은 면·그림자 없이 종이 위에 선다(에디토리얼) — 안개 = 종이색이라 띠가 안 진다', () => {
     const markup = render(false, 3600);
     const at = markup.indexOf('class="goal-wheels"');
     const card = markup.slice(markup.lastIndexOf('<div', markup.lastIndexOf('<', at) - 1), at);
 
     expect(at).toBeGreaterThan(-1);
-    expect(card).toContain('var(--puffShadow');
+    expect(card).toContain('padding:12px 0'); // 그 그릇을 잡았다
+    expect(card).not.toContain('box-shadow');
   });
 
   /**

@@ -225,9 +225,9 @@ describe('홈 렌더 배선', () => {
     expect(renderHome()).not.toContain(BUTTON_LABEL);
   });
 
-  it('진행률 게이지가 세이지 단색으로 찬다 — 그라데이션은 재료를 하나 더 얹는다(톤 조율 A)', () => {
+  it('진행률 게이지가 강조 잉크 단색으로 찬다 — 그라데이션은 재료를 하나 더 얹는다', () => {
     // 게이지 막대만 집는다 — 같은 토큰을 캐러셀 점(DOT_ON)도 쓰므로 토큰 문자열만으로는 게이지를 못 가린다.
-    expect(renderHome()).toMatch(/width:calc\(\(100% - 6px\)[^"]*background:var\(--adaptiveBlue500, #5B7F55\)"/);
+    expect(renderHome()).toMatch(/width:calc\(100% \* [^"]*background:var\(--adaptiveBlue500, #1D1B18\)"/);
     expect(renderHome()).not.toContain('linear-gradient(90deg');
     expect(renderHome()).not.toContain('#2F8F6B');
   });
@@ -1640,7 +1640,7 @@ describe('계정 진입점', () => {
     expect(shown).not.toBeNull();
     const at = clock.indexOf('>' + shown![1] + '<');
     const tag = clock.slice(clock.lastIndexOf('<', at), at);
-    expect(tag).toContain('Gowun Batang');
+    expect(tag).toContain('Noto Serif KR');
     expect(tag).toContain('--tds-t-t2-text-fontSize');
   });
 
@@ -1662,10 +1662,11 @@ describe('계정 진입점', () => {
     expect(section({ loginId: null })).toContain('구스펠님'); // 이름은 그대로 — 행이 통째로 사라지지 않는다
   });
 
-  it('아바타는 책방과 같은 이니셜 원이다 — 같은 사람이 화면마다 다른 색이면 다른 사람으로 읽힌다', () => {
+  it('아바타는 책방과 같은 잉크 1px 이니셜 원이다 — 색은 표지 몫이라 사람은 선으로 선다(에디토리얼)', () => {
     const markup = section({ nickname: '나비독서' });
 
-    expect(markup).toContain(coverColor('나비독서')); // 닉네임에서 결정적으로 고른 그 색
+    expect(markup).not.toContain(coverColor('나비독서')); // 천 장정 색은 표지만 쓴다
+    expect(markup).toContain('border:1px solid var(--adaptiveGrey800');
     expect(markup).toContain('>나<');
   });
 
@@ -1953,7 +1954,7 @@ describe('홈 히어로 위계 (시안 2a)', () => {
     const tag = tagBefore(renderHome(), '구스펠님');
 
     expect(tag).not.toBe('');
-    expect(tag).toContain('Gowun Batang');
+    expect(tag).toContain('Noto Serif KR');
     expect(tag).toContain('font-size:28px');
   });
 
@@ -1987,16 +1988,19 @@ describe('Soft 히어로 (PR-2)', () => {
   };
   const hero = (markup: string) => tagWith(markup, LAMP_PAGE_CLASS);
 
-  it('히어로는 반경 30의 부푼 면이다 — 연필선이 되살아나지 않는다', () => {
+  it('히어로는 면·그림자가 없다(에디토리얼 — 아치 배치는 PR-2)', () => {
     const tag = hero(renderHome());
 
-    expect(tag).toContain('var(--puffShadow');
-    expect(tag).toContain('border-radius:30px');
-    expect(tag).not.toContain('border-image');
+    expect(tag).toContain('padding:20px'); // 그 그릇을 잡았다(아래 부재 단언이 공허하지 않음)
+    expect(tag).not.toContain('box-shadow');
+    expect(tag).toContain('border-radius:2px');
   });
 
-  it('게이지 트랙은 눌린 면이다', () => {
-    expect(tagWith(renderHome(), 'data-gauge-track')).toContain('var(--dentShadow');
+  it('게이지 트랙은 가는 선 색 막대(TRACK, 높이 4)다', () => {
+    const track = tagWith(renderHome(), 'data-gauge-track');
+    expect(track).toContain('background:var(--adaptiveGrey200');
+    expect(track).toContain('height:4px');
+    expect(track).not.toContain('box-shadow');
   });
 
   /**
@@ -2043,14 +2047,14 @@ describe('Soft 히어로 (PR-2)', () => {
    *
    * <p>⚠️ 옛 단언 `'0 0 0 3px'`는 새 문자열의 <b>틈</b>(카드색 3px)에도 들어 있어 우연히 통과한다 — 판별하는 조각으로 잰다.
    */
-  it('캐러셀의 고른 칸은 후광(카드색 틈 3 + 세이지 테 3) + 체크 배지로 선다(흐림으로 지우지 않는다)', () => {
+  it('캐러셀의 고른 칸은 후광(종이색 틈 3 + 강조 테 3) + 체크 배지로 선다(흐림으로 지우지 않는다)', () => {
     const books = [book(1, '데미안'), book(2, '사피엔스')];
     const markup = renderHome({ readingBooks: books }, { selectedBookId: 1 });
     const at = markup.indexOf('aria-current="true"');
     const cell = markup.slice(markup.lastIndexOf('<button', at), markup.indexOf('</button>', at));
     const button = cell.slice(0, cell.indexOf('>') + 1);
 
-    expect(button).toContain('box-shadow:0 0 0 3px var(--adaptiveGrey100, #FBF9F4), 0 0 0 6px var(--adaptiveBlue500, #5B7F55)');
+    expect(button).toContain('box-shadow:0 0 0 3px var(--adaptiveGrey100, #F5F0E6), 0 0 0 6px var(--adaptiveBlue500, #1D1B18)');
     expect(button).toContain('border-radius:8px'); // 후광이 둥글게 흐르려면 칸 모서리도 둥글어야 한다
     expect(cell).toContain('data-check-badge');
     expect(markup).toContain('opacity:0.7'); // 안 고른 칸은 .7 — .45는 40대 이상에게 지워진 것으로 읽혔다
@@ -2078,16 +2082,17 @@ describe('Soft 히어로 (PR-2)', () => {
     expect(cell.slice(cell.indexOf('>') + 1)).toContain('border-radius:8px');
   });
 
-  it('모드 세그먼트는 15이고, 고른 쪽은 밝은 칸 + 진한 글자다 — 홈의 진한 채움은 탭바 원 하나다(톤 조율 A)', () => {
+  it('모드 세그먼트는 15이고, 고른 쪽은 강조 잉크 테 + 강조 글자 500이다(결정 ①) — 채우지 않는다', () => {
     const markup = renderHome();
     const at = markup.indexOf('aria-pressed="true"');
     const tag = markup.slice(at, markup.indexOf('>', at));
 
     expect(tag).toContain('font-size:15px');
-    expect(tag).toContain('background:var(--adaptiveGrey100');
+    expect(tag).toContain('border:1px solid var(--adaptiveBlue700');
     expect(tag).toContain('color:var(--adaptiveBlue700');
-    expect(tag).toContain('box-shadow:'); // 작은 부풂 — 고른 칸이 트랙 위로 떠야 「고른 쪽」이 읽힌다
-    expect(tag).not.toContain('background:var(--adaptiveBlue700');
+    expect(tag).toContain('font-weight:500');
+    expect(tag).toContain('background:transparent');
+    expect(tag).not.toContain('box-shadow');
   });
 });
 

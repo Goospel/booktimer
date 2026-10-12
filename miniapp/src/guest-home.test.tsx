@@ -385,12 +385,13 @@ describe('게스트 홈 — 다 재고 나서', () => {
     expect(markup.slice(markup.lastIndexOf('<', markup.indexOf('medal-pop')))).toMatch(/^<svg\b/);
   });
 
-  it('「기록 없이 둘게요」는 1.5px 실선 보조 손잡이다', () => {
+  it('「기록 없이 둘게요」는 외곽선 알약(강조 1px) 보조 손잡이다', () => {
     const markup = shell(done);
     const at = markup.indexOf('기록 없이 둘게요');
     const tag = markup.slice(markup.lastIndexOf('<button', at), at);
 
-    expect(tag).toContain('1.5px solid var(--adaptiveBlue700');
+    expect(tag).toContain('1px solid var(--adaptiveBlue700');
+    expect(tag).toContain('border-radius:999px');
   });
 });
 
@@ -414,23 +415,22 @@ describe('게스트 홈 — 메달은 끝난 뒤에만', () => {
     expect(shell(done)).not.toContain('data-book-stack'); // 끝난 뒤엔 메달이 그 하나다
   });
 
-  it('히어로는 반경 30의 부푼 면이다 — 연필선이 되살아나지 않는다', () => {
+  it('히어로는 면·그림자가 없다(에디토리얼) — 아치 배치는 PR-2', () => {
     const markup = shell(null);
     const at = markup.indexOf('data-guest-hero');
     const tag = markup.slice(markup.lastIndexOf('<', at), markup.indexOf('>', at) + 1);
 
-    expect(tag).toContain('var(--puffShadow');
-    expect(tag).toContain('border-radius:30px');
-    expect(tag).not.toContain('border-image');
+    expect(tag).toContain('padding:24px 20px'); // 그 태그를 잡았다(아래 부재 단언이 공허하지 않음)
+    expect(tag).not.toContain('box-shadow');
   });
 
-  it('잠긴 탭 카드도 부푼 면이다', () => {
+  it('잠긴 탭 안내도 면·그림자가 없다', () => {
     const markup = shell(null, 'library');
     const at = markup.indexOf('서재는 계정이 있어야 열려요');
     const card = markup.slice(markup.lastIndexOf('<div', markup.lastIndexOf('<svg', at)), at);
 
-    expect(card).toContain('var(--puffShadow');
-    expect(card).not.toContain('border-image');
+    expect(card).toContain('padding:24px 20px');
+    expect(card).not.toContain('box-shadow');
   });
 });
 

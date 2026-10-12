@@ -163,13 +163,13 @@ export function CalendarGrid({
                   borderRadius: '50%',
                   boxSizing: 'border-box',
                   // 채운 원 = 지킴 · 테두리 원 = 못 지킴 · 맨 숫자 = 무기록. 세 꼴이 형태로 갈린다.
-                  background: state === 'kept' ? 'var(--adaptiveBlue500, #6E8A6A)' : 'transparent',
-                  border: state === 'missed' ? '1.5px solid var(--adaptiveBlue300, #B6C9AE)' : 'none',
-                  color: state === 'kept' ? '#FFFFFF' : 'var(--adaptiveGrey700, #57534A)',
+                  background: state === 'kept' ? 'var(--adaptiveBlue500, #1D1B18)' : 'transparent',
+                  border: state === 'missed' ? '1.5px solid var(--adaptiveBlue300, #9C9182)' : 'none',
+                  color: state === 'kept' ? '#FFFFFF' : 'var(--adaptiveGrey700, #4A453E)',
                   ...SERIF_VALUE,
                   fontSize: 15,
                   // 세리프 기본 굵기를 덮는다 — 지킨 날만 굵어야 「채운 원」이 형태로 한 번 더 말한다.
-                  fontWeight: state === 'kept' ? 700 : 400,
+                  fontWeight: state === 'kept' ? 500 : 400,
                 }}
               >
                 {day}
@@ -182,7 +182,7 @@ export function CalendarGrid({
                   width: 3,
                   height: 3,
                   borderRadius: '50%',
-                  background: studied ? 'var(--adaptiveBlue300, #B6C9AE)' : 'transparent',
+                  background: studied ? 'var(--adaptiveBlue300, #9C9182)' : 'transparent',
                 }}
               />
             </button>
@@ -209,7 +209,7 @@ export function CalendarLegend() {
       {item(
         <span
           aria-hidden="true"
-          style={{ width: 10, height: 10, borderRadius: '50%', background: 'var(--adaptiveBlue500, #6E8A6A)' }}
+          style={{ width: 10, height: 10, borderRadius: '50%', background: 'var(--adaptiveBlue500, #1D1B18)' }}
         />,
         '지킨 날',
       )}
@@ -221,7 +221,7 @@ export function CalendarLegend() {
             height: 10,
             borderRadius: '50%',
             boxSizing: 'border-box',
-            border: '1.5px solid var(--adaptiveBlue300, #B6C9AE)',
+            border: '1.5px solid var(--adaptiveBlue300, #9C9182)',
           }}
         />,
         '못 지킨 날',
@@ -229,7 +229,7 @@ export function CalendarLegend() {
       {item(
         <span
           aria-hidden="true"
-          style={{ width: 3, height: 3, borderRadius: '50%', background: 'var(--adaptiveBlue300, #B6C9AE)' }}
+          style={{ width: 3, height: 3, borderRadius: '50%', background: 'var(--adaptiveBlue300, #9C9182)' }}
         />,
         '측정 기록',
       )}
@@ -334,7 +334,7 @@ export function StudyCalendar({ onError }: { onError: (error: Error) => void }) 
         height: 44,
         border: 'none',
         background: 'transparent',
-        color: 'var(--adaptiveGrey700, #57534A)',
+        color: 'var(--adaptiveGrey700, #4A453E)',
         opacity: disabled ? 0.3 : 1,
         cursor: disabled ? 'default' : 'pointer',
       }}
@@ -357,7 +357,7 @@ export function StudyCalendar({ onError }: { onError: (error: Error) => void }) 
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
           {navButton('prev', false)}
           {/* 같은 이유로 `textAlign`은 prop(T-219) — style에 두면 짧은 달(「1월」)이 120px 상자의 왼쪽에 붙는다. */}
-          <Text typography="st10" fontWeight="bold" textAlign="center" style={{ ...SERIF_VALUE, fontSize: 19, minWidth: 120 }}>
+          <Text typography="st10" fontWeight="medium" textAlign="center" style={{ ...SERIF_VALUE, fontSize: 19, minWidth: 120 }}>
             {monthTitle(year, month)}
           </Text>
           {navButton('next', atCurrentMonth)}

@@ -71,10 +71,16 @@ describe('REQ-04 · 글꼴 CSS는 load 뒤 한 번만 붙는다', () => {
     expect(doc.links).toHaveLength(1);
   });
 
-  it('URL은 지금 고운 글꼴 그대로다 — 이 PR은 패밀리를 바꾸지 않는다', () => {
-    expect(FONT_CSS_URL).toBe(
-      'https://fonts.googleapis.com/css2?family=Gowun+Batang:wght@700&family=Gowun+Dodum&display=swap',
-    );
+  /**
+   * REQ-03 · 명조 500 + 고딕 400·500만 — 셋째 패밀리·굵기가 몰래 실리면 첫 화면 글꼴 조각·바이트가 는다(계획 §3-3:
+   * 이 조합으로 목 데이터 홈 39조각·514KB). `family=`를 <b>정확히 둘</b>로 센다.
+   */
+  it('REQ-03 · 글꼴 URL은 명조 500 + 고딕 400·500만 부른다', () => {
+    expect(FONT_CSS_URL).toContain('family=Noto+Serif+KR:wght@500');
+    expect(FONT_CSS_URL).toContain('family=Noto+Sans+KR:wght@400;500');
+    expect(FONT_CSS_URL).toContain('display=swap');
+    expect(FONT_CSS_URL).not.toContain('Gowun');
+    expect(FONT_CSS_URL.match(/family=/g)).toHaveLength(2);
   });
 
   it('global.css에 @import가 0개다 — 되살아나면 폰트 CSS가 다시 앱 시작의 선행 조건이 된다', () => {

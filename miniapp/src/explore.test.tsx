@@ -220,15 +220,15 @@ describe('공통 친구 줄', () => {
 /**
  * Soft 재테마(PR-4) — 둘러보기 카드는 표지를 품은 <b>반복 카드</b>라 큰 그림자 대신 옅은 실선 행이다(그림자 예산 §6).
  */
-describe('Soft 표면 — 둘러보기 (PR-4)', () => {
-  it('사람 카드는 옅은 실선 행이고 큰 그림자가 없다', () => {
+describe('에디토리얼 표면 — 둘러보기 (PR-1)', () => {
+  it('사람 카드는 아래 가는 선 행(RULE_ROW)이고 그림자가 없다', () => {
     const html = render(
       <ExploreList users={[userWith('a', ['아몬드']), userWith('b', ['데미안'])]} rateLimited={false} onSelect={() => {}} />,
     );
     const cards = (html.match(/<button[^>]*>/g) ?? []).filter((tag) => tag.includes('님 책방 열기'));
     expect(cards).toHaveLength(2);
     for (const card of cards) {
-      expect(card).toContain('1.5px solid var(--adaptiveGrey200');
+      expect(card).toContain('border-bottom:1px solid var(--adaptiveGrey200');
       expect(bigShadow(card)).toBe(false);
     }
   });

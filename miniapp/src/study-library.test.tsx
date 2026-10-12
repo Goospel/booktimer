@@ -361,7 +361,7 @@ describe('dev-mock 공부 서재', () => {
  * 채움 + 부푼 그림자 + `--filledInk` 글자, 「관리」는 1.5px 세이지 실선, 「검색해서 담기」는 옅은 모드색 채움,
  * 시트 행은 옅은 실선 행. 연필선(`border-image`)은 넷 다 직전 main에 실제로 있던 자리다.
  */
-describe('Soft 표면 — 공부 서재 (PR-4)', () => {
+describe('에디토리얼 표면 — 공부 서재 (PR-1)', () => {
   const shelf = (rows: StudyBookRow[], selectedId: number | undefined) =>
     render(
       <StudyShelf
@@ -382,19 +382,18 @@ describe('Soft 표면 — 공부 서재 (PR-4)', () => {
     return at < 0 ? '' : html.slice(html.lastIndexOf('<button', at), at + 1);
   };
 
-  it('「회독 +1」은 주 동작이다 — 옅은 모드색 타일 + 부푼 그림자 + 진한 모드색 글자(톤 조율 A)', () => {
+  it('「회독 +1」은 주 동작이다 — 검정 알약(강조 잉크 바탕 + 미색 글자, 공부 모드에선 파란 잉크)', () => {
     const tag = button(shelf([studyBook(1, '기본서', 3)], 1), '회독 +1');
     expect(tag).not.toBe('');
-    expect(tag).toContain('background:var(--adaptiveBlue50,'); // 경계 `,` — `--adaptiveBlue500`에도 맞지 않게(리뷰 M7)
-    expect(tag).toContain('color:var(--adaptiveBlue700');
-    expect(tag).toContain('box-shadow:var(--puffShadow');
-    expect(tag).not.toContain('border-image');
+    expect(tag).toContain('background:var(--adaptiveBlue700,');
+    expect(tag).toContain('color:var(--filledInk');
+    expect(tag).not.toContain('box-shadow');
   });
 
-  it('「관리」는 1.5px 세이지 실선 보조 손잡이다', () => {
+  it('「관리」는 외곽선 알약(강조 1px) 보조 손잡이다', () => {
     const tag = button(shelf([studyBook(1, '기본서', 3)], 1), '관리');
     expect(tag).not.toBe('');
-    expect(tag).toContain('1.5px solid var(--adaptiveBlue700');
+    expect(tag).toContain('1px solid var(--adaptiveBlue700');
     expect(tag).not.toContain('border-image');
   });
 
@@ -405,7 +404,7 @@ describe('Soft 표면 — 공부 서재 (PR-4)', () => {
     expect(tag).not.toContain('border-image');
   });
 
-  it('관리 시트 행은 옅은 실선 행이고 삭제만 붉다', () => {
+  it('관리 시트 행은 아래 가는 선 행(RULE_ROW)이고 삭제만 붉다', () => {
     const html = render(
       <StudyActionSheet
         book={studyBook(1, '기본서', 2, { purchaseLink: 'https://www.aladin.co.kr/shop/x' })}
@@ -420,8 +419,7 @@ describe('Soft 표면 — 공부 서재 (PR-4)', () => {
     for (const label of ['회독 -1 (지금 2독)', '알라딘에서 구매', '서재에서 삭제']) {
       const tag = button(html, label);
       expect(tag).not.toBe('');
-      expect(tag).toContain('1.5px solid var(--adaptiveGrey200');
-      expect(tag).not.toContain('border-image');
+      expect(tag).toContain('border-bottom:1px solid var(--adaptiveGrey200');
       expect(bigShadow(tag)).toBe(false);
     }
     expect(button(html, '서재에서 삭제')).toContain('color:#A32D2D');

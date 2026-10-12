@@ -11,7 +11,7 @@ import {
   validateHandleFormat,
 } from '../api';
 import { useBackClose } from '../back';
-import { ErrorMessage, Loading, SOFT_OUTLINE, Screen, Sheet, Text, UnreadBadge, UserList } from '../ui';
+import { ErrorMessage, FIELD, Loading, OUTLINE_PILL, Screen, Sheet, Text, UnreadBadge, UserList } from '../ui';
 import { Explore } from './Explore';
 import { Profile } from './Profile';
 import { BookMargin, StoryComposer } from './Story';
@@ -324,8 +324,8 @@ export function BookshopHeader({
       aria-label="아이디로 친구 찾기"
       onClick={onSearch}
       style={{
-        // Soft 보조 손잡이 — 1.5px 세이지 실선(규칙 1). 높이는 그대로 44.
-        ...SOFT_OUTLINE,
+        // 생김새가 검색바라 입력칸 경계(FIELD — muted 1px)를 입는다. 높이는 그대로 44.
+        ...FIELD,
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
@@ -334,7 +334,7 @@ export function BookshopHeader({
         marginBottom: 16,
         padding: '0 14px',
         // 글자는 흐린 잉크로 둔다 — 생김새가 검색바라 문구가 입력 자리의 안내(placeholder)로 읽혀야 한다.
-        color: 'var(--adaptiveGrey600, #5B5A4D)',
+        color: 'var(--adaptiveGrey600, #645E54)',
         fontSize: 15,
         cursor: 'pointer',
       }}
@@ -352,7 +352,7 @@ export function BookshopHeader({
         aria-label="대화함"
         onClick={inbox.onOpen}
         style={{
-          ...SOFT_OUTLINE,
+          ...OUTLINE_PILL,
           flex: '0 0 auto',
           display: 'flex',
           alignItems: 'center',

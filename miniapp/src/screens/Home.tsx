@@ -28,17 +28,16 @@ import {
   Avatar,
   BookCover,
   CoverInitial,
-  DENT,
   ErrorMessage,
   GoalMedal,
-  PUFF,
+  OUTLINE_PILL,
   SECTION_RULE,
   SERIF_VALUE,
-  SOFT_OUTLINE,
   SPROUT_PATHS,
   Screen,
   SectionTitle,
   Sheet,
+  TRACK,
   Text,
   sectionStyle,
 } from '../ui';
@@ -56,19 +55,17 @@ const STUDY_AGREEMENT_KEY = 'booktimer.notificationAgreement.studyGoal';
  * 캐러셀 위치 점 — 지금 칸은 세이지, 나머지는 선 색. 토큰이라 공부 모드에서 저절로 파랑이 된다.
  * 게스트 홈의 같은 점 줄도 이 둘을 쓴다(점 색이 두 화면에서 갈리지 않게).
  */
-export const DOT_ON = 'var(--adaptiveBlue500, #5B7F55)';
-export const DOT_OFF = 'var(--adaptiveGrey200, #DED8CA)';
+export const DOT_ON = 'var(--adaptiveBlue500, #1D1B18)';
+export const DOT_OFF = 'var(--adaptiveGrey200, #D9D1C3)';
 
 /**
  * 게이지 채움 — 세이지 단색(톤 조율 A). 시안의 그라데이션은 재료를 하나 더 얹어 「쨍하다」의 한 몫이었다.
- * 토큰이라 공부 모드에서 파랑이 된다. 트랙은 눌린 면(`DENT`)이다.
+ * 토큰이라 공부 모드에서 파란 잉크가 된다. 트랙은 가는 선 색 막대(`TRACK`)다.
  */
-const GAUGE_FILL = 'var(--adaptiveBlue500, #5B7F55)';
+const GAUGE_FILL = 'var(--adaptiveBlue500, #1D1B18)';
 
-/** 히어로 타일의 모양(시안 Soft-Home) — 지금은 남은 시간 타일 하나가 가로(row)로 펼쳐 쓴다. */
-const TILE = { display: 'flex', flexDirection: 'column', gap: 4, padding: '12px 14px', borderRadius: 20 } as const;
-/** 타일 윗변의 1px 빛 — 부푼 면의 흰 하이라이트를 타일 크기에 맞게 줄인 것이다. */
-const TILE_HIGHLIGHT = 'inset 0 1px 0 rgba(255, 255, 255, 0.7)';
+/** 히어로 타일의 모양 — 지금은 남은 시간 타일 하나가 가로(row)로 펼쳐 쓴다. 에디토리얼(PR-1): 반경 2, 그림자 없음. */
+const TILE = { display: 'flex', flexDirection: 'column', gap: 4, padding: '12px 14px', borderRadius: 2 } as const;
 
 /**
  * 히어로 카드 배경 토큰 — js–css 매듭이라 이름을 한 곳에서 든다(`LAMP_PAGE_CLASS`와 같은 이유).
@@ -85,7 +82,7 @@ export const HERO_CARD_BG_VAR = '--heroCardBg';
  * 그러니 이건 「안 그러면 깨진다」가 아니라 **방어**다 — 이 조각이 등불 밖으로 옮겨지거나 그 예외가
  * 걷히는 날 리터럴이면 조용히 낮 색으로 남는다. 값이 같을 때 토큰을 쓰는 편이 나중을 안 망친다.
  */
-const ACCENT = 'var(--adaptiveBlue700, #4F6B4C)';
+const ACCENT = 'var(--adaptiveBlue700, #1D1B18)';
 
 /**
  * 측정 중 안심 문구 — 이 앱의 핵심 계약은 "화면을 꺼도 서버가 센다"인데 측정 중 화면에 그 말이 없었다.
@@ -151,16 +148,15 @@ export function ModeToggle({
           justifyContent: 'center',
           minHeight: 44,
           padding: '0 16px',
-          border: 0,
           borderRadius: 999,
-          // 고른 칸 = 카드색 + 진한 모드색 글자 + 작은 부풂(톤 조율 A). 진한 채움은 탭바 원 하나만 남긴다 —
-          // 홈 한 화면에 진한 덩어리가 넷이라 눈이 어디부터 볼지 흔들렸다. 글자색이 토큰이라 공부 모드에서 파랑이 된다.
-          background: selected ? 'var(--adaptiveGrey100, #FBF9F4)' : 'transparent',
-          color: selected ? 'var(--adaptiveBlue700, #3F5A3C)' : 'var(--adaptiveGrey700, #43423A)',
-          boxShadow: selected ? '2px 2px 6px rgba(112, 96, 64, 0.18), -2px -2px 5px rgba(255, 255, 255, 0.9)' : 'none',
+          // 고른 칸 = 강조 잉크 1px 테 + 강조 글자 500, 채움 없음(결정 ① — 검정 채움은 주 동작 하나뿐). 안 고른 칸도
+          // 같은 1px 테(투명)라 고르기가 바뀌어도 칸 크기가 안 변한다. 강조 토큰이라 공부 모드에서 파란 잉크다.
+          border: `1px solid ${selected ? 'var(--adaptiveBlue700, #1D1B18)' : 'transparent'}`,
+          background: 'transparent',
+          color: selected ? 'var(--adaptiveBlue700, #1D1B18)' : 'var(--adaptiveGrey600, #645E54)',
           fontFamily: 'inherit',
           fontSize: 15,
-          fontWeight: selected ? 700 : 400,
+          fontWeight: selected ? 500 : 400,
           cursor: 'pointer',
         }}
       >
@@ -176,10 +172,7 @@ export function ModeToggle({
         display: 'flex',
         flex: 'none',
         gap: 4,
-        padding: 3,
-        borderRadius: 999,
-        background: 'var(--softDent, #EAE5D9)',
-        border: '1.5px solid var(--adaptiveGrey200, #DED8CA)',
+        // 그릇의 면·테는 걷었다(에디토리얼 — 면 없음). 고른 칸의 잉크 테가 「여기」를 말한다.
         opacity: locked ? 0.4 : 1,
       }}
     >
@@ -243,7 +236,7 @@ export function FirstSessionBanner({ show }: { show: boolean }) {
 
   return (
     <div
-      style={{ marginTop: 12, padding: 14, borderRadius: 20, background: 'var(--adaptiveBlue50, #E1E8D4)', textAlign: 'center' }}
+      style={{ marginTop: 12, padding: 14, borderRadius: 20, background: 'var(--adaptiveBlue50, #ECE5D8)', textAlign: 'center' }}
     >
       <Text typography="st11" style={{ display: 'block', wordBreak: 'keep-all' }}>
         <SproutMark size={14} /> 첫 독서 기록이 심어졌어요! 기록 탭에 첫 칸이 생겼어요.
@@ -305,7 +298,7 @@ export function ReadingReminderOffer({
         </Text>
       ) : (
         <>
-          <Text typography="st11" fontWeight="bold" style={{ display: 'block' }}>
+          <Text typography="st11" fontWeight="medium" style={{ display: 'block' }}>
             {READING_REMINDER_OFFER_TITLE}
           </Text>
           <Text typography="st12" color="grey600" style={{ display: 'block', marginTop: 6, wordBreak: 'keep-all' }}>
@@ -355,14 +348,14 @@ export function GoalReachedView({
   onContinue: () => void;
   onGoHistory: () => void;
 }) {
-  const button = { height: 56, borderRadius: 18, fontFamily: 'inherit', fontSize: 17, fontWeight: 700, cursor: 'pointer' } as const;
+  const button = { height: 56, borderRadius: 999, fontFamily: 'inherit', fontSize: 17, fontWeight: 500, cursor: 'pointer' } as const;
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 16, paddingTop: 6 }}>
       <GoalMedal />
       <div style={{ textAlign: 'center', wordBreak: 'keep-all' }}>
         <span style={{ display: 'block', ...SERIF_VALUE, fontSize: 26 }}>오늘 목표를 채웠어요</span>
-        <span style={{ display: 'block', marginTop: 6, fontSize: 17, lineHeight: 1.5, color: 'var(--adaptiveGrey700, #43423A)' }}>
+        <span style={{ display: 'block', marginTop: 6, fontSize: 17, lineHeight: 1.5, color: 'var(--adaptiveGrey700, #4A453E)' }}>
           연속 {streak}일째예요.
           <br />
           {/* 길이가 사용자 값이라 조사를 고정할 수 없다 — 「30분이면」/「1시간 30초면」(게스트 「잔디 첫 칸」과 같은 처방). */}
@@ -377,25 +370,25 @@ export function GoalReachedView({
           alignItems: 'center',
           gap: 12,
           padding: '12px 14px',
-          borderRadius: 20,
-          background: 'var(--adaptiveBlue50, #E1E8D4)',
+          borderRadius: 2,
+          background: 'var(--adaptiveBlue50, #ECE5D8)',
         }}
       >
-        <span style={{ fontSize: 15, color: 'var(--adaptiveBlue900, #283B27)' }}>오늘 읽은 시간</span>
+        <span style={{ fontSize: 15, color: 'var(--adaptiveBlue900, #1D1B18)' }}>오늘 읽은 시간</span>
         <span style={{ marginLeft: 'auto', ...SERIF_VALUE, fontSize: 24 }}>{formatClock(todayRead)}</span>
         <svg width="26" height="26" viewBox="0 0 24 24" aria-hidden="true" style={{ flex: 'none' }}>
-          <circle cx="12" cy="12" r="11" style={{ fill: 'var(--adaptiveBlue700, #3F5A3C)' }} />
-          <path d="M6.5 12.5l3.5 3.5 7.5-8" fill="none" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round" style={{ stroke: 'var(--filledInk, #FFFFFF)' }} />
+          <circle cx="12" cy="12" r="11" style={{ fill: 'var(--adaptiveBlue700, #1D1B18)' }} />
+          <path d="M6.5 12.5l3.5 3.5 7.5-8" fill="none" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round" style={{ stroke: 'var(--filledInk, #F5F0E6)' }} />
         </svg>
       </div>
       <div style={{ alignSelf: 'stretch', display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: 10 }}>
-        <button type="button" onClick={onContinue} style={{ ...SOFT_OUTLINE, ...button }}>
+        <button type="button" onClick={onContinue} style={{ ...OUTLINE_PILL, ...button }}>
           이어서 읽기
         </button>
         <button
           type="button"
           onClick={onGoHistory}
-          style={{ ...button, border: 0, background: 'var(--adaptiveBlue50, #E1E8D4)', color: 'var(--adaptiveBlue700, #3F5A3C)' }}
+          style={{ ...button, border: 0, background: 'var(--adaptiveBlue50, #ECE5D8)', color: 'var(--adaptiveBlue700, #1D1B18)' }}
         >
           기록 보기
         </button>
@@ -505,7 +498,7 @@ const CAROUSEL_RADIUS = 8;
  * 「틈 + 세이지」 문법이되, 92px 표지는 500으로 충분해(카드 대비 4.33 · 비텍스트 3:1 통과) 700을 쓰지 않는다.
  * 토큰이라 공부 모드에서 파랑 후광이 된다.
  */
-const PICK_RING = '0 0 0 3px var(--adaptiveGrey100, #FBF9F4), 0 0 0 6px var(--adaptiveBlue500, #5B7F55)';
+const PICK_RING = '0 0 0 3px var(--adaptiveGrey100, #F5F0E6), 0 0 0 6px var(--adaptiveBlue500, #1D1B18)';
 
 /**
  * 트랙 세로 여백 — 아래 선택 표지의 `scale(1.1)`이 위아래로 각각 높이의 **0.05**만큼 삐져나가므로
@@ -667,7 +660,7 @@ export function NoBookCard({
         // 밝은 상자가 뜨고, 낮엔 카드색(#FBF9F4)과 거의 같아 투명과 구별되지 않는다. 굵기는 2px 그대로다
         // (Soft PR-3 서재 판정): 시안의 1.5px은 DPR 3 크롬에서 computed 1px로 떨어져 캔버스 위 「책 추가」 칸의
         // 점선이 흐려지고, 밤 카드 위에선 거의 사라졌다(목 모드 390×844@3 실측).
-        border: '2px dashed #7C8A78',
+        border: '2px dashed var(--adaptiveGrey600, #645E54)', // muted 토큰(종이 5.65 · 밤 책상 6.31) — 옛 세이지 리터럴은 PR-1에서 걷었다
         borderRadius: radius,
         display: 'flex',
         flexDirection: 'column',
@@ -709,11 +702,11 @@ function CheckBadge() {
         height: 22,
         boxSizing: 'border-box',
         borderRadius: '50%',
-        background: 'var(--adaptiveGrey100, #FBF9F4)',
-        border: '2px solid var(--adaptiveBlue500, #5B7F55)',
+        background: 'var(--adaptiveGrey100, #F5F0E6)',
+        border: '2px solid var(--adaptiveBlue500, #1D1B18)',
       }}
     >
-      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" strokeWidth="3.5" strokeLinecap="round" strokeLinejoin="round" style={{ stroke: 'var(--adaptiveBlue700, #3F5A3C)' }}>
+      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" strokeWidth="3.5" strokeLinecap="round" strokeLinejoin="round" style={{ stroke: 'var(--adaptiveBlue700, #1D1B18)' }}>
         <path d="M5 12.5l4.5 4.5L19 7.5" />
       </svg>
     </span>
@@ -877,7 +870,7 @@ export function BookCarousel<T extends BookOption>({
         data-selected-book={selected?.title ?? leadCard?.title}
         style={{ marginTop: 12, textAlign: 'center' }}
       >
-        <Text typography="st10" fontWeight="bold" style={{ display: 'block', wordBreak: 'keep-all' }}>
+        <Text typography="st10" fontWeight="medium" style={{ display: 'block', wordBreak: 'keep-all' }}>
           {selected?.title ?? leadCard?.title}
         </Text>
         {selected === null ? (
@@ -1081,9 +1074,9 @@ export function RemainingNote({
           top: -6,
           width: 10,
           height: 10,
-          background: 'var(--adaptiveBackground, #FBF9F4)',
-          borderLeft: '1.5px solid var(--adaptiveGrey200, #DED8CA)',
-          borderTop: '1.5px solid var(--adaptiveGrey200, #DED8CA)',
+          background: 'var(--adaptiveBackground, #F5F0E6)',
+          borderLeft: '1.5px solid var(--adaptiveGrey200, #D9D1C3)',
+          borderTop: '1.5px solid var(--adaptiveGrey200, #D9D1C3)',
           transform: 'rotate(45deg)',
         }}
       />
@@ -1092,18 +1085,18 @@ export function RemainingNote({
           position: 'relative',
           padding: '9px 12px',
           borderRadius: 14,
-          background: 'var(--adaptiveBackground, #FBF9F4)',
+          background: 'var(--adaptiveBackground, #F5F0E6)',
           /* 선이 있어야 떨어진다 — 이 상자의 배경은 히어로 카드 면과 같은 색이라 그림자만으론 경계가
              안 선다(옛 연필선 자리). Soft 시트 행(`SOFT_ROW`)과 같은 옅은 1.5px 실선이고, 캐럿도 같은 선을
              두른다. 히어로는 밤에도 `.lamp-page`가 낮 토큰을 재선언하므로 이 선도 낮 값으로 선다. */
-          border: '1.5px solid var(--adaptiveGrey200, #DED8CA)',
+          border: '1.5px solid var(--adaptiveGrey200, #D9D1C3)',
         }}
       >
         {/* ⓘ가 답해야 할 유일한 질문 — "못 채우면 어떻게 되나". 빚이 있든 없든 규칙은 같으므로 늘
             말하되, 이월을 끈 사람에겐 **반대로** 말한다(그 사람에게 이월 문구는 거짓이다). */}
         <Text
           typography="st12"
-          style={{ display: 'block', color: 'var(--adaptiveGrey700, #57534A)', wordBreak: 'keep-all' }}
+          style={{ display: 'block', color: 'var(--adaptiveGrey700, #4A453E)', wordBreak: 'keep-all' }}
         >
           {carryover ? (
             <>
@@ -1122,7 +1115,7 @@ export function RemainingNote({
             >
               {row('오늘 목표', formatDuration(goalSeconds))}
               {row('밀린 시간', formatDuration(debtSeconds))}
-              <div style={{ marginTop: 4, paddingTop: 4, borderTop: '0.5px solid var(--adaptiveGrey600, #6F6A5E)' }}>
+              <div style={{ marginTop: 4, paddingTop: 4, borderTop: '0.5px solid var(--adaptiveGrey600, #645E54)' }}>
                 {row('남은시간', formatClock(remainingSeconds), true)}
               </div>
             </div>
@@ -1248,7 +1241,7 @@ export function BookSheet({
   return (
     <Sheet title={title ?? '무슨 책을 읽으셨나요?'} onClose={onClose}>
       {hint !== undefined && (
-        <div style={{ marginTop: -4, marginBottom: 10, fontSize: 13, color: 'var(--adaptiveGrey600, #6F6A5E)', wordBreak: 'keep-all' }}>
+        <div style={{ marginTop: -4, marginBottom: 10, fontSize: 13, color: 'var(--adaptiveGrey600, #645E54)', wordBreak: 'keep-all' }}>
           {hint}
         </div>
       )}
@@ -1354,7 +1347,7 @@ export function AccountSection({
             // Soft(시안 Soft-Home)에서 28로 — 계단 t3(28)와 같은 칸이다.
             ...SERIF_VALUE,
             fontSize: 28,
-            color: 'var(--adaptiveGrey900, #1E1E18)',
+            color: 'var(--adaptiveGrey900, #1D1B18)',
             overflow: 'hidden',
             textOverflow: 'ellipsis',
             whiteSpace: 'nowrap',
@@ -1365,7 +1358,7 @@ export function AccountSection({
         {loginId !== null && (
           <span
             data-handle={loginId}
-            style={{ display: 'block', marginTop: 2, fontSize: 15, color: 'var(--adaptiveGrey600, #5B5A4D)' }}
+            style={{ display: 'block', marginTop: 2, fontSize: 15, color: 'var(--adaptiveGrey600, #645E54)' }}
           >
             @{loginId}
           </span>
@@ -1413,7 +1406,7 @@ export function ReadingNowCard({
           <BookCover url={book.coverUrl} title={book.title} width={READING_NOW_COVER} eager />
         )}
         <div style={{ minWidth: 0 }}>
-          <Text typography="t7" fontWeight="bold" style={{ wordBreak: 'keep-all' }}>
+          <Text typography="t7" fontWeight="medium" style={{ wordBreak: 'keep-all' }}>
             {book === null ? '책 없이 측정 중' : book.title}
           </Text>
           {book?.author != null && (
@@ -1750,15 +1743,13 @@ export function Home({
       <div
         className={LAMP_PAGE_CLASS}
         style={{
-          // 부푼 면(시안 Soft-Home). ⚠️ 밤(독서등)엔 `global.css`의 `.lamp-page` 등불 글로우가 `!important`로
-          // 이 인라인 그림자를 이긴다 — 안 그러면 카드 안 타일용으로 재선언된 낮 `--puffShadow`의 흰 .95
-          // 하이라이트가 밤 캔버스 위에 뜬다(soft-surface.test가 그 선언을 잰다).
-          ...PUFF,
-          borderRadius: 30,
+          // 에디토리얼(PR-1) — 면·그림자 없음. 밤(독서등)엔 `global.css`의 `.lamp-page`가 이 그릇을 미색 사각 페이지로
+          // 깐다(반경 2). 아치 배치는 PR-2 몫이다.
+          borderRadius: 2,
           padding: 20,
           // 이 카드 <b>한 장만</b>의 토큰이다(grey100은 전 화면 공용이라 스왑하면 앱이 통째로 파래진다).
           // 공부 모드에서 화면 최대 면이 색으로 말하는 자리 — 값은 `global.css`가 정한다.
-          background: `var(${HERO_CARD_BG_VAR}, #FBF9F4)`,
+          background: `var(${HERO_CARD_BG_VAR}, transparent)`,
         }}
       >
         {/* 첫 사용 안내는 이 카드 <b>속을 통째로</b> 가져간다 — 처음 온 사람에게 이 박스는 타이머가
@@ -1783,7 +1774,7 @@ export function Home({
               동안엔 서지 않는다(안내 위에 다른 손잡이를 겹치지 않는다). */}
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
             {/* 머리말 — 흐린 잉크 16, 자간 없음(시안). 옛 자간 3 세이지 머리말은 가운데 정렬 카드의 것이었다. */}
-            <span style={{ minWidth: 0, fontSize: 16, color: 'var(--adaptiveGrey600, #5B5A4D)' }}>
+            <span style={{ minWidth: 0, fontSize: 16, color: 'var(--adaptiveGrey600, #645E54)' }}>
               {/* 달성일 때만 새싹이 선다 — 평소 머리말은 글자 그대로여서 미달성 렌더가 안 흔들린다.
                   새싹은 독서 하루 목표의 것이다 — 공부 하루 목표는 폐기돼(2026-09-13, Q6) 공부엔 오지 않는다. */}
               {heroOverline(mode, mode === 'reading' && achieved) ?? (
@@ -1805,7 +1796,7 @@ export function Home({
                 서사를 깨지 않는다(토큰 경유라 값은 css가 정한다). */}
             <Text
               typography="t2"
-              fontWeight="bold"
+              fontWeight="medium"
               color={mode === 'study' ? 'blue700' : undefined}
               style={{ ...SERIF_VALUE }}
             >
@@ -1818,7 +1809,7 @@ export function Home({
           */}
           {mode === 'study' ? null : progress !== null ? (
             <div style={{ marginTop: 16 }}>
-              {/* 게이지 — 눌린 트랙 안에 세이지 그라데이션 막대(시안 Soft-Home). 막대의 윗 하이라이트는 정적이다. */}
+              {/* 게이지 — 가는 선 색 트랙(TRACK, 높이 4) 위 같은 높이의 강조 잉크 채움(에디토리얼 PR-1). */}
               <div
                 data-gauge-track=""
                 role="progressbar"
@@ -1827,16 +1818,16 @@ export function Home({
                 aria-valuemax={100}
                 aria-valuenow={Math.round(progress * 100)}
                 aria-valuetext={`${Math.round(progress * 100)}%`}
-                style={{ ...DENT, position: 'relative', height: 20, borderRadius: 999 }}
+                style={{ ...TRACK, position: 'relative', height: 4 }}
               >
                 <div
                   style={{
                     position: 'absolute',
-                    left: 3,
-                    top: 3,
-                    bottom: 3,
-                    width: `calc((100% - 6px) * ${progress})`, // 트랙 안쪽 폭(양옆 3px 뺀 값)의 비율
-                    borderRadius: 999,
+                    left: 0,
+                    top: 0,
+                    bottom: 0,
+                    width: `calc(100% * ${progress})`,
+                    borderRadius: 2,
                     background: GAUGE_FILL,
                   }}
                 />
@@ -1864,8 +1855,7 @@ export function Home({
                   justifyContent: 'space-between',
                   gap: 8,
                   marginTop: 16,
-                  background: 'var(--butterBg, #F1E6C3)',
-                  boxShadow: `${TILE_HIGHLIGHT}, 5px 5px 12px rgba(150, 125, 60, 0.14)`,
+                  background: 'var(--butterBg, #ECE5D8)',
                 }}
               >
                 {/* ⓘ는 라벨에 붙는다 — 값이 아니라 「남은 시간」이라는 개념을 설명하는 손잡이다. */}
@@ -1884,7 +1874,7 @@ export function Home({
                     padding: 0,
                     border: 0,
                     background: 'transparent',
-                    color: 'var(--butterInk, #5A4A14)',
+                    color: 'var(--butterInk, #4A453E)',
                     fontFamily: 'inherit',
                     fontSize: 15,
                     cursor: 'pointer',
@@ -1900,7 +1890,7 @@ export function Home({
                     fill="none"
                     strokeWidth="2"
                     strokeLinecap="round"
-                    style={{ stroke: 'var(--butterInk, #5A4A14)', flex: 'none' }}
+                    style={{ stroke: 'var(--butterInk, #4A453E)', flex: 'none' }}
                   >
                     <circle cx="12" cy="12" r="9" />
                     <path d="M12 11v5M12 7.5v.5" />
@@ -1959,7 +1949,7 @@ export function Home({
                     alignItems: 'center',
                     gap: 6,
                     fontSize: 14,
-                    color: 'var(--adaptiveGrey600, #5B5A4D)',
+                    color: 'var(--adaptiveGrey600, #645E54)',
                     whiteSpace: 'nowrap',
                   }}
                 >
@@ -1986,8 +1976,8 @@ export function Home({
                       background: 'transparent',
                       fontFamily: 'inherit',
                       fontSize: 14,
-                      fontWeight: goalAdPending ? 400 : 700,
-                      color: goalAdPending ? 'var(--adaptiveGrey600, #5B5A4D)' : 'var(--adaptiveBlue700, #3F5A3C)',
+                      fontWeight: goalAdPending ? 400 : 500,
+                      color: goalAdPending ? 'var(--adaptiveGrey600, #645E54)' : 'var(--adaptiveBlue700, #1D1B18)',
                       cursor: 'pointer',
                     }}
                   >
@@ -2085,7 +2075,7 @@ export function Home({
               cursor: 'pointer',
             }}
           >
-            <Text typography="st11" fontWeight="bold">
+            <Text typography="st11" fontWeight="medium">
               읽지 않은 대화 {chatUnread}
             </Text>
             <Text typography="st12" color="grey600">

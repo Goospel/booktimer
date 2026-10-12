@@ -209,17 +209,17 @@ describe('달력 격자 렌더', () => {
  * Soft 재테마(PR-4) — 공부 일정. 달력(월 넘김 · 격자 · 범례)이 부푼 카드 한 장 안에 선다. 날짜 칸은 한 달
  * 30칸 반복이라 큰 그림자가 붙으면 안 된다(그림자 예산 §6).
  */
-describe('Soft 표면 — 공부 일정 (PR-4)', () => {
+describe('에디토리얼 표면 — 공부 일정 (PR-1)', () => {
   const html = renderToStaticMarkup(
     <TDSMobileProvider userAgent={userAgent}>
       <StudyCalendar onError={() => {}} />
     </TDSMobileProvider>,
   );
 
-  it('달력은 부푼 카드 한 장 안에 선다', () => {
+  it('달력은 면·그림자 없는 묶음 한 장 안에 선다', () => {
     const card = tagWith(html, 'data-calendar-card=""');
     expect(card).not.toBe('');
-    expect(card).toContain('box-shadow:var(--puffShadow');
+    expect(card).not.toContain('box-shadow');
     expect(html.indexOf('data-calendar-card')).toBeLessThan(html.indexOf('data-cal-day'));
   });
 

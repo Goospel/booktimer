@@ -8,7 +8,6 @@ import { CACHE_HISTORY, cacheGet, cachePut } from '../cache';
 import { formatDuration } from '../format';
 import {
   BookCover,
-  DENT,
   ErrorMessage,
   GrassGrid,
   LEVEL_COLORS,
@@ -18,6 +17,7 @@ import {
   Screen,
   SectionTitle,
   TODAY_RING,
+  TRACK,
   Text,
   monthLabelPositions,
   sectionStyle,
@@ -113,7 +113,7 @@ export function GrassPanel({ graph }: { graph: ContributionGraph }) {
           {months.map(({ label, left }) => (
             <span
               key={label}
-              style={{ position: 'absolute', left, fontSize: 14, color: 'var(--adaptiveGrey600, #5B5A4D)', whiteSpace: 'nowrap' }}
+              style={{ position: 'absolute', left, fontSize: 14, color: 'var(--adaptiveGrey600, #645E54)', whiteSpace: 'nowrap' }}
             >
               {label}
             </span>
@@ -178,7 +178,7 @@ export function StatStrip({
         <div key={label} data-stat-tile="" style={{ ...(butter ? STAT_TILE_BUTTER : STAT_TILE), flex, minWidth: 0 }}>
           <Text
             typography="st12"
-            color={butter ? 'var(--butterInk, #5A4A14)' : 'grey600'}
+            color={butter ? 'var(--butterInk, #4A453E)' : 'grey600'}
             style={{ display: 'block', fontSize: 15 }}
           >
             {label}
@@ -186,7 +186,7 @@ export function StatStrip({
           {/* 세리프 24 — 라벨(15)과 크기·서체 두 축으로 갈린다(시안 Soft-History). */}
           <Text
             typography="st10"
-            fontWeight="bold"
+            fontWeight="medium"
             style={{ ...SERIF_VALUE, display: 'block', fontSize: 24, marginTop: 2, wordBreak: 'keep-all' }}
           >
             {value}
@@ -197,18 +197,13 @@ export function StatStrip({
   );
 }
 
-/** 스탯 타일 공통 꼴 + 윗변 1px 빛(부푼 면의 흰 하이라이트를 타일 크기로 줄인 것 — 홈 남은 시간 타일과 같은 값). */
-const STAT_TILE_BASE: CSSProperties = { padding: '10px 14px', borderRadius: 20 };
-const STAT_TILE_BUTTER: CSSProperties = {
-  ...STAT_TILE_BASE,
-  background: 'var(--butterBg, #F1E6C3)',
-  boxShadow: 'inset 0 1px 0 rgba(255, 255, 255, 0.7), 5px 5px 12px rgba(150, 125, 60, 0.14)',
-};
-const STAT_TILE: CSSProperties = {
-  ...STAT_TILE_BASE,
-  background: 'var(--adaptiveGrey100, #FBF9F4)',
-  boxShadow: 'var(--tileShadow), -4px -4px 10px rgba(255, 255, 255, 0.9)',
-};
+/**
+ * 스탯 타일 공통 꼴 — 에디토리얼(PR-1): 그림자·부푼 면을 걷고 가는 선 테만 남겼다. 「줄 표」로 바꾸는 배치 변경은 PR-4 몫.
+ * 정보색(버터)은 폐지돼 옅은 면(paper-2)이다.
+ */
+const STAT_TILE_BASE: CSSProperties = { padding: '10px 14px', borderRadius: 2, border: '1px solid var(--adaptiveGrey200, #D9D1C3)' };
+const STAT_TILE_BUTTER: CSSProperties = { ...STAT_TILE_BASE, background: 'var(--butterBg, #ECE5D8)' };
+const STAT_TILE: CSSProperties = STAT_TILE_BASE;
 
 const WEEKDAYS = ['일', '월', '화', '수', '목', '금', '토'];
 
@@ -361,10 +356,10 @@ export function MonthHead({ month, totalSeconds }: { month: string; totalSeconds
         borderBottom: SECTION_RULE,
       }}
     >
-      <Text typography="st10" fontWeight="bold" style={{ ...SERIF_VALUE, fontSize: 20 }}>
+      <Text typography="st10" fontWeight="medium" style={{ ...SERIF_VALUE, fontSize: 20 }}>
         {formatMonthTitle(month)}
       </Text>
-      <Text typography="st12" fontWeight="bold" color="blue700" style={{ ...SERIF_VALUE, fontSize: 16 }}>
+      <Text typography="st12" fontWeight="medium" color="blue700" style={{ ...SERIF_VALUE, fontSize: 16 }}>
         {formatDuration(totalSeconds)}
       </Text>
     </div>
@@ -372,17 +367,18 @@ export function MonthHead({ month, totalSeconds }: { month: string; totalSeconds
 }
 
 /**
- * 그 달의 날짜 줄들을 담는 <b>눌린 쟁반</b> 하나(시안 Soft-History). 줄 사이 구분선 대신 눌린 면 + 간격이 가른다.
+ * 그 달의 날짜 줄들을 담는 묶음 하나 — 에디토리얼(PR-1): 면 없이 아래 가는 선이 다음 달과 가른다(옛 눌린 쟁반). 위는 월
+ * 머리의 잉크 선이 이미 긋고 있어 두 줄로 겹치지 않게 윗선은 두지 않는다.
  *
  * <p>월 쟁반을 다시 부푼 카드로 감싸지 않는다(시안은 감쌌다): 카드 패딩 18×2가 하루 막대 칸을 60px 아래로
  * 깎아, 막대로 날을 견주는 것 자체가 흐려진다. 쟁반이 곧 캔버스에 파인 묶음이다.
  */
 export const DAY_TRAY: CSSProperties = {
-  ...DENT,
   display: 'flex',
   flexDirection: 'column',
   gap: 12,
-  padding: 14,
+  padding: '14px 0',
+  borderBottom: '1px solid var(--adaptiveGrey200, #D9D1C3)',
 };
 
 /**
@@ -407,27 +403,21 @@ const ROW_GRID: CSSProperties = {
 };
 
 /**
- * 하루 막대 — 트랙(카드 면, 16px 알약) 위에 2px 띄워 앉은 세이지 그라데이션(시안 Soft-History). 폭은
- * {@link barPercent} 그대로다.
+ * 하루 막대 — 가는 선 색 트랙(`TRACK`, 높이 6 · 모서리 2) 위에 같은 높이의 강조 잉크 채움(에디토리얼 PR-1). 폭은
+ * {@link barPercent} 그대로다. 옛 16px 알약 + 2px 띄움은 카드 면 위에서만 성립했다(종이 위에선 트랙이 사라진다).
  *
  * <p>단색 <b>토큰</b>이다(톤 조율 A — 시안의 그라데이션은 재료를 하나 더 얹었다): 공부 기록이 같은 막대를 쓰는데 `body.study-mode`가
  * 이 토큰을 파랑으로 갈아 끼운다 — 리터럴이면 공부 화면의 이 막대만 세이지로 남는다. 옛 막대가
  * `LEVEL_COLORS[2]`를 쓰던 이유와 같다.
  */
-export const BAR_TRACK: CSSProperties = {
-  height: 16,
-  borderRadius: 999,
-  background: 'var(--adaptiveGrey100, #FBF9F4)',
-  padding: 2,
-  boxSizing: 'border-box',
-};
-export const BAR_FILL = 'var(--adaptiveBlue500, #5B7F55)';
+export const BAR_TRACK: CSSProperties = { ...TRACK, height: 6 };
+export const BAR_FILL = 'var(--adaptiveBlue500, #1D1B18)';
 
 /** 트랙 위 막대 한 줄 — `barPercent`가 낸 퍼센트를 받는다. 0%면 빈 트랙만 남는다. */
 export function DayBar({ percent }: { percent: number }) {
   return (
     <div aria-hidden="true" style={BAR_TRACK}>
-      <div style={{ width: `${percent}%`, height: 12, borderRadius: 999, background: BAR_FILL }} />
+      <div style={{ width: `${percent}%`, height: '100%', borderRadius: 2, background: BAR_FILL }} />
     </div>
   );
 }
@@ -559,7 +549,7 @@ const PILE_CARD: CSSProperties = {
   position: 'relative',
   display: 'flex',
   borderRadius: 4,
-  boxShadow: '0 0 0 1.5px var(--softDent, #EAE5D9)',
+  boxShadow: '0 0 0 1.5px var(--softDent, #ECE5D8)',
 };
 
 /**
@@ -584,7 +574,7 @@ function CoverPile({ books }: { books: BookRead[] }) {
           width: 20,
           height: 28,
           borderRadius: 3,
-          border: '1px dashed var(--adaptiveGrey200, #E4DDD0)',
+          border: '1px dashed var(--adaptiveGrey200, #D9D1C3)',
         }}
       />
     );
@@ -609,8 +599,8 @@ function CoverPile({ books }: { books: BookRead[] }) {
             height: 28,
             alignItems: 'center',
             justifyContent: 'center',
-            background: 'var(--adaptiveGrey200, #E4DDD0)',
-            color: 'var(--adaptiveGrey700, #57534A)',
+            background: 'var(--adaptiveGrey200, #D9D1C3)',
+            color: 'var(--adaptiveGrey700, #4A453E)',
             fontSize: 14,
           }}
         >
@@ -724,7 +714,7 @@ export function Chevron({ open }: { open: boolean }) {
       viewBox="0 0 10 10"
       aria-hidden="true"
       style={{
-        color: 'var(--adaptiveGrey600, #6F6A5E)',
+        color: 'var(--adaptiveGrey600, #645E54)',
         transform: open ? 'rotate(180deg)' : 'none',
         transition: 'transform 0.15s',
       }}
