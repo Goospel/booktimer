@@ -5,7 +5,7 @@ import { fileURLToPath } from 'node:url';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
 
-import { bigShadow } from './soft-guard';
+import { bigShadow, smallShadow } from './soft-guard';
 import { sourceFiles, stripComments } from './source-scan';
 import * as ui from './ui';
 import { FIELD, FLOAT, OUTLINE_PILL, RULE_ROW, TRACK, sectionStyle } from './ui';
@@ -188,6 +188,32 @@ describe('REQ-05 · 큰 흐림 그림자가 0이다', () => {
       if (n > 0) counts[basename(file)] = n;
     }
     expect(counts).toEqual(ALLOWED);
+  });
+
+  /**
+   * 작은 흐림(blur 1~7px)도 0자리다 — 큰 흐림 표만 있으면 「살짝 뜬」 그림자가 초록으로 샌다(리뷰 돌연변이 M31 코치마크
+   * 말풍선 `0 2px 4px` · M32 시트 패널 `0 -2px 6px`가 둘 다 살아남았다). 링(`0 0 0 Npx`, blur 0)은 선이라 세지 않는다
+   * — 잔디 오늘 칸·격자 고른 칸 outline이 그 자리다. 새 자리가 생기면 근거와 함께 이 표를 고친다.
+   */
+  it('파일별 작은 흐림 수가 허용표({})와 같다 — 링은 제외', () => {
+    const SMALL_ALLOWED: Record<string, number> = {};
+    const small = (v: string) => smallShadow(`box-shadow:${v}`);
+    // 양성 대조 — M31·M32 꼴과 rem 환산(0.25rem = 4px)을 잡는다
+    expect(['0 2px 4px rgba(29, 27, 24, 0.12)', '0 -2px 6px rgba(0,0,0,.1)', '0 1px 0.25rem #000'].map(small)).toEqual([
+      true,
+      true,
+      true,
+    ]);
+    // 음성 대조 — 링(blur 0)·inset 하이라이트·흐림 없음·큰 흐림(큰 흐림 표 몫)은 작은 흐림이 아니다
+    expect(
+      ['0 0 0 2px var(--adaptiveBlue700)', 'inset 0 1px 0 #fff', 'none', '', '0 8px 24px rgba(0,0,0,.2)'].map(small),
+    ).toEqual([false, false, false, false, false]);
+    const counts: Record<string, number> = {};
+    for (const file of files) {
+      const n = values(stripComments(readFileSync(file, 'utf8'))).filter(small).length;
+      if (n > 0) counts[basename(file)] = n;
+    }
+    expect(counts).toEqual(SMALL_ALLOWED);
   });
 
   /**

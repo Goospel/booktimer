@@ -7,6 +7,7 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
 
 import { History } from './screens/History';
+import { openingTags } from './source-scan';
 import { ReadingNowCard } from './screens/Home';
 import { StatItem } from './screens/Profile';
 import { graph, userAgent } from './test-fixtures';
@@ -501,15 +502,34 @@ describe('채움 주 버튼 개수 (설계 D5)', () => {
 
   // 에디토리얼(PR-1): 주 동작 = 검정 알약이라 「부푼 그림자」 갈래는 지웠다(REQ-06 #10). 남은 두 형태 — TDS 래퍼와 맨 버튼의 잉크 바탕.
   const FILLED = /<FilledButton|background: 'var\(--adaptiveBlue700/g;
+  /**
+   * 셋째 형태 — 맨 `<button>`의 <b>잉크 채움</b>(`--adaptiveGrey800`·`--adaptiveGrey900`). 강조 토큰(Blue700)이 아니라
+   * 글자 잉크로 칠해도 낮엔 같은 검정 알약이다(리뷰 돌연변이 M5b: 서재 「관리」에 grey800 바탕을 넣어도 초록이었다).
+   * 잉크 바탕은 미읽음 배지(`UnreadBadge`)처럼 누르지 않는 것에도 서므로 <b>`<button` 여는 태그 안</b>만 센다.
+   * ponytail: 스타일을 태그 밖 상수로 빼(`style={X}`) 칠하면 못 본다 — 그 꼴이 생기면 상수 정의까지 넓힌다.
+   */
+  const INK_FILL = /background(?:Color)?:\s*['"`]var\(--adaptiveGrey[89]00\b/;
+  const filledCount = (src: string) =>
+    (src.match(FILLED) ?? []).length + openingTags(src, 'button').filter((t) => INK_FILL.test(t)).length;
 
   const read = (rel: string) => codeOnly(readFileSync(new URL(rel, import.meta.url), 'utf8'));
 
   const surfaces = [
     ...readdirSync(new URL('./screens', import.meta.url))
       .filter((f) => f.endsWith('.tsx'))
-      .map((f) => ({ file: f, count: (read(`./screens/${f}`).match(FILLED) ?? []).length })),
-    { file: 'App.tsx', count: (read('./App.tsx').match(FILLED) ?? []).length },
+      .map((f) => ({ file: f, count: filledCount(read(`./screens/${f}`)) })),
+    { file: 'App.tsx', count: filledCount(read('./App.tsx')) },
   ];
+
+  it('잉크 채움 계측기 — 버튼 안 grey800·900 바탕은 세고, 배지(버튼 밖)는 안 센다', () => {
+    // 양성 대조 — 맨 버튼의 잉크 채움(grey800 · grey900 · backgroundColor 꼴)
+    expect(filledCount(`<button type="button" style={{ background: 'var(--adaptiveGrey800, #1D1B18)' }}>관리</button>`)).toBe(1);
+    expect(filledCount(`<button style={{ backgroundColor: "var(--adaptiveGrey900)" }} onClick={() => go()}>x</button>`)).toBe(1);
+    // 음성 대조 — 같은 바탕의 배지(span), 버튼의 옅은 면(grey100), 버튼 밖 잉크 선
+    expect(filledCount(`<span style={{ background: 'var(--adaptiveGrey800, #1D1B18)' }}>3</span>`)).toBe(0);
+    expect(filledCount(`<button style={{ background: 'var(--adaptiveGrey100)' }}>x</button>`)).toBe(0);
+    expect(filledCount(`<button style={{ border: '1px solid var(--adaptiveGrey800)' }}>x</button>`)).toBe(0);
+  });
 
   it('한 화면에 채움 버튼이 둘 이상 서지 않는다 — 여럿이면 「주 동작 하나」라는 축이 무너진다', () => {
     expect(surfaces.filter((s) => s.count > 1)).toEqual([]);
