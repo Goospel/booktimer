@@ -47,6 +47,17 @@ describe('REQ-04 · 글꼴 CSS는 load 뒤 한 번만 붙는다', () => {
     expect(doc.links[0]).toMatchObject({ id: 'bt-webfonts', rel: 'stylesheet', href: FONT_CSS_URL });
   });
 
+  it('모듈 스크립트 시점(interactive)이면 load 전엔 0개 — 「DOM 준비」로 착각해 미리 붙이지 않는다', () => {
+    const doc = fakeDoc('interactive');
+    const win = fakeWin();
+
+    run(doc, win);
+    expect(doc.links).toHaveLength(0);
+
+    win.listeners.get('load')?.();
+    expect(doc.links).toHaveLength(1);
+  });
+
   it('이미 로드가 끝났으면 바로 1개', () => {
     const doc = fakeDoc('complete');
     run(doc, fakeWin());
@@ -71,7 +82,14 @@ describe('REQ-04 · 글꼴 CSS는 load 뒤 한 번만 붙는다', () => {
     expect(css.match(/@import/g) ?? []).toHaveLength(0);
   });
 
-  it('main.tsx가 loadWebFonts(document, window)를 부른다', () => {
-    expect(read('main.tsx')).toContain('loadWebFonts(document, window)');
+  it('index.html이 구글 폰트를 직접 부르지 않는다 — <link>·preload도 파서가 넣으면 렌더를 붙잡는다', () => {
+    expect(read('../index.html')).not.toContain('fonts.googleapis.com');
+  });
+
+  it('main.tsx가 loadWebFonts(document, window)를 부른다 — 주석 처리된 호출은 치지 않는다', () => {
+    const src = read('main.tsx')
+      .replace(/\/\*[\s\S]*?\*\//g, '')
+      .replace(/^\s*\/\/.*$/gm, '');
+    expect(src).toMatch(/^loadWebFonts\(document, window\);\r?$/m); // main.tsx는 CRLF
   });
 });
