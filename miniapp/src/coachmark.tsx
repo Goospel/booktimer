@@ -191,6 +191,7 @@ export function Coachmark({
   title,
   detail,
   enabled = true,
+  tailLeft,
   children,
 }: {
   name: string;
@@ -204,6 +205,8 @@ export function Coachmark({
    * 안내가 한 곳에 남아 「없는 것을 가리키는 안내」가 갈라져 생기지 않는다.
    */
   enabled?: boolean;
+  /** 꼬리의 가로 위치 — 감싼 것이 가리킬 것보다 넓을 때만(서재: 줄 전체를 감싸고 맨 앞 칸을 가리킨다). 없으면 가운데. */
+  tailLeft?: string;
   children: ReactNode;
 }) {
   // 이 안내를 닫았는가 — 상태로 드는 것은 이 한 가지다(마운트 때 기기 기록에서 시작한다).
@@ -273,6 +276,7 @@ export function Coachmark({
         title={title}
         detail={detail}
         tail="up"
+        tailLeft={tailLeft}
         style={{ position: 'relative', zIndex: INLINE_DIM_Z_INDEX + 1, marginTop: 12 }}
       />
     </>
