@@ -758,7 +758,7 @@ export function NoBookCard({
  * <p>시안은 표지 밖으로 7px 삐져나가지만 여기선 <b>안쪽에</b> 둔다: 트랙이 가로 스크롤 컨테이너라 삐져나간
  * 배지는 세로 넘침이 돼 잘리고 트랙이 위아래로 들썩인다(`TRACK_V_PAD` 주석과 같은 사고).
  */
-function CheckBadge() {
+export function CheckBadge() {
   return (
     <span
       data-check-badge=""

@@ -46,7 +46,7 @@ const SERIF_SPREADS = {
   'History.tsx': 6, // 2026-09-25 펼친 책별 시간(세리프 16)이 측정 줄(비세리프)로 바뀌며 한 자리 줄었다(R2 PR-5)
   'Home.tsx': 8, // 2026-09-24 하루 목표 세리프 값이 회색 캡션으로 내려가 한 자리 줄었다 · 에디토리얼 PR-2: 캐러셀 제목(H1)·「읽는 중」 제목(H3) 명조 +2
   'HomeFeed.tsx': 3,
-  'Library.tsx': 1,
+  'Library.tsx': 4, // 에디토리얼 PR-3: 아치 「내 서재」(D2 32) · 선반 머리(H3 18) · 펼친 책 제목(H2 22) 명조 +3
   'Profile.tsx': 1,
   'Story.tsx': 3,
   'StudyCalendar.tsx': 2,
