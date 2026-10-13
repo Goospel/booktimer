@@ -8,7 +8,7 @@ import { ErrorMessage, SERIF_VALUE, Screen, Text, sectionStyle } from '../ui';
  * 공부 일정 달력 — <b>지킨 날을 사용자가 직접 표시하는</b> 화면.
  *
  * <p>기록 탭의 잔디와 <b>네 축이 전부 다르다</b>: 형태(숫자 달력 vs 무숫자 격자) · 마크(원 vs 사각) ·
- * 색(파랑 vs 세이지) · 이름(일정 vs 기록). 두 화면이 같은 것을 말한다고 오해되면 「측정하면 저절로
+ * 색(파랑 vs 잉크) · 이름(일정 vs 기록). 두 화면이 같은 것을 말한다고 오해되면 「측정하면 저절로
  * 지킨 날이 된다」는 거짓 기대가 생기는데, 이 화면의 요점은 정확히 그 반대다.
  *
  * <p>서버가 자동으로 채워 주는 것은 <b>「그날 측정이 있었나」(점)</b>까지다. 목표 대비 달성 배지는
@@ -349,7 +349,7 @@ export function StudyCalendar({ onError }: { onError: (error: Error) => void }) 
         지킨 날을 눌러 표시해요. 한 번 더 누르면 못 지킨 날, 또 누르면 표시가 지워져요.
       </Text>
 
-      {/* 달력 카드 — 월 넘김·격자·범례가 한 장의 부푼 면에 선다. 좌우 여백은 {@link CALENDAR_CARD_PAD_X}. */}
+      {/* 달력 카드 — 월 넘김·격자·범례가 한 덩어리(면 없이 선과 여백)로 선다. 좌우 여백은 {@link CALENDAR_CARD_PAD_X}. */}
       <section
         data-calendar-card=""
         style={{ ...sectionStyle, marginTop: 12, padding: `6px ${CALENDAR_CARD_PAD_X}px 14px` }}

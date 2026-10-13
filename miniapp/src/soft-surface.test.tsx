@@ -1,5 +1,5 @@
 import { readFileSync } from 'node:fs';
-import { basename } from 'node:path';
+import { basename, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { renderToStaticMarkup } from 'react-dom/server';
@@ -165,17 +165,21 @@ describe('REQ-05 · 큰 흐림 그림자가 0이다', () => {
 
 
   const root = fileURLToPath(new URL('.', import.meta.url));
-  const files = sourceFiles(root);
+  // 제품 .tsx + 전역 CSS — 시트 패널·의사요소 그림자는 global.css에 산다(PR-4 가드 빈틈 ②).
+  const files = [...sourceFiles(root), join(root, 'global.css')];
 
-  /** 키 뒤의 값 — 줄 끝까지, 줄이 비면 다음 줄(`boxShadow:\n  cond ? … : …`). 따옴표는 걷는다. */
+  /** 키 뒤의 값 — 줄 끝까지, 줄이 비면 다음 줄(`boxShadow:\n  cond ? … : …`). 따옴표는 걷는다. CSS `box-shadow:`도 같은 키다. */
   function values(src: string): string[] {
-    return [...src.matchAll(/\b(?:boxShadow|ring)\s*:[ \t]*([^\n]*)(?:\n([^\n]*))?/g)].map(
+    return [...src.matchAll(/(?:\bboxShadow|\bring|box-shadow)\s*:[ \t]*([^\n]*)(?:\n([^\n]*))?/g)].map(
       (m) => (m[1].trim() === '' ? m[2] ?? '' : m[1]).replace(/['"`]/g, ''),
     );
   }
 
   it('파일을 실제로 훑는다 — 스캔 0개는 공허한 초록', () => {
     expect(files.length).toBeGreaterThan(10);
+    // PR-4 — global.css도 훑는다(시트 패널 `box-shadow: 0 -2px 6px …`가 .tsx 키만 보는 스캔 밖이었다)
+    expect(files.some((f) => basename(f) === 'global.css')).toBe(true);
+    expect(values('.sheet { box-shadow: 0 -2px 6px rgba(0,0,0,.1); }').map((v) => smallShadow(`box-shadow:${v}`))).toEqual([true]);
     // 양성 대조 — 스캐너가 이미 아는 큰 그림자를 잡는다(아래 표 비교가 「언제나 0」 고장이 아님)
     expect(values("boxShadow: '0 6px 20px rgba(0, 0, 0, 0.25)',").map((v) => bigShadow(`box-shadow:${v}`))).toEqual([true]);
     expect(values('boxShadow:\n  on ? "0 0 0 2px var(--x)" : undefined,').map((v) => bigShadow(`box-shadow:${v}`))).toEqual([false]);

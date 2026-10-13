@@ -84,7 +84,7 @@ export function metaLine(book: MyBookSummary): string {
  * <p>시간은 「2시간」이 아니라 「2시간 읽음」이다 — 칩 하나만 떼어 놓고 보면 무엇의 2시간인지 알 수 없다.
  * 0이면 칩 자체를 안 만든다(「0분 읽음」은 정보가 아니다).
  *
- * <p>공개는 세이지로 켜지고 비공개는 외곽선으로 눌린다 — <b>색이 곧 「누구에게 보이는가」</b>다.
+ * <p>공개는 옅은 면 + 잉크 글자로 켜지고 비공개는 외곽선으로 눌린다 — <b>색이 곧 「누구에게 보이는가」</b>다.
  *
  * <p>저자를 줄바꿈으로 분리하던 옛 수법(`pre-line`)이 사라진 것도 이득이다 — 긴 알라딘 저자 문자열이
  * 되접혀도 칩은 <b>다른 요소</b>라 그 사이에 끼어 들 수가 없다(전에는 문자열 한 덩어리라 가능했다).
@@ -96,7 +96,7 @@ export function bookStats(book: MyBookSummary): BookChip[] {
     const read = formatDuration(book.seconds);
     chips.push({ label: `${read} 읽음`, value: read, tone: 'neutral' });
   }
-  chips.push(book.isPublic ? { label: '공개', tone: 'sage' } : { label: '비공개', tone: 'outline' });
+  chips.push(book.isPublic ? { label: '공개', tone: 'ink' } : { label: '비공개', tone: 'outline' });
   return chips;
 }
 
@@ -107,16 +107,19 @@ export interface BookChip {
   value?: string;
 }
 
-type BookChipTone = 'neutral' | 'sage' | 'outline';
+type BookChipTone = 'neutral' | 'ink' | 'outline';
 
-/** 칩 세 톤 — 소식 배지와 같은 값이다(새 색을 만들지 않는다). */
+/**
+ * 칩 세 톤 — 누르지 못하는 <span>이라 못 누르는 태그 옷(paper-2 면 r2, 책BTI 태그와 같다)이다.
+ * 공개·시간은 면, 비공개만 면 없이 테로 눌린다 — 공개 여부가 글자색만이 아니라 형태로도 갈린다(둘 다 지운다면 구분이 사라진다).
+ */
 function bookChipStyle(tone: BookChipTone): CSSProperties {
-  const base: CSSProperties = { display: 'inline-block', padding: '2px 9px', borderRadius: 20, fontSize: 14, lineHeight: 1.6 };
-  if (tone === 'sage') {
-    return { ...base, background: 'var(--adaptiveBlue50, #ECE5D8)', color: 'var(--adaptiveBlue700, #1D1B18)' };
+  const base: CSSProperties = { display: 'inline-block', padding: '2px 9px', borderRadius: 2, fontSize: 14, lineHeight: 1.6 };
+  if (tone === 'ink') {
+    return { ...base, background: 'var(--softDent, #ECE5D8)', color: 'var(--adaptiveBlue700, #1D1B18)' };
   }
   if (tone === 'neutral') {
-    return { ...base, background: 'var(--adaptiveGrey200, #D9D1C3)', color: 'var(--adaptiveGrey700, #4A453E)' };
+    return { ...base, background: 'var(--softDent, #ECE5D8)', color: 'var(--adaptiveGrey700, #4A453E)' };
   }
   return {
     ...base,
@@ -1398,14 +1401,14 @@ export function SearchResultRow({
       onClick={onPick}
       style={{
         ...rowStyle,
+        ...RULE_ROW, // 에디토리얼 PR-4 — 아래 가는 선 · 모서리 0 · 면 없음(담긴 행만 아래에서 paper-2)
         position: 'relative', // 접힌 모서리(`.book-owned::after`)가 이 박스를 기준으로 앉는다
         flex: 1,
         minWidth: 0,
         marginTop: badge === null ? 8 : 0,
-        borderRadius: 12,
-        // 담긴 책은 한 톤 가라앉힌다 — 면(`--adaptiveGrey100`)보다 어두워야 「지나간 칸」으로 읽힌다. Soft에서 그
-        // 「가라앉은 바탕」은 눌린 면 색(`--softDent`)이다(옛 베이지 #EFE9DC 자리 — 공부 모드·밤도 토큰이 데려간다).
-        background: row.owned ? 'var(--softDent, #ECE5D8)' : 'var(--adaptiveGrey100, #F5F0E6)',
+        // 담긴 책은 한 톤 가라앉힌다 — 종이보다 어두운 paper-2(`--softDent`)여야 「지나간 칸」으로 읽힌다
+        // (옛 베이지 #EFE9DC 자리 — 공부 모드·밤도 토큰이 데려간다). 안 담긴 행은 면이 없다(RULE_ROW).
+        ...(row.owned ? { background: 'var(--softDent, #ECE5D8)' } : {}),
       }}
     >
       {/* 표지만 흐리고 도장은 또렷해야 하므로 흐림을 안쪽 겹에 건다(바깥에 걸면 도장까지 바랜다). */}
@@ -1451,14 +1454,11 @@ export function SearchResultRow({
   );
 }
 
-/** 「여백 N」 배지 — 행과 같은 카드지 위에 서지만 테두리로 「누를 수 있는 다른 것」임을 말한다. */
+/** 「여백 N」 배지 — 보조 손잡이라 외곽선 알약이다(에디토리얼 PR-4 · 버튼 2단의 아래 단). */
 const marginBadgeStyle = {
+  ...OUTLINE_PILL,
   flex: '0 0 auto',
-  padding: '8px 10px',
-  borderRadius: 10,
-  border: '1px solid var(--adaptiveGrey200, #D9D1C3)',
-  background: 'var(--adaptiveGrey100, #F5F0E6)',
-  color: 'var(--adaptiveBlue700, #1D1B18)',
+  padding: '8px 12px',
   fontSize: 13,
   fontWeight: 500,
   cursor: 'pointer',
@@ -1471,7 +1471,7 @@ const marginBadgeStyle = {
  * <p>제목·근거 문장은 <b>서버가</b> 만든다 — 화면은 어느 전략(내 저자 / 베스트셀러)으로 뽑혔는지 모른 채
  * 라벨을 그대로 그린다. 그래서 서버가 전략을 늘려도 여기는 안 바뀐다.
  *
- * <p>⚠️ <b>안쪽 행은 카드를 쓰지 않는다.</b> 카드지(`#FCFAF5`)가 이미 명도 위쪽 끝이라 안쪽 행을 채우면
+ * <p>⚠️ <b>안쪽 행은 카드를 쓰지 않는다.</b> 옛 카드 면색이 명도 위쪽 끝이라 안쪽 행을 채우면
  * 어두워지는 방향밖에 없는데, 그 방향엔 <b>이미 「서재에 있어요」 톤(`#EFE9DC`)이 자리를 잡고 있다</b> —
  * 채운 행은 「지나간 칸」으로 읽힌다. 그래서 배경 없이 실선으로만 나눈다.
  *

@@ -11,6 +11,7 @@ import {
   GuestShell,
   LockedFeedBody,
   guestAction,
+  guestRowCover,
   lockedCopy,
   openGuestNews,
   startLogin,
@@ -196,6 +197,54 @@ describe('게스트 홈 — 무엇으로 측정할까요?', () => {
     };
     for (const w of [280, 300, 350]) expect(3 * COVER_WIDTH + 2 * gapAt(w)).toBeLessThanOrEqual(w);
     expect(gapAt(350)).toBe(COVER_GAP);
+  });
+
+  // 「책 없이」는 104/88로 커져 양옆으로 칸 폭의 8/88씩 삐져나온다 — 보이는 틈 = gap − 그 삐짐.
+  // 320 화면(내용 280)에서 칸 88이면 gap 8 − 8 = 0으로 잠긴 칸에 닿았다(PR-2 리뷰 low 이월, 사용자 결정 2026-10-13
+  // 「좁은 폰만 간격 띄우기」). 내용 폭 W = 화면 − Screen 좌우 패딩 40.
+  const visibleGap = (w: number, cover: number) => Math.min(COVER_GAP, (w - 3 * cover) / 2) - (cover * 8) / 88;
+
+  // 틈 ≥ 12면 (W − 3·칸)/2 > 0이라 줄이 내용 폭을 안 넘는 것도 따라 나온다 — 따로 재지 않는다.
+  it('좁은 폰(내용 280)에선 칸을 줄여 「책 없이」와 잠긴 칸 사이가 12px 이상 뜬다', () => {
+    for (const w of [280, 290, 303]) {
+      const cover = guestRowCover(w);
+      expect(cover).toBeLessThan(COVER_WIDTH);
+      expect(visibleGap(w, cover)).toBeGreaterThanOrEqual(12);
+    }
+  });
+
+  it('375·390 폰(내용 335·350)과 경계(내용 304)에선 칸이 그대로 88이다 — 넓은 폰의 배치는 한 픽셀도 안 바뀐다', () => {
+    for (const w of [304, 335, 350, Infinity]) expect(guestRowCover(w)).toBe(COVER_WIDTH);
+  });
+
+  // 화면 폭 → 내용 폭 배선을 그린 줄로 잠근다. 0은 WebView가 폭을 아직 모를 때다 — 「모름」으로 보고 88.
+  const rowAt = (innerWidth: number) => {
+    vi.stubGlobal('innerWidth', innerWidth);
+    try {
+      const markup = shell(null);
+      return { markup, row: markup.match(/<div style="([^"]*)"><span data-book-slot="free"/)?.[1] ?? '' };
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  };
+  const coversOf = (markup: string, cover: number) =>
+    markup.match(new RegExp(`width:${cover}px;height:${Math.round(cover * 1.4)}px`, 'g'));
+
+  it('320 화면에서 그린 줄은 줄인 칸 폭으로 선다 — 칸 셋·gap 식·윗여백이 같은 폭을 쓴다', () => {
+    const cover = guestRowCover(280);
+    const { markup, row } = rowAt(320);
+    expect(row).toContain(`gap:min(${COVER_GAP}px, calc((100% - ${3 * cover}px) / 2))`);
+    // 104/88로 키운 「책 없이」가 위로 솟는 만큼 — 320 폭에선 21px(칸 88 기준이면 23).
+    expect(row).toContain('padding-top:21px');
+    expect(coversOf(markup, cover)).toHaveLength(3);
+  });
+
+  it('375·390 화면과 폭을 모르는 WebView(0)에선 그린 줄이 칸 88·간격 32 그대로다', () => {
+    for (const innerWidth of [375, 390, 0]) {
+      const { markup, row } = rowAt(innerWidth);
+      expect(row).toContain(`gap:min(${COVER_GAP}px, calc((100% - ${3 * COVER_WIDTH}px) / 2))`);
+      expect(coversOf(markup, COVER_WIDTH)).toHaveLength(3);
+    }
   });
 });
 

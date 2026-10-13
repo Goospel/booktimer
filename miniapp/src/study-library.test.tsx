@@ -14,6 +14,7 @@ import {
   StudyShelf,
   canDecrement,
   readCountLabel,
+  studyBookChips,
   studyOwned,
 } from './screens/StudyLibrary';
 import { bigShadow } from './soft-guard';
@@ -423,5 +424,19 @@ describe('에디토리얼 표면 — 공부 서재 (PR-1)', () => {
       expect(bigShadow(tag)).toBe(false);
     }
     expect(button(html, '서재에서 삭제')).toContain('color:#A32D2D');
+  });
+});
+
+describe('공부 서재 칩 옷 (에디토리얼 PR-4)', () => {
+  // 회독·시간 칩은 <span>이라 누르지 못한다 — 못 누르는 태그 옷(paper-2 면 r2).
+  it('회독·시간 칩은 paper-2 면 r2다 — r20 알약이 아니다', () => {
+    const chips = studyBookChips(studyBook(1, '기본서', 3, { totalSeconds: 12_000 }));
+    expect(chips).toHaveLength(2);
+    for (const { style } of chips) {
+      expect(style.background).toBe('var(--softDent, #ECE5D8)');
+      expect(style.borderRadius).toBe(2);
+    }
+    expect(chips[0].style.color).toBe('var(--adaptiveBlue700, #1D1B18)');
+    expect(chips[1].style.color).toBe('var(--adaptiveGrey700, #4A453E)');
   });
 });

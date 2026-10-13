@@ -101,7 +101,7 @@ export function Goal({
           className="goal-wheels"
           style={{ position: 'relative', display: 'flex', justifyContent: 'center', gap: 8, height: 180 }}
         >
-          {/* 선택 밴드(시안 2e) — 가운데 칸이 「고른 것」임을 색으로 말한다. 정적이다(애니메이션 0):
+          {/* 선택 밴드(시안 2e) — 가운데 칸이 「고른 것」임을 위아래 선으로 말한다. 정적이다(애니메이션 0):
               T-176이 발광 애니메이션으로 표지를 초당 60번 재래스터화했던 자리와 같은 종류다. */}
           <div
             aria-hidden="true"
@@ -113,11 +113,13 @@ export function Goal({
               top: '50%',
               height: 44,
               transform: 'translateY(-50%)',
-              // ⚠️ 시안·설계는 `rgba(110,138,106,.12)`인데 **토큰으로 바꿨다**: 종이색 위 합성값이
-              // ≈`#EAECE4`로 이 토큰(`#E7EEE2`)과 사실상 같고, 토큰이라야 밤 테마를 함께 탄다.
-              // (이탈이라는 사실이 어디에도 없어 처음부터 그랬던 것처럼 읽혔다 — 독립 리뷰 적발.)
-              background: 'var(--adaptiveBlue50, #ECE5D8)',
-              borderRadius: 10,
+              // 에디토리얼 PR-4 — 면 없이 위아래 muted 1px 선(휠 카드 면 0). 옛 옅은 면 밴드(r10)는 종이 위에 카드를 하나 더 얹었다.
+              // muted(종이 대비 5.65)라 「여기가 고른 칸」이 가는 선(1.33)보다 분명하고, 토큰이라 공부·밤 테마를 함께 탄다.
+              borderTop: '1px solid var(--adaptiveGrey600, #645E54)',
+              borderBottom: '1px solid var(--adaptiveGrey600, #645E54)',
+              // 선을 휠 안개(종이색 마스크) 위에 그린다 — 아래 두면 안개가 윗선을 칸마다 지운다(목 모드 390 실측). 누름은 휠로 통과.
+              zIndex: 1,
+              pointerEvents: 'none',
             }}
           />
           <Wheel

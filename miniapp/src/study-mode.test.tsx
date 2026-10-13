@@ -649,6 +649,15 @@ describe('회당 시간 시트 (SessionGoalSheet)', () => {
     expect(markup).toContain('aria-label="시간 선택"');
     expect(markup).toContain('aria-label="분 선택"');
     expect(markup).toContain('data-wheel-band');
+    // 에디토리얼 PR-4 — 목표 화면과 같은 밴드: 면 없이 위아래 muted 선
+    const at = markup.indexOf('data-wheel-band');
+    const band = markup.slice(markup.lastIndexOf('<', at), markup.indexOf('>', at));
+    expect(band).toContain('border-top:1px solid var(--adaptiveGrey600');
+    expect(band).toContain('border-bottom:1px solid var(--adaptiveGrey600');
+    // 선이 휠 안개 위에 서되(z 1) 누름은 휠로 통과해야 한다 — 하나만 빠지면 가운데 줄이 휠을 막는다
+    expect(band).toContain('z-index:1');
+    expect(band).toContain('pointer-events:none');
+    expect(band).not.toMatch(/background|border-radius/);
     expect(markup).toContain('height:180px');
     expect(markup).toContain('goal-wheels');
   });

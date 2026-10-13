@@ -48,7 +48,7 @@ const SERIF_SPREADS = {
   'HomeFeed.tsx': 3,
   'Library.tsx': 4, // 에디토리얼 PR-3: 아치 「내 서재」(D2 32) · 선반 머리(H3 18) · 펼친 책 제목(H2 22) 명조 +3
   'Profile.tsx': 1,
-  'Story.tsx': 3,
+  'Story.tsx': 4, // 에디토리얼 PR-4 빈 여백 안내(Q1 세리프 16/26)가 넷째
   'StudyCalendar.tsx': 2,
   'StudyHistory.tsx': 1,
   'ui.tsx': 5, // 아바타·표지 이니셜 + 에디토리얼 PR-1의 명조 머리 셋(SectionTitle H1 · Sheet 제목 · Screen 제목)
@@ -508,7 +508,7 @@ describe('채움 주 버튼 개수 (설계 D5)', () => {
    * 잉크 바탕은 미읽음 배지(`UnreadBadge`)처럼 누르지 않는 것에도 서므로 <b>`<button` 여는 태그 안</b>만 센다.
    * ponytail: 스타일을 태그 밖 상수로 빼(`style={X}`) 칠하면 못 본다 — 그 꼴이 생기면 상수 정의까지 넓힌다.
    */
-  const INK_FILL = /background(?:Color)?:\s*['"`]var\(--adaptiveGrey[89]00\b/;
+  const INK_FILL = /background(?:Color)?:\s*['"`](?:var\(--adaptiveGrey[89]00\b|#1D1B18\b)/i;
   const filledCount = (src: string) =>
     (src.match(FILLED) ?? []).length + openingTags(src, 'button').filter((t) => INK_FILL.test(t)).length;
 
@@ -525,6 +525,9 @@ describe('채움 주 버튼 개수 (설계 D5)', () => {
     // 양성 대조 — 맨 버튼의 잉크 채움(grey800 · grey900 · backgroundColor 꼴)
     expect(filledCount(`<button type="button" style={{ background: 'var(--adaptiveGrey800, #1D1B18)' }}>관리</button>`)).toBe(1);
     expect(filledCount(`<button style={{ backgroundColor: "var(--adaptiveGrey900)" }} onClick={() => go()}>x</button>`)).toBe(1);
+    // PR-4 — 토큰을 거치지 않은 잉크 리터럴(#1D1B18)도 같은 검정 알약이다(PR-1 재리뷰 돌연변이: 리터럴 채움이 초록이었다)
+    expect(filledCount(`<button type="button" style={{ background: '#1D1B18', color: '#F5F0E6' }}>x</button>`)).toBe(1);
+    expect(filledCount(`<button style={{ backgroundColor: "#1d1b18" }}>x</button>`)).toBe(1);
     // 음성 대조 — 같은 바탕의 배지(span), 버튼의 옅은 면(grey100), 버튼 밖 잉크 선
     expect(filledCount(`<span style={{ background: 'var(--adaptiveGrey800, #1D1B18)' }}>3</span>`)).toBe(0);
     expect(filledCount(`<button style={{ background: 'var(--adaptiveGrey100)' }}>x</button>`)).toBe(0);

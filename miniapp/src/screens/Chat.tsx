@@ -480,12 +480,14 @@ export function RoomView({
               <div
                 data-bubble={m.mine ? 'mine' : 'theirs'}
                 // 말풍선은 메시지 수만큼 반복된다 — 그림자 없이 면의 색으로만 가른다(설계 §6 예산).
-                // 내 것은 옅은 세이지, 남의 것은 눌린 바탕. 둘 다 진한 잉크라 대비는 본문과 같다.
+                // 내 것은 옅은 면(paper-2), 남의 것은 면 없이 가는 선 테(에디토리얼 PR-4). 둘 다 진한 잉크라 대비는 본문과 같다.
                 style={{
                   maxWidth: '78%',
                   padding: '8px 12px',
                   borderRadius: 14,
-                  background: m.mine ? 'var(--adaptiveBlue50, #ECE5D8)' : 'var(--softDent, #ECE5D8)',
+                  ...(m.mine
+                    ? { background: 'var(--softDent, #ECE5D8)' }
+                    : { background: 'transparent', border: '1px solid var(--adaptiveGrey200, #D9D1C3)' }),
                   color: 'var(--adaptiveGrey800, #1D1B18)',
                   fontSize: 15,
                   lineHeight: 1.45,

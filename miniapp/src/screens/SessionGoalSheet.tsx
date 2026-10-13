@@ -63,8 +63,10 @@ export function SessionGoalSheet({
             top: '50%',
             height: 44,
             transform: 'translateY(-50%)',
-            background: 'var(--adaptiveBlue50, #E7EEE2)',
-            borderRadius: 10,
+            borderTop: '1px solid var(--adaptiveGrey600, #645E54)', // Goal.tsx 밴드와 같다(에디토리얼 PR-4 — 면 0)
+            borderBottom: '1px solid var(--adaptiveGrey600, #645E54)',
+            zIndex: 1, // Goal.tsx와 같다 — 선이 휠 안개 위에 서고 누름은 휠로 통과
+            pointerEvents: 'none',
           }}
         />
         <Wheel

@@ -30,7 +30,7 @@ const files = [...productFiles(SRC), INDEX_HTML].map((path) => ({
   text: readFileSync(path, 'utf8'),
 }));
 
-/** 테마 정의 파일 — 이 PR이 옷을 정하는 자리. 나머지 화면 파일의 폴백은 PR-4가 전수로 넓힌다. */
+/** 테마 정의 파일 — PR-1이 옷을 정한 자리(계측기 자기검증의 양성 대조용). 부재 단언은 PR-4부터 제품 소스 전부를 본다. */
 const THEME_FILES = ['global.css', 'ui.tsx', 'fonts.ts', 'index.html', 'App.tsx', 'coachmark.tsx'];
 const theme = files.filter((f) => THEME_FILES.includes(f.name));
 
@@ -123,22 +123,25 @@ describe('REQ-01 · 낮 팔레트가 에디토리얼 값이다', () => {
   });
 });
 
-describe('REQ-01 · 테마 정의 파일(global.css·ui.tsx·fonts.ts·index.html·App·coachmark)에 옛 값이 0', () => {
+// PR-4 — 스캔 범위를 테마 정의 파일 → 제품 소스 전부로 넓혔다(화면 파일 구석의 옛 폴백·리터럴).
+describe('REQ-01 · 제품 소스 전부에 옛 값이 0', () => {
   it('규칙 — var(--토큰, #hex) 폴백이 그 토큰의 낮 정의값과 같다', () => {
-    expect(driftedFallbacks(theme, root)).toEqual([]);
+    expect(driftedFallbacks(files, root)).toEqual([]);
   });
 
   it('목록 — Soft·톤 조율 A의 바탕·면·잉크·세이지·밤 리터럴이 0회다', () => {
     const OLD = [
       '#F3EFE5', '#FBF9F4', '#EAE5D9', '#DED8CA', '#5B5A4D', '#43423A', '#2A2921', '#1E1E18',
       '#E1E8D4', '#3F5A3C', '#5B7F55', '#26231D', '#322E27',
+      // PR-4 — 잉크 위 글자의 옛 크림(검정 위 글자는 --filledInk = 종이 #F5F0E6) · 여백 인용 세로선의 옛 베이지
+      '#FFFDF8', '#DCD4C2',
     ];
-    expect(hits(new RegExp(OLD.join('|'), 'i'), theme)).toEqual([]);
+    expect(hits(new RegExp(OLD.join('|'), 'i'))).toEqual([]);
   });
 
   it('목록 — 옛 갈색 그림자 틴트와 시트 딤(rgba(30, 30, 24)이 0회다', () => {
-    expect(hits(/rgba\(\s*112,\s*96,\s*64/, theme)).toEqual([]);
-    expect(hits(/rgba\(\s*30,\s*30,\s*24/, theme)).toEqual([]);
+    expect(hits(/rgba\(\s*112,\s*96,\s*64/)).toEqual([]);
+    expect(hits(/rgba\(\s*30,\s*30,\s*24/)).toEqual([]);
   });
 
   it.each(['--accentPill', '--accentRing'])('%s의 인라인 폴백이 전부 낮 정의값과 같다(제품 소스 전부)', (name) => {
