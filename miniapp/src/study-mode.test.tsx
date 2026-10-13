@@ -106,9 +106,9 @@ describe('탭바 원 — 무엇을 재기 시작하는지 라벨이 말한다', 
     expect(timerActionView(true, 'study').label).toBe('측정 끝내기');
   });
 
-  it('대기 링·배경은 토큰을 탄다 — 공부 모드 색 전환이 css 한 벌로 따라오게', () => {
-    expect(timerActionView(false, 'study').ring).toContain('--accentRing');
+  it('원 배경은 강조 토큰을 탄다 — 공부 모드 파란 잉크가 css 한 벌로 따라오게(링은 에디토리얼에서 걷었다)', () => {
     expect(timerActionView(false, 'study').background).toContain('--adaptiveBlue700');
+    expect(timerActionView(true, 'study').background).toContain('--adaptiveBlue700');
   });
 });
 
@@ -174,8 +174,9 @@ describe('공부 모드 색 — css에 실재하는가', () => {
   });
 
   it('시안 accent·deep이 세이지 사다리 자리를 대신한다', () => {
-    expect(css).toContain('--adaptiveBlue500: #5F7E96');
-    expect(css).toContain('--adaptiveBlue700: #47657C');
+    // REQ-14 · 공부는 강조 자리만 파란 잉크(D3=A) — 500~900이 한 값 #2B4A6F(종이 대비 8.00)
+    expect(css).toContain('--adaptiveBlue500: #2B4A6F');
+    expect(css).toContain('--adaptiveBlue700: #2B4A6F');
   });
 
   it('낮 기본값 토큰 두 개가 html:root에 있다 — 없으면 fallback만 남아 공부 모드가 안 따라온다', () => {
@@ -188,12 +189,13 @@ describe('공부 모드 색 — css에 실재하는가', () => {
    * 히어로 카드 틴트(2차 §7-B) — 「토글했는데 색이 안 바뀐다」의 처방이다. 값이 <b>양쪽에</b> 있어야
    * 의미가 있다: 낮 기본값이 빠지면 인라인 fallback만 남아 공부 모드에서도 종이색 그대로다.
    */
-  it('히어로 카드 배경 토큰이 낮·공부 양쪽에 있다 — 한쪽만 있으면 틴트가 조용히 죽는다', () => {
+  it('REQ-14 · 히어로 카드 면이 없다 — 낮은 투명, 공부 블록은 틴트를 정의하지 않는다(면 대신 강조 잉크가 모드를 말한다)', () => {
     const root = css.slice(css.indexOf('html:root {'), css.indexOf('}', css.indexOf('html:root {')));
     const study = css.slice(css.indexOf(`body.${STUDY_CLASS} {`), css.indexOf('}', css.indexOf(`body.${STUDY_CLASS} {`)));
 
-    expect(root).toContain(`${HERO_CARD_BG_VAR}: #FBF9F4`); // 독서 = 따뜻한 부푼 면(톤 조율 A)
-    expect(study).toContain(`${HERO_CARD_BG_VAR}: #ECEFEE`); // 공부 = 채도 낮춘 청회색 — 따뜻한 바탕 위에서 안 튄다
+    expect(root).toContain(`${HERO_CARD_BG_VAR}: transparent`); // 아치는 면이 없다(PR-2가 사용처를 걷는다)
+    expect(study).toContain('--adaptiveBlue700:'); // 블록을 제대로 잘랐다(아래 부재 단언이 공허하지 않음)
+    expect(study).not.toContain(`${HERO_CARD_BG_VAR}:`);
   });
 
   it('히어로 카드가 그 토큰을 실제로 소비한다 — 선언만 있고 안 쓰면 화면은 안 바뀐다', () => {
@@ -221,7 +223,8 @@ describe('공부 모드 색 — css에 실재하는가', () => {
 
   it('공부 블록은 옅은 타일만 파랑으로 갈고 그림자는 낮 값을 물려받는다 — 파랑 틴트 그림자는 따뜻한 바탕 위에서 튄다(톤 조율 A)', () => {
     const study = css.slice(css.indexOf(`body.${STUDY_CLASS} {`), css.indexOf('}', css.indexOf(`body.${STUDY_CLASS} {`)));
-    expect(study).toContain('--adaptiveBlue50: #D6E0E7'); // 블록을 제대로 잘랐다(아래 부재 단언이 공허하지 않음)
+    expect(study).toContain('--adaptiveBlue700: #2B4A6F'); // 블록을 제대로 잘랐다(아래 부재 단언이 공허하지 않음)
+    expect(study).not.toMatch(/--adaptiveBlue50\s*:/); // 옅은 면은 낮 그대로 — 종이가 파래지지 않는다
     expect(study).not.toMatch(/--puffShadow\s*:/);
     expect(study).not.toMatch(/--dentShadow\s*:/);
   });
@@ -243,11 +246,11 @@ describe('공부 모드 색 — css에 실재하는가', () => {
     const root = css.slice(css.indexOf('html:root {'), css.indexOf('}', css.indexOf('html:root {')));
 
     for (const decl of [
-      '--grass0: #E7E2D5',
-      '--grass1: #CFD9C0',
-      '--grass2: #A9BD99',
-      '--grass3: #6E9565',
-      '--grass4: #3F5A3C',
+      '--grass0: #E6DFD2',
+      '--grass1: #CDC3B2',
+      '--grass2: #A29785',
+      '--grass3: #625A4F',
+      '--grass4: #1D1B18',
     ]) {
       expect(root).toContain(decl);
     }
@@ -257,7 +260,7 @@ describe('공부 모드 색 — css에 실재하는가', () => {
     const study = css.slice(css.indexOf(`body.${STUDY_CLASS} {`), css.indexOf('}', css.indexOf(`body.${STUDY_CLASS} {`)));
 
     // 세이지 4단과 같은 명도의 파랑 짝수 칸(200·400·600·800) — 새 색을 만들지 않는다.
-    for (const decl of ['--grass1: #AFC4D2', '--grass2: #83A0B4', '--grass3: #536F85', '--grass4: #3A5266']) {
+    for (const decl of ['--grass1: #B8C3D1', '--grass2: #8598B0', '--grass3: #4F6A8B', '--grass4: #2B4A6F']) {
       expect(study).toContain(decl);
     }
     // 0단은 「기록 없음」의 종이색이라 모드가 갈려도 같다 — 덮으면 빈 칸이 파래진다.
@@ -730,9 +733,10 @@ describe('모드 토글', () => {
     expect(toggle('reading')).not.toContain('aria-disabled');
   });
 
-  it('세그먼트는 눌린 트랙 위에 선다(시안 Soft-Home) — 절대위치가 아니라 머리 줄의 흐름 안이다', () => {
+  it('세그먼트는 그릇 면 없이 고른 칸의 잉크 테가 말한다(결정 ①) — 절대위치가 아니라 머리 줄의 흐름 안이다', () => {
     const markup = toggle('reading');
-    expect(markup).toContain('background:var(--softDent');
+    expect(markup).toContain('border:1px solid var(--adaptiveBlue700');
+    expect(markup).not.toContain('background:var(--softDent');
     expect(markup).not.toContain('position:absolute');
   });
 

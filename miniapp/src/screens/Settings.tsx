@@ -21,7 +21,7 @@ import {
   reminderSummary,
 } from '../readingReminder';
 import { notificationAgreementSupported, openExternal } from '../toss';
-import { ErrorMessage, SOFT_OUTLINE, Screen, SectionTitle, Sheet, Text, sectionStyle } from '../ui';
+import { ErrorMessage, FIELD, Screen, SectionTitle, Sheet, Text, sectionStyle } from '../ui';
 import { HandleSheet } from './Bookshop';
 import { filterChipStyle } from './Profile';
 
@@ -201,7 +201,7 @@ export function WebLoginSection({
         </Text>
       ) : (
         <>
-          <Text typography="t3" fontWeight="bold" style={{ display: 'block', letterSpacing: 2 }}>
+          <Text typography="t3" fontWeight="medium" style={{ display: 'block', letterSpacing: 2 }}>
             {groupCode(code)}
           </Text>
           {/* TTL을 말하지 않으면 느긋하게 옮기다 만료돼, 이유도 모른 채 「코드가 올바르지 않다」를 본다. */}
@@ -316,12 +316,11 @@ export function ReadingReminderSection({
                 aria-pressed={reminder.kind === kind}
                 disabled={busy}
                 onClick={() => onPickKind(kind)}
-                // 카드 바탕과 같은 색이라 안 눌린 칩엔 선을 둔다 — 없으면 글자만 떠 있어 고를 수 있는 칸으로 안 읽힌다(목 모드 실측).
+                // 테두리는 칩 문법이 정한다(결정 ① — 고른 칩 = 잉크 테 + 500, 안 고른 칩 = 가는 선 테).
                 style={{
                   ...filterChipStyle(reminder.kind === kind),
                   padding: '8px 14px',
                   fontSize: 15,
-                  border: `1.5px solid ${reminder.kind === kind ? 'transparent' : 'var(--adaptiveGrey200, #DED8CA)'}`,
                 }}
               >
                 {label}
@@ -337,7 +336,7 @@ export function ReadingReminderSection({
               value={reminder.hour}
               disabled={busy}
               onChange={(e) => onPickHour(Number(e.target.value))}
-              style={{ ...SOFT_OUTLINE, width: '100%', padding: 10, fontSize: 16 }}
+              style={{ ...FIELD, width: '100%', padding: 10, fontSize: 16, color: 'var(--adaptiveGrey800, #1D1B18)' }}
             >
               {REMINDER_HOURS.map((h) => (
                 <option key={h} value={h}>

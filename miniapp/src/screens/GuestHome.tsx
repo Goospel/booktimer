@@ -28,16 +28,14 @@ import {
   writeTrial,
 } from '../trial';
 import {
-  DENT,
+  FLOAT,
   GoalMedal,
-  PUFF,
+  OUTLINE_PILL,
   SECTION_RULE,
   SERIF_VALUE,
-  SOFT_OUTLINE,
   Screen,
   SectionTitle,
   Text,
-  coverColor,
   sectionStyle,
 } from '../ui';
 import {
@@ -173,7 +171,7 @@ function SkeletonLine({ width }: { width: string }) {
         width,
         marginTop: 10,
         borderRadius: 6,
-        background: 'var(--adaptiveGrey200, #E4DDD0)',
+        background: 'var(--adaptiveGrey200, #D9D1C3)',
         opacity: 0.5,
       }}
     />
@@ -199,13 +197,13 @@ export function LockedScreen({ tab, onLogin }: { tab: LockedTab; onLogin: (sourc
         </Text>
       }
     >
-      <div style={{ ...PUFF, padding: '24px 20px', textAlign: 'center' }}>
+      <div style={{ padding: '24px 20px', textAlign: 'center' }}>
         <svg
           width="28"
           height="28"
           viewBox="0 0 24 24"
           fill="none"
-          stroke="var(--adaptiveGrey600, #6F6A5E)"
+          stroke="var(--adaptiveGrey600, #645E54)"
           strokeWidth="1.8"
           strokeLinecap="round"
           strokeLinejoin="round"
@@ -213,7 +211,7 @@ export function LockedScreen({ tab, onLogin }: { tab: LockedTab; onLogin: (sourc
         >
           <path d={LOCK_ICON} />
         </svg>
-        <Text typography="st10" fontWeight="bold" style={{ display: 'block', marginTop: 10, wordBreak: 'keep-all' }}>
+        <Text typography="st10" fontWeight="medium" style={{ display: 'block', marginTop: 10, wordBreak: 'keep-all' }}>
           {copy.title}
         </Text>
         <Text typography="st11" color="grey600" style={{ display: 'block', marginTop: 6, wordBreak: 'keep-all' }}>
@@ -249,7 +247,7 @@ function LockedSlot() {
         height: COVER_HEIGHT,
         flex: '0 0 auto',
         boxSizing: 'border-box',
-        border: '2px dashed #B6C3B2', // 「책 없이」 점선(#7C8A78)보다 한 톤 옅게 — 잠긴 칸은 고를 수 없는 칸이다
+        border: '2px dashed var(--adaptiveBlue200, #B9AF9F)', // 「책 없이」 점선(muted)보다 한 톤 옅게 — 잠긴 칸은 고를 수 없는 칸이다
         borderRadius: 4,
         display: 'flex',
         alignItems: 'center',
@@ -261,7 +259,7 @@ function LockedSlot() {
         height="20"
         viewBox="0 0 24 24"
         fill="none"
-        stroke="var(--adaptiveGrey600, #6F6A5E)"
+        stroke="var(--adaptiveGrey600, #645E54)"
         strokeWidth="1.8"
         strokeLinecap="round"
         strokeLinejoin="round"
@@ -356,7 +354,7 @@ export function LockedFeedBody({ newsOpen }: { newsOpen: boolean }) {
         height="28"
         viewBox="0 0 24 24"
         fill="none"
-        stroke="var(--adaptiveGrey600, #6F6A5E)"
+        stroke="var(--adaptiveGrey600, #645E54)"
         strokeWidth="1.8"
         strokeLinecap="round"
         strokeLinejoin="round"
@@ -364,7 +362,7 @@ export function LockedFeedBody({ newsOpen }: { newsOpen: boolean }) {
       >
         <path d={LOCK_ICON} />
       </svg>
-      <Text typography="st10" fontWeight="bold" style={{ display: 'block', marginTop: 10, wordBreak: 'keep-all' }}>
+      <Text typography="st10" fontWeight="medium" style={{ display: 'block', marginTop: 10, wordBreak: 'keep-all' }}>
         {newsOpen ? '소식·여백은 계정이 있어야 보여요' : '소식·여백·책 뉴스는 계정이 있어야 보여요'}
       </Text>
       <Text typography="st11" color="grey600" style={{ display: 'block', marginTop: 6, wordBreak: 'keep-all' }}>
@@ -382,7 +380,7 @@ export function LockedFeedBody({ newsOpen }: { newsOpen: boolean }) {
 function TrialStat({ label, value }: { label: string; value: string }) {
   return (
     <div style={{ flex: 1, minWidth: 0 }}>
-      <div style={{ fontSize: 14, color: 'var(--adaptiveGrey600, #5B5A4D)' }}>{label}</div>
+      <div style={{ fontSize: 14, color: 'var(--adaptiveGrey600, #645E54)' }}>{label}</div>
       <div style={{ ...SERIF_VALUE, fontSize: 21, marginTop: 2 }}>{value}</div>
     </div>
   );
@@ -427,7 +425,7 @@ function BookStack() {
 /** 체크 줄 머리의 획 체크 — 이모지 대신(`no-emoji.test`). */
 function CheckMark() {
   return (
-    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" style={{ flex: 'none', marginTop: 2, stroke: 'var(--adaptiveBlue700, #3F5A3C)' }}>
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" style={{ flex: 'none', marginTop: 2, stroke: 'var(--adaptiveBlue700, #1D1B18)' }}>
       <path d="M5 12.5l4.5 4.5L19 7.5" />
     </svg>
   );
@@ -476,10 +474,10 @@ export function GuestHome({
           아바타 자리에 사람 아이콘이 서서 <b>그 아이콘이 곧 로그인 문</b>이 된다(로그아웃한 기존 사용자의 길). */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12, padding: '2px 2px 0' }}>
         <span style={{ flex: 1, minWidth: 0 }}>
-          <span style={{ display: 'block', ...SERIF_VALUE, fontSize: 28, color: 'var(--adaptiveGrey900, #1E1E18)' }}>
+          <span style={{ display: 'block', ...SERIF_VALUE, fontSize: 28, color: 'var(--adaptiveGrey900, #1D1B18)' }}>
             북타이머
           </span>
-          <span style={{ display: 'block', marginTop: 2, fontSize: 15, color: 'var(--adaptiveGrey600, #5B5A4D)' }}>
+          <span style={{ display: 'block', marginTop: 2, fontSize: 15, color: 'var(--adaptiveGrey600, #645E54)' }}>
             둘러보는 중
           </span>
         </span>
@@ -495,9 +493,12 @@ export function GuestHome({
             width: 38,
             height: 38,
             padding: 0,
-            border: 'none',
+            boxSizing: 'border-box',
+            // 로그인 홈 `Avatar`와 같은 문법 — 채움 없음 + 잉크 1px 테 + 잉크 획(§6-4).
+            border: '1px solid var(--adaptiveGrey800, #1D1B18)',
             borderRadius: '50%',
-            background: coverColor('북타이머'),
+            background: 'transparent',
+            color: 'var(--adaptiveGrey800, #1D1B18)',
             cursor: 'pointer',
           }}
         >
@@ -506,7 +507,7 @@ export function GuestHome({
             height="22"
             viewBox="0 0 24 24"
             fill="none"
-            stroke="rgba(44,42,36,0.5)"
+            stroke="currentColor"
             strokeWidth="1.8"
             strokeLinecap="round"
             strokeLinejoin="round"
@@ -519,7 +520,7 @@ export function GuestHome({
 
       <div
         data-guest-hero=""
-        style={{ ...PUFF, borderRadius: 30, padding: '24px 20px', background: `var(${HERO_CARD_BG_VAR}, #FBF9F4)`, textAlign: 'center' }}
+        style={{ padding: '24px 20px', background: `var(${HERO_CARD_BG_VAR}, transparent)`, textAlign: 'center' }}
       >
         {phase !== 'done' && (
           <>
@@ -527,12 +528,12 @@ export function GuestHome({
             <BookStack />
             {/* 오버라인 — 로그인 홈과 <b>같은 글자</b>다(`heroOverline`). 로그인하면 이 줄만 그대로 남는다. */}
             <div style={{ marginTop: 14 }}>
-              <span style={{ fontSize: 15, letterSpacing: 3, color: 'var(--adaptiveBlue700, #3F5A3C)' }}>
+              <span style={{ fontSize: 15, letterSpacing: 3, color: 'var(--adaptiveBlue700, #1D1B18)' }}>
                 {heroOverline('reading', false)}
               </span>
             </div>
             <div style={{ marginTop: 6 }}>
-              <Text typography="t2" fontWeight="bold" style={{ ...SERIF_VALUE }}>
+              <Text typography="t2" fontWeight="medium" style={{ ...SERIF_VALUE }}>
                 {formatClock(seconds)}
               </Text>
             </div>
@@ -570,17 +571,26 @@ export function GuestHome({
             <span style={{ display: 'block', marginTop: 14, ...SERIF_VALUE, fontSize: 24 }}>
               {formatDuration(duration)} 읽었어요
             </span>
-            <span style={{ display: 'block', marginTop: 4, fontSize: 16, color: 'var(--adaptiveGrey700, #43423A)' }}>
+            <span style={{ display: 'block', marginTop: 4, fontSize: 16, color: 'var(--adaptiveGrey700, #4A453E)' }}>
               기록을 남기려면 계정이 필요해요.
             </span>
 
             {/* 계정을 만들면 무엇이 되는가 — 방금 잰 값으로 보여 준다. 「연속 1일」은 <b>투영</b>이라
                 아래 한 줄이 「시작하면 …이 돼요」로 그 사실을 말한다(없는 기록을 있다고 하지 않는다). */}
-            <div style={{ ...DENT, display: 'flex', marginTop: 16, padding: '12px 6px' }}>
+            {/* 묶음 — 면 없이 위아래 가는 선(에디토리얼). */}
+            <div
+              style={{
+                display: 'flex',
+                marginTop: 16,
+                padding: '12px 6px',
+                borderTop: '1px solid var(--adaptiveGrey200, #D9D1C3)',
+                borderBottom: '1px solid var(--adaptiveGrey200, #D9D1C3)',
+              }}
+            >
               <TrialStat label="오늘" value={formatDuration(duration)} />
-              <div style={{ width: 1, background: 'var(--adaptiveGrey200, #DED8CA)' }} />
+              <div style={{ width: 1, background: 'var(--adaptiveGrey200, #D9D1C3)' }} />
               <TrialStat label="연속" value="1일" />
-              <div style={{ width: 1, background: 'var(--adaptiveGrey200, #DED8CA)' }} />
+              <div style={{ width: 1, background: 'var(--adaptiveGrey200, #D9D1C3)' }} />
               <TrialStat label="목표" value="—" />
             </div>
 
@@ -595,15 +605,15 @@ export function GuestHome({
                     width: 26,
                     height: 26,
                     borderRadius: 8,
-                    background: i === 0 ? 'var(--adaptiveBlue500, #5B7F55)' : 'var(--grass0, #E7E2D5)',
+                    background: i === 0 ? 'var(--adaptiveBlue500, #1D1B18)' : 'var(--grass0, #E6DFD2)',
                     boxShadow:
-                      i === 0 ? '0 0 0 2px var(--adaptiveGrey100, #FBF9F4), 0 0 0 4.5px var(--adaptiveBlue700, #3F5A3C)' : undefined,
+                      i === 0 ? '0 0 0 2px var(--adaptiveGrey100, #F5F0E6), 0 0 0 4.5px var(--adaptiveBlue700, #1D1B18)' : undefined,
                   }}
                 />
               ))}
             </div>
             <span
-              style={{ display: 'block', marginTop: 8, fontSize: 16, fontWeight: 700, color: 'var(--adaptiveBlue700, #3F5A3C)', wordBreak: 'keep-all' }}
+              style={{ display: 'block', marginTop: 8, fontSize: 16, fontWeight: 500, color: 'var(--adaptiveBlue700, #1D1B18)', wordBreak: 'keep-all' }}
             >
               {/* 길이가 사용자 데이터라 조사를 고정할 수 없다 — 「7분이」/「12초가」/「2시간이」가 다 지나간다. */}
               시작하면 방금 {formatDuration(duration)}
@@ -614,21 +624,21 @@ export function GuestHome({
               {WHY_LOGIN.map((line) => (
                 <span
                   key={line}
-                  style={{ display: 'flex', alignItems: 'flex-start', gap: 8, fontSize: 15, lineHeight: 1.5, color: 'var(--adaptiveGrey700, #43423A)', wordBreak: 'keep-all' }}
+                  style={{ display: 'flex', alignItems: 'flex-start', gap: 8, fontSize: 15, lineHeight: 1.5, color: 'var(--adaptiveGrey700, #4A453E)', wordBreak: 'keep-all' }}
                 >
                   <CheckMark />
                   {line}
                 </span>
               ))}
             </div>
-            {/* 「토스로 시작하기」는 TDS primary(옅은 세이지) 그대로다 — 이 화면의 채움은 탭바 원이다(설계 D5). */}
+            {/* 「토스로 시작하기」는 TDS primary(검정 알약) — 이 상태의 주 동작 하나다. */}
             <Button display="block" style={{ marginTop: 20 }} onClick={() => onLogin('trial')}>
               토스로 시작하기
             </Button>
             <button
               type="button"
               onClick={onDiscard}
-              style={{ ...SOFT_OUTLINE, width: '100%', height: 52, marginTop: 10, fontFamily: 'inherit', fontSize: 17, fontWeight: 700, cursor: 'pointer' }}
+              style={{ ...OUTLINE_PILL, width: '100%', height: 52, marginTop: 10, fontFamily: 'inherit', fontSize: 17, fontWeight: 500, cursor: 'pointer' }}
             >
               기록 없이 둘게요
             </button>
@@ -821,9 +831,8 @@ export function GuestShell({
             bottom: `calc(12px + env(safe-area-inset-bottom) + ${TAB_BAR_HEIGHT}px + 8px)`,
             zIndex: TAB_BAR_Z_INDEX,
             padding: '8px 14px',
-            ...PUFF,
-            borderRadius: 20,
-            color: 'var(--adaptiveGrey600, #5B5A4D)',
+            ...FLOAT,
+            color: 'var(--adaptiveGrey600, #645E54)',
             fontSize: 14,
             textAlign: 'center',
           }}

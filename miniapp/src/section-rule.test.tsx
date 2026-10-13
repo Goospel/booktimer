@@ -51,7 +51,8 @@ beforeEach(() => {
  * 피드의 외곽선 배지는 축약 `border:`라 `border-bottom:`이라는 부분 문자열 자체가 없어 안 걸린다.
  */
 const ruleTags = (markup: string) => [
-  ...markup.matchAll(/<[a-z]+[^>]*border-bottom:1px solid var\(--adaptiveGrey200[^>]*>/g),
+  // 에디토리얼(PR-1): 섹션 머리 아래 = 강한 선(잉크 grey800, spec §5.3). 가는 선(grey200)은 이제 `RULE_ROW` 행 구분선이다.
+  ...markup.matchAll(/<[a-z]+[^>]*border-bottom:1px solid var\(--adaptiveGrey800[^>]*>/g),
 ].map((m) => m[0]);
 
 /** 그 자리의 선 하나를 꺼낸다 — 없거나 둘이면 그 자리에서 죽는다(0개가 조용히 통과하지 않게). */

@@ -5,48 +5,50 @@ import { fileURLToPath } from 'node:url';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
 
-import { bigShadow } from './soft-guard';
+import { bigShadow, smallShadow } from './soft-guard';
 import { sourceFiles, stripComments } from './source-scan';
-import { DENT, PUFF, SOFT_OUTLINE, SOFT_ROW, sectionStyle } from './ui';
+import * as ui from './ui';
+import { FIELD, FLOAT, OUTLINE_PILL, RULE_ROW, TRACK, sectionStyle } from './ui';
 
 /**
- * Soft 표면 상수 — 부푼(PUFF)·눌린(DENT) 면의 그림자는 <b>CSS 변수 경유</b>라야 한다.
+ * 에디토리얼 표면 상수 — 면·그림자가 없고 경계는 선과 여백이다(spec §5.3). 떠 있는 것(탭바·토스트·스트립·말풍선)만
+ * 미색 + 잉크 1px이다.
  *
- * <p>리터럴로 적으면 밤(독서등)·공부 모드가 인라인을 이기려고 자리마다 `!important` 규칙을 둬야 한다 —
- * 연필선이 겪은 고질의 재판이다. 그리고 낮의 흰 하이라이트(`rgba(255,255,255,.95)`)가 밤 카드에 그대로
- * 새어 어두운 화면에 흰 테가 뜬다. 변수면 `body` 클래스 한 벌이 값만 갈아 끼운다.
+ * <p>진짜 실패: 카드 면·부푼 그림자가 상수 한 줄로 되살아나는 것. 옛 이름(`PUFF`·`DENT`·`SOFT_*`)이 남아 있으면 「부푼 면」
+ * 이름의 상수가 면 없는 것을 뜻해 주석·가드가 거짓말을 하므로 export 자체가 없어야 한다.
  */
-describe('Soft 표면 상수', () => {
-  const markup = renderToStaticMarkup(<section style={sectionStyle} />);
-
-  it('섹션 카드가 부푼 그림자를 변수로 싣는다', () => {
-    expect(markup).toContain('box-shadow:'); // 그림자 자체가 있다(아래 부정 단언이 공허하지 않음)
-    expect(markup).toContain('box-shadow:var(--puffShadow');
+describe('REQ-05 · 표면 상수', () => {
+  it('FLOAT = 미색 + 잉크 1px, 그림자 없음', () => {
+    expect(FLOAT.background).toContain('var(--adaptiveGrey100');
+    expect(FLOAT.border).toMatch(/^1px solid var\(--adaptiveGrey800/);
+    expect('boxShadow' in FLOAT).toBe(false);
   });
 
-  it('섹션 카드에 연필선이 되살아나지 않는다', () => {
-    expect(markup).toContain('box-shadow:');
-    expect(markup).not.toContain('border-image');
+  it('OUTLINE_PILL = 강조 토큰 1px 알약(공부 모드에서 파란 잉크로 따라온다)', () => {
+    expect(OUTLINE_PILL.border).toMatch(/^1px solid var\(--adaptiveBlue700/);
+    expect(OUTLINE_PILL.borderRadius).toBe(999);
+    expect(OUTLINE_PILL.background).toBe('transparent');
   });
 
-  it('섹션 카드는 26px 둥근 면이다', () => {
-    expect(sectionStyle.borderRadius).toBe(26);
-    expect(sectionStyle.padding).toBe(18);
+  it('RULE_ROW는 아래 가는 선만 — 면도 사방 테도 없다', () => {
+    expect(RULE_ROW.borderBottom).toMatch(/^1px solid var\(--adaptiveGrey200/);
+    expect(RULE_ROW.border).toBe(0);
+    expect(RULE_ROW.background).toBe('transparent');
   });
 
-  it('PUFF 그림자는 변수 경유다 — 리터럴이면 밤에 흰 빛이 샌다', () => {
-    expect(PUFF.boxShadow.startsWith('var(--puffShadow')).toBe(true);
-    expect(PUFF.background).toContain('var(--adaptiveGrey100');
+  it('TRACK은 가는 선 색 막대, FIELD는 muted 1px 경계 + 투명', () => {
+    expect(TRACK.background).toContain('var(--adaptiveGrey200');
+    expect(FIELD.border).toMatch(/^1px solid var\(--adaptiveGrey600/);
+    expect(FIELD.background).toBe('transparent');
   });
 
-  it('DENT는 안으로 눌린 그림자다 — 폴백 값이 inset으로 시작한다', () => {
-    expect(DENT.boxShadow.startsWith('var(--dentShadow, inset')).toBe(true);
-    expect(DENT.background).toContain('var(--softDent');
+  it('sectionStyle에 면·그림자·반경 키가 없다', () => {
+    for (const key of ['background', 'boxShadow', 'borderRadius']) expect(key in sectionStyle).toBe(false);
+    expect(renderToStaticMarkup(<section style={sectionStyle} />)).not.toContain('box-shadow');
   });
 
-  it('보조 손잡이·시트 행은 1.5px 실선이다(규칙 1 「보조 버튼은 1.5px 테두리」)', () => {
-    expect(SOFT_OUTLINE.border).toMatch(/^1\.5px solid var\(--adaptiveBlue700/);
-    expect(SOFT_ROW.border).toMatch(/^1\.5px solid var\(--adaptiveGrey200/);
+  it('옛 표면 상수(PUFF·DENT·SOFT_OUTLINE·SOFT_ROW)가 export되지 않는다', () => {
+    for (const name of ['PUFF', 'DENT', 'SOFT_OUTLINE', 'SOFT_ROW']) expect(name in ui).toBe(false);
   });
 });
 
@@ -102,29 +104,6 @@ describe('메달 애니메이션 가드 (T-176)', () => {
 });
 
 /**
- * 독서등(측정 중 밤)의 히어로 — 리뷰(PR-1)가 남긴 경고 두 가지를 한 규칙이 닫는다.
- *
- * <p>히어로는 인라인 `box-shadow: var(--puffShadow)`를 싣는다. 그런데 ⓐ 인라인은 `.lamp-page`의 등불 글로우
- * 규칙을 덮고, ⓑ `.lamp-page`가 카드 안쪽 타일을 위해 `--puffShadow`를 <b>낮값으로 재선언</b>하므로 히어로
- * 자신도 낮 그림자(흰 .95 하이라이트)를 받아 밤 캔버스 위에 흰 테가 뜬다. 등불 글로우가 `!important`여야
- * 둘 다 풀린다 — 밤엔 글로우가 인라인을 이기고, 낮엔 규칙 자체가 안 걸린다.
- */
-describe('독서등 히어로 그림자 — 등불 글로우가 부푼 그림자를 이긴다', () => {
-  const lampPage = blockAfter('body.reading-lamp .lamp-page');
-  const shadow = lampPage.match(/(^|[;\s])box-shadow:([^;]*);/)?.[2] ?? '';
-
-  it('글로우 선언이 !important다 — 아니면 히어로의 인라인 var(--puffShadow)가 이긴다', () => {
-    expect(shadow).toContain('rgba(255, 220, 160'); // 등불 글로우가 그 선언이다
-    expect(shadow.trim().endsWith('!important')).toBe(true);
-  });
-
-  it('글로우엔 흰 하이라이트가 없다 — 밤 캔버스에 흰 테가 뜨지 않는다', () => {
-    expect(shadow).not.toBe('');
-    expect(shadow).not.toMatch(/255,\s*255,\s*255/);
-  });
-});
-
-/**
  * `bigShadow` 계측기 자기검증 — 화면 테스트들이 반복 행에 「큰 그림자 없음」을 걸 때 쓰는 판정이다. 부정
  * 단언에만 쓰이므로 <b>양성 대조</b>가 없으면 「언제나 false」인 고장이 초록으로 숨는다.
  */
@@ -132,7 +111,6 @@ describe('bigShadow 계측기 자기검증', () => {
   const tag = (style: object) => renderToStaticMarkup(<div style={style} />);
 
   it('부푼 그림자(변수 경유)와 blur 8px 이상 리터럴을 잡는다', () => {
-    expect(bigShadow(tag(sectionStyle))).toBe(true);
     expect(bigShadow(tag({ boxShadow: 'var(--puffShadow)' }))).toBe(true);
     expect(bigShadow(tag({ boxShadow: '5px 5px 12px rgba(112,96,64,.14)' }))).toBe(true);
     expect(bigShadow(tag({ boxShadow: 'inset 0 1px 0 #fff, 0 2px 8px rgba(0,0,0,.2)' }))).toBe(true);
@@ -161,8 +139,9 @@ describe('bigShadow 계측기 자기검증', () => {
 
   it('링·눌린 면·그림자 없음은 통과한다', () => {
     expect(bigShadow(tag({ boxShadow: '0 0 0 3px var(--adaptiveBlue700)' }))).toBe(false);
-    expect(bigShadow(tag(DENT))).toBe(false);
-    expect(bigShadow(tag(SOFT_ROW))).toBe(false);
+    expect(bigShadow(tag(FLOAT))).toBe(false);
+    expect(bigShadow(tag(RULE_ROW))).toBe(false);
+    expect(bigShadow(tag(TRACK))).toBe(false);
     expect(bigShadow(tag({}))).toBe(false);
   });
 });
@@ -180,16 +159,10 @@ describe('bigShadow 계측기 자기검증', () => {
  * <p>ponytail: 키 이름으로 찾으므로 `const X = '0 8px 24px …'` 뒤 `boxShadow: X`처럼 값을 딴 상수로 빼면 못 본다
  * (지금 그런 자리는 `TILE_HIGHLIGHT`·`TODAY_RING`뿐이고 둘 다 작다). 그 꼴이 늘면 문자열 리터럴 전수로 넓힌다.
  */
-describe('그림자 예산 — 큰 흐림은 허용표 자리에만', () => {
-  const ALLOWED: Record<string, number> = {
-    'App.tsx': 1, // 탭바 가운데 타이머 원(시작 상태 4px 4px 10px)
-    'coachmark.tsx': 1, // 코치마크 말풍선
-    'History.tsx': 2, // 스탯 타일 둘(연속 · 부푼 축소판 — 한 상수를 두 타일이 씀)
-    'Home.tsx': 1, // 히어로 남은 시간 타일(하루 목표는 2026-09-24 캡션 줄로 내려가 그림자가 없다)
-    'Library.tsx': 1, // 서재 「여백에 글쓰기」 채움 버튼(var(--puffShadow))
-    'StudyLibrary.tsx': 1, // 공부 서재 「회독 +1」 채움 버튼(var(--puffShadow))
-    'ui.tsx': 2, // PUFF 상수 정의 · 시트 패널
-  };
+describe('REQ-05 · 큰 흐림 그림자가 0이다', () => {
+  // 에디토리얼 PR-1 — 큰 흐림은 0자리다(REQ-05 이펙트 0). 새 자리가 생기면 근거와 함께 이 표를 고친다.
+  const ALLOWED: Record<string, number> = {};
+
 
   const root = fileURLToPath(new URL('.', import.meta.url));
   const files = sourceFiles(root);
@@ -218,54 +191,49 @@ describe('그림자 예산 — 큰 흐림은 허용표 자리에만', () => {
   });
 
   /**
-   * 부푼 면 사용처 — `...PUFF`·`...sectionStyle` 펼치기와 `style={PUFF}`·`style={sectionStyle}` 직접 참조를 파일별로
-   * 센다. 위 그림자 표는 키(`boxShadow:`)가 없는 펼치기를 못 봐서, 검색 결과 행에 `...PUFF`를 넣어도 초록이었다
-   * (리뷰 돌연변이 생존). 부푼 면은 카드·히어로·탭바·토스트/스트립 같은 **하나뿐인 면**에만 선다 — 반복 행에 새면 이
-   * 표가 어긋난다. 새 카드를 만들면 근거와 함께 표를 고친다(2026-09-23 실측 13파일 31곳).
-   *
-   * <p>ponytail: 상수를 다른 상수로 한 번 감싼 뒤(`GRASS_CARD = { ...sectionStyle }`) 그 이름을 쓰는 자리는 감싼
-   * 정의 1곳만 세진다. 그 꼴이 반복 요소로 번지면 파생 상수 이름도 이 식에 넣는다.
+   * 작은 흐림(blur 1~7px)도 0자리다 — 큰 흐림 표만 있으면 「살짝 뜬」 그림자가 초록으로 샌다(리뷰 돌연변이 M31 코치마크
+   * 말풍선 `0 2px 4px` · M32 시트 패널 `0 -2px 6px`가 둘 다 살아남았다). 링(`0 0 0 Npx`, blur 0)은 선이라 세지 않는다
+   * — 잔디 오늘 칸·격자 고른 칸 outline이 그 자리다. 새 자리가 생기면 근거와 함께 이 표를 고친다.
    */
-  it('부푼 면(PUFF·sectionStyle) 사용처가 허용표와 같다', () => {
-    const PUFF_USES: Record<string, number> = {
+  it('파일별 작은 흐림 수가 허용표({})와 같다 — 링은 제외', () => {
+    const SMALL_ALLOWED: Record<string, number> = {};
+    const small = (v: string) => smallShadow(`box-shadow:${v}`);
+    // 양성 대조 — M31·M32 꼴과 rem 환산(0.25rem = 4px)을 잡는다
+    expect(['0 2px 4px rgba(29, 27, 24, 0.12)', '0 -2px 6px rgba(0,0,0,.1)', '0 1px 0.25rem #000'].map(small)).toEqual([
+      true,
+      true,
+      true,
+    ]);
+    // 음성 대조 — 링(blur 0)·inset 하이라이트·흐림 없음·큰 흐림(큰 흐림 표 몫)은 작은 흐림이 아니다
+    expect(
+      ['0 0 0 2px var(--adaptiveBlue700)', 'inset 0 1px 0 #fff', 'none', '', '0 8px 24px rgba(0,0,0,.2)'].map(small),
+    ).toEqual([false, false, false, false, false]);
+    const counts: Record<string, number> = {};
+    for (const file of files) {
+      const n = values(stripComments(readFileSync(file, 'utf8'))).filter(small).length;
+      if (n > 0) counts[basename(file)] = n;
+    }
+    expect(counts).toEqual(SMALL_ALLOWED);
+  });
+
+  /**
+   * 떠 있는 면(FLOAT) 사용처 — `...FLOAT` 펼치기와 `style={FLOAT}` 직접 참조를 파일별로 센다. 떠 있는 것은 하나뿐인 면
+   * (탭바·시작 토스트·액션/잠금 스트립·게스트 안내 스트립·코치마크 말풍선)에만 선다 — 반복 행·화면 카드에 새면 이 표가 어긋난다.
+   */
+  it('떠 있는 면(FLOAT) 사용처가 허용표와 같다', () => {
+    const FLOAT_USES: Record<string, number> = {
       'App.tsx': 4, // 에러 스트립 · 잠금 안내 · 시작 토스트 · 탭바
-      'Chat.tsx': 1, // 대화 목록 섹션
-      'Goal.tsx': 1, // 목표 휠 카드
-      'GuestHome.tsx': 4, // 잠긴 탭 카드 · 게스트 히어로 · 안내 스트립 · 섹션 1
-      'History.tsx': 1, // 잔디 카드(GRASS_CARD 정의)
-      'Home.tsx': 7, // 히어로 · 섹션 5 · 독서 알림 제안 카드(N3 — 측정 종료 뒤 한 장, 반복 행 아님)
-      'HomeFeed.tsx': 1, // 피드 박스
-      'Library.tsx': 2, // 여백 박스 · 섹션 1
-      'Profile.tsx': 2, // 성향 카드 · 신고 패널
-      'Settings.tsx': 7, // 설정 섹션 6 · 독서 알림 섹션(N3)
-      'Story.tsx': 1, // 여백 게시판
-      'StudyCalendar.tsx': 1, // 달력 카드
-      'ui.tsx': 1, // sectionStyle 정의(= PUFF 펼치기)
+      'GuestHome.tsx': 1, // 안내 스트립
+      'coachmark.tsx': 1, // 말풍선
     };
-    const USE = /(\.\.\.|=\{\s*)(PUFF|sectionStyle)\b/g;
+    const USE = /(\.\.\.|=\{\s*)FLOAT\b/g;
     // 양성 대조 — 식이 펼치기와 직접 참조를 둘 다 잡는다
-    expect("{ ...PUFF, a: 1 } style={sectionStyle} const PUFF = {".match(USE)).toHaveLength(2);
+    expect('{ ...FLOAT, a: 1 } style={FLOAT} const FLOAT = {'.match(USE)).toHaveLength(2);
     const counts: Record<string, number> = {};
     for (const file of files) {
       const n = (stripComments(readFileSync(file, 'utf8')).match(USE) ?? []).length;
       if (n > 0) counts[basename(file)] = n;
     }
-    expect(counts).toEqual(PUFF_USES);
-  });
-});
-
-/**
- * 탭바는 `<main>` 밖이라 독서등(밤)의 토큰 스왑이 안 닿는다(끄는 원이 어둠에 잠기지 않게 — 의도). 그런데 Soft
- * 탭바는 `var(--puffShadow)`를 싣으므로, 스왑이 없으면 낮 그림자의 흰 .95 하이라이트가 밤 캔버스 위에 흰 테로
- * 뜬다. `body.reading-lamp` 자체가 `main` 밖 요소용 값을 준다(`main`·`.lamp-page`는 자기 값을 재선언해 안 닿는다).
- */
-describe('독서등 — main 밖(탭바·스트립)의 부푼 그림자', () => {
-  const lampBody = blockAfter('body.reading-lamp {');
-
-  it('body.reading-lamp가 --puffShadow를 흰 빛 없이 준다', () => {
-    expect(lampBody).toContain('background'); // 캔버스 규칙 그 블록이 잡혔다
-    const value = lampBody.match(/--puffShadow:([^;]*);/)?.[1] ?? '';
-    expect(value).toContain('rgba('); // 값이 있다(아래 부재 단언이 공허하지 않음)
-    expect(value).not.toMatch(/255,\s*255,\s*255/); // 알파 무관 — .9만 보면 .8 흰 빛이 샌다
+    expect(counts).toEqual(FLOAT_USES);
   });
 });

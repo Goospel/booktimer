@@ -1,0 +1,133 @@
+import { Button, TDSMobileProvider, TextField } from '@toss/tds-mobile';
+import { readFileSync } from 'node:fs';
+import type { ReactNode } from 'react';
+import { renderToStaticMarkup } from 'react-dom/server';
+import { describe, expect, it } from 'vitest';
+
+import { filterChipStyle } from './screens/Profile';
+import { userAgent } from './test-fixtures';
+
+/**
+ * 에디토리얼 PR-1 — 누를 수 있는 것의 옷(버튼 2단 · 입력칸 · 고르기 칩).
+ *
+ * <p>TDS 버튼·입력칸은 색·경계를 <b>인라인 커스텀 프로퍼티</b>로 박는다 — 인라인을 이기는 것은 저자 규칙 + `!important`뿐이고,
+ * 정적 렌더 하니스는 css를 적용하지 않으므로 규칙은 소스로, 「키가 실제 마크업에 있는가」는 렌더로 잰다(둘이 한 쌍이라야
+ * 「규칙은 있는데 조용히 안 먹는다」를 잡는다 — U-19).
+ */
+const css = readFileSync(new URL('./global.css', import.meta.url), 'utf8').replace(/\/\*[\s\S]*?\*\//g, '');
+
+/** 머리(선택자 끝 조각)로 시작하는 규칙의 본문 — 없으면 `''`. 호출부는 먼저 비지 않았음을 단언한다. */
+function rule(head: string): string {
+  const at = css.indexOf(head);
+  if (at < 0) return '';
+  return css.slice(css.indexOf('{', at) + 1, css.indexOf('}', at));
+}
+
+const render = (node: ReactNode) => renderToStaticMarkup(<TDSMobileProvider userAgent={userAgent}>{node}</TDSMobileProvider>);
+
+describe('REQ-06 · TDS 버튼 2단', () => {
+  const primary = rule(".tds-mobile-button[style*='--button-background-color: #3182f6'] {");
+  const weak = rule(".tds-mobile-button[style*='--button-background-color: rgba(100, 168, 255, 0.15)'] {");
+
+  it('검정 알약(primary) — 잉크 바탕 · 미색 글자 · 999 · 테두리 없음', () => {
+    expect(primary).not.toBe('');
+    expect(primary).toMatch(/(^|[\s;])background-color:\s*var\(--adaptiveBlue700[^;]*!important/);
+    expect(primary).toMatch(/--button-color:\s*var\(--filledInk[^;]*!important/);
+    expect(primary).toMatch(/--button-border-radius:\s*999px\s*!important/);
+    expect(primary).toMatch(/(^|[\s;])border:\s*0\s*!important/);
+  });
+
+  it('외곽선 알약(weak) — 강조 1px · 999 · 투명', () => {
+    expect(weak).not.toBe('');
+    expect(weak).toMatch(/(^|[\s;])border:\s*1px solid var\(--adaptiveBlue700[^;]*!important/);
+    expect(weak).toMatch(/--button-border-radius:\s*999px\s*!important/);
+    expect(weak).toMatch(/(^|[\s;])background-color:\s*transparent\s*!important/);
+  });
+
+  it('채움 마커 규칙(--btn-filled)이 없고 danger red 값이 css에 0이다 — 위험 빨강을 잉크가 삼키지 않는다', () => {
+    expect(css).not.toContain('--btn-filled');
+    expect(css).not.toMatch(/#f04452|240,\s*68,\s*82/i);
+  });
+
+  /**
+   * 결정 ② — 비활성 주 버튼은 옅은 면(paper-2) + muted 글자, 테두리 없음. TDS는 비활성 fill 버튼 전체에 불투명도 .3을
+   * 인라인으로 거는데, 그대로 두면 잉크 위에 겹쳐 「진한 회색 알약」이 된다 — 화면당 검정 알약 ≤ 1 규칙을 흐린다.
+   */
+  it('결정 ② · 비활성 주 버튼 = paper-2 면 + muted 글자 + 불투명도 1, 테두리 없음', () => {
+    const disabled = rule(":disabled {");
+    expect(disabled).not.toBe('');
+    expect(css).toMatch(/\.tds-mobile-button\[style\*='--button-background-color: #3182f6'\]:disabled\s*\{/);
+    expect(disabled).toMatch(/(^|[\s;])background-color:\s*var\(--softDent[^;]*!important/);
+    expect(disabled).toMatch(/--button-color:\s*var\(--adaptiveGrey600[^;]*!important/);
+    expect(disabled).toMatch(/--button-disabled-text-color:\s*var\(--adaptiveGrey600[^;]*!important/);
+    expect(disabled).toMatch(/(^|[\s;])opacity:\s*1\s*!important/);
+    expect(disabled).toMatch(/(^|[\s;])border:\s*0\s*!important/);
+  });
+
+  it('결정 ② · 비활성 TDS 버튼이 실제로 disabled 속성과 primary 키를 함께 든다 — 선택자가 닿는 마크업이다', () => {
+    const markup = render(<Button disabled>저장</Button>);
+    const tag = markup.slice(markup.lastIndexOf('<button', markup.indexOf('tds-mobile-button')), markup.indexOf('>', markup.indexOf('tds-mobile-button')) + 1);
+    expect(tag).toContain('disabled=""');
+    expect(tag).toMatch(/--button-background-color:\s*#3182f6/);
+  });
+});
+
+describe('REQ-13 · TDS 입력칸은 면 없이 muted 경계다', () => {
+  const KEY = '[style*="--text-field-box-background-color"]';
+  const base = rule(`html ${KEY} {`);
+  const focus = rule(`html ${KEY}:focus-within {`);
+  const off = rule(`html ${KEY}:has(input:disabled) {`);
+
+  it('기본 — 투명 면 · muted 1px · 반경 2, 전부 !important', () => {
+    expect(base).not.toBe('');
+    expect(base).toMatch(/--text-field-box-background-color:\s*transparent\s*!important/);
+    expect(base).toMatch(/(^|[\s;])border:\s*1px solid var\(--adaptiveGrey600[^;]*!important/);
+    expect(base).toMatch(/border-radius:\s*2px\s*!important/);
+  });
+
+  it('포커스 — 경계가 잉크로, TDS 파란 덧칠(::before) 끔', () => {
+    expect(focus).not.toBe('');
+    expect(focus).toMatch(/border-color:\s*var\(--adaptiveGrey800[^;]*!important/);
+    expect(focus).toMatch(/--text-field-box-before-opacity:\s*0\s*!important/);
+  });
+
+  it('비활성 — 옅은 면 + muted 글자(TDS가 읽는 --adaptiveGrey400은 앱에 없다)', () => {
+    expect(off).not.toBe('');
+    expect(off).toMatch(/--text-field-box-background-color:\s*var\(--softDent[^;]*!important/);
+    expect(off).toMatch(/--text-field-box-color:\s*var\(--adaptiveGrey600[^;]*!important/);
+    expect(off).toMatch(/--text-field-box-webkit-text-fill-color:\s*var\(--adaptiveGrey600[^;]*!important/);
+  });
+
+  it('키가 실제 TDS 마크업에 인라인으로 있다 — 없으면 규칙이 조용히 안 먹는다(U-19 정적 판)', () => {
+    const markup = render(<TextField variant="box" aria-label="검색" value="" onChange={() => {}} />);
+    expect(markup).toMatch(/style="[^"]*--text-field-box-background-color/);
+  });
+});
+
+/**
+ * 결정 ① — 고른 칩(설정 「매일」·책방 필터 「전체」)은 잉크 채움이 아니라 <b>잉크 1px 테두리 + 잉크 글자 500</b>이다.
+ * 검정 채움은 화면 주 동작(검정 알약) 하나뿐이어야 한다(REQ-06 — 화면당 검정 알약 ≤ 1). 안 고른 칩은 가는 선 테 + 보조 글자.
+ * 고르기가 바뀌어도 칩 크기가 안 변하게 테 두께는 둘 다 1px이다.
+ */
+describe('결정 ① · 고른 칩은 채우지 않고 잉크 테 + 500이다', () => {
+  const on = filterChipStyle(true);
+  const off = filterChipStyle(false);
+
+  it('고른 칩 — 투명 바탕 · 잉크 1px · 잉크 글자 500', () => {
+    expect(on.background).toBe('transparent');
+    expect(on.border).toMatch(/^1px solid var\(--adaptiveGrey800/);
+    expect(on.color).toMatch(/^var\(--adaptiveGrey800/);
+    expect(on.fontWeight).toBe(500);
+  });
+
+  it('안 고른 칩 — 투명 바탕 · 가는 선 1px · 보조 글자 400', () => {
+    expect(off.background).toBe('transparent');
+    expect(off.border).toMatch(/^1px solid var\(--adaptiveGrey200/);
+    expect(off.color).toMatch(/^var\(--adaptiveGrey700/);
+    expect(off.fontWeight).toBe(400);
+  });
+
+  it('어느 쪽도 잉크·강조 토큰으로 채우지 않는다 — 검정 채움은 주 버튼 하나뿐', () => {
+    for (const chip of [on, off]) expect(String(chip.background)).not.toMatch(/adaptiveBlue|adaptiveGrey800/);
+  });
+});

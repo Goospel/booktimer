@@ -601,11 +601,11 @@ describe('피드 탭 알약 (Soft PR-2)', () => {
   const pill = (markup: string, key: string) =>
     markup.match(new RegExp(`data-feed-tab="${key}"[^>]*style="([^"]*)"`))?.[1] ?? '';
 
-  it('현재 탭은 알약 틴트 + 700, 안 고른 탭은 흐린 잉크 400이다', () => {
+  it('현재 탭은 알약 틴트 + 500, 안 고른 탭은 흐린 잉크 400이다', () => {
     const markup = renderBox(feed(), 'news');
 
     expect(pill(markup, 'news')).toContain('background:var(--accentPill');
-    expect(pill(markup, 'news')).toContain('font-weight:700');
+    expect(pill(markup, 'news')).toContain('font-weight:500');
     expect(pill(markup, 'social')).toContain('--adaptiveGrey600');
     expect(pill(markup, 'social')).toContain('font-weight:400');
   });

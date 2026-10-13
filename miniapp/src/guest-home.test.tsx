@@ -106,6 +106,21 @@ describe('게스트 홈 — 첫 화면', () => {
    * 「진입 직후 덮는 것 0」의 정적 절반 — 떠 있는 것은 탭바 하나뿐이다(T-183: 시트·딤·모달·툴팁 전부 금지).
    * 동적 절반(첫 진입 실측)은 목 모드 원장 U-3이 잰다.
    */
+  /**
+   * 머리 로그인 문은 로그인 홈 `Avatar`와 같은 문법(채움 없음 + 잉크 1px 테 + 잉크 획)이다(§6-4). 천 색으로 채우면
+   * plum 위에 옛 반투명 획이 얹혀 대비 1.24:1 — 심사관이 처음 보는 화면에서 로그인 문이 안 보였다(PR-1 리뷰).
+   */
+  it('머리 로그인 문은 채우지 않은 잉크 선 원이다 — 로그인 홈 아바타와 같은 꼴', () => {
+    const markup = shell(null);
+    const start = markup.indexOf('aria-label="토스로 시작하기"');
+    const door = markup.slice(markup.lastIndexOf('<button', start), markup.indexOf('</button>', start));
+
+    expect(door).toContain('background:transparent');
+    expect(door).toContain('border:1px solid var(--adaptiveGrey800, #1D1B18)');
+    expect(door).toContain('stroke="currentColor"');
+    expect(door).not.toContain('rgba(44,42,36');
+  });
+
   it('떠 있는 것은 탭바 하나뿐이다 — 진입 직후 화면을 덮는 것이 없다', () => {
     const markup = shell(null);
     const fixed = markup.match(/position:fixed/g) ?? [];
@@ -385,12 +400,13 @@ describe('게스트 홈 — 다 재고 나서', () => {
     expect(markup.slice(markup.lastIndexOf('<', markup.indexOf('medal-pop')))).toMatch(/^<svg\b/);
   });
 
-  it('「기록 없이 둘게요」는 1.5px 실선 보조 손잡이다', () => {
+  it('「기록 없이 둘게요」는 외곽선 알약(강조 1px) 보조 손잡이다', () => {
     const markup = shell(done);
     const at = markup.indexOf('기록 없이 둘게요');
     const tag = markup.slice(markup.lastIndexOf('<button', at), at);
 
-    expect(tag).toContain('1.5px solid var(--adaptiveBlue700');
+    expect(tag).toContain('1px solid var(--adaptiveBlue700');
+    expect(tag).toContain('border-radius:999px');
   });
 });
 
@@ -414,23 +430,22 @@ describe('게스트 홈 — 메달은 끝난 뒤에만', () => {
     expect(shell(done)).not.toContain('data-book-stack'); // 끝난 뒤엔 메달이 그 하나다
   });
 
-  it('히어로는 반경 30의 부푼 면이다 — 연필선이 되살아나지 않는다', () => {
+  it('히어로는 면·그림자가 없다(에디토리얼) — 아치 배치는 PR-2', () => {
     const markup = shell(null);
     const at = markup.indexOf('data-guest-hero');
     const tag = markup.slice(markup.lastIndexOf('<', at), markup.indexOf('>', at) + 1);
 
-    expect(tag).toContain('var(--puffShadow');
-    expect(tag).toContain('border-radius:30px');
-    expect(tag).not.toContain('border-image');
+    expect(tag).toContain('padding:24px 20px'); // 그 태그를 잡았다(아래 부재 단언이 공허하지 않음)
+    expect(tag).not.toContain('box-shadow');
   });
 
-  it('잠긴 탭 카드도 부푼 면이다', () => {
+  it('잠긴 탭 안내도 면·그림자가 없다', () => {
     const markup = shell(null, 'library');
     const at = markup.indexOf('서재는 계정이 있어야 열려요');
     const card = markup.slice(markup.lastIndexOf('<div', markup.lastIndexOf('<svg', at)), at);
 
-    expect(card).toContain('var(--puffShadow');
-    expect(card).not.toContain('border-image');
+    expect(card).toContain('padding:24px 20px');
+    expect(card).not.toContain('box-shadow');
   });
 });
 

@@ -31,7 +31,7 @@ import {
   attachMarginBanner,
   marginBannerEnabled,
 } from '../toss';
-import { BookCover, ErrorMessage, Loading, PUFF, SECTION_RULE, SERIF_VALUE, Screen, Sheet, Text, UserList } from '../ui';
+import { BookCover, ErrorMessage, Loading, SECTION_RULE, SERIF_VALUE, Screen, Sheet, Text, UserList } from '../ui';
 
 /**
  * 여백 — <b>책에 딸린 자리</b>와 거기 쌓이는 글 (2026-08-16 재설계).
@@ -492,12 +492,12 @@ export const tabStyle = (active: boolean) =>
     flex: 1,
     padding: '9px 0',
     border: 0,
-    borderBottom: active ? '2px solid var(--adaptiveBlue700, #3F5A3C)' : '2px solid transparent',
+    borderBottom: active ? '2px solid var(--adaptiveBlue700, #1D1B18)' : '2px solid transparent',
     marginBottom: -1,
     background: 'transparent',
-    color: active ? 'var(--adaptiveBlue700, #3F5A3C)' : 'var(--adaptiveGrey600, #5B5A4D)',
+    color: active ? 'var(--adaptiveBlue700, #1D1B18)' : 'var(--adaptiveGrey600, #645E54)',
     fontSize: 14,
-    fontWeight: 700,
+    fontWeight: 500,
     textAlign: 'center',
     cursor: 'pointer',
   }) as const;
@@ -512,9 +512,8 @@ export function MarginBoard({ count, onCompose, children }: { count: number; onC
   return (
     <div
       data-margin-board=""
-      // Soft 부푼 면 — 게시판은 화면에 한 장이라 큰 그림자 예산 안이다. 행(`MarginCard`)은 반복이라 그림자 없이
-      // 토큰 구분선만 진다(설계 §6). `overflow`는 두지 않는다 — 부푼 그림자가 잘린다.
-      style={{ ...PUFF, marginTop: 12 }}
+      // 에디토리얼(PR-1) — 게시판도 면이 없다. 행(`MarginCard`)은 토큰 구분선이 가른다(설계 §6).
+      style={{ marginTop: 12 }}
     >
       <div
         style={{
@@ -1010,7 +1009,8 @@ export function MarginCard({
   const clamped = foldable && expanded !== true;
 
   return (
-    <div data-margin-row="" style={{ display: 'flex', gap: 9, padding: '11px 12px', borderTop: SECTION_RULE }}>
+    // 행 구분선 = 가는 선 — 섹션 머리의 잉크 선(SECTION_RULE)과 갈린다(에디토리얼에서 두 선의 체급이 달라졌다).
+    <div data-margin-row="" style={{ display: 'flex', gap: 9, padding: '11px 12px', borderTop: '1px solid var(--adaptiveGrey200, #D9D1C3)' }}>
       {/* 팔레트 색이 사는 유일한 자리 — 배경으로 깔면 목록이 색 덩어리가 되고, 아예 버리면 작성 화면의
           색 선택이 뜻을 잃는다. 3px 막대가 그 사이의 값이다. */}
       <div style={{ flex: '0 0 auto', width: 3, background: bg.background }} />
@@ -1182,8 +1182,8 @@ const CLAMP_CHARS = 75;
 const CLAMP_LINES = 3;
 
 /** 행의 본문 색 — 배경이 흰 게시판이라 팔레트 색을 상속하지 않는다(막대만 색을 진다). */
-const ROW_TEXT = 'var(--adaptiveGrey900, #2C2A24)';
-const ROW_SUB = 'var(--adaptiveGrey600, #8A8578)';
+const ROW_TEXT = 'var(--adaptiveGrey900, #1D1B18)';
+const ROW_SUB = 'var(--adaptiveGrey600, #645E54)';
 
 /**
  * 행 푸터의 아이콘 버튼 — <b>테두리가 없다</b>. 옛 ghost 버튼은 1px 테두리를 둘렀는데, 색 카드 위에서는
@@ -1209,9 +1209,9 @@ const moreLine = {
   padding: '2px 0',
   border: 'none',
   background: 'transparent',
-  color: 'var(--adaptiveBlue700, #4F6B4C)',
+  color: 'var(--adaptiveBlue700, #1D1B18)',
   fontSize: 14,
-  fontWeight: 700,
+  fontWeight: 500,
   textAlign: 'left',
   cursor: 'pointer',
 } as const;
@@ -1221,8 +1221,8 @@ const sharedChip = {
   flex: '0 0 auto',
   padding: '1px 7px',
   borderRadius: 999,
-  background: 'var(--adaptiveBlue50, #E7EEE2)',
-  color: 'var(--adaptiveBlue700, #4F6B4C)',
+  background: 'var(--adaptiveBlue50, #ECE5D8)',
+  color: 'var(--adaptiveBlue700, #1D1B18)',
 } as const;
 
 /**
@@ -1297,7 +1297,7 @@ const menuRow = (danger: boolean) =>
     background: 'transparent',
     color: danger ? '#A32D2D' : ROW_TEXT,
     fontSize: 15,
-    fontWeight: 700,
+    fontWeight: 500,
     textAlign: 'left',
     cursor: 'pointer',
   }) as const;
@@ -1308,9 +1308,9 @@ const authorLine = {
   width: 'auto',
   margin: '0 0 4px',
   padding: 0,
-  color: 'var(--adaptiveBlue700, #4F6B4C)',
+  color: 'var(--adaptiveBlue700, #1D1B18)',
   fontSize: 14,
-  fontWeight: 700,
+  fontWeight: 500,
   textAlign: 'left',
 } as const;
 
@@ -1439,7 +1439,7 @@ export function StoryComposer({
               borderRadius: 999,
               background: option.background,
               // 칸의 채움(`option.background`)은 내용의 색이라 그대로다 — 고름 표시만 토큰이다.
-              border: option.code === bgCode ? '2px solid var(--adaptiveBlue500, #5B7F55)' : '1px solid var(--adaptiveGrey200, #DED8CA)',
+              border: option.code === bgCode ? '2px solid var(--adaptiveBlue500, #1D1B18)' : '1px solid var(--adaptiveGrey200, #D9D1C3)',
               cursor: 'pointer',
             }}
           />
@@ -1457,7 +1457,7 @@ export function StoryComposer({
           checked={shared}
           disabled={busy}
           onChange={(e) => setShared(e.target.checked)}
-          style={{ width: 18, height: 18, flex: '0 0 auto', accentColor: 'var(--adaptiveBlue500, #5B7F55)' }}
+          style={{ width: 18, height: 18, flex: '0 0 auto', accentColor: 'var(--adaptiveBlue500, #1D1B18)' }}
         />
         <span style={{ minWidth: 0 }}>
           <Text typography="st11" style={{ display: 'block', wordBreak: 'keep-all' }}>

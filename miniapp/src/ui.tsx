@@ -17,11 +17,11 @@ import type { ContributionDay, UserRow } from './api';
  * 조용히 원위치한다(그게 위 Grey900 폴백이 아무 일도 못 한 이유이기도 하다).
  */
 const INK: Record<string, string> = {
-  grey600: 'var(--adaptiveGrey600, #5B5A4D)',
-  grey700: 'var(--adaptiveGrey700, #43423A)',
-  grey800: 'var(--adaptiveGrey800, #2A2921)',
-  blue500: 'var(--adaptiveBlue500, #5B7F55)',
-  blue700: 'var(--adaptiveBlue700, #3F5A3C)',
+  grey600: 'var(--adaptiveGrey600, #645E54)',
+  grey700: 'var(--adaptiveGrey700, #4A453E)',
+  grey800: 'var(--adaptiveGrey800, #1D1B18)',
+  blue500: 'var(--adaptiveBlue500, #1D1B18)',
+  blue700: 'var(--adaptiveBlue700, #1D1B18)',
   red500: 'var(--adaptiveRed500, #F04452)',
 };
 
@@ -48,18 +48,18 @@ export function Text({ color, ...rest }: ComponentProps<typeof TdsText>) {
  * 리터럴은 fallback으로 남아 독서 렌더는 픽셀 하나 안 바뀐다.
  */
 export const LEVEL_COLORS = [
-  'var(--grass0, #E7E2D5)',
-  'var(--grass1, #CFD9C0)',
-  'var(--grass2, #A9BD99)',
-  'var(--grass3, #6E9565)',
-  'var(--grass4, #3F5A3C)',
+  'var(--grass0, #E6DFD2)',
+  'var(--grass1, #CDC3B2)',
+  'var(--grass2, #A29785)',
+  'var(--grass3, #625A4F)',
+  'var(--grass4, #1D1B18)',
 ];
 
 /** 수동 기록 칸의 테두리 — 웹 `--neutral-3`. 격자와 범례가 같은 값을 봐야 범례가 거짓말을 안 한다. */
 export const MANUAL_OUTLINE = '1px solid #9A9486';
 
 /** 잔디 오늘 칸 링 — 범례 「오늘」 스와치도 같은 값을 둘러야 범례가 거짓말을 안 한다. */
-export const TODAY_RING = '0 0 0 2px var(--adaptiveGrey100, #FBF9F4), 0 0 0 4.5px var(--adaptiveBlue700, #3F5A3C)';
+export const TODAY_RING = '0 0 0 2px var(--adaptiveGrey100, #F5F0E6), 0 0 0 4.5px var(--adaptiveBlue700, #1D1B18)';
 
 /** 주 컬럼 사이 간격 — 격자와 월 라벨 배치가 이 값을 공유해야 라벨이 그 열 위에 선다. */
 export const GRASS_GAP = 3;
@@ -147,15 +147,18 @@ export function GrassGrid({
 }
 
 /**
- * 무표지 자리 표지의 배경색 팔레트 — 웹 `books/pure.ts` `COVER_PALETTE`와 같은 12색(종이톤).
- * 웹은 `{bg, fg}`를 돌려주지만 fg가 상수라 미니앱은 색 문자열 하나로 줄였다.
+ * 무표지 자리 표지의 배경색 팔레트 — **천 장정 12색**(에디토리얼 D4=A: 「표지가 색의 주인공」). 옛 파스텔은 미색 위에서
+ * 베이지 한 톤으로 묻히고 이니셜 대비가 2.3~2.6이었다. 해시·12칸은 웹 `books/pure.ts`와 같아 같은 책은 같은 칸이다
+ * (값은 웹 재테마 때 맞춘다 — 그동안 같은 책의 색이 웹과 잠시 다르다). 이니셜 대비는 editorial-palette.test가 잰다(최저 4.94).
+ * 순서: oxblood · navy · forest · plum · teal · sienna · slate · umber · olive · wine · indigo · moss.
  */
 export const COVER_PALETTE = [
-  '#B8C2A6', '#D6C3B0', '#C7B89B', '#A9B9A0', '#B0B7A8', '#CBB9A3',
-  '#C3CBC0', '#BFC8B4', '#CFC0AE', '#D9C8A9', '#C2BBA8', '#B5A98F',
+  '#7A2E28', '#233A57', '#2F4B3A', '#5B3A55', '#2C5C5E', '#A0522D',
+  '#3E4A56', '#5A4632', '#4F5A2E', '#6B2C3E', '#2E3F66', '#3F5B45',
 ] as const;
 
-export const COVER_FG = 'rgba(44,42,36,0.5)';
+/** 천 표지 위 이니셜 — 미색 리터럴이다. 표지는 물건이라 밤(독서등)에도 안 뒤집는다. */
+export const COVER_FG = '#F5F0E6';
 
 /** 표지 대신 세울 첫 글자 — 앞뒤 공백은 버리고, 빈 제목은 `?`로(빈 상자가 되면 표지 자리가 무너진다). */
 export function initialOf(title: string): string {
@@ -175,10 +178,8 @@ export function coverColor(seed: string): string {
 }
 
 /**
- * 사람 아바타 — 무표지 책과 같은 이니셜 원(<b>같은 사람은 언제 그려도 같은 색</b>).
- *
- * <p>책방 프로필과 홈 헤더가 같은 것을 쓴다 — 화면마다 색이 다르면 같은 사람이 다른 사람으로 읽힌다.
- * 링은 두르지 않는다: 발광은 책 격자가 지는 신호라 신원 아바타까지 두르면 뜻이 흐려진다.
+ * 사람 아바타 — 채움 없는 잉크 1px 원 + 잉크 이니셜(에디토리얼 spec §6.1 #6). 색은 표지(천 장정)가 맡고 사람은 선으로만
+ * 선다 — 사람까지 색을 입으면 「표지가 색의 주인공」이 흐려진다. 책방 프로필과 홈 헤더가 같은 것을 쓴다.
  */
 export function Avatar({ nickname, size = 72 }: { nickname: string; size?: number }) {
   return (
@@ -192,10 +193,12 @@ export function Avatar({ nickname, size = 72 }: { nickname: string; size?: numbe
         alignItems: 'center',
         justifyContent: 'center',
         borderRadius: '50%',
+        boxSizing: 'border-box',
         fontSize: Math.round(size * 0.375),
-        background: coverColor(nickname),
-        color: COVER_FG,
-        ...SERIF_VALUE, // 이니셜은 값·인용 축(세리프)이다 — 손글씨는 톤 조율 A에서 걷었다
+        border: '1px solid var(--adaptiveGrey800, #1D1B18)',
+        background: 'transparent',
+        color: 'var(--adaptiveGrey800, #1D1B18)',
+        ...SERIF_VALUE, // 이니셜은 값·인용 축(명조)이다
       }}
     >
       {initialOf(nickname)}
@@ -204,7 +207,7 @@ export function Avatar({ nickname, size = 72 }: { nickname: string; size?: numbe
 }
 
 /** 무표지 책의 자리 표지 — `BookOption`엔 표지 주소가 없어 첫 글자 + 제목색 상자로 대신한다. */
-export function CoverInitial({ title, width = 32, radius = 4 }: { title: string; width?: number; radius?: number }) {
+export function CoverInitial({ title, width = 32, radius = 2 }: { title: string; width?: number; radius?: number }) {
   return (
     <div
       aria-hidden="true"
@@ -216,10 +219,10 @@ export function CoverInitial({ title, width = 32, radius = 4 }: { title: string;
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
-        fontSize: Math.round(width * 0.5),
+        fontSize: Math.round(width * 0.45),
         background: coverColor(title),
         color: COVER_FG,
-        ...SERIF_VALUE, // 표지 이니셜 — 아바타 이니셜과 한 몸(세리프)
+        ...SERIF_VALUE, // 표지 이니셜 — 아바타 이니셜과 한 몸(명조)
       }}
     >
       {initialOf(title)}
@@ -261,14 +264,14 @@ export function BookCover({
   url,
   title,
   width = 40,
-  radius = 4,
+  radius = 2,
   eager = false,
 }: {
   url: string | null;
   /** 있으면 자리 채움이 첫 글자 + 제목색이 된다. 없으면 무채색 상자. */
   title?: string;
   width?: number;
-  /** 모서리 — 기본 4. 홈·서재 캐러셀만 8(고른 칸의 후광과 동심이 되게). */
+  /** 모서리 — 기본 2(표지는 물건 — 반경이 작다). 홈·서재 캐러셀만 8(고른 칸의 후광과 동심이 되게). */
   radius?: number;
   eager?: boolean;
 }) {
@@ -278,7 +281,7 @@ export function BookCover({
 
   if (src === null) {
     if (title !== undefined) return <CoverInitial title={title} width={width} radius={radius} />;
-    return <div aria-hidden="true" style={{ ...box, background: 'var(--adaptiveGrey200, #E4DDD0)' }} />;
+    return <div aria-hidden="true" style={{ ...box, background: 'var(--adaptiveGrey200, #D9D1C3)' }} />;
   }
   return (
     <img
@@ -292,44 +295,43 @@ export function BookCover({
 }
 
 /**
- * Soft 부푼 면 — 카드의 기본 표면. 선이 아니라 면의 부풂(밝은 쪽 하이라이트 + 어두운 쪽 그림자)으로
- * 바탕과 갈린다.
- *
- * <p>⚠️ 그림자 값은 **CSS 변수 경유**다(`global.css`의 `--puffShadow`). 리터럴로 적으면 밤(독서등)·공부
- * 모드가 인라인을 이기려고 자리마다 `!important` 규칙을 둬야 한다 — 연필선이 겪은 고질의 재판이고,
- * 낮의 흰 하이라이트가 밤 카드에 그대로 새어 어두운 화면에 흰 테가 뜬다. 변수면 `body` 클래스 한 벌이
- * 값만 갈아 끼운다(`LEVEL_COLORS`·`--accentPill`과 같은 수법). 폴백은 낮 값이다.
+ * 에디토리얼 표면 상수(재테마 PR-1 — 계획 §6-4). **면·그림자가 없다** — 경계는 선과 여백이 맡는다(REQ-05 이펙트 0).
+ * 옛 `PUFF`·`DENT`·`SOFT_OUTLINE`·`SOFT_ROW`는 이름이 「부푼/눌린 면」을 말해 개명했다(남겨 두면 주석·가드가 거짓말을 한다).
  *
  * <p>인라인 상수인 이유: 하니스가 `renderToStaticMarkup`이라 CSS 클래스는 계측이 안 된다.
- * ⚠️ 이 그림자를 애니메이션하지 않는다 — 값이 변하면 프레임마다 재페인트다(T-176).
  */
-export const PUFF = {
-  background: 'var(--adaptiveGrey100, #FBF9F4)',
-  boxShadow: 'var(--puffShadow, 10px 10px 24px rgba(112,96,64,.15), -8px -8px 20px rgba(255,255,255,.9))',
-  borderRadius: 26,
+
+/** 떠 있는 것 — 시작 토스트·액션/잠금 스트립·게스트 안내 스트립·코치마크 말풍선. 탭바는 여기에 radius 999. */
+export const FLOAT = {
+  background: 'var(--adaptiveGrey100, #F5F0E6)',
+  border: '1px solid var(--adaptiveGrey800, #1D1B18)',
+  borderRadius: 2,
 } as const;
 
-/** Soft 눌린 면 — 트랙·입력·눌린 묶음. 그림자가 안쪽(inset)이라 면이 바탕 아래로 파인다. */
-export const DENT = {
-  background: 'var(--softDent, #EAE5D9)',
-  boxShadow: 'var(--dentShadow, inset 3px 3px 7px rgba(112,96,64,.16), inset -3px -3px 7px rgba(255,255,255,.85))',
-  borderRadius: 20,
+/** 게이지·하루 막대 트랙 — 가는 선 색 막대(채운 몫은 강조 잉크). */
+export const TRACK = { background: 'var(--adaptiveGrey200, #D9D1C3)', borderRadius: 2 } as const;
+
+/** 보조 손잡이(외곽선 알약) — 강조 토큰이라 공부 모드에서 파란 잉크가 된다. */
+export const OUTLINE_PILL = {
+  border: '1px solid var(--adaptiveBlue700, #1D1B18)',
+  borderRadius: 999,
+  background: 'transparent',
+  color: 'var(--adaptiveBlue700, #1D1B18)',
 } as const;
 
-/** 보조 손잡이 — 규칙 1 「보조 버튼은 1.5px 테두리」. 카드 위에 선다. */
-export const SOFT_OUTLINE = {
-  border: '1.5px solid var(--adaptiveBlue700, #3F5A3C)',
-  borderRadius: 18,
-  background: 'var(--adaptiveGrey100, #FBF9F4)',
-  color: 'var(--adaptiveBlue700, #3F5A3C)',
+/** 시트 행·목록 줄 — 아래 가는 선만. 면이 없어 반복 행이 늘어도 페인트 비용이 0이다. */
+export const RULE_ROW = {
+  border: 0,
+  borderBottom: '1px solid var(--adaptiveGrey200, #D9D1C3)',
+  borderRadius: 0,
+  background: 'transparent',
 } as const;
 
-/** 시트 안 행 버튼 — 시트 바닥과 같은 색이라 선이 있어야 누르는 줄로 읽힌다. */
-export const SOFT_ROW = {
-  border: '1.5px solid var(--adaptiveGrey200, #DED8CA)',
-  borderRadius: 14,
-  background: 'var(--adaptiveGrey100, #FBF9F4)',
-} as const;
+/**
+ * 입력칸·선택 상자 — 경계 muted 1px(종이 대비 5.65 ≥ 3, WCAG 1.4.11). 가는 선(1.33)·옅은 면(paper-2 1.10)으로는
+ * 칸이 안 보인다(soft-contrast.test가 이 경계 토큰을 뽑아 잰다). TDS `TextField`는 global.css 덮기 규칙이 같은 값을 준다.
+ */
+export const FIELD = { border: '1px solid var(--adaptiveGrey600, #645E54)', borderRadius: 2, background: 'transparent' } as const;
 
 /**
  * 새싹 세 획(줄기 · 왼 잎 · 오른 잎) — 24 격자. 홈의 「오늘 목표 달성」 표식과 메달 한가운데가 <b>같은 새싹</b>이라
@@ -342,8 +344,8 @@ export const SPROUT_PATHS = [
 ] as const;
 
 /**
- * 목표 달성 메달 — 코인 + 리본 둘 + 새싹(시안 Soft-Goal). 이 앱의 「부푼 입체 오브젝트」는 한 화면에 하나라
- * 달성 순간엔 이게 그 하나다.
+ * 목표 달성 메달 — 코인 + 리본 둘 + 새싹(시안 Soft-Goal). 리본·새싹은 에디토리얼 잉크 농담으로 바꿨다(PR-1 — 세이지 0).
+ * 도장 모양 개편은 PR-2(REQ-08) 몫이다.
  *
  * <p>튀는 움직임은 `global.css`의 `.medal-pop`(transform·opacity만, 1회). SVG 안에 글자·이미지가 없어 튀는
  * 동안 다시 그릴 콘텐츠가 없다(T-176). 색은 그림의 색이라 리터럴이다 — 메달은 독서 모드·측정 밖에서만 선다.
@@ -367,26 +369,25 @@ export function GoalMedal({ size = 132 }: { size?: number }) {
           <stop offset="1" stopColor="#D9BF6A" />
         </radialGradient>
       </defs>
-      <ellipse cx="60" cy="124" rx="34" ry="5" fill="rgba(112,96,64,0.2)" />
-      <path d="M40 86 L30 122 L44 114 L50 126 L58 92 Z" fill="#6E9565" />
-      <path d="M80 86 L90 122 L76 114 L70 126 L62 92 Z" fill="#3F5A3C" />
+      <path d="M40 86 L30 122 L44 114 L50 126 L58 92 Z" fill="#625A4F" />
+      <path d="M80 86 L90 122 L76 114 L70 126 L62 92 Z" fill="#1D1B18" />
       <circle cx="60" cy="56" r="46" fill={`url(#${id})`} />
       <circle cx="60" cy="56" r="36" fill="none" stroke="#FFFFFF" strokeWidth="3" opacity="0.7" />
       <ellipse cx="44" cy="30" rx="14" ry="6" fill="#FFFFFF" opacity="0.55" transform="rotate(-24 44 30)" />
       {/* 새싹 — 24 격자의 (12,14)를 코인 중심(60,56)에 맞춰 3배로 키운다. */}
-      <g transform="translate(24 14) scale(3)" stroke="#3F5A3C" strokeWidth="1.1" strokeLinecap="round" strokeLinejoin="round">
+      <g transform="translate(24 14) scale(3)" stroke="#1D1B18" strokeWidth="1.1" strokeLinecap="round" strokeLinejoin="round">
         <path d={SPROUT_PATHS[0]} fill="none" />
-        <path d={SPROUT_PATHS[1]} fill="#8FA986" />
-        <path d={SPROUT_PATHS[2]} fill="#B5C6A5" />
+        <path d={SPROUT_PATHS[1]} fill="#A29785" />
+        <path d={SPROUT_PATHS[2]} fill="#CDC3B2" />
       </g>
     </svg>
   );
 }
 
 /**
- * 섹션 카드 — 부푼 면 그대로. 배경이 리터럴이 아니라 토큰이라야 독서등이 이 카드도 함께 밤으로 데려간다.
+ * 화면 덩어리 — 면·그림자·반경·패딩이 없다(에디토리얼). 경계는 머리 아래 잉크 선({@link SECTION_RULE})과 이 여백이다.
  */
-export const sectionStyle = { marginTop: 20, padding: 18, ...PUFF } as const;
+export const sectionStyle = { marginTop: 28 } as const;
 
 /**
  * 섹션 머리 아래 실선 — 시안(턴2)이 카드 안 머리에 그은 그 선이다. 그은 자리는 <b>넷</b>이다:
@@ -396,11 +397,10 @@ export const sectionStyle = { marginTop: 20, padding: 18, ...PUFF } as const;
  * <p>⚠️ 선은 <b>제목이 아니라 줄</b>에 건다. 위 넷 중 셋은 제목 옆에 카운트·손잡이·합계가 서므로,
  * {@link SectionTitle}에 걸면 선이 줄 한가운데서 끊긴다 — 그래서 공용 컴포넌트가 아니라 자리마다 준다.
  *
- * <p>색은 시안의 생 `rgba(44,42,36,.12)`가 아니라 토큰이다: 그 값은 <b>잉크를 12%로 깐 것</b>이라
- * 밤(독서등)에 카드지와 함께 어두워져 선이 통째로 사라진다. 낮 계산값(≈`#E3E1DC`)이 이 토큰과 한 톤
- * 안이라 <b>낮의 그림은 그대로 두면서 밤만 산다</b> — 「새 색을 만들지 않는다」는 이 파일의 원칙과 같은 방향.
+ * <p>에디토리얼(PR-1): 카드 면이 사라져 이 선이 덩어리의 경계가 됐다 — 그래서 가는 선(grey200)이 아니라 **잉크**(grey800)다
+ * (spec §5.3 「섹션 머리 아래 = 강한 선」). 토큰이라 밤엔 밝은 잉크로 갈린다. 가는 선은 `RULE_ROW` 행 구분선 몫이다.
  */
-export const SECTION_RULE = '1px solid var(--adaptiveGrey200, #DED8CA)';
+export const SECTION_RULE = '1px solid var(--adaptiveGrey800, #1D1B18)'; // 섹션 머리 아래 = 강한 선(spec §5.3) — 행 구분선(가는 선)과 갈린다
 
 /**
  * 값(수)·성취 이름을 세리프로 — 웹이 이미 쓰는 축을 미니앱에도 놓는다.
@@ -414,7 +414,7 @@ export const SECTION_RULE = '1px solid var(--adaptiveGrey200, #DED8CA)';
  * 폰트를 불러만 놓고 화면 제목 한 곳에서만 썼다. 손글씨 옆의 세리프는 「적어 둔 값」으로 읽혀,
  * 크기를 덜 키우고도 눈에 먼저 든다.
  *
- * <p>클래스가 아니라 <b>인라인 스타일 상수</b>인 이유는 {@link PUFF}·{@link sectionStyle}과 같다 —
+ * <p>클래스가 아니라 <b>인라인 스타일 상수</b>인 이유는 {@link FLOAT}·{@link sectionStyle}과 같다 —
  * 이 저장소의 테스트 하니스는 `renderToStaticMarkup` 정적 렌더라 <b>css를 적용하지 않는다</b>.
  * 인라인이라야 「이 값이 세리프로 오는가」를 마크업에서 계측할 수 있다.
  *
@@ -422,15 +422,12 @@ export const SECTION_RULE = '1px solid var(--adaptiveGrey200, #DED8CA)';
  * 시간·팔로워 수)라, 폭이 들쭉날쭉하면 값이 바뀔 때마다 글자가 좌우로 흔들린다.
  */
 export const SERIF_VALUE = {
-  fontFamily: "'Gowun Batang', serif",
+  fontFamily: "'Noto Serif KR', 'Noto Serif CJK KR', serif",
   /*
-   * 굵기를 상수가 든다 — 값은 화면에서 **읽히는 수**라 항상 700이다. 사용처 8곳 중 7곳이 이미 인라인
-   * 700을 적고 있었고 한 곳(`Profile`의 통계 수치)만 빠져 있었는데, 오늘은 그게 안 보인다:
-   * `FONT_CSS_URL`(fonts.ts)이 `Gowun+Batang:wght@700` 단일이라 400 요청도 700 face로 매칭되기 때문이다.
-   * 즉 **잠재 취약점**이다 — 그 URL에 웨이트 축이 붙거나 폴백으로 떨어지는 순간 그 숫자만 얇아진다.
-   * 여기 두면 그 자리가 상수를 쓰는 것만으로 닫힌다.
+   * 굵기를 상수가 든다 — 명조는 500 한 face만 싣는다(`fonts.ts`). 호출부가 굵기를 따로 적으면 실리지 않은 face를
+   * 부르게 되므로, 값 자리는 이 상수를 펼치는 것만으로 굵기까지 닫힌다(spec §5.2 「Medium이 최대」).
    */
-  fontWeight: 700,
+  fontWeight: 500,
   fontVariantNumeric: 'tabular-nums',
 } as const;
 
@@ -438,13 +435,9 @@ export const SERIF_VALUE = {
  * 채움 주 버튼 — <b>한 화면의 주 동작 하나</b>에만 쓴다(서재=여백에 글쓰기 · 목표=저장).
  * 홈은 탭바 가운데 원이 그 역할이라 여기 해당하지 않는다.
  *
- * <p>위계가 3단이 된다: <b>채움</b>(화면의 주 동작) &gt; primary(연한 세이지 — 시트·확인 흐름의 긍정
- * 동작) &gt; weak(연필선 — 보조). 채움이 화면마다 여럿이면 그 축이 곧 무너지므로 개수를 소스로 센다.
- *
- * <p><b>마커 커스텀 프로퍼티를 선택자 키로 쓴다</b>(`global.css`의 대응 규칙 참고). TDS Button은
- * variant를 가려낼 표지가 class에도 data 속성에도 없어 인라인 값 자체를 키로 쓸 수밖에 없는데,
- * hex를 키로 쓰는 기존 방식과 달리 <b>이름만</b> 보므로 콜론 뒤 공백 직렬화 차이에 안 걸리고
- * danger red 팔레트를 css에 적을 일도 생기지 않는다.
+ * <p>에디토리얼(PR-1) 버튼은 **2단**이다: 검정 알약(TDS primary — 화면 주 동작) · 외곽선 알약(weak — 보조). 이 래퍼는
+ * primary와 같은 그림이 됐고(옛 마커 css 규칙은 지웠다), 인라인 마커 `--btn-filled`는 「이 화면의 주 동작」 <b>표지</b>로만
+ * 남는다 — 검정 알약이 화면마다 여럿이면 축이 무너지므로 typography.test가 `<FilledButton`을 센다.
  *
  * <p>TDS `Button`을 그대로 감싸는 이유: 목표 「저장」의 `loading`·`disabled`가 공짜로 따라온다.
  */
@@ -465,7 +458,12 @@ export function FilledButton({ style, ...props }: ComponentProps<typeof Button>)
  */
 export function SectionTitle({ children, style }: { children: ReactNode; style?: CSSProperties }) {
   return (
-    <Text typography="st10" fontWeight="bold" style={{ display: 'block', wordBreak: 'keep-all', ...style }}>
+    // 에디토리얼 H1 — 명조 20/28 500(spec §5.2). 크기 토큰(st10)은 「본문보다 큰 머리」 계측용으로 그대로 두고 인라인이 덮는다.
+    <Text
+      typography="st10"
+      fontWeight="medium"
+      style={{ display: 'block', wordBreak: 'keep-all', ...SERIF_VALUE, fontSize: 20, lineHeight: '28px', ...style }}
+    >
       {children}
     </Text>
   );
@@ -507,8 +505,8 @@ export function Sheet({
       <div
         className="sheet-dim"
         onClick={onDimClose}
-        // 딤은 순검정이 아니라 잉크(#1E1E18)를 깐다 — 따뜻한 바탕 위에 순검정을 덮으면 화면이 잿빛으로 식는다(톤 조율 A).
-        style={{ position: 'fixed', inset: 0, zIndex: 200, background: 'rgba(30, 30, 24, 0.45)' }}
+        // 딤은 순검정이 아니라 잉크(#1D1B18)의 알파다 — 미색 위에 순검정을 덮으면 화면이 잿빛으로 식는다.
+        style={{ position: 'fixed', inset: 0, zIndex: 200, background: 'rgba(29, 27, 24, 0.45)' }}
       />
       <div
         className="sheet-panel"
@@ -525,13 +523,17 @@ export function Sheet({
           overflowY: 'auto',
           // 홈 인디케이터 위로 마지막 줄이 올라오게 — 바닥 여백만 safe-area를 탄다.
           padding: '20px 20px calc(20px + env(safe-area-inset-bottom))',
-          borderRadius: '26px 26px 0 0',
-          background: 'var(--adaptiveGrey100, #FBF9F4)',
-          boxShadow: '0 -8px 24px rgba(112, 96, 64, 0.15)',
+          // 에디토리얼 — 미색 패널 + 위 잉크 1px, 반경 0, 그림자 0(떠 있는 면은 선이 말한다).
+          borderTop: '1px solid var(--adaptiveGrey800, #1D1B18)',
+          background: 'var(--adaptiveGrey100, #F5F0E6)',
         }}
       >
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 }}>
-          <Text typography="t6" fontWeight="bold" style={{ flex: 1, minWidth: 0, wordBreak: 'keep-all' }}>
+          <Text
+            typography="t6"
+            fontWeight="medium"
+            style={{ flex: 1, minWidth: 0, wordBreak: 'keep-all', ...SERIF_VALUE, fontSize: 18, lineHeight: '26px' }}
+          >
             {title}
           </Text>
           <button
@@ -548,7 +550,7 @@ export function Sheet({
               fontSize: 16,
               lineHeight: 1,
               background: 'transparent',
-              color: 'var(--adaptiveGrey700, #57534A)',
+              color: 'var(--adaptiveGrey700, #4A453E)',
               cursor: 'pointer',
             }}
           >
@@ -598,12 +600,8 @@ export function Screen({
       {title !== undefined && (
       <>
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: subtitle === undefined ? 20 : 3 }}>
-        {/* 제목만 세리프(고운바탕) — 웹 `.brand h1`과 같은 위계다. 본문은 전역 고운돋움 그대로. */}
-        <Text
-          typography="t3"
-          fontWeight="bold"
-          style={{ flex: 1, minWidth: 0, fontFamily: "'Gowun Batang', serif", wordBreak: 'keep-all' }}
-        >
+        {/* 제목만 명조 500(D2 32/40 — 크기는 t3 토큰) — 본문은 전역 고딕 그대로. */}
+        <Text typography="t3" fontWeight="medium" style={{ flex: 1, minWidth: 0, ...SERIF_VALUE, wordBreak: 'keep-all' }}>
           {title}
         </Text>
         {right}
@@ -742,7 +740,7 @@ function SearchGlass({ dim }: { dim: boolean }) {
       viewBox="0 0 24 24"
       fill="none"
       aria-hidden="true"
-      style={{ color: 'var(--adaptiveBlue700, #3F5A3C)', opacity: dim ? 0.35 : 1 }}
+      style={{ color: 'var(--adaptiveBlue700, #1D1B18)', opacity: dim ? 0.35 : 1 }}
     >
       <circle cx="10.5" cy="10.5" r="6.6" stroke="currentColor" strokeWidth="1.9" />
       <path d="M15.6 15.6 L20 20" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" />
@@ -763,8 +761,9 @@ export function UnreadBadge({ count, unit }: { count: number; unit: '대화' | '
         minWidth: 18,
         padding: '1px 6px',
         borderRadius: 999,
-        background: 'var(--adaptiveBlue500, #5B7F55)',
-        color: '#FFFDF8',
+        // 잉크 바탕 + 미색 글자(15.13) — 밤엔 토큰이 함께 뒤집힌다.
+        background: 'var(--adaptiveGrey800, #1D1B18)',
+        color: 'var(--filledInk, #F5F0E6)',
         fontSize: 13,
         lineHeight: '16px',
         textAlign: 'center',
@@ -815,14 +814,12 @@ export function UserList({
           key={u.loginId}
           type="button"
           onClick={() => onSelect(u.loginId)}
-          // 반복 행이라 부푼 그림자 대신 옅은 실선 행(SOFT_ROW)이다 — 행 수 × 큰 blur는 저사양 안드로이드의
-          // 스크롤 재래스터를 부른다(설계 §6 그림자 예산). 검색 결과·팔로우 목록·좋아요 명단이 함께 바뀐다.
+          // 반복 행 — 아래 가는 선만(RULE_ROW). 검색 결과·팔로우 목록·좋아요 명단이 함께 바뀐다.
           style={{
-            ...SOFT_ROW,
+            ...RULE_ROW,
             display: 'block',
             width: '100%',
-            padding: 16,
-            marginBottom: 8,
+            padding: '14px 0',
             textAlign: 'left',
             cursor: 'pointer',
           }}

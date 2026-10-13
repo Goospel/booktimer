@@ -390,8 +390,8 @@ describe('인라인 여백 박스 표시 (MarginBoxView)', () => {
   });
 
   it('빈 박스는 헤더 아랫선도 접는다', () => {
-    expect(box(margin([]))).not.toContain('border-bottom:1px solid var(--adaptiveGrey200');
-    expect(box(three)).toContain('border-bottom:1px solid var(--adaptiveGrey200'); // 글이 있으면 그대로
+    expect(box(margin([]))).not.toContain('border-bottom:1px solid var(--adaptiveGrey800');
+    expect(box(three)).toContain('border-bottom:1px solid var(--adaptiveGrey800'); // 글이 있으면 그대로(섹션 머리 = 잉크 선)
   });
 
   /** 회귀 가드 — 위 셋이 「전체 보기를 통째로 걷어라」로 미끄러지지 않게 반대편을 함께 못 박는다. */
@@ -1386,15 +1386,16 @@ const tagBefore = (markup: string, text: string) => {
 describe('서재 위계 (시안 2c)', () => {
   const read = (extra = {}) => book(1, '미움받을 용기', 'READING', { seconds: 7_200, ...extra });
 
-  it('고른 세그먼트만 굵고 그림자를 진다 — 색만으로는 어느 탭인지 약하다', () => {
+  it('고른 세그먼트만 굵다(500) — 그림자는 걷었다(에디토리얼), 면과 굵기가 함께 말한다', () => {
     const markup = shelf([read()], { tab: 'READING' });
     const on = tagBefore(markup, '읽는 중');
     const off = tagBefore(markup, '다 읽음');
 
-    expect(on).toContain('font-weight:700');
-    expect(on).toContain('box-shadow');
+    expect(on).toContain('font-weight:500');
+    expect(on).toContain('background:var(--adaptiveGrey100');
     expect(off).not.toBe('');
-    expect(off).not.toContain('box-shadow');
+    expect(off).toContain('font-weight:400');
+    expect(on).not.toContain('box-shadow');
     // 크기·모서리도 함께 잠근다 — 굵기만 재면 13->14, r10->r8이 조용히 지나간다(자가 리뷰 실측).
     expect(on).toContain('font-size:13px');
     expect(on).toContain('border-radius:10px');
@@ -1403,8 +1404,8 @@ describe('서재 위계 (시안 2c)', () => {
   it('「N시간 읽음」 칩은 시간만 세리프다 — 「읽음」까지 세리프면 값이 어디까지인지 흐려진다', () => {
     const markup = shelf([read()], { tab: 'READING', selectedId: 1 });
 
-    expect(tagBefore(markup, '2시간')).toContain('Gowun Batang');
-    expect(tagBefore(markup, ' 읽음')).not.toContain('Gowun Batang');
+    expect(tagBefore(markup, '2시간')).toContain('Noto Serif KR');
+    expect(tagBefore(markup, ' 읽음')).not.toContain('Noto Serif KR');
   });
 
   it('여백 헤더는 16이고 카운트만 세리프다', () => {
@@ -1426,14 +1427,15 @@ describe('서재 위계 (시안 2c)', () => {
     expect(tagBefore(markup, '여백')).toContain('font-size:16px');
   });
 
-  it('「여백에 글쓰기」는 채움 버튼이다 — 이 화면의 주 동작 하나', () => {
+  it('「여백에 글쓰기」는 검정 알약이다 — 이 화면의 주 동작 하나', () => {
     const tag = tagBefore(shelf([read()], { tab: 'READING', selectedId: 1 }), '여백에 글쓰기');
 
     expect(tag).not.toBe('');
     // 경계 `,`까지 적는다 — `--adaptiveBlue50`만 적으면 `--adaptiveBlue500`(진한 점 색)에도 맞는다(리뷰 M6).
-    expect(tag).toContain('background:var(--adaptiveBlue50,'); // 옅은 타일 — 진한 채움은 탭바 원 하나다(톤 조율 A)
-    expect(tag).toContain('color:var(--adaptiveBlue700'); // 진한 글자 — 밤엔 밝은 세이지로 스왑된다
-    expect(tag).toContain('var(--puffShadow'); // 채움은 부푼다(TDS 채움 버튼 규칙과 같은 그림자)
+    expect(tag).toContain('background:var(--adaptiveBlue700,'); // 강조 잉크 바탕(공부 모드에선 파란 잉크)
+    expect(tag).toContain('color:var(--filledInk'); // 미색 글자
+    expect(tag).toContain('border-radius:999px');
+    expect(tag).not.toContain('box-shadow');
     expect(tag).toContain('font-size:15px'); // 시안 15.5 -> 계단 15(설계 D3 반올림)
   });
 
@@ -1443,14 +1445,14 @@ describe('서재 위계 (시안 2c)', () => {
    * 이제 <b>면과 선</b>으로 위계를 말한다: 주 동작은 부푼 채움, 보조 「관리」는 1.5px 세이지 실선.
    * 설계 D5의 `FilledButton` 교체를 안 따른 이유(TDS가 56px 최소 높이를 박는다)는 그대로 유효하다.
    */
-  it('「여백에 글쓰기」는 부푼 채움, 「관리」는 1.5px 실선 — 연필 프레임은 둘 다 없다', () => {
+  it('「여백에 글쓰기」는 검정 알약, 「관리」는 외곽선 알약(1px) — 면이 있고 없음으로 위계가 갈린다', () => {
     const markup = shelf([read()], { tab: 'READING', selectedId: 1 });
     const write = tagBefore(markup, '여백에 글쓰기');
     const manage = tagBefore(markup, '관리');
 
     expect(write).not.toBe('');
     expect(manage).not.toBe('');
-    expect(manage).toContain('1.5px solid var(--adaptiveBlue700');
+    expect(manage).toContain('1px solid var(--adaptiveBlue700');
     expect(write).not.toContain('border-image');
     expect(manage).not.toContain('border-image');
     expect(write).toContain(`height:${HANDLE_ROW_HEIGHT}px`);
@@ -1464,11 +1466,12 @@ describe('서재 위계 (시안 2c)', () => {
     expect(tag).toContain(`height:${HANDLE_ROW_HEIGHT}px`);
   });
 
-  it('제목 줄 「펼쳐보기」도 1.5px 실선 손잡이다(`handleStyle`)', () => {
-    expect(handleStyle.border).toBe('1.5px solid var(--adaptiveBlue700, #3F5A3C)');
+  it('제목 줄 「펼쳐보기」도 외곽선 알약이다(`handleStyle`)', () => {
+    expect(handleStyle.border).toBe('1px solid var(--adaptiveBlue700, #1D1B18)');
+    expect(handleStyle.borderRadius).toBe(999);
   });
 
-  it('여백 박스는 부푼 면이다 — 옛 크림 상자 + 연필선 자리', () => {
+  it('여백 박스는 면·그림자가 없다 — 경계는 머리 줄 아래 잉크 선과 여백이다(에디토리얼)', () => {
     const markup = renderToStaticMarkup(
       <TDSMobileProvider userAgent={userAgent}>
         <MarginBoxView view="loading" now={0} onOpenAll={() => {}} />
@@ -1477,11 +1480,11 @@ describe('서재 위계 (시안 2c)', () => {
     const box = markup.match(/<div data-margin-box=""[^>]*>/)?.[0] ?? '';
 
     expect(box).not.toBe('');
-    expect(box).toContain('var(--puffShadow');
-    expect(box).not.toContain('border-image');
+    expect(box).toContain('margin-top:24px');
+    expect(box).not.toContain('box-shadow');
   });
 
-  it('관리 시트 행은 1.5px 옅은 실선 줄이다(`SOFT_ROW`) — 위험 행 글자는 빨강 그대로', () => {
+  it('관리 시트 행은 아래 가는 선 줄이다(`RULE_ROW`) — 위험 행 글자는 빨강 그대로', () => {
     const markup = shelf([read()], {
       tab: 'READING',
       selectedId: 1,
@@ -1490,8 +1493,7 @@ describe('서재 위계 (시안 2c)', () => {
     const row = tagBefore(markup, '다 읽음(으)로 옮기기');
     const danger = tagBefore(markup, '서재에서 삭제');
 
-    expect(row).toContain('1.5px solid var(--adaptiveGrey200');
-    expect(row).not.toContain('border-image');
+    expect(row).toContain('border-bottom:1px solid var(--adaptiveGrey200');
     expect(danger).toContain('#A32D2D');
   });
 

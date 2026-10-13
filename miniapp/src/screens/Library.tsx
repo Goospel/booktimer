@@ -21,10 +21,9 @@ import {
   BookCover,
   ErrorMessage,
   Loading,
-  PUFF,
+  OUTLINE_PILL,
+  RULE_ROW,
   SECTION_RULE,
-  SOFT_OUTLINE,
-  SOFT_ROW,
   Screen,
   SearchField,
   SectionTitle,
@@ -112,16 +111,16 @@ type BookChipTone = 'neutral' | 'sage' | 'outline';
 function bookChipStyle(tone: BookChipTone): CSSProperties {
   const base: CSSProperties = { display: 'inline-block', padding: '2px 9px', borderRadius: 20, fontSize: 14, lineHeight: 1.6 };
   if (tone === 'sage') {
-    return { ...base, background: 'var(--adaptiveBlue50, #E7EEE2)', color: 'var(--adaptiveBlue700, #4F6B4C)' };
+    return { ...base, background: 'var(--adaptiveBlue50, #ECE5D8)', color: 'var(--adaptiveBlue700, #1D1B18)' };
   }
   if (tone === 'neutral') {
-    return { ...base, background: 'var(--adaptiveGrey200, #E4DDD0)', color: 'var(--adaptiveGrey700, #57534A)' };
+    return { ...base, background: 'var(--adaptiveGrey200, #D9D1C3)', color: 'var(--adaptiveGrey700, #4A453E)' };
   }
   return {
     ...base,
     background: 'transparent',
-    color: 'var(--adaptiveGrey600, #6F6A5E)',
-    border: '1px solid var(--adaptiveGrey200, #E4DDD0)',
+    color: 'var(--adaptiveGrey600, #645E54)',
+    border: '1px solid var(--adaptiveGrey200, #D9D1C3)',
   };
 }
 
@@ -259,8 +258,8 @@ export function MarginBoxView({
   return (
     <div
       data-margin-box=""
-      // 부푼 면(Soft PR-3) — 옛 크림 상자 + 연필선 자리. 캔버스 위에 떠 캐러셀 아래 한 덩어리로 읽힌다.
-      style={{ ...PUFF, marginTop: 16, padding: 16 }}
+      // 에디토리얼(PR-1) — 면 없음. 덩어리의 경계는 머리 줄 아래 잉크 선(SECTION_RULE)과 위 여백이다.
+      style={{ marginTop: 24 }}
     >
       {/* 선은 제목이 아니라 이 줄에 건다 — 오른쪽 「전체 보기 ›」까지 지나야 머리 한 줄로 읽힌다(시안 2c). */}
       <div style={{ display: 'flex', alignItems: 'baseline', paddingBottom: 9, borderBottom: empty ? undefined : SECTION_RULE }}>
@@ -269,7 +268,7 @@ export function MarginBoxView({
         <SectionTitle style={{ flex: 1, fontSize: 16 }}>
           여백
           {entries.length > 0 && (
-            <b style={{ ...SERIF_VALUE, fontSize: 16, color: 'var(--adaptiveBlue700, #4F6B4C)' }}>
+            <b style={{ ...SERIF_VALUE, fontSize: 16, color: 'var(--adaptiveBlue700, #1D1B18)' }}>
               {' '}
               {entries.length}
             </b>
@@ -283,7 +282,7 @@ export function MarginBoxView({
               padding: 0,
               border: 'none',
               background: 'transparent',
-              color: 'var(--adaptiveGrey600, #6F6A5E)',
+              color: 'var(--adaptiveGrey600, #645E54)',
               fontSize: 14,
               cursor: 'pointer',
             }}
@@ -576,7 +575,7 @@ export function Shelf({
   return (
     <>
       {/* 세 탭은 늘 서 있다(권수 0이어도) — 나타났다 사라지면 누르려던 자리가 옮겨 다닌다. */}
-      <div style={{ display: 'flex', gap: 6, padding: 3, borderRadius: 10, background: 'var(--adaptiveGrey200, #E4DDD0)' }}>
+      <div style={{ display: 'flex', gap: 6, padding: 3, borderRadius: 10, background: 'var(--adaptiveGrey200, #D9D1C3)' }}>
         {SECTIONS.map(({ status, title }) => {
           const current = status === tab;
           return (
@@ -591,13 +590,12 @@ export function Shelf({
                 border: 'none',
                 borderRadius: 10,
                 fontSize: 13,
-                // 시안 2c — 고른 칸은 색만으로 말하지 않는다. 굵기와 그림자가 「떠 있음」을 만든다.
-                fontWeight: current ? 700 : 400,
-                boxShadow: current ? '0 1px 3px rgba(0, 0, 0, 0.08)' : undefined,
+                // 고른 칸은 색만으로 말하지 않는다 — 면과 굵기(500)가 함께 말한다(그림자는 걷었다 — 에디토리얼).
+                fontWeight: current ? 500 : 400,
                 cursor: 'pointer',
                 // 카드 면·잉크 토큰 — 옛 크림 `#FCFAF5` 리터럴은 Soft 카드 면(#FBF9F4)과 한 톤 어긋났다.
-                background: current ? 'var(--adaptiveGrey100, #FBF9F4)' : 'transparent',
-                color: current ? 'var(--adaptiveGrey800, #2A2921)' : 'var(--adaptiveGrey700, #43423A)',
+                background: current ? 'var(--adaptiveGrey100, #F5F0E6)' : 'transparent',
+                color: current ? 'var(--adaptiveGrey800, #1D1B18)' : 'var(--adaptiveGrey700, #4A453E)',
               }}
             >
               {/* 이름만 적는다 — 권수는 「펼쳐보기」 시트 제목(`읽는 중 N권`)이 이미 말한다. 세 칸에
@@ -663,11 +661,11 @@ export function Shelf({
                   flex: 1,
                   height: HANDLE_ROW_HEIGHT,
                   border: 'none',
-                  borderRadius: 18,
-                  background: 'var(--adaptiveBlue50, #E1E8D4)',
-                  color: 'var(--adaptiveBlue700, #3F5A3C)',
+                  borderRadius: 999,
+                  background: 'var(--adaptiveBlue50, #ECE5D8)',
+                  color: 'var(--adaptiveBlue700, #1D1B18)',
                   fontSize: 16,
-                  fontWeight: 700,
+                  fontWeight: 500,
                   cursor: 'pointer',
                 }}
               >
@@ -688,21 +686,17 @@ export function Shelf({
                       style={{
                         flex: 2,
                         height: HANDLE_ROW_HEIGHT,
-                        // 시안 2c — 이 화면의 주 동작 하나라 **채움**이다. Soft(PR-3): 연필 프레임 대신
-                        // 부푼 그림자 — TDS 채움 버튼 규칙(global.css `--btn-filled`)과 같은 옷이다. 톤 조율 A:
-                        // 진한 채움 → 옅은 세이지 타일 + 진한 글자(진한 덩어리는 탭바 원 하나). 옆 「관리」와는
-                        // 면(부푼 타일)과 선(1.5px 실선)으로 갈린다.
+                        // 이 화면의 주 동작 하나라 **검정 알약**이다(에디토리얼 2단 — TDS primary와 같은 옷). 옆
+                        // 「관리」(외곽선 알약)와는 면이 있고 없음으로 갈린다.
                         // ⚠️ 설계 D5의 `FilledButton` 교체는 **안 따랐다**: TDS Button이
                         // `--button-min-height: 56px`를 박아 이 38px 손잡이 줄에서 혼자 56px로 솟는다(실측).
-                        // 채움 개수 계측은 `typography.test`가 **두 형태를 함께 세는** 방식으로 받는다 —
-                        // 그 가드가 세는 키 `boxShadow: 'var(--puffShadow)'`를 그대로 쓴다(톤 조율 A에서 배경 키 대신).
+                        // 검정 알약 개수 계측은 `typography.test`가 그 맨 버튼의 잉크 바탕 키를 센다.
                         border: 'none',
-                        borderRadius: 18,
-                        background: 'var(--adaptiveBlue50, #E1E8D4)',
-                        color: 'var(--adaptiveBlue700, #3F5A3C)',
-                        boxShadow: 'var(--puffShadow)',
+                        borderRadius: 999,
+                        background: 'var(--adaptiveBlue700, #1D1B18)',
+                        color: 'var(--filledInk, #F5F0E6)',
                         fontSize: 15,
-                        fontWeight: 700,
+                        fontWeight: 500,
                         cursor: 'pointer',
                       }}
                     >
@@ -713,13 +707,13 @@ export function Shelf({
                     type="button"
                     disabled={busy}
                     onClick={() => onSheet({ kind: 'actions', confirmDelete: false, confirmPublish: false })}
-                    // 보조 손잡이 — 1.5px 세이지 실선(규칙 1). 옆 채움과 면/선으로 위계가 갈린다.
+                    // 보조 손잡이 — 외곽선 알약(강조 1px). 옆 검정 알약과 면/선으로 위계가 갈린다.
                     style={{
-                      ...SOFT_OUTLINE,
+                      ...OUTLINE_PILL,
                       flex: 1,
                       height: HANDLE_ROW_HEIGHT,
                       fontSize: 15,
-                      fontWeight: 700,
+                      fontWeight: 500,
                       cursor: 'pointer',
                     }}
                   >
@@ -825,7 +819,7 @@ export function BookGrid({
                 display: 'flex',
                 justifyContent: 'center',
                 // 지금 고른 책만 테두리로 — 격자에서 "내가 보던 그 책"을 잃지 않게.
-                outline: book.id === selectedId ? '2px solid var(--adaptiveBlue500, #5B7F55)' : undefined,
+                outline: book.id === selectedId ? '2px solid var(--adaptiveBlue500, #1D1B18)' : undefined,
                 outlineOffset: 2,
                 borderRadius: 4,
               }}
@@ -845,8 +839,8 @@ export function BookGrid({
                       width: 10,
                       height: 10,
                       borderRadius: '50%',
-                      background: 'var(--adaptiveBlue500, #5B7F55)',
-                      border: '2px solid var(--adaptiveGrey100, #FBF9F4)',
+                      background: 'var(--adaptiveBlue500, #1D1B18)',
+                      border: '2px solid var(--adaptiveGrey100, #F5F0E6)',
                     }}
                   />
                 )}
@@ -999,13 +993,12 @@ function SheetRow({
       disabled={busy}
       onClick={onClick}
       style={{
-        // 시트 바닥과 같은 색이라 배경만으론 경계가 안 보인다 — 1.5px 옅은 실선이 줄을 버튼으로 읽히게 한다.
-        ...SOFT_ROW,
+        // 시트 행 = 아래 가는 선(RULE_ROW) — 면 없이 줄이 버튼으로 읽힌다(에디토리얼).
+        ...RULE_ROW,
         display: 'block',
         width: '100%',
-        marginBottom: 8,
-        padding: '15px 14px',
-        color: danger ? '#A32D2D' : 'var(--adaptiveGrey800, #2A2921)',
+        padding: '15px 0',
+        color: danger ? '#A32D2D' : 'var(--adaptiveGrey800, #1D1B18)',
         fontSize: 15,
         textAlign: 'left',
         cursor: 'pointer',
@@ -1024,9 +1017,9 @@ function SheetRow({
  */
 export const HANDLE_ROW_HEIGHT = 38;
 
-/** 테두리만 있는 작은 손잡이 — 제목 줄 「펼쳐보기」가 쓴다(캐러셀 아래 줄은 전폭 손잡이로 갈렸다). 1.5px 실선(규칙 1). */
+/** 테두리만 있는 작은 손잡이 — 제목 줄 「펼쳐보기」가 쓴다(캐러셀 아래 줄은 전폭 손잡이로 갈렸다). 외곽선 알약. */
 export const handleStyle = {
-  ...SOFT_OUTLINE,
+  ...OUTLINE_PILL,
   flex: '0 0 auto',
   padding: '8px 14px',
   fontSize: 14,
@@ -1193,7 +1186,7 @@ export function SearchResultRow({
         borderRadius: 12,
         // 담긴 책은 한 톤 가라앉힌다 — 면(`--adaptiveGrey100`)보다 어두워야 「지나간 칸」으로 읽힌다. Soft에서 그
         // 「가라앉은 바탕」은 눌린 면 색(`--softDent`)이다(옛 베이지 #EFE9DC 자리 — 공부 모드·밤도 토큰이 데려간다).
-        background: row.owned ? 'var(--softDent, #EAE5D9)' : 'var(--adaptiveGrey100, #FBF9F4)',
+        background: row.owned ? 'var(--softDent, #ECE5D8)' : 'var(--adaptiveGrey100, #F5F0E6)',
       }}
     >
       {/* 표지만 흐리고 도장은 또렷해야 하므로 흐림을 안쪽 겹에 건다(바깥에 걸면 도장까지 바랜다). */}
@@ -1203,7 +1196,7 @@ export function SearchResultRow({
         </span>
         {row.owned && (
           <span style={ownedStampStyle}>
-            <OwnedCheck color="var(--adaptiveGrey100, #FBF9F4)" />
+            <OwnedCheck color="var(--adaptiveGrey100, #F5F0E6)" />
           </span>
         )}
       </span>
@@ -1220,7 +1213,7 @@ export function SearchResultRow({
         </div>
         {row.owned && (
           <span style={ownedChipStyle}>
-            <OwnedCheck color="var(--adaptiveBlue700, #3F5A3C)" />
+            <OwnedCheck color="var(--adaptiveBlue700, #1D1B18)" />
             서재에 있어요
           </span>
         )}
@@ -1244,11 +1237,11 @@ const marginBadgeStyle = {
   flex: '0 0 auto',
   padding: '8px 10px',
   borderRadius: 10,
-  border: '1px solid var(--adaptiveGrey200, #E4DDD0)',
-  background: 'var(--adaptiveGrey100, #FCFAF5)',
-  color: 'var(--adaptiveBlue700, #4F6B4C)',
+  border: '1px solid var(--adaptiveGrey200, #D9D1C3)',
+  background: 'var(--adaptiveGrey100, #F5F0E6)',
+  color: 'var(--adaptiveBlue700, #1D1B18)',
   fontSize: 13,
-  fontWeight: 700,
+  fontWeight: 500,
   cursor: 'pointer',
 } as const;
 
@@ -1400,8 +1393,8 @@ const ownedStampStyle = {
   width: 20,
   height: 20,
   borderRadius: '50%',
-  background: 'var(--adaptiveBlue500, #5B7F55)', // 모드 강조색(공부 모드면 파랑)
-  border: '1.5px solid var(--softDent, #EAE5D9)', // 담긴 행 바탕과 같은 토큰
+  background: 'var(--adaptiveBlue500, #1D1B18)', // 모드 강조색(공부 모드면 파랑)
+  border: '1.5px solid var(--softDent, #ECE5D8)', // 담긴 행 바탕과 같은 토큰
   display: 'flex',
   alignItems: 'center',
   justifyContent: 'center',
@@ -1415,9 +1408,9 @@ const ownedChipStyle = {
   marginTop: 6,
   padding: '1px 8px 2px',
   borderRadius: 8,
-  border: '1px solid var(--adaptiveBlue300, #A9BD99)',
-  background: 'var(--accentPill, rgba(91, 127, 85, 0.16))',
-  color: 'var(--adaptiveBlue700, #3F5A3C)', // 옅은 채움 위에서 읽히는 진한 잉크
+  border: '1px solid var(--adaptiveBlue300, #9C9182)',
+  background: 'var(--accentPill, rgba(29, 27, 24, .06))',
+  color: 'var(--adaptiveBlue700, #1D1B18)', // 옅은 채움 위에서 읽히는 진한 잉크
   fontSize: 13,
   lineHeight: 1.5,
 } as const;
