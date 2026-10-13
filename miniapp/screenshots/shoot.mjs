@@ -1,5 +1,5 @@
 /*
- * 스토어 스크린샷 재촬영기 — 목 모드 앱을 열어 세로 5장 + 가로 배너 1장을 규격대로 찍는다.
+ * 스토어 스크린샷 재촬영기 — 목 모드 앱을 열어 세로 8장 + 가로 배너 1장을 규격대로 찍는다.
  *
  * 실행:
  *   npm --prefix miniapp run dev:mock      # 먼저 목 서버를 띄운다
@@ -42,10 +42,34 @@ const page = await browser.newPage({
 
 const settle = (ms = 700) => page.waitForTimeout(ms)
 
+/**
+ * 글꼴이 실렸다는 신호 — 에디토리얼 설계 §5-2. 앱은 글꼴 CSS를 **load 뒤에** 붙이므로(`fonts.ts`) 그냥 찍으면
+ * 대체 글꼴로 찍힐 수 있다. 명조 500 face 하나가 `loaded`가 될 때까지 기다리고, 15초를 넘으면 **죽는다** —
+ * 대체 글꼴 컷을 조용히 내지 않는다.
+ *
+ * ⚠️ `document.fonts.check()`는 쓰지 않는다 — 링크가 없어도·없는 패밀리 이름이어도 참이다(스파이크 실측).
+ * ⚠️ 이 PC엔 Noto가 시스템에 깔려 있어 링크가 빠져도 그림은 Noto로 나온다 — 그림이 아니라 이 신호로만 판정한다.
+ * 음성 대조: `--block-fonts`(구글 폰트 요청을 막는다)로 돌리면 여기서 타임아웃으로 죽어야 정상이다(U-15).
+ */
+async function waitFonts(p, label) {
+    const t0 = Date.now()
+    await p.waitForFunction(
+        () => [...document.fonts].some(
+            (f) => f.family.replace(/["']/g, '') === 'Noto Serif KR' && f.weight === '500' && f.status === 'loaded',
+        ),
+        null,
+        { timeout: 15000 },
+    )
+    await p.evaluate(() => document.fonts.ready) // 신호 뒤 남은 조각까지
+    console.log(`글꼴 신호 통과(${label}) — ${Date.now() - t0}ms`)
+}
+
 async function shot(name) {
     // 탭·버튼을 눌러 이동하므로 포커스 링이 그림에 남는다 — 촬영 직전마다 지운다.
     await page.evaluate(() => document.activeElement?.blur?.())
     await settle(400)
+    // 탭을 옮기면 그 화면 글자가 새 unicode-range 조각을 부를 수 있다 — 진입 때의 waitFonts만으론 컷마다 보장이 안 된다.
+    await page.evaluate(() => document.fonts.ready)
     const buf = await page.screenshot()
     await sharp(buf).resize(PORTRAIT.w, PORTRAIT.h).png().toFile(`${OUT}/${name}.png`)
     console.log(`${name}.png — ${PORTRAIT.w}x${PORTRAIT.h}`)
@@ -71,7 +95,7 @@ async function clickText(text) {
 
 /**
  * `--banner`면 앱 컷은 건너뛰고 가로 배너만 다시 조판한다 — 배너는 **디스크의 세로 png를 얹은
- * 합성물**이라 목 서버가 필요 없다. 문구만 손볼 때 세로 5장을 굳이 다시 찍으면, 목 픽스처의
+ * 합성물**이라 목 서버가 필요 없다. 문구만 손볼 때 세로 8장을 굳이 다시 찍으면, 목 픽스처의
  * 상대 시간(「3시간 전」)이 흘러 **바뀐 게 없는 컷까지 diff가 뜬다**.
  */
 const BANNER_ONLY = process.argv.includes('--banner')
@@ -89,10 +113,13 @@ await page.addInitScript(() => {
     }
 })
 
+if (process.argv.includes('--block-fonts')) await page.route(/fonts\.googleapis\.com/, (r) => r.abort())
+
 await page.goto(URL_APP, { waitUntil: 'networkidle' })
+await waitFonts(page, '독서 모드')
 await settle(1200)
 
-// 01 홈 — 인사말·아바타 헤더 + 타이머 카드 + 표지 캐러셀.
+// 01 홈 — 인사말·아바타 헤더 + 아치(독서|공부 · 시계 · 게이지) + 오늘 표. 그 아래 고르기 선반은 탭바 뒤다.
 // 최상단에서 찍는다: 주 CTA가 홈 하단 풀폭 버튼에서 **탭바 가운데 원**으로 옮겨가(항상 화면에 있다)
 // 스크롤로 지켜 줄 것이 없어졌고, 대신 맨 위 헤더가 이 앱에서 내가 누구인지 말하는 자리가 되었다.
 await page.evaluate(() => window.scrollTo(0, 0))
@@ -120,23 +147,34 @@ await page.evaluate(() => {
 await settle()
 await shot('02-feed')
 
-// 03 서재 — 상태 탭 + 표지 캐러셀 + 인라인 여백 박스
-// ⚠️ 최상단에서 찍지 않는다 — 여백 박스가 생기며 세로가 길어져, 0에서 찍으면 첫 글 카드가 문장
-// 중간에 탭바로 잘린다(잘린 문장은 심사용 그림이 아니다).
-// ⚠️ 눈으로 고른 매직넘버(옛 `60`)를 버리고 **상태 탭 줄을 기준으로 잡는다** — 그 위 「펼쳐보기」
-// 알약의 위치가 바뀌자 60이 그 알약을 반토막 낸 채 화면 맨 위에 남겼다(실측). 기준선을 두면
-// 위쪽 레이아웃이 또 바뀌어도 컷의 첫 줄은 늘 상태 탭이다.
+// 03 서재 — 「내 서재」 아치(판화) + 상태 선반 1·2단 + 고른 표지에 걸친 「여백에 글쓰기」 검정 알약.
+// 에디토리얼 PR-3으로 상태 탭이 선반 세 단(+ 그 아래 펼친 책)이 됐다. 375×618 창엔 셋째 선반·펼친 책까지
+// 안 든다(실측: 아치 24~186 · 선반 214~384 · 396~566 · 578~748 · 펼친 책 776~ · 탭바 540) — 이 컷이 파는
+// 것은 「선반에 꽂힌 서재」와 걸친 알약이라 둘째 선반 표지 바닥까지를 담는다.
+// 기준선: 아치 꼭대기를 화면 12px 아래에 세운다(0에서 찍으면 둘째 선반 바닥이 탭바 윗선에 걸린다 — 실측 544 vs 540).
+// 그러고도 알약·둘째 선반 표지가 탭바에 가리면 죽는다(조용히 잘린 그림을 내지 않는다).
 await tab('서재')
-await page.evaluate(() => {
-    // 「잎 요소」로 찾지 않는다 — 시안 2c에서 권수를 세리프 span으로 떼면서 이 버튼이 더는
-    // 잎이 아니게 됐고, 그 순간 이 촬영기가 죽었다(2026-08-24 실측). 버튼 자체를 찾으면
-    // 안쪽이 몇 조각으로 갈리든 상관이 없다.
-    const label = [...document.querySelectorAll('button')].find((e) =>
-        (e.textContent ?? '').trim().startsWith('읽는 중'),
-    )
-    if (!label) throw new Error('서재 상태 탭을 못 찾았다') // 문구가 바뀌면 엉뚱한 그림 대신 여기서 죽는다
-    window.scrollTo(0, label.closest('div').getBoundingClientRect().top + window.scrollY - 12)
+const libLayout = await page.evaluate(() => {
+    const arch = document.querySelector('[data-arch]')
+    const shelves = document.querySelectorAll('[data-shelf]')
+    const nav = document.querySelector('nav[aria-label="메인 탭"]')
+    const pill = [...document.querySelectorAll('button')].find((b) => (b.textContent ?? '').trim() === '여백에 글쓰기')
+    if (!arch || shelves.length < 2 || !nav) throw new Error('서재 아치·선반·탭바 중 하나를 못 찾았다')
+    if (!pill) throw new Error('걸친 「여백에 글쓰기」 알약이 없다 — 고른 책이 없다') // 엉뚱한 그림 대신 죽는다
+    window.scrollTo(0, 0)
+    window.scrollTo(0, arch.getBoundingClientRect().top - 12)
+    const r = (el) => el.getBoundingClientRect()
+    const covers = [...shelves[1].querySelectorAll('[data-shelf-item]')]
+    const shelf2Bottom = Math.max(...covers.map((c) => r(c).bottom))
+    if (r(arch).top < 0) throw new Error('아치 꼭대기가 화면 위로 잘린다')
+    if (r(pill).bottom > r(nav).top - 16) throw new Error('「여백에 글쓰기」 알약이 탭바에 가린다')
+    if (!covers.length || shelf2Bottom > r(nav).top - 4) throw new Error('둘째 선반 표지가 탭바에 가린다')
+    return {
+        scrollY: Math.round(window.scrollY), archTop: Math.round(r(arch).top), pillBottom: Math.round(r(pill).bottom),
+        shelf2CoverBottom: Math.round(shelf2Bottom), navTop: Math.round(r(nav).top),
+    }
 })
+console.log('03 구도', JSON.stringify(libLayout))
 await settle()
 await shot('03-library')
 
@@ -215,12 +253,13 @@ await shot('05-goal')
  */
 await page.addInitScript(() => localStorage.setItem('booktimer.timerMode', 'study'))
 await page.goto(URL_APP, { waitUntil: 'networkidle' })
+await waitFonts(page, '공부 모드')
 await settle(1200)
 
-// 06 공부 홈 — 「독서|공부」 토글이 공부로 선 파랑 화면(`body.study-mode`)+ 캐러셀 아래 「회당 50분 · 바꾸기」.
-// ⚠️ 맨 위에서 찍으면 그 손잡이가 탭바 뒤에 깔린다(2026-09-13 실측: 손잡이 545~577 · 탭바 550). 인사말을
-// 내주고 타이머 카드가 화면 위에 붙도록 내린다 — 이 컷이 파는 것은 인사말이 아니라 책별 회당 시간이다.
-// 손잡이를 못 찾으면 옛 그림 대신 여기서 죽는다(문구가 바뀌었거나 픽스처 책에 회당 시간이 없다).
+// 06 공부 홈 — 공부 모드 화면(`body.study-mode`)의 「무엇을 공부할까요?」 파랑 체크 표지 선반 + 「회당 50분 · 바꾸기」.
+// ⚠️ 맨 위에서 찍으면 그 손잡이가 탭바 뒤에 깔린다. 그래서 아치(토글·시계)를 통째로 화면 밖으로 넘겨 손잡이까지
+// 담는다(아래 에디토리얼 주석) — 이 컷이 파는 것은 인사말·시계가 아니라 책별 회당 시간이다.
+// 손잡이·아치를 못 찾으면 옛 그림 대신 여기서 죽는다(문구·표식이 바뀌었거나 픽스처 책에 회당 시간이 없다).
 await page.evaluate(() => {
     const handle = [...document.querySelectorAll('span')].find((x) => /^회당 .+ · 바꾸기$/.test(x.textContent?.trim() ?? ''))
     if (!handle) throw new Error('회당 시간 손잡이를 못 찾았다')
@@ -234,11 +273,20 @@ await page.evaluate(() => {
     // 들어갔다(실측 375×618: 카드 위 104 → 손잡이 아래 703, 탭바 542) — 둘 다 담을 수 없으면 이 컷의 주제가 이긴다.
     const cardTop = card.getBoundingClientRect().top
     const handleFit = handle.getBoundingClientRect().bottom - (nav.getBoundingClientRect().top - 16)
-    window.scrollTo(0, Math.max(cardTop - 16, handleFit))
-    if (handle.getBoundingClientRect().bottom > nav.getBoundingClientRect().top - 8) {
+    // 에디토리얼(2026-10-13): 카드가 아치가 되며 시계가 커져(시계 196~284 · 손잡이 바닥 738 — 542px) 탭바 위
+    // 524px에 둘을 함께 못 담는다. 손잡이 기준으로만 내리면 **시계 숫자가 화면 윗변에 반토막 난다**(실측 — 잘린
+    // 글자는 심사용 그림이 아니다). 그래서 아치를 통째로 화면 밖으로 넘긴다: 아치 바닥 선 4px 아래가 화면 윗변.
+    // 공부 모드는 파랑 체크·손잡이 테·탭바 원·「일정」 탭이 말한다.
+    const arch = card.matches('[data-arch]') ? card : card.querySelector('[data-arch]')
+    if (!arch) throw new Error('공부 홈 아치([data-arch])를 못 찾았다') // 대체값으로 물러서면 시계 반토막 컷이 조용히 돌아온다
+    const archBottom = arch.getBoundingClientRect().bottom + 4
+    window.scrollTo(0, Math.max(cardTop - 16, handleFit, archBottom))
+    if (handle.getBoundingClientRect().bottom > nav.getBoundingClientRect().top - 16) {
         throw new Error('회당 시간 손잡이가 탭바에 가린다') // 조용히 가린 그림을 내지 않는다
     }
-})
+    if (arch.getBoundingClientRect().bottom > 0) throw new Error('아치(시계)가 화면 윗변에 잘린다')
+    return { scrollY: Math.round(window.scrollY), handleBottom: Math.round(handle.getBoundingClientRect().bottom), navTop: Math.round(nav.getBoundingClientRect().top) }
+}).then((v) => console.log('06 구도', JSON.stringify(v)))
 await settle()
 await shot('06-study-home')
 
@@ -274,36 +322,36 @@ const [home, feed, history] = await Promise.all(['01-home', '02-feed', '04-histo
 const banner = `
 <!doctype html><meta charset="utf-8">
 <style>
-  @import url('https://fonts.googleapis.com/css2?family=Gowun+Batang:wght@700&family=Gowun+Dodum&display=swap');
+  @import url('https://fonts.googleapis.com/css2?family=Noto+Serif+KR:wght@500&family=Noto+Sans+KR:wght@400;500&display=swap');
   * { margin: 0; box-sizing: border-box; }
   body {
     width: ${LANDSCAPE.w}px; height: ${LANDSCAPE.h}px; overflow: hidden;
     /*
      * ⚠️ 바탕색은 앱을 따라간다 — 배너는 앱 컷 3장을 얹은 합성물이라 여기만 옛 값이면 폰 안팎이
-     * 다른 톤으로 갈린다. 톤 조율 A(2026-09-24)의 캔버스 #F3EFE5 · 본문 잉크 #2A2921 · 보조 잉크
-     * #43423A · 선 #DED8CA · 면 #FBF9F4(global.css html:root와 같은 값 — 한쪽만 고치지 않는다).
+     * 다른 톤으로 갈린다. 에디토리얼(2026-10-13)의 종이 #F5F0E6 · 잉크 #1D1B18 · 본문 #4A453E
+     * (global.css html:root와 같은 값 — 한쪽만 고치지 않는다).
      *
-     * 서체도 앱을 따라간다 — 제목은 고운바탕(앱의 화면 제목·값 축), 본문은 고운돋움. 한때 여기만 손글씨
-     * (개구)였는데, 톤 조율 A가 앱에서 손글씨를 걷으며 「글꼴 두 벌」로 정리했다 — 폰 그림 옆 카피만 셋째
-     * 서체면 사용자가 「글꼴이 서로 안 어울린다」고 한 그 조합이 스토어에 그대로 남는다.
+     * 서체도 앱을 따라간다 — 제목은 Noto Serif KR 500(앱의 화면 제목·값 축), 본문은 Noto Sans KR 400.
+     * 앱이 싣는 face도 이 셋뿐이고 font-synthesis: none이라 굵기는 400·500만 쓴다(fonts.ts와 같은 URL).
+     * (이 CSS는 JS 템플릿 문자열 안이다 — 주석에 백틱을 쓰면 문자열이 끊긴다.)
      */
-    background: #F3EFE5; color: #2A2921;
-    font-family: 'Gowun Dodum', 'Malgun Gothic', sans-serif;
+    background: #F5F0E6; color: #1D1B18;
+    font-family: 'Noto Sans KR', 'Malgun Gothic', sans-serif;
+    font-synthesis: none;
     display: flex; align-items: center;
   }
   /*
    * 크기는 480px 칸(왼쪽 여백 80 포함) 안에서 줄이 되접히지 않는 값이다 — 되접힌 줄은 폰 그림 위로 넘어간다.
-   * 고운 서체는 개구보다 자폭이 넓어 옛 값(66 · 25)이면 본문 둘째 줄이 넘친다. 고운돋움은 400 단일 웨이트라
-   * 본문 굵기는 400이다(700은 합성 볼드 — global.css 주석).
+   * 아래 조판 뒤 줄 수를 재서 되접히면 죽는다.
    */
   .copy { flex: 0 0 auto; padding-left: 80px; width: 480px; }
-  .copy h1 { font-family: 'Gowun Batang', serif; font-size: 60px; font-weight: 700; line-height: 1.3; letter-spacing: -1px; }
-  .copy p  { margin-top: 24px; font-size: 21px; line-height: 1.7; color: #43423A; }
+  .copy h1 { font-family: 'Noto Serif KR', serif; font-size: 58px; font-weight: 500; line-height: 1.3; letter-spacing: -1px; }
+  .copy p  { margin-top: 24px; font-size: 21px; font-weight: 400; line-height: 1.7; color: #4A453E; }
   .phones { position: relative; flex: 1; height: 100%; }
+  /* 에디토리얼은 그림자·면이 없다(이펙트 0) — 폰 테두리도 앱의 탭바처럼 잉크 1px 선 하나로 선다. */
   .phone {
     position: absolute; width: 300px; border-radius: 24px; overflow: hidden;
-    border: 1px solid #DED8CA; background: #FBF9F4;
-    box-shadow: 0 18px 44px rgba(112, 96, 64, 0.18); /* 앱 --puffShadow와 같은 갈색 틴트 */
+    border: 1px solid #1D1B18; background: #F5F0E6;
   }
   .phone img { display: block; width: 100%; }
   /* 계단으로 어긋나게 + 캔버스 아래로 흘려 보낸다 — 잘린 변이 "아래에서 올라온다"로 읽힌다(README). */
@@ -331,8 +379,15 @@ const wide = await browser.newPage({
     viewport: { width: LANDSCAPE.w, height: LANDSCAPE.h },
     deviceScaleFactor: 1,
 })
+if (process.argv.includes('--block-fonts')) await wide.route(/fonts\.googleapis\.com/, (r) => r.abort())
 await wide.setContent(banner, { waitUntil: 'networkidle' })
-await wide.waitForTimeout(1200) // 웹폰트가 실제로 그려질 때까지
+await waitFonts(wide, '배너')
+const wraps = await wide.evaluate(() =>
+    [...document.querySelectorAll('.copy h1, .copy p')]
+        .filter((e) => Math.round(e.getBoundingClientRect().height / parseFloat(getComputedStyle(e).lineHeight)) !== 2)
+        .map((e) => e.textContent),
+)
+if (wraps.length) throw new Error(`배너 카피가 되접힌다: ${wraps.join(' / ')}`) // 두 줄 카피가 셋째 줄로 넘치면 폰 위로 번진다
 await wide.screenshot({ path: `${OUT}/10-landscape.png` })
 console.log(`10-landscape.png — ${LANDSCAPE.w}x${LANDSCAPE.h}`)
 
