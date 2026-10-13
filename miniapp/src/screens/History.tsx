@@ -150,13 +150,9 @@ export const GRASS_CARD: CSSProperties = { ...sectionStyle, marginTop: 0 };
  * 「다음 단계까지 N일」이라는 재촉뿐이었고, 정작 이 화면이 답해야 할 세 수는 카드 안팎으로
  * 흩어져 있었다.
  *
- * <p>Soft(PR-3): 세로선 칸막이 → <b>타일 셋</b>(시안 Soft-History). 「연속」은 버터(정보색 — 모드 무관),
- * 나머지 둘은 부푼 면의 축소판이다. 그림자는 시안 값 리터럴이다 — `--puffShadow`(10/24px)를 그대로 쓰면
- * 12px 간격의 이웃 타일까지 번진다. 화면당 타일 3개라 큰 흐림 예산 안이다(§6 「스탯/2열 타일 ≤ 3」).
- *
- * <p>총 시간 칸만 넓다: 「11시간 5분」은 「4일」의 두 배가 넘는다. 그래도 분이 붙는 대부분의 값에서 띄어쓰기로
- * 두 줄로 접힌다(`keep-all`, 390폭 실측: 「1시간 30분」도) — 한 줄 고정이면 타일 밖으로 삐져나간다.
- * 사용자 결정으로 허용했다(리뷰 I-1, 2026-09-23) — 줄은 공백 자리(「42시간」/「30분」)에서만 갈린다.
+ * <p>에디토리얼(PR-4): 타일 셋 → <b>줄 표</b>. 라벨(왼쪽, 보조 글자) ↔ 값(오른쪽, 세리프 D3 24/30)이 한 줄에 서고,
+ * 줄 아래 가는 선이 다음 줄과 가른다. 면·그림자·정보색(버터)이 없다 — 강조는 잉크 하나다. 한 줄 전체 폭을 값이
+ * 쓰므로 「11시간 5분」도 접히지 않는다(타일 시절의 두 줄 접힘 사유가 사라졌다).
  */
 export function StatStrip({
   graph,
@@ -167,27 +163,22 @@ export function StatStrip({
   activeDaysLabel?: string;
 }) {
   const cells = [
-    { label: '연속', value: `${graph.currentStreak}일`, flex: 1, butter: true },
-    { label: activeDaysLabel, value: `${graph.activeDays}일`, flex: 1, butter: false },
-    { label: '총 시간', value: formatDuration(graph.totalSeconds), flex: 1.5, butter: false },
+    { label: '연속', value: `${graph.currentStreak}일` },
+    { label: activeDaysLabel, value: `${graph.activeDays}일` },
+    { label: '총 시간', value: formatDuration(graph.totalSeconds) },
   ];
 
   return (
-    <div style={{ display: 'flex', gap: 12, marginTop: 14 }}>
-      {cells.map(({ label, value, flex, butter }) => (
-        <div key={label} data-stat-tile="" style={{ ...(butter ? STAT_TILE_BUTTER : STAT_TILE), flex, minWidth: 0 }}>
-          <Text
-            typography="st12"
-            color={butter ? 'var(--butterInk, #4A453E)' : 'grey600'}
-            style={{ display: 'block', fontSize: 15 }}
-          >
+    <div style={{ marginTop: 14 }}>
+      {cells.map(({ label, value }) => (
+        <div key={label} data-stat-row="" style={STAT_ROW}>
+          <Text typography="st12" color="grey600" style={{ fontSize: 15 }}>
             {label}
           </Text>
-          {/* 세리프 24 — 라벨(15)과 크기·서체 두 축으로 갈린다(시안 Soft-History). */}
           <Text
             typography="st10"
             fontWeight="medium"
-            style={{ ...SERIF_VALUE, display: 'block', fontSize: 24, marginTop: 2, wordBreak: 'keep-all' }}
+            style={{ ...SERIF_VALUE, fontSize: 24, lineHeight: '30px', whiteSpace: 'nowrap' }}
           >
             {value}
           </Text>
@@ -197,13 +188,15 @@ export function StatStrip({
   );
 }
 
-/**
- * 스탯 타일 공통 꼴 — 에디토리얼(PR-1): 그림자·부푼 면을 걷고 가는 선 테만 남겼다. 「줄 표」로 바꾸는 배치 변경은 PR-4 몫.
- * 정보색(버터)은 폐지돼 옅은 면(paper-2)이다.
- */
-const STAT_TILE_BASE: CSSProperties = { padding: '10px 14px', borderRadius: 2, border: '1px solid var(--adaptiveGrey200, #D9D1C3)' };
-const STAT_TILE_BUTTER: CSSProperties = { ...STAT_TILE_BASE, background: 'var(--butterBg, #ECE5D8)' };
-const STAT_TILE: CSSProperties = STAT_TILE_BASE;
+/** 스탯 한 줄 — 라벨과 값이 글자 밑선에 맞춰 양끝에 선다. 아래 가는 선은 `RULE_ROW`와 같은 값이다. */
+const STAT_ROW: CSSProperties = {
+  display: 'flex',
+  justifyContent: 'space-between',
+  alignItems: 'baseline',
+  gap: 12,
+  padding: '8px 0',
+  borderBottom: '1px solid var(--adaptiveGrey200, #D9D1C3)',
+};
 
 const WEEKDAYS = ['일', '월', '화', '수', '목', '금', '토'];
 
@@ -342,7 +335,7 @@ export function MonthlyRecords({
 /**
  * 월 머리 — 달 이름과 그 달 합계가 한 줄로 머리를 이룬다, 선은 그 줄 아래를 지난다(시안 2d). 공부 기록이 같이 쓴다.
  *
- * <p>합계는 16 굵게 세이지(시안 Soft-History) — 달 이름(세리프 20)과 크기로 층을 두되 서체는 같이 간다.
+ * <p>합계는 16 굵게 강조 잉크(시안 Soft-History) — 달 이름(세리프 20)과 크기로 층을 두되 서체는 같이 간다.
  */
 export function MonthHead({ month, totalSeconds }: { month: string; totalSeconds: number }) {
   return (
@@ -370,7 +363,7 @@ export function MonthHead({ month, totalSeconds }: { month: string; totalSeconds
  * 그 달의 날짜 줄들을 담는 묶음 하나 — 에디토리얼(PR-1): 면 없이 아래 가는 선이 다음 달과 가른다(옛 눌린 쟁반). 위는 월
  * 머리의 잉크 선이 이미 긋고 있어 두 줄로 겹치지 않게 윗선은 두지 않는다.
  *
- * <p>월 쟁반을 다시 부푼 카드로 감싸지 않는다(시안은 감쌌다): 카드 패딩 18×2가 하루 막대 칸을 60px 아래로
+ * <p>월 묶음을 다시 카드로 감싸지 않는다(시안은 감쌌다): 카드 패딩 18×2가 하루 막대 칸을 60px 아래로
  * 깎아, 막대로 날을 견주는 것 자체가 흐려진다. 쟁반이 곧 캔버스에 파인 묶음이다.
  */
 export const DAY_TRAY: CSSProperties = {
@@ -407,7 +400,7 @@ const ROW_GRID: CSSProperties = {
  * {@link barPercent} 그대로다. 옛 16px 알약 + 2px 띄움은 카드 면 위에서만 성립했다(종이 위에선 트랙이 사라진다).
  *
  * <p>단색 <b>토큰</b>이다(톤 조율 A — 시안의 그라데이션은 재료를 하나 더 얹었다): 공부 기록이 같은 막대를 쓰는데 `body.study-mode`가
- * 이 토큰을 파랑으로 갈아 끼운다 — 리터럴이면 공부 화면의 이 막대만 세이지로 남는다. 옛 막대가
+ * 이 토큰을 파랑으로 갈아 끼운다 — 리터럴이면 공부 화면의 이 막대만 독서 잉크로 남는다. 옛 막대가
  * `LEVEL_COLORS[2]`를 쓰던 이유와 같다.
  */
 export const BAR_TRACK: CSSProperties = { ...TRACK, height: 6 };
@@ -542,14 +535,14 @@ const PILE_OVERLAP = -8;
 /**
  * 더미의 한 장.
  *
- * <p>테두리는 더미가 앉은 바탕색이다 — 지금은 눌린 쟁반({@link DAY_TRAY})이라 `--softDent`(blur 0 링).
+ * <p>테두리는 더미가 앉은 바탕색이다 — 지금은 면 없는 종이 묶음({@link DAY_TRAY})이라 종이 토큰(blur 0 링).
  * 이게 없으면 색이 비슷한 책 둘이 붙어 <b>한 덩어리로 뭉쳐</b> 몇 권인지가 안 보인다.
  */
 const PILE_CARD: CSSProperties = {
   position: 'relative',
   display: 'flex',
   borderRadius: 4,
-  boxShadow: '0 0 0 1.5px var(--softDent, #ECE5D8)',
+  boxShadow: '0 0 0 1.5px var(--adaptiveGrey100, #F5F0E6)',
 };
 
 /**

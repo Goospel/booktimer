@@ -585,6 +585,23 @@ describe('기록 위계 (시안 2d)', () => {
       </TDSMobileProvider>,
     );
 
+  // 에디토리얼 PR-4 — 날짜 묶음은 면 없는 종이라 더미 표지의 테(링)도 종이색이다. 옛 눌린 면(--softDent) 링은 종이 위에 베이지 테로 뜬다.
+  it('표지 더미의 테는 종이색 링이다(눌린 면 색이 아니다)', () => {
+    const two: MonthlySection = {
+      month: '2026-08',
+      totalSeconds: 7_200,
+      days: [{ ...day('2026-08-21', 1_800), books: [{ title: '사피엔스', coverUrl: null, seconds: 900 }, { title: '총균쇠', coverUrl: null, seconds: 900 }] }],
+    };
+    const markup = renderToStaticMarkup(
+      <TDSMobileProvider userAgent={userAgent}>
+        <MonthlyRecords months={[two]} />
+      </TDSMobileProvider>,
+    );
+
+    expect(markup).toContain('box-shadow:0 0 0 1.5px var(--adaptiveGrey100');
+    expect(markup).not.toContain('--softDent');
+  });
+
   it('월 머리글은 세리프 20, 월 합계는 16 굵게(500) 강조 잉크다', () => {
     const markup = records();
     const head = tagBefore(markup, '2026년 8월');
@@ -667,26 +684,26 @@ describe('잔디의 오늘 (latestDate)', () => {
 describe('기록 Soft (시안 Soft-History)', () => {
   const render = (node: React.ReactNode) =>
     renderToStaticMarkup(<TDSMobileProvider userAgent={userAgent}>{node}</TDSMobileProvider>);
-  const tiles = (markup: string) => markup.match(/<div data-stat-tile=""[^>]*>/g) ?? [];
+  const rows = (markup: string) => markup.match(/<div data-stat-row=""[^>]*>/g) ?? [];
 
-  it('스탯 세 칸이 타일이다 — 세로선 칸막이 대신 면으로 갈린다', () => {
-    expect(tiles(render(<StatStrip graph={graph} />))).toHaveLength(3);
-  });
-
-  it('「연속」 타일은 버터다 — 정보색(모드 무관), 라벨도 버터 잉크', () => {
+  // 에디토리얼 PR-4 — 타일 셋 → 줄 표(라벨 ↔ 값 세리프). 면·그림자·버터 없이 아래 가는 선이 줄을 가른다.
+  it('스탯 세 칸이 줄 표다 — 줄마다 아래 가는 선, 면·그림자 0', () => {
     const markup = render(<StatStrip graph={graph} />);
 
-    expect(tiles(markup)[0]).toContain('var(--butterBg');
-    expect(tagBefore(markup, '연속')).toContain('var(--butterInk');
+    expect(rows(markup)).toHaveLength(3);
+    for (const row of rows(markup)) {
+      expect(row).toContain('border-bottom:1px solid var(--adaptiveGrey200');
+      expect(row).not.toMatch(/box-shadow|background/);
+    }
+    expect(markup).not.toContain('data-stat-tile');
   });
 
-  it('「읽은 날」「총 시간」 타일은 면·그림자 없이 가는 선 테다(에디토리얼 — 줄 표 전환은 PR-4)', () => {
-    const [, days, total] = tiles(render(<StatStrip graph={graph} />));
+  it('「연속」도 버터가 아니다 — 정보색은 폐지됐고 강조는 잉크 하나다', () => {
+    const markup = render(<StatStrip graph={graph} />);
 
-    for (const tile of [days, total]) {
-      expect(tile).toContain('border:1px solid var(--adaptiveGrey200');
-      expect(tile).not.toContain('box-shadow');
-    }
+    expect(markup).not.toMatch(/--butter(Bg|Ink)/);
+    // 양성 대조 — 「연속」 라벨은 실제로 그려진다(부재 단언이 빈 마크업에 공허하지 않게)
+    expect(tagBefore(markup, '연속')).not.toBe('');
   });
 
   it('라벨 15 · 값 세리프 24 — 연령 규칙(보조 14 이상)과 시안 값', () => {

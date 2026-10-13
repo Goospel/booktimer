@@ -43,7 +43,6 @@ import {
 import {
   ACTIVE_SESSION_RELIEF,
   COVER_GAP,
-  COVER_HEIGHT,
   COVER_WIDTH,
   DOT_OFF,
   DOT_ON,
@@ -241,12 +240,12 @@ export function LockedScreen({ tab, onLogin }: { tab: LockedTab; onLogin: (sourc
  * 게스트에게 실데이터 미리보기를 주지 않는다는 결정 때문이기도 하지만, 없는 책을 있는 것처럼
  * 그리면 로그인하고 나서 「내 서재가 비어 있다」가 배신이 되기 때문이다.
  */
-function LockedSlot() {
+function LockedSlot({ width }: { width: number }) {
   return (
     <div
       style={{
-        width: COVER_WIDTH,
-        height: COVER_HEIGHT,
+        width,
+        height: Math.round(width * 1.4),
         flex: '0 0 auto',
         boxSizing: 'border-box',
         // 「책 없이」 점선(muted 1px)보다 한 톤 옅게 — 잠긴 칸은 고를 수 없는 칸이다. 굵기·모서리는 「책 없이」와 같다(PR-2).
@@ -275,6 +274,17 @@ function LockedSlot() {
 }
 
 /**
+ * 고르기 줄의 칸 폭 — 내용 폭 `contentWidth`(화면 − Screen 좌우 패딩 40)에서 정한다.
+ *
+ * <p>「책 없이」는 104/88로 커져 양옆으로 칸 폭의 8/88(= 1/11)씩 삐져나오므로 보이는 틈 = gap − 칸/11 이다.
+ * 줄은 gap이 남은 폭을 채우니(gap = (W − 3칸)/2) 틈 ≥ 12 ⇔ 칸 ≤ (W − 24)·11/35. 내용 304(화면 344) 이상이면
+ * 그대로 88 — 375·390 폰의 배치는 안 바뀐다. 320 화면(내용 280)이면 80(사용자 결정 2026-10-13 「좁은 폰만 간격 띄우기」).
+ */
+export function guestRowCover(contentWidth: number): number {
+  return Math.min(COVER_WIDTH, Math.floor(((contentWidth - 24) * 11) / 35));
+}
+
+/**
  * 「무엇으로 측정할까요?」 — 로그인 홈과 <b>같은 자리·같은 카드</b>이고, 고를 수 있는 칸만 하나다.
  *
  * <p>캐러셀({@link BookCarousel})을 안 쓴다: 0번 특수 칸의 offset 산술과 스냅 stride가 「책이 아닌
@@ -286,6 +296,9 @@ function LockedSlot() {
  * 카드 높이가 달라져 화면이 세로로 들썩인다.
  */
 function GuestBookCard({ onLogin }: { onLogin: (source: LoginSource) => void }) {
+  // 정적 렌더(테스트)엔 화면이 없고, WebView가 폭을 아직 모르면 0을 준다 — 둘 다 「모름」으로 보고 88.
+  // ponytail: 다시 그릴 때 읽는 화면 폭 — resize는 듣지 않는다. 가로 회전을 지원하면 resize를 듣는다.
+  const cover = guestRowCover((globalThis.innerWidth || Infinity) - 40);
   return (
     <section style={sectionStyle}>
       {/* 머리 아래 선은 없다 — 판이 그 일을 맡는다(로그인 홈 고르기 선반과 같은 문법, 안 1 §7.1). */}
@@ -297,23 +310,23 @@ function GuestBookCard({ onLogin }: { onLogin: (source: LoginSource) => void }) 
           alignItems: 'flex-end',
           justifyContent: 'center',
           // 스크롤 트랙이 아닌 고정 줄이라 88×3 + 32×2 = 328이 320 화면(내용 280)을 넘는다 — 좁은 폭에서만 간격을 줄인다.
-          // ponytail: 320 폭에선 간격 8이라 104로 키운 「책 없이」가 잠긴 칸에 닿는다(보이는 틈 0). 더 좁은 기기를 지원하면 잠긴 칸을 줄인다.
-          gap: `min(${COVER_GAP}px, calc((100% - ${3 * COVER_WIDTH}px) / 2))`,
-          paddingTop: Math.ceil(COVER_HEIGHT * (104 / 88 - 1)),
+          // 그래도 칸 88이면 320 폭에서 gap 8이라 104로 키운 「책 없이」가 잠긴 칸에 닿는다 — 칸 폭은 guestRowCover가 줄인다.
+          gap: `min(${COVER_GAP}px, calc((100% - ${3 * cover}px) / 2))`,
+          paddingTop: Math.ceil(Math.round(cover * 1.4) * (104 / 88 - 1)),
           // 표지 바닥 = 판(로그인 홈 `data-board`와 같은 잉크 1px).
           borderBottom: '1px solid var(--adaptiveGrey800, #1D1B18)',
         }}
       >
         {/* 고를 수 있는 칸 — 로그인 홈에서 가운데 온 칸과 같은 배율(104/88)·바닥 기준으로 서서 「이것이 대상」을 말한다. */}
         <span data-book-slot="free" style={{ display: 'block', transform: `scale(${104 / 88})`, transformOrigin: 'bottom center' }}>
-          <NoBookCard />
+          <NoBookCard width={cover} />
         </span>
         {/* 잠긴 두 칸 — 로그인 홈 캐러셀에서 가운데가 아닌 표지와 같은 흐림(0.7)이다. */}
         <span data-book-slot="locked" style={{ opacity: 0.7 }}>
-          <LockedSlot />
+          <LockedSlot width={cover} />
         </span>
         <span data-book-slot="locked" style={{ opacity: 0.7 }}>
-          <LockedSlot />
+          <LockedSlot width={cover} />
         </span>
       </div>
 

@@ -173,7 +173,7 @@ const PLAY_ICON = 'M9.5 6.8v10.4l8.5-5.2z';
 const STOP_ICON = 'M8 8h8v8H8z';
 
 /**
- * 액션 버튼의 두 얼굴 — 시작은 브랜드 세이지 ▶, 측정 중은 토스 danger 빨강 ■.
+ * 액션 버튼의 두 얼굴 — 시작은 강조 잉크 ▶, 측정 중은 토스 danger 빨강 ■.
  *
  * <p>빨강은 옛 홈 「측정 끝내기」가 쓰던 TDS `color="danger"`와 같은 값이라 색 연속성이 유지된다.
  * 전환에 애니메이션을 두지 않는다 — 표지를 재래스터화하는 발광·펄스는 실기기에서 실측된 사고 클래스다(T-176).
@@ -230,7 +230,7 @@ export function effectiveMode(readingActive: boolean, studyActive: boolean, stor
  *
  * <p><b>공부 모드에선 켜지 않는다</b>(1차 결정): 독서등은 「독서」 브랜드 장치고, 공부용 밤 팔레트는
  * 1차 가치 대비 비용이 크다. 덕분에 `body.study-mode`와 `body.reading-lamp`가 <b>동시에 붙을 수 없어</b>
- * (밤 세이지 vs 파랑) 명시도 싸움이 통째로 사라진다.
+ * (밤 잉크 vs 파랑) 명시도 싸움이 통째로 사라진다.
  */
 export function lampOn(tab: TabKey, hasActiveSession: boolean, mode: TimerMode): boolean {
   return tab === 'home' && hasActiveSession && mode === 'reading';
@@ -308,7 +308,7 @@ export function timerActionView(active: boolean, mode: TimerMode = 'reading'): {
   icon: string;
 } {
   // 에디토리얼(PR-1, 시안 M-HOME-06 #15) — 두 상태 모두 **잉크 원**이고 ▶/■ 모양이 상태를 말한다. 옛 측정 중 빨강·눌린
-  // 그림자, 대기 중 부푼 그림자는 걷었다(이펙트 0). 위험 빨강은 삭제·차단처럼 되돌릴 수 없는 동작에만 남는다.
+  // 그림자, 대기 중 큰 그림자는 걷었다(이펙트 0). 위험 빨강은 삭제·차단처럼 되돌릴 수 없는 동작에만 남는다.
   // 강조 토큰이라 공부 모드에선 두 상태 모두 파란 잉크다.
   // 한 자리에 둔다 — typography.test의 검정 알약 개수 가드가 이 잉크 바탕 키를 「홈의 주 동작」 하나로 센다.
   const ink = { background: 'var(--adaptiveBlue700, #1D1B18)' };

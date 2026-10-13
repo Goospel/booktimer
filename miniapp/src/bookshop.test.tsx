@@ -1412,6 +1412,25 @@ describe('에디토리얼 표면 — 책방·프로필 (PR-1)', () => {
     expect(more).toContain(PILL);
   });
 
+  it('「나를 팔로우함」 태그는 paper-2 면 r2다 — 옛 grey200 면·r9 알약이 아니다', () => {
+    const html = card(profile({ following: true, followsMe: true }), [], null, {});
+    const at = html.indexOf('>나를 팔로우함<');
+    expect(at).toBeGreaterThan(-1);
+    const tag = html.slice(html.lastIndexOf('<span', at), at);
+    expect(tag).toContain('background:var(--softDent');
+    expect(tag).toContain('border-radius:2px');
+  });
+
+  it('책BTI 태그 — 누르는 태그는 외곽선 알약, 못 누르는 태그는 paper-2 면 r2다(종이 위 종이 면이 아니다)', () => {
+    const html = card(profile());
+    const pressable = html.match(/<button[^>]*>한우물형/)?.[0] ?? '';
+    const plain = html.match(/<span[^>]*>완독률 80%/)?.[0] ?? '';
+    expect(pressable).toContain(PILL);
+    expect(pressable).toContain('border-radius:999px');
+    expect(plain).toContain('background:var(--softDent');
+    expect(plain).toContain('border-radius:2px');
+  });
+
   it('성향 카드는 면 없이 가는 선 테 상자다 — 그림자 없음', () => {
     const tag = tagWith(card(profile({ personality: '밑줄을 아끼지 않는 완독형이에요.' })), 'data-bio-card=""');
     expect(tag).toContain('border:1px solid var(--adaptiveGrey200');

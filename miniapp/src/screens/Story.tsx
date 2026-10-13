@@ -1,5 +1,5 @@
 import { Button } from '@toss/tds-mobile';
-import type { ReactNode } from 'react';
+import type { CSSProperties, ReactNode } from 'react';
 import { useCallback, useEffect, useRef, useState } from 'react';
 
 import type {
@@ -31,7 +31,7 @@ import {
   attachMarginBanner,
   marginBannerEnabled,
 } from '../toss';
-import { BookCover, ErrorMessage, Loading, SECTION_RULE, SERIF_VALUE, Screen, Sheet, Text, UserList } from '../ui';
+import { BookCover, ErrorMessage, Loading, RULE_ROW, SECTION_RULE, SERIF_VALUE, Screen, Sheet, Text, UserList, Woodcut } from '../ui';
 
 /**
  * 여백 — <b>책에 딸린 자리</b>와 거기 쌓이는 글 (2026-08-16 재설계).
@@ -50,6 +50,21 @@ import { BookCover, ErrorMessage, Loading, SECTION_RULE, SERIF_VALUE, Screen, Sh
 /** 배경 코드 → 색. 팔레트 밖 코드(옛 데이터·오타)는 기본으로 떨어뜨려 스타일 주입 자리를 안 만든다. */
 function palette(bgCode: string | null) {
   return STORY_BG_CODES.find((bg) => bg.code === bgCode) ?? STORY_BG_CODES[0];
+}
+
+/**
+ * 작성 카드 그릇 — 쓰는 동안 보이는 것이 곧 카드(미리보기)다. 배경이 종이(paper)일 때만 muted 1px 테를 두른다(에디토리얼 PR-4):
+ * 미색 화면 위 종이 카드는 대비 1.01로 칸이 사라진다. 어두운 다섯 색은 카드 면이 곧 경계라 테가 없다(설계 §3-1).
+ */
+export function composerFrame(bgCode: string | null): CSSProperties {
+  const bg = palette(bgCode);
+  return {
+    background: bg.background,
+    color: bg.color,
+    borderRadius: 20,
+    padding: 16,
+    ...(bg.code === 'paper' ? { border: '1px solid var(--adaptiveGrey600, #645E54)' } : {}),
+  };
 }
 
 /** 발광이 지속되는 창 — 하루. 서버는 시각만 주고 이 판정은 클라가 한다(설계 §D3ⓐ). */
@@ -906,8 +921,14 @@ export function MarginView({
       <MarginBoard count={entries.length} onCompose={self ? onCompose : undefined}>
         {entries.length === 0 ? (
           // 가운데 정렬은 바깥 div가 한다(T-216) — Text에 준 `textAlign`은 TDS가 걸러낸다.
-          <div style={{ padding: '34px 16px', textAlign: 'center' }}>
-            <Text typography="st12" color="grey600" style={{ wordBreak: 'keep-all' }}>
+          // 빈 여백 = 판화 한 점(148) + 안내 Q1 세리프 16/26(에디토리얼 PR-4 · spec §6.4). 판화는 이 빈 자리에만 선다.
+          <div style={{ padding: '28px 16px 34px', textAlign: 'center' }}>
+            <Woodcut size={148} />
+            <Text
+              typography="st12"
+              color="grey700"
+              style={{ display: 'block', marginTop: 16, wordBreak: 'keep-all', ...SERIF_VALUE, fontSize: 16, lineHeight: '26px' }}
+            >
               {/* 남의 여백이 비면 그냥 비었다고 말한다 — 예전의 「팔로우하면 볼 수 있어요」는 2026-08-22에
                   걷었다. 「모두의 여백」에서 그 사람 글을 읽고 넘어온 사람에게 "팔로우해야 읽을 수 있다"고
                   말하는 자리였다(팔로우는 이제 열람 권한이 아니다). */}
@@ -1031,7 +1052,7 @@ export function MarginCard({
               {author.nickname} @{author.loginId}
             </button>
           ))}
-        {/* 책 라벨도 같은 행 머리 슬롯이다 — 작성자 줄과 같은 자리·같은 무게(세이지 12px 700)로 둬야
+        {/* 책 라벨도 같은 행 머리 슬롯이다 — 작성자 줄과 같은 자리·같은 무게(강조 잉크 14px 500)로 둬야
             「이 글이 어디서 왔나」가 한 가지 모양으로 읽힌다. 겹낫표는 책 제목의 관례 표기다. */}
         {book !== undefined &&
           (onOpenBook === undefined ? (
@@ -1047,21 +1068,21 @@ export function MarginCard({
             </button>
           ))}
         {/* 인용은 主가 아니라 從이다 — 작게·옅게 두고 세로선으로만 가른다. 크게 뽑으면 행의 주인공이
-            남의 문장이 되어 「내 독서 기록」이 명언 카드가 된다. 세리프로 가르지 않는 이유: 폰에 한글
-            세리프가 없어 `serif`가 안드로이드는 명조·iOS는 고딕으로 갈린다(폰마다 다른 화면). */}
+            남의 문장이 되어 「내 독서 기록」이 명언 카드가 된다. 서체로 가르지 않는다 — 본문·인용 둘 다 명조 웹폰트라
+            (옛 「폰에 한글 세리프가 없어 갈린다」는 웹폰트로 풀렸다) 크기·색·세로선만 가른다. */}
         {entry.quote !== null && (
           <blockquote
             style={{
               margin: '0 0 5px',
               paddingLeft: 7,
-              borderLeft: '2px solid #DCD4C2',
+              borderLeft: '2px solid var(--adaptiveGrey200, #D9D1C3)',
               color: ROW_SUB,
               fontSize: 13,
               lineHeight: 1.55,
               whiteSpace: 'pre-wrap',
               wordBreak: 'keep-all',
               // 여백은 「적어 둔 것」이라 인용 축(세리프)이다 — 기능 글자(고운돋움)와 갈린다.
-              // 손글씨였다가 톤 조율 A(2026-09-24)에서 세리프로 옮겼다(부푼 면 위에서 어린이 앱 글씨로 읽혔다).
+              // 손글씨였다가 톤 조율 A(2026-09-24)에서 세리프로 옮겼다(어린이 앱 글씨로 읽혔다).
               ...SERIF_VALUE,
             }}
           >
@@ -1072,8 +1093,8 @@ export function MarginCard({
           style={{
             margin: 0,
             color: ROW_TEXT,
-            fontSize: 15,
-            lineHeight: 1.55,
+            fontSize: 16, // Q1 16/26(에디토리얼 PR-4 — spec §5.2)
+            lineHeight: '26px',
             whiteSpace: 'pre-wrap',
             wordBreak: 'keep-all',
             ...SERIF_VALUE, // 위와 같은 이유 — 사용자가 적어 둔 글이다
@@ -1286,15 +1307,17 @@ export function MarginMenuSheet({
   );
 }
 
-/** 시트의 한 줄 — 손가락 높이(44px)를 쓰는 전체폭 버튼. 되돌릴 수 없는 줄만 붉다. */
+/**
+ * 시트의 한 줄 — 손가락 높이(44px)를 쓰는 전체폭 버튼. 되돌릴 수 없는 줄만 붉다.
+ * 아래 가는 선 행(RULE_ROW) — 서재·공부 서재 관리 시트와 같은 옷이라 줄이 버튼으로 읽힌다.
+ */
 const menuRow = (danger: boolean) =>
   ({
+    ...RULE_ROW,
     display: 'block',
     width: '100%',
     height: 44,
     padding: '0 4px',
-    border: 'none',
-    background: 'transparent',
     color: danger ? '#A32D2D' : ROW_TEXT,
     fontSize: 15,
     fontWeight: 500,
@@ -1302,7 +1325,7 @@ const menuRow = (danger: boolean) =>
     cursor: 'pointer',
   }) as const;
 
-/** 작성자 줄 — 게시판 행의 머리. 세이지로 눌러 본문보다 뒤로 물린다(이름이 본문을 이기면 안 된다). */
+/** 작성자 줄 — 게시판 행의 머리. 강조 잉크 14로 작게 두어 본문보다 뒤로 물린다(이름이 본문을 이기면 안 된다). */
 const authorLine = {
   display: 'block',
   width: 'auto',
@@ -1400,7 +1423,7 @@ export function StoryComposer({
       </Text>
       {/* 두 칸을 한 배경 안에 넣는다 — 쓰는 동안 보이는 것이 곧 카드여야 미리보기 값을 한다.
           라벨·카운터도 안에 두는 이유는 같다(밖으로 빼면 배경마다 대비가 어긋난다). */}
-      <div style={{ background: bg.background, color: bg.color, borderRadius: 20, padding: 16 }}>
+      <div style={composerFrame(bgCode)}>
         <p style={composerLabel}>책에서 옮긴 문장 (선택)</p>
         <textarea
           value={quote}

@@ -453,8 +453,8 @@ describe('보내기 성공 뒤 입력창 비우기', () => {
 });
 
 /**
- * Soft 재테마(PR-4) — 대화 화면. 입력줄은 눌린 면(규칙 3 「입력 자리는 파인다」), 말풍선은 내 것 옅은 세이지 ·
- * 남의 것 눌린 바탕이고 <b>그림자가 없다</b>(반복 요소 — 그림자 예산 §6). 대화함 행도 반복 행이다.
+ * 에디토리얼 — 대화 화면. 입력줄은 muted 1px 경계(FIELD), 말풍선은 내 것 paper-2 면 ·
+ * 남의 것 가는 선 테이고 <b>그림자가 없다</b>(반복 요소 — 그림자 예산 §6). 대화함 행도 반복 행이다.
  */
 describe('에디토리얼 표면 — 대화 (PR-1)', () => {
   const bubbles = (html: string) => html.match(/<div[^>]*data-bubble="(mine|theirs)"[^>]*>/g) ?? [];
@@ -474,11 +474,16 @@ describe('에디토리얼 표면 — 대화 (PR-1)', () => {
     expect(textarea).toContain('color:var(--adaptiveGrey600');
   });
 
-  it('내 말풍선은 옅은 면, 남의 말풍선은 눌린 바탕 토큰이다', () => {
+  // 에디토리얼 PR-4 — 내 것 paper-2 면(테 없음) · 남의 것 면 없이 가는 선 테(line). 말풍선은 누르는 것이 아니라 경계 3:1 대상이 아니다.
+  it('내 말풍선은 paper-2 면, 남의 말풍선은 면 없이 가는 선 테다', () => {
     const list = bubbles(roomView());
     expect(list).toHaveLength(2);
-    expect(list.find((b) => b.includes('data-bubble="mine"'))).toContain('background:var(--adaptiveBlue50,');
-    expect(list.find((b) => b.includes('data-bubble="theirs"'))).toContain('background:var(--softDent');
+    const mine = list.find((b) => b.includes('data-bubble="mine"')) ?? '';
+    const theirs = list.find((b) => b.includes('data-bubble="theirs"')) ?? '';
+    expect(mine).toContain('background:var(--softDent');
+    expect(mine).not.toContain('border:');
+    expect(theirs).toContain('border:1px solid var(--adaptiveGrey200');
+    expect(theirs).toContain('background:transparent');
   });
 
   it('말풍선엔 큰 그림자가 없다 — 메시지 수만큼 반복되는 요소다', () => {

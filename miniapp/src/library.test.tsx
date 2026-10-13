@@ -30,6 +30,7 @@ import {
   revealSpan,
   revealCell,
 } from './screens/Library';
+import { tagWith } from './soft-guard';
 import { clickHandlerFor, stubLocalStorage, userAgent } from './test-fixtures';
 
 beforeEach(() => {
@@ -488,7 +489,7 @@ describe('책 상태 칩 (bookStats)', () => {
   it('읽은 시간은 「N 읽음」으로 — 「2시간」만 있으면 무엇의 2시간인지 안 보인다', () => {
     expect(bookStats(book(1, '데미안', 'READING', { seconds: 7200, isPublic: true }))).toEqual([
       { label: '2시간 읽음', value: '2시간', tone: 'neutral' },
-      { label: '공개', tone: 'sage' },
+      { label: '공개', tone: 'ink' },
     ]);
   });
 
@@ -502,7 +503,7 @@ describe('책 상태 칩 (bookStats)', () => {
     const shown = bookStats(book(1, '가', 'READING', { isPublic: true }));
     const hidden = bookStats(book(2, '나', 'READING', { isPublic: false }));
 
-    expect(shown.at(-1)!.tone).toBe('sage');
+    expect(shown.at(-1)!.tone).toBe('ink');
     expect(hidden.at(-1)!.tone).toBe('outline');
   });
 
@@ -1421,6 +1422,21 @@ describe('검색 결과 — 이미 서재에 있는 책', () => {
     expect(markup).not.toContain('여백 ');
   });
 
+  // 에디토리얼 PR-4 — 검색 행은 RULE_ROW(아래 가는 선 · 모서리 0 · 면 없음), 담긴 행만 paper-2. 「여백 N」은 외곽선 알약 손잡이.
+  it('검색 행은 가는 선 행이다 — 안 담긴 행은 면이 없고 담긴 행만 paper-2', () => {
+    const open = tagWith(row(false), 'type="button"');
+    expect(open).toContain('border-bottom:1px solid var(--adaptiveGrey200');
+    expect(open).toContain('border-radius:0');
+    expect(open).toContain('background:transparent');
+    expect(tagWith(row(true), 'book-owned')).toContain('background:var(--softDent');
+  });
+
+  it('「여백 N」 배지는 외곽선 알약이다', () => {
+    const badge = tagWith(badged(3), 'aria-label="이 책의 여백 3개 보기"');
+    expect(badge).toContain('border-radius:999px');
+    expect(badge).toContain('border:1px solid var(--adaptiveBlue700');
+  });
+
   it('담긴 책의 배지는 눌린다 — 행은 `disabled`지만 배지는 그 바깥이다', () => {
     expect(badged(2, true)).toMatch(/aria-label="이 책의 여백 2개 보기"/);
   });
@@ -1854,5 +1870,29 @@ describe('선반을 고른 표지로 밀기 (revealScrollLeft)', () => {
     const guest = { scrollLeft: 30, clientWidth: 350 };
     revealCell(guest, 300, false);
     expect(guest.scrollLeft).toBe(30);
+  });
+});
+
+describe('서재 상태 칩 옷 (에디토리얼 PR-4)', () => {
+  // 칩은 <span>이라 누르지 못한다 — 못 누르는 태그 옷(paper-2 면 r2). 비공개만 면 없이 테로 눌린다(색이 곧 공개 여부).
+  const chips = (isPublic: boolean) =>
+    shelf([book(1, '데미안', 'READING', { seconds: 7200, isPublic })], { selectedId: 1 })
+      .match(/<span data-book-chip=""[^>]*>/g) ?? [];
+
+  it('읽은 시간·공개 칩은 paper-2 면 r2다 — r20 알약이 아니다', () => {
+    const [time, pub] = chips(true);
+    for (const tag of [time, pub]) {
+      expect(tag).toContain('background:var(--softDent, #ECE5D8)');
+      expect(tag).toContain('border-radius:2px');
+    }
+    expect(time).toContain('color:var(--adaptiveGrey700');
+    expect(pub).toContain('color:var(--adaptiveBlue700');
+  });
+
+  it('비공개 칩은 면 없이 1px 테 r2다 — 공개와 형태로 갈린다', () => {
+    const priv = chips(false).at(-1)!;
+    expect(priv).toContain('background:transparent');
+    expect(priv).toContain('border:1px solid var(--adaptiveGrey200');
+    expect(priv).toContain('border-radius:2px');
   });
 });

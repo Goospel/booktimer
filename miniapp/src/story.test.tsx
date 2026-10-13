@@ -13,6 +13,7 @@ import {
   MarginView,
   StoryComposer,
   TIMER_STOPPED_NOTICE,
+  composerFrame,
   createStoryMessage,
   dimClosable,
   hasFreshStory,
@@ -835,6 +836,16 @@ describe('글 관리 시트 (MarginMenuSheet)', () => {
     expect(confirming).toContain('이 글을 지울까요?');
     expect(confirming).toContain('정말 지우기');
   });
+
+  it('시트 줄은 아래 가는 선 행(RULE_ROW)이고 지우기만 붉다 — 서재·공부 서재 관리 시트와 같은 옷', () => {
+    const html = sheet({ shared: false });
+    const row = (label: string) => html.match(new RegExp(`<button[^>]*>${label}<`))?.[0] ?? '';
+    for (const label of ['모두의 여백에 올리기', '지우기']) {
+      expect(row(label)).toContain('border-bottom:1px solid var(--adaptiveGrey200');
+    }
+    expect(row('지우기')).toContain('color:#A32D2D');
+    expect(row('모두의 여백에 올리기')).not.toContain('#A32D2D'); // 경고색이 다른 줄로 번지지 않는다
+  });
 });
 
 /**
@@ -1224,5 +1235,47 @@ describe('에디토리얼 표면 — 여백 (PR-1)', () => {
     expect(other).not.toBe('');
     expect(picked).toContain('2px solid var(--adaptiveBlue500');
     expect(other).toContain('1px solid var(--adaptiveGrey200');
+  });
+});
+
+/**
+ * 에디토리얼 PR-4 — 빈 여백은 판화 한 점(148) + 「아직 남긴 글이 없어요.」 Q1(spec §6.4). 작성 카드는 배경이 종이(paper)일 때만
+ * 그릇에 muted 1px 테 — 종이 위 종이 카드는 대비 1.01로 칸이 사라진다. 어두운 다섯 색은 카드 면이 곧 경계라 테가 없다.
+ */
+describe('여백 옷 (에디토리얼 PR-4)', () => {
+  it('빈 여백에 판화가 한 점(148)이고 안내는 세리프 16/26이다 — 내 것·남의 것 둘 다', () => {
+    for (const self of [true, false]) {
+      const markup = view(margin({ self, entries: [] }));
+      expect(markup.match(/data-woodcut/g)).toHaveLength(1);
+      expect(tagWith(markup, 'data-woodcut')).toContain('width="148"');
+      const at = markup.indexOf('아직 남긴 글이 없어요');
+      expect(at).toBeGreaterThan(-1);
+      const textTag = markup.slice(markup.lastIndexOf('<span', at), at);
+      expect(textTag).toContain('Noto Serif KR');
+      expect(textTag).toContain('font-size:16px');
+      expect(textTag).toContain('line-height:26px');
+    }
+  });
+
+  it('글 본문은 Q1 세리프 16/26이다', () => {
+    const markup = view(margin({ self: true, entries: [entry(1, { text: '본문표지' })] }));
+    const at = markup.indexOf('본문표지');
+    expect(at).toBeGreaterThan(-1);
+    const tag = markup.slice(markup.lastIndexOf('<p', at), at);
+    expect(tag).toContain('Noto Serif KR');
+    expect(tag).toContain('font-size:16px');
+    expect(tag).toContain('line-height:26px');
+  });
+
+  it('글이 있으면 판화가 없다 — 판화는 빈 자리를 채우는 한 점이다', () => {
+    expect(view(margin({ self: true, entries: [entry(1)] }))).not.toContain('data-woodcut');
+    // 양성 대조 — 같은 계측이 빈 여백에선 잡는다
+    expect(view(margin({ self: true, entries: [] }))).toContain('data-woodcut');
+  });
+
+  it('작성 카드 그릇: 종이 배경이면 muted 1px 테, 어두운 배경(night)이면 테 없음', () => {
+    expect(composerFrame('paper').border).toBe('1px solid var(--adaptiveGrey600, #645E54)');
+    expect(composerFrame('night').border).toBeUndefined();
+    expect(composerFrame('night').background).toBe('#1f2233');
   });
 });

@@ -62,32 +62,33 @@ export const ADD_STUDY_BOOK_CARD: LeadCard = {
 };
 
 /**
- * 회독 칩 — 파랑 토큰을 쓴다. 공부 모드에서 `body.study-mode`가 이 토큰들을 파랑으로 갈아끼우므로
- * 화면은 색을 한 줄도 몰라도 된다(독서등·모드 스왑과 같은 수법).
+ * 회독 칩 — 글자는 파랑 토큰을 쓴다. 공부 모드에서 `body.study-mode`가 이 토큰을 파랑으로 갈아끼우므로
+ * 화면은 색을 한 줄도 몰라도 된다(독서등·모드 스왑과 같은 수법). 누르지 못하는 <span>이라 면은 못 누르는
+ * 태그 옷(paper-2 면 r2)이다.
  */
 const readCountChipStyle: CSSProperties = {
   display: 'inline-block',
   padding: '2px 9px',
-  borderRadius: 20,
+  borderRadius: 2,
   fontSize: 14,
   lineHeight: 1.6,
-  background: 'var(--adaptiveBlue50, #ECE5D8)',
+  background: 'var(--softDent, #ECE5D8)',
   color: 'var(--adaptiveBlue700, #1D1B18)',
 };
 
 /**
  * 누적 공부 시간 칩 — 회독 칩과 <b>같은 박스, 다른 색</b>이다(회독은 파랑 토큰, 시간은 중립).
  *
- * <p>색값은 독서 서재 `bookChipStyle('neutral')`에서 <b>복사</b>했다: 그 함수는 export돼 있지 않고
- * `Library.tsx`는 이 작업에서 수정 금지라(독서 경로 diff 0), 값 복사가 가장 싼 길이다.
+ * <p>값은 독서 서재 `bookChipStyle('neutral')`과 같다(그 함수는 export돼 있지 않아 값을 복사한다) —
+ * 한쪽을 바꾸면 다른 쪽도 맞춘다.
  */
 const studyTimeChipStyle: CSSProperties = {
   display: 'inline-block',
   padding: '2px 9px',
-  borderRadius: 20,
+  borderRadius: 2,
   fontSize: 14,
   lineHeight: 1.6,
-  background: 'var(--adaptiveGrey200, #D9D1C3)',
+  background: 'var(--softDent, #ECE5D8)',
   color: 'var(--adaptiveGrey700, #4A453E)',
 };
 
@@ -111,7 +112,7 @@ export function studyBookChips(book: StudyBookRow): { label: string; value: stri
 }
 
 /**
- * 채움이 아닌 손잡이 — 「관리」(카드지)와 「검색해서 담기」(틴트)가 쓴다.
+ * 채움이 아닌 손잡이 — 「관리」(외곽선 알약)와 「검색해서 담기」(옅은 면)가 쓴다.
  *
  * <p>주 손잡이(「회독 +1」)는 여기 없다: 채움 레시피를 <b>호출부에 리터럴로</b> 편다. 헬퍼 삼항에
  * 숨기면 「채움 주 버튼은 화면당 하나」 불변식의 계측기(설계 D5 · `typography.test`의 소스 스캔)가
@@ -347,7 +348,7 @@ export function StudyShelf({
             {/*
               * 한 회독을 끝냈을 때 누르는 자리 — 이 화면의 유일한 핵심 동작이라 <b>채움</b>이다.
               * 독서 서재의 구조적 대응물은 「검색해서 담기」(0번 칸 전용 틴트)가 아니라 같은 2:1 줄의
-              * 「여백에 글쓰기」이고, 그쪽 레시피(채움 + 부푼 그림자 + 채움 잉크)를 그대로 쓴다.
+              * 「여백에 글쓰기」이고, 그쪽 레시피(검정 알약 — 채움 + 종이 글자)를 그대로 쓴다.
               * TDS `Button`이 아니라 맨 `<button>`인 것도 그쪽과 같은 이유다 — `--button-min-height: 56px`가
               * 박혀 있어 38px 손잡이 줄에서 혼자 솟는다.
               */}

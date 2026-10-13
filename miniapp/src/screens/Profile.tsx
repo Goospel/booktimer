@@ -769,8 +769,8 @@ export function ProfileCard({
             style={{
               fontSize: 14,
               padding: '2px 7px',
-              borderRadius: 9,
-              background: 'var(--adaptiveGrey200, #D9D1C3)',
+              borderRadius: 2,
+              background: 'var(--softDent, #ECE5D8)', // 태그 = paper-2 옅은 면(설계 §6-1)
               color: 'var(--adaptiveGrey700, #4A453E)',
             }}
           >
@@ -1198,7 +1198,7 @@ export function ArchiveSheet({
                   borderRadius: 999,
                   fontSize: 14,
                   background: 'var(--adaptiveBlue500, #1D1B18)',
-                  color: '#FFFDF8',
+                  color: 'var(--filledInk, #F5F0E6)', // 잉크 위 글자 = 종이(밤엔 토큰이 뒤집힌다)
                 }}
               >
                 지금 대표
@@ -1328,14 +1328,19 @@ export const filterChipStyle = (active: boolean) =>
     cursor: 'pointer',
   }) as const;
 
+/**
+ * 책BTI 태그 — 누르는 것은 외곽선 알약, 못 누르는 것은 「나를 팔로우함」과 같은 태그(paper-2 면 r2).
+ * 옛 모양(종이 면 r999)은 종이 바탕 위라 면이 안 보여, 누르는 태그와 못 누르는 태그가 글자색으로만 갈렸다.
+ */
 const chipStyle = (clickable: boolean) =>
-  ({
-    display: 'inline-block',
-    padding: '6px 10px',
-    borderRadius: 999,
-    border: 'none',
-    fontSize: 14,
-    background: 'var(--adaptiveGrey100, #F5F0E6)',
-    color: clickable ? 'var(--adaptiveBlue500, #1D1B18)' : 'var(--adaptiveGrey700, #4A453E)',
-    cursor: clickable ? 'pointer' : 'default',
-  }) as const;
+  clickable
+    ? ({ ...OUTLINE_PILL, display: 'inline-block', padding: '6px 10px', fontSize: 14, cursor: 'pointer' } as const)
+    : ({
+        display: 'inline-block',
+        padding: '6px 10px',
+        borderRadius: 2,
+        border: 'none',
+        fontSize: 14,
+        background: 'var(--softDent, #ECE5D8)',
+        color: 'var(--adaptiveGrey700, #4A453E)',
+      } as const);
