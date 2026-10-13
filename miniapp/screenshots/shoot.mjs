@@ -50,18 +50,33 @@ const settle = (ms = 700) => page.waitForTimeout(ms)
  * ⚠️ `document.fonts.check()`는 쓰지 않는다 — 링크가 없어도·없는 패밀리 이름이어도 참이다(스파이크 실측).
  * ⚠️ 이 PC엔 Noto가 시스템에 깔려 있어 링크가 빠져도 그림은 Noto로 나온다 — 그림이 아니라 이 신호로만 판정한다.
  * 음성 대조: `--block-fonts`(구글 폰트 요청을 막는다)로 돌리면 여기서 타임아웃으로 죽어야 정상이다(U-15).
+ *
+ * 본문 고딕(Noto Sans KR 400)도 같은 신호로 기다린다 — 명조 하나만 보던 때는 고딕 파일만 막아도(face error 18개)
+ * 촬영기가 세로 8장을 다 썼다(2026-10-13 리뷰 2회차 돌연변이). 대기 뒤엔 `assertNoFontError`로 조각 실패도 잡는다.
  */
 async function waitFonts(p, label) {
     const t0 = Date.now()
     await p.waitForFunction(
-        () => [...document.fonts].some(
-            (f) => f.family.replace(/["']/g, '') === 'Noto Serif KR' && f.weight === '500' && f.status === 'loaded',
-        ),
+        () => {
+            const ok = (fam, w) => [...document.fonts].some(
+                (f) => f.family.replace(/["']/g, '') === fam && f.weight === w && f.status === 'loaded',
+            )
+            return ok('Noto Serif KR', '500') && ok('Noto Sans KR', '400')
+        },
         null,
         { timeout: 15000 },
     )
     await p.evaluate(() => document.fonts.ready) // 신호 뒤 남은 조각까지
+    await assertNoFontError(p)
     console.log(`글꼴 신호 통과(${label}) — ${Date.now() - t0}ms`)
+}
+
+/** Noto 두 패밀리의 face가 하나라도 받기에 실패했으면 죽는다 — 일부 조각만 대체 글꼴인 컷을 조용히 내지 않는다. */
+async function assertNoFontError(p) {
+    const bad = await p.evaluate(() => [...document.fonts].filter(
+        (f) => /^Noto (Serif|Sans) KR$/.test(f.family.replace(/["']/g, '')) && f.status === 'error',
+    ).length)
+    if (bad) throw new Error(`글꼴 받기 실패 face ${bad}개 — 대체 글꼴 컷을 내지 않는다`)
 }
 
 async function shot(name) {
@@ -70,6 +85,7 @@ async function shot(name) {
     await settle(400)
     // 탭을 옮기면 그 화면 글자가 새 unicode-range 조각을 부를 수 있다 — 진입 때의 waitFonts만으론 컷마다 보장이 안 된다.
     await page.evaluate(() => document.fonts.ready)
+    await assertNoFontError(page)
     const buf = await page.screenshot()
     await sharp(buf).resize(PORTRAIT.w, PORTRAIT.h).png().toFile(`${OUT}/${name}.png`)
     console.log(`${name}.png — ${PORTRAIT.w}x${PORTRAIT.h}`)
