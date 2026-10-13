@@ -122,7 +122,11 @@ function card(markup: string, header: string): string {
 const TITLE_MARK = '--tds-t-st10-text-fontSize';
 
 describe('제목이 곧 줄인 자리 — 선은 제목에 건다', () => {
-  it('홈 캐러셀 머리 (시안 2a)', () => {
+  /**
+   * 에디토리얼 PR-2(안 1 §7.1) — 고르기 선반의 머리는 아래 선이 없다. 표지 바닥의 판(`data-board`, 잉크 1px)이 그 일을 맡는다 —
+   * 머리 선과 판이 둘 다 서면 표지 위아래로 잉크 선이 두 줄 생겨 표지가 선 사이에 갇힌다.
+   */
+  it('홈 고르기 선반 머리 (안 1) — 머리 선 대신 판이 선다', () => {
     const markup = render(<Home
       dashboard={dashboard()}
       mode="reading"
@@ -140,10 +144,10 @@ describe('제목이 곧 줄인 자리 — 선은 제목에 건다', () => {
       onOpenMargin={() => {}}
       onComposeMargin={() => {}}
     />);
-    const tag = theRule(card(markup, '무엇으로 측정할까요?'));
+    const picker = card(markup, '무엇으로 측정할까요?');
 
-    expect(tag).toContain(TITLE_MARK);
-    expect(tag).toContain('padding-bottom:9px');
+    expect(picker).toContain('data-board'); // 그 카드를 잡았다(아래 부재 단언이 공허하지 않음)
+    expect(ruleTags(picker)).toEqual([]);
   });
 
   /** 시안에 없는 자리다 — 캐러셀과 <b>같은 슬롯</b>이라 한쪽만 그으면 측정 시작에 카드가 변한다. */

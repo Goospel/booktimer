@@ -127,13 +127,14 @@ const badgeStyle = (tone: 'solid' | 'tint' | 'outline') =>
   ({
     display: 'inline-block',
     padding: '1px 8px',
-    borderRadius: 6,
+    // 에디토리얼 PR-2(spec §6.1 #29) — 배지 3톤: 다 읽음 잉크 채움 · 여백 N 옅은 면(paper-2) · 읽는 중 외곽선. 모서리 2.
+    borderRadius: 2,
     fontSize: 13,
     lineHeight: 1.6,
     ...(tone === 'solid'
       ? { background: 'var(--adaptiveBlue800, #1D1B18)', color: 'var(--adaptiveGrey100, #F5F0E6)' }
       : tone === 'tint'
-        ? { background: 'var(--adaptiveGrey200, #D9D1C3)', color: 'var(--adaptiveGrey700, #4A453E)' }
+        ? { background: 'var(--softDent, #ECE5D8)', color: 'var(--adaptiveGrey700, #4A453E)' }
         : {
             background: 'transparent',
             color: 'var(--adaptiveGrey600, #645E54)',
@@ -242,15 +243,17 @@ export function eventLine(event: SocialEvent): string {
 }
 
 /**
- * 탭 알약 — 선택된 쪽만 알약 틴트 + 500(굵기 축은 400·500뿐). 안 고른 탭은 흐린 잉크 400이라
- * 「지금 어디인가」가 색과 굵기 둘로 갈린다. 틴트가 반투명 토큰이라 독서등(밤)·공부 모드에 저절로 맞는다.
+ * 탭 머리 — 고른 쪽만 강조 잉크 밑줄 2px + 500(안 1 · spec §6.1 #25 — 에디토리얼 PR-2에서 알약 틴트를 걷었다).
+ * 안 고른 탭도 같은 2px(투명)이라 고르기가 바뀌어도 줄이 안 흔들리고, 흐린 잉크 400이라 「지금 어디인가」가 선·굵기 둘로 갈린다.
+ * 강조 토큰이라 공부 모드에서 파란 잉크가 된다.
  */
 const pillStyle = (active: boolean) =>
   ({
     padding: '6px 14px',
     border: 0,
-    borderRadius: 999,
-    background: active ? 'var(--accentPill, rgba(29, 27, 24, .06))' : 'transparent',
+    borderBottom: `2px solid ${active ? 'var(--adaptiveBlue700, #1D1B18)' : 'transparent'}`,
+    borderRadius: 0,
+    background: 'transparent',
     color: active ? 'var(--adaptiveBlue700, #1D1B18)' : 'var(--adaptiveGrey600, #645E54)',
     fontSize: 14,
     fontWeight: active ? 500 : 400,

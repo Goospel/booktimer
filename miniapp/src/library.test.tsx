@@ -1194,7 +1194,7 @@ describe('책 추가 칸 (캐러셀 0번)', () => {
   });
 
   it('표지와 같은 크기의 점선 상자다 — 색 상자면 실제 표지와 구분이 안 된다', () => {
-    expect(shelf(books)).toContain('border:2px dashed');
+    expect(shelf(books)).toContain('border:1px dashed'); // 에디토리얼 PR-2 — 점선 1px muted(spec §5.1)
   });
 
   /**

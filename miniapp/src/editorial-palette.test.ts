@@ -215,9 +215,11 @@ describe('REQ-14 · 밤은 책상 + 미색 페이지(D2=A)', () => {
     expect(night['--filledInk']).toBe('#1C1A17');
   });
 
-  it('등불 밑 페이지는 미색 사각 페이지이고 등불 글로우가 없다', () => {
+  // PR-2 — 사각 배경 리터럴을 걷고 페이지 토큰만 미색으로 되돌린다(아치·오늘 표가 그 토큰으로 칠해 아치 모양 페이지가 된다).
+  it('등불 밑 페이지는 미색 아치 페이지(토큰)이고 등불 글로우가 없다', () => {
     const page = block('body.reading-lamp .lamp-page');
-    expect(page).toMatch(/background:\s*#F5F0E6\s*!important/);
+    expect(page).toMatch(/--adaptiveGrey100:\s*#F5F0E6/);
+    expect(page).not.toMatch(/(?:^|[\s;{])background\s*:/);
     expect(css).not.toMatch(/rgba\(\s*255,\s*220,\s*160/);
     expect(page).not.toMatch(/box-shadow/);
   });

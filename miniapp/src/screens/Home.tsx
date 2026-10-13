@@ -28,9 +28,11 @@ import {
   Avatar,
   BookCover,
   CoverInitial,
+  ARCH,
   ErrorMessage,
   GoalMedal,
   OUTLINE_PILL,
+  RULE_ROW,
   SECTION_RULE,
   SERIF_VALUE,
   SPROUT_PATHS,
@@ -64,14 +66,68 @@ export const DOT_OFF = 'var(--adaptiveGrey200, #D9D1C3)';
  */
 const GAUGE_FILL = 'var(--adaptiveBlue500, #1D1B18)';
 
-/** 히어로 타일의 모양 — 지금은 남은 시간 타일 하나가 가로(row)로 펼쳐 쓴다. 에디토리얼(PR-1): 반경 2, 그림자 없음. */
-const TILE = { display: 'flex', flexDirection: 'column', gap: 4, padding: '12px 14px', borderRadius: 2 } as const;
+/**
+ * 게이지 폭 — 아치 안쪽 폭(350 − 24×2 = 302)을 꽉 채우던 안 1 숫자에서 240(가운데)으로 줄였다(계획 §4 H1 · D5 추천).
+ * 옆선 사이를 다 채우면 막대가 아치 밑선과 평행선 두 줄로 붙어 답답했다.
+ */
+const GAUGE_WIDTH = 240;
 
 /**
- * 히어로 카드 배경 토큰 — js–css 매듭이라 이름을 한 곳에서 든다(`LAMP_PAGE_CLASS`와 같은 이유).
- * 값은 `global.css`가 정한다: 낮 종이색, `body.study-mode`에서 푸른 종이.
+ * 아치 그릇의 숫자(안 1 §7.1 + D5 추천) — 위 28 · 옆 24 · 아래 44(안 1 32 + 12), 최소 높이 252(안 1 240 + 12).
+ * 늘어난 12는 머리띠 아래 간격(28 → 16)에서 되찾아 아치 아래 y가 안 1과 같다. 대안 ⓐ(폭만 240)는 아래 32 · 240 · 간격 28이다.
+ * 피그마 숫자는 선 바깥에서 잰 값이라 CSS 패딩은 위아래 선 1px씩을 뺀다(27 · 43) — 그래야 표 줄 y가 안 1과 같다(목 모드 실측 346 → 344).
  */
-export const HERO_CARD_BG_VAR = '--heroCardBg';
+const ARCH_PADDING = '27px 24px 43px';
+const ARCH_MIN_HEIGHT = 252;
+const MASTHEAD_GAP = 16;
+
+/**
+ * 시계 크기(D1 단계) — 「25:00」(5자)은 84, 한 시간을 넘겨 「01:25:00」(8자)이 되면 68. 84로 8자를 세우면 아치 안쪽 폭(302)을
+ * 넘긴다(숫자 6 · 쌍점 2 — 계산 약 340, 실측은 U-5). 줄 높이는 크기 + 4(84/88 · 68/72).
+ */
+export function heroClockSize(text: string): number {
+  return text.length > 5 ? 68 : 84;
+}
+
+/**
+ * 아치 속 시계(D1) — 로그인 홈과 게스트 홈이 같은 것을 쓴다. 숫자는 한 자씩 1ch 칸에 세운다: Noto Serif KR엔 고정폭 숫자가 없어
+ * `tabular-nums`가 먹지 않는다(U-4 실측 — 84px에서 「11:11」 177 · 「88:88」 211). 칸이 없으면 측정 중 매초 시계가 좌우로 흔들린다.
+ * 칸마다 읽으면 「2, 5, …」로 끊기므로 읽기 이름은 그릇이 시계 글자 그대로 든다.
+ */
+export function HeroClock({ text, color }: { text: string; color: string }) {
+  const size = heroClockSize(text);
+  /*
+   * 8자 시계는 좁은 폰에서 한 단 더 줄인다 — 아치 안쪽 폭(화면 − 바깥 여백 40 − 아치 옆 24×2 − 선 2)에 4.1em(8자 실측 폭
+   * 273.9/68 ≈ 4.03em + 여유)이 들어가게. 390에선 68 그대로, 320에선 약 56(U-5 실측: 68 고정이면 320에서 옆선을 넘었다).
+   * 칸(inline-block)이 줄바꿈 지점이 되므로 `nowrap`이 없으면 좁은 폭에서 시계가 두 줄로 꺾였다(같은 실측).
+   */
+  const fontSize = text.length > 5 ? `min(${size}px, calc((100vw - 90px) / 4.1))` : size;
+  return (
+    <div
+      data-hero-clock=""
+      role="timer"
+      aria-label={text}
+      style={{ ...SERIF_VALUE, fontSize, lineHeight: `${size + 4}px`, letterSpacing: '-0.02em', whiteSpace: 'nowrap', color }}
+    >
+      {[...text].map((ch, i) => (
+        <span key={i} aria-hidden="true" style={/\d/.test(ch) ? { display: 'inline-block', width: '1ch', textAlign: 'center' } : undefined}>
+          {ch}
+        </span>
+      ))}
+    </div>
+  );
+}
+
+/** 오늘 표 한 줄 — 아래 가는 선(RULE_ROW)이 줄을 가르고, 위 테두리는 아치 밑선이 잇는다. 왼쪽 말 · 오른쪽 값/손잡이. */
+const TABLE_ROW = {
+  ...RULE_ROW,
+  display: 'flex',
+  alignItems: 'center',
+  justifyContent: 'space-between',
+  gap: 8,
+  width: '100%',
+  boxSizing: 'border-box',
+} as const;
 
 /**
  * 진한 세이지 — 통계 행의 ⓘ와 캡션 줄 「바꾸기 ›」가 쓰는 손잡이 색(웹 `--accent-hover`).
@@ -106,10 +162,10 @@ export function heroOverline(mode: TimerMode, achieved: boolean): string | null 
 }
 
 /**
- * 히어로 머리 줄 오른쪽의 「독서 | 공부」 세그먼트 — 이 앱에서 <b>모드를 바꾸는 유일한 손잡이</b>다.
+ * 아치 꼭대기 가운데의 「독서 | 공부」 세그먼트 — 이 앱에서 <b>모드를 바꾸는 유일한 손잡이</b>다.
  *
- * <p>시안 Soft-Home: 눌린 트랙(`--softDent` + 1.5px 선) 위에 고른 쪽만 진한 세이지로 찬 알약이 선다.
- * 세그먼트 버튼이 <b>그 자체로 44px</b>를 든다(시안 40 — 손가락 최소치 44를 버튼 사각형이 직접 넘게, U-8).
+ * <p>안 1(에디토리얼 PR-2): 밑줄형 — 고른 칸 아래 강조 잉크 2px, 칸은 58×44. 옛 Soft의 눌린 트랙·찬 알약은 걷었다.
+ * 세그먼트 버튼이 <b>그 자체로 44px</b>를 든다(손가락 최소치 44를 버튼 사각형이 직접 넘게, U-8).
  *
  * <p>선택 세그먼트의 색이 <b>토큰</b>인 것이 요점이다 — `body.study-mode`가 토큰을 갈아 끼우면 이 알약도
  * 코드 한 줄 없이 파랑으로 따라온다.
@@ -146,16 +202,19 @@ export function ModeToggle({
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
+          minWidth: 58,
           minHeight: 44,
-          padding: '0 16px',
-          borderRadius: 999,
-          // 고른 칸 = 강조 잉크 1px 테 + 강조 글자 500, 채움 없음(결정 ① — 검정 채움은 주 동작 하나뿐). 안 고른 칸도
-          // 같은 1px 테(투명)라 고르기가 바뀌어도 칸 크기가 안 변한다. 강조 토큰이라 공부 모드에서 파란 잉크다.
-          border: `1px solid ${selected ? 'var(--adaptiveBlue700, #1D1B18)' : 'transparent'}`,
+          padding: '0 12px',
+          boxSizing: 'border-box',
+          // 안 1 밑줄형(spec §7.1 modeToggle) — 고른 칸 아래 강조 잉크 2px + 강조 글자 500, 채움 없음(검정 채움은 주 동작 하나뿐).
+          // 안 고른 칸도 같은 2px(투명)이라 고르기가 바뀌어도 칸 높이가 안 변한다. 강조 토큰이라 공부 모드에서 파란 잉크다.
+          border: 0,
+          borderBottom: `2px solid ${selected ? 'var(--adaptiveBlue700, #1D1B18)' : 'transparent'}`,
+          borderRadius: 0,
           background: 'transparent',
           color: selected ? 'var(--adaptiveBlue700, #1D1B18)' : 'var(--adaptiveGrey600, #645E54)',
           fontFamily: 'inherit',
-          fontSize: 15,
+          fontSize: 14,
           fontWeight: selected ? 500 : 400,
           cursor: 'pointer',
         }}
@@ -235,8 +294,15 @@ export function FirstSessionBanner({ show }: { show: boolean }) {
   if (!show) return null;
 
   return (
+    // 에디토리얼 PR-2 — 면 없는 한 줄. 오늘 표 바로 밑에 붙어 표의 마지막 줄처럼 선다(위 선 = 표의 마지막 선, 아래 가는 선).
+    // 위에도 선을 그으면 표의 마지막 선과 겹쳐 두 줄이 된다(목 모드 컷 실측).
     <div
-      style={{ marginTop: 12, padding: 14, borderRadius: 20, background: 'var(--adaptiveBlue50, #ECE5D8)', textAlign: 'center' }}
+      data-first-session-banner=""
+      style={{
+        padding: '12px 0',
+        borderBottom: '1px solid var(--adaptiveGrey200, #D9D1C3)',
+        textAlign: 'center',
+      }}
     >
       <Text typography="st11" style={{ display: 'block', wordBreak: 'keep-all' }}>
         <SproutMark size={14} /> 첫 독서 기록이 심어졌어요! 기록 탭에 첫 칸이 생겼어요.
@@ -351,7 +417,8 @@ export function GoalReachedView({
   const button = { height: 56, borderRadius: 999, fontFamily: 'inherit', fontSize: 17, fontWeight: 500, cursor: 'pointer' } as const;
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 16, paddingTop: 6 }}>
+    // 아치(가운데 정렬 flex) 속에서도 안쪽 폭을 다 쓰게 `alignSelf: stretch` — 아니면 줄·버튼이 글자 폭으로 줄어든다.
+    <div style={{ alignSelf: 'stretch', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 16, paddingTop: 6 }}>
       <GoalMedal />
       <div style={{ textAlign: 'center', wordBreak: 'keep-all' }}>
         <span style={{ display: 'block', ...SERIF_VALUE, fontSize: 26 }}>오늘 목표를 채웠어요</span>
@@ -363,18 +430,20 @@ export function GoalReachedView({
           {hasFinalConsonant(formatDuration(goalSeconds)) ? '이면' : '면'} {streak + 1}일이 돼요.
         </span>
       </div>
+      {/* 면 없는 줄 — 위아래 가는 선(오늘 표와 같은 문법). */}
       <div
         style={{
           alignSelf: 'stretch',
           display: 'flex',
           alignItems: 'center',
           gap: 12,
-          padding: '12px 14px',
-          borderRadius: 2,
-          background: 'var(--adaptiveBlue50, #ECE5D8)',
+          padding: '10px 0',
+          borderTop: '1px solid var(--adaptiveGrey200, #D9D1C3)',
+          borderBottom: '1px solid var(--adaptiveGrey200, #D9D1C3)',
+          textAlign: 'left',
         }}
       >
-        <span style={{ fontSize: 15, color: 'var(--adaptiveBlue900, #1D1B18)' }}>오늘 읽은 시간</span>
+        <span style={{ fontSize: 14, color: 'var(--adaptiveGrey600, #645E54)' }}>오늘 읽은 시간</span>
         <span style={{ marginLeft: 'auto', ...SERIF_VALUE, fontSize: 24 }}>{formatClock(todayRead)}</span>
         <svg width="26" height="26" viewBox="0 0 24 24" aria-hidden="true" style={{ flex: 'none' }}>
           <circle cx="12" cy="12" r="11" style={{ fill: 'var(--adaptiveBlue700, #1D1B18)' }} />
@@ -385,11 +454,8 @@ export function GoalReachedView({
         <button type="button" onClick={onContinue} style={{ ...OUTLINE_PILL, ...button }}>
           이어서 읽기
         </button>
-        <button
-          type="button"
-          onClick={onGoHistory}
-          style={{ ...button, border: 0, background: 'var(--adaptiveBlue50, #ECE5D8)', color: 'var(--adaptiveBlue700, #1D1B18)' }}
-        >
+        {/* 둘 다 외곽선 알약 — 홈의 검정 자리는 탭바 원 하나다(계획 PR-2 #9). */}
+        <button type="button" onClick={onGoHistory} style={{ ...OUTLINE_PILL, ...button }}>
           기록 보기
         </button>
       </div>
@@ -482,30 +548,35 @@ export function marginDoorBook(dashboard: DashboardResponse, selectedBookId: num
 }
 
 /** 캐러셀 표지 한 장의 폭·간격 — 계산(가운데 인덱스)과 스타일이 같은 값을 봐야 스냅과 선택이 어긋나지 않는다. */
-export const COVER_WIDTH = 84;
-export const COVER_GAP = 16;
+/**
+ * 에디토리얼 PR-2(안 1 §7.3) — 옆 표지 88 · 사이 32. 고른 표지는 104로 커지며 양옆 8씩 먹어 보이는 간격이 24가 되고,
+ * 판에 걸친 알약(144)이 이웃 표지에 닿지 않는 여유 4가 남는다.
+ */
+export const COVER_WIDTH = 88;
+export const COVER_GAP = 32;
 
 /** 표지 한 장의 높이 — `BookCover`·`CoverInitial`이 쓰는 식(폭 × 1.4) 그대로여야 여백 계산이 실제 표지를 따라간다. */
 export const COVER_HEIGHT = Math.round(COVER_WIDTH * 1.4);
 
-/** 캐러셀 칸·표지 모서리 — 후광(`PICK_RING`)이 둥글게 흐르려면 안쪽 표지도 같이 둥글어야 한다(선택 표시 H안). */
-const CAROUSEL_RADIUS = 8;
+/** 고른 표지의 배율 — 88 → 104(안 1 `r5/cover-sel`). transform이라 레이아웃 폭이 안 변해 스냅·가운데 계산은 상수만 따른다. */
+const PICKED_SCALE = 104 / 88;
+
+/** 캐러셀 칸·표지 모서리 — 에디토리얼 2(표지는 물건이라 각이 선다). 옛 8은 후광과 동심이던 값이다. */
+const CAROUSEL_RADIUS = 2;
 
 /**
- * 고른 칸의 후광 — 카드색 틈 3px + 중간 세이지(Blue500) 테 3px, 둘 다 blur 0이라 옛 한 겹 링과 비용이 같다(T-176:
- * 표지 이미지를 감싸는 요소라 흐린 그림자는 두르지 않는다). 옛 진한(700) 3px 링은 틈 없이 표지에 붙어 「액자」로
- * 읽혔고 부드러운 화면에서 혼자 딱딱하게 튀었다(사용자, 2026-09-24). 잔디 「오늘」 링(`TODAY_RING`)과 같은
- * 「틈 + 세이지」 문법이되, 92px 표지는 500으로 충분해(카드 대비 4.33 · 비텍스트 3:1 통과) 700을 쓰지 않는다.
- * 토큰이라 공부 모드에서 파랑 후광이 된다.
+ * 트랙 위 여백 — 고른 표지가 **바닥을 기준으로** 커지므로(`transform-origin: bottom center`) 위로만
+ * 높이 × (104/88 − 1) ≈ 22.4px 솟는다. 그 몫을 위에만 잡는다(아래는 0 — 판이 표지 바닥에 바로 붙는다).
+ * 여기가 모자라면 커진 표지 윗변이 스크롤 영역에 잘린다.
  */
-const PICK_RING = '0 0 0 3px var(--adaptiveGrey100, #F5F0E6), 0 0 0 6px var(--adaptiveBlue500, #1D1B18)';
+export const TRACK_V_PAD = Math.ceil(COVER_HEIGHT * (PICKED_SCALE - 1));
 
 /**
- * 트랙 세로 여백 — 아래 선택 표지의 `scale(1.1)`이 위아래로 각각 높이의 **0.05**만큼 삐져나가므로
- * 그 몫(+ 후광 6px × 1.1 = 6.6 → 여유 7px)을 여백으로 미리 확보한다. 여기가 모자라면 커진 표지가 트랙을 세로로
- * 넘쳐 손가락에 위아래로 들썩이고, 후광 윗변이 스크롤 영역에 잘린다.
+ * 판 아래 넘침 자리 — 걸친 알약(보이는 44)의 3/4(33)이 판 아래로 내려온다(1/4 걸침 · 계획 §4 H2). 고르기가 바뀌어도
+ * 아래 제목 줄이 들썩이지 않게 문이 없는 칸(「책 없이」)에서도 같은 자리를 둔다.
  */
-export const TRACK_V_PAD = Math.ceil(COVER_HEIGHT * 0.05) + 7;
+const DOOR_HEIGHT = 44;
+const DOOR_OVERLAP = 11;
 
 /**
  * 첫·마지막 표지를 가운데까지 올려 주는 여백 — **트랙의 padding이 아니라 양끝 표지의 margin으로 준다.**
@@ -612,7 +683,7 @@ export const SCROLL_SETTLE_MS = 120;
  * 「읽는 중」 카드의 표지 폭 — 캐러셀(84)보다 작다. 그곳은 고르는 무대라 크게 서야 하지만,
  * 여기는 이미 정해진 한 권을 한 줄로 알려 주는 자리라 제목·저자와 높이가 맞아야 한다.
  */
-export const READING_NOW_COVER = 52;
+export const READING_NOW_COVER = 64; // 에디토리얼 PR-2 — 옷 시안 M-HOME-06의 64×90
 
 /**
  * 캐러셀 0번의 특수 칸 — 화면마다 뜻이 다르다. 홈은 「책 없이」(측정 대상의 한 갈래), 서재는
@@ -646,8 +717,8 @@ export const NO_BOOK_CARD: LeadCard = {
 export function NoBookCard({
   width = COVER_WIDTH,
   label = '책 없이',
-  radius = 4,
-}: { width?: number; label?: string; /** 캐러셀만 8(후광과 동심) — 나머지 자리는 표지와 같은 4 */ radius?: number } = {}) {
+  radius = 2,
+}: { width?: number; label?: string; /** 표지와 같은 모서리 — 에디토리얼 2 */ radius?: number } = {}) {
   return (
     <div
       style={{
@@ -660,7 +731,8 @@ export function NoBookCard({
         // 밝은 상자가 뜨고, 낮엔 카드색(#FBF9F4)과 거의 같아 투명과 구별되지 않는다. 굵기는 2px 그대로다
         // (Soft PR-3 서재 판정): 시안의 1.5px은 DPR 3 크롬에서 computed 1px로 떨어져 캔버스 위 「책 추가」 칸의
         // 점선이 흐려지고, 밤 카드 위에선 거의 사라졌다(목 모드 390×844@3 실측).
-        border: '2px dashed var(--adaptiveGrey600, #645E54)', // muted 토큰(종이 5.65 · 밤 책상 6.31) — 옛 세이지 리터럴은 PR-1에서 걷었다
+        // 에디토리얼 PR-2(spec §5.1) — 점선 1px muted(종이 5.65 · 밤 책상 6.31). 옛 2px은 부푼 면 위에서 점선이 묻히던 때의 값이다.
+        border: '1px dashed var(--adaptiveGrey600, #645E54)',
         borderRadius: radius,
         display: 'flex',
         flexDirection: 'column',
@@ -702,11 +774,12 @@ function CheckBadge() {
         height: 22,
         boxSizing: 'border-box',
         borderRadius: '50%',
-        background: 'var(--adaptiveGrey100, #F5F0E6)',
-        border: '2px solid var(--adaptiveBlue500, #1D1B18)',
+        // 에디토리얼 PR-2(spec §6.1 #17) — 잉크 원 + 미색 체크(체크/원 15.13). 토큰 500인 이유: `typography.test`의 채움 버튼
+        // 가드가 `background: '` + Blue700 꼴을 센다 — 배지는 버튼이 아니다(값은 같은 잉크, 공부 모드에선 같은 파란 잉크).
+        background: 'var(--adaptiveBlue500, #1D1B18)',
       }}
     >
-      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" strokeWidth="3.5" strokeLinecap="round" strokeLinejoin="round" style={{ stroke: 'var(--adaptiveBlue700, #1D1B18)' }}>
+      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" strokeWidth="3.5" strokeLinecap="round" strokeLinejoin="round" style={{ stroke: 'var(--filledInk, #F5F0E6)' }}>
         <path d="M5 12.5l4.5 4.5L19 7.5" />
       </svg>
     </span>
@@ -736,6 +809,7 @@ export function BookCarousel<T extends BookOption>({
   leadCard = NO_BOOK_CARD,
   metaOf,
   chipsOf,
+  door,
 }: {
   books: T[];
   selectedId: number | null;
@@ -756,6 +830,14 @@ export function BookCarousel<T extends BookOption>({
    * 칩 마크업이 여기 하나뿐이라서다.
    */
   chipsOf?: (book: T) => { label: string; style: CSSProperties; value?: string }[];
+  /**
+   * 판에 걸치는 손잡이(홈의 「여백에 글 남기기」 — 안 1 §7.3 「알약 걸침」). 넘기면 판 아래 넘침 자리를 <b>늘</b> 잡는다 —
+   * `null`(지금 고른 칸엔 문이 없음)이어도 자리는 남겨 고르기가 바뀔 때 제목 줄이 들썩이지 않는다. 안 넘기면(`undefined`) 자리도 없다.
+   *
+   * <p>트랙(가로 스크롤) <b>밖</b>에 가운데로 둔다: 안에 두면 판 아래로 내려온 몫을 스크롤 컨테이너가 잘라 낸다
+   * (`overflow-x: auto`면 y도 auto로 계산된다). 가운데 온 칸 = 고른 책이라 손잡이도 가운데면 고른 표지에 걸친다.
+   */
+  door?: ReactNode;
 }) {
   const trackRef = useRef<HTMLDivElement>(null);
   const settleRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -788,6 +870,8 @@ export function BookCarousel<T extends BookOption>({
 
   return (
     <>
+      {/* 판 그릇 — 트랙 · 판(잉크 1px) · 걸친 손잡이. 손잡이는 이 그릇 기준 절대 배치라 트랙 스크롤에 안 잘린다. */}
+      <div style={{ position: 'relative', paddingBottom: door !== undefined ? DOOR_HEIGHT - DOOR_OVERLAP : 0 }}>
       <div
         ref={trackRef}
         onScroll={(e) => {
@@ -804,6 +888,8 @@ export function BookCarousel<T extends BookOption>({
         }}
         style={{
           display: 'flex',
+          // 표지 바닥 = 판 윗선(안 1 §7.3) — 크기가 달라도 바닥에 선다.
+          alignItems: 'flex-end',
           gap: COVER_GAP,
           overflowX: 'auto',
           // 세로는 `overflow-y: hidden`이 아니라 여기서 막는다 — 그 값을 만나면 웹뷰가 이 트랙의
@@ -811,8 +897,8 @@ export function BookCarousel<T extends BookOption>({
           touchAction: 'pan-x',
           scrollBehavior: TRACK_SCROLL_BEHAVIOR,
           scrollSnapType: 'x mandatory',
-          // 세로 여백만 여기서 — 좌우(가운데 정렬) 여백은 양끝 표지의 margin이 맡는다(EDGE_SPACE 주석).
-          padding: `${TRACK_V_PAD}px 0`,
+          // 위 여백만 여기서(고른 표지가 위로만 솟는다) — 좌우(가운데 정렬) 여백은 양끝 표지의 margin이 맡는다(EDGE_SPACE 주석).
+          padding: `${TRACK_V_PAD}px 0 0`,
           scrollbarWidth: 'none',
         }}
       >
@@ -843,12 +929,13 @@ export function BookCarousel<T extends BookOption>({
                 border: 'none',
                 background: 'transparent',
                 cursor: 'pointer',
-                // 가운데 온 칸만 크게 + 후광·체크 배지(선택 표시 H안). 안 고른 칸은 .7 — .45로 흐리면 40대
-                // 이상 눈엔 「없는 책」으로 읽혀 흐림으로 지우지 않는다.
+                // 가운데 온 칸만 바닥 기준으로 크게(88 → 104) + 체크 배지. 후광 링은 걷었다(에디토리얼 — 이펙트 0). 안 고른
+                // 칸은 .7 — .45로 흐리면 40대 이상 눈엔 「없는 책」으로 읽혀 흐림으로 지우지 않는다.
+                // 0번 특수 칸(점선 + muted 글자)은 흐리지 않는다(spec §5.1 ⚠️) — .7이면 글자 대비가 3.03으로 4.5 아래다.
                 position: 'relative',
-                transform: current ? 'scale(1.1)' : 'scale(1)',
-                opacity: current ? 1 : 0.7,
-                boxShadow: current ? PICK_RING : undefined,
+                transform: current ? `scale(${PICKED_SCALE})` : 'scale(1)',
+                transformOrigin: 'bottom center',
+                opacity: current || item === null ? 1 : 0.7,
                 borderRadius: CAROUSEL_RADIUS,
                 transition: 'transform 0.2s ease, opacity 0.2s ease',
               }}
@@ -864,13 +951,41 @@ export function BookCarousel<T extends BookOption>({
           );
         })}
       </div>
+      {/* 판 — 표지 바닥이 서는 잉크 선 하나(안 1 `r5/board`, 내용 폭 전체). */}
+      <div data-board="" aria-hidden="true" style={{ borderTop: '1px solid var(--adaptiveGrey800, #1D1B18)' }} />
+      {door !== undefined && door !== null && (
+        // 판에 1/4 걸친 손잡이 — 그릇 끝에서 알약 높이만큼 위에 붙여 위 11px이 판 위로 올라온다. 아래(bottom:0)에 붙이면 여백
+        // 안내 말풍선이 형제로 흘러들 때 그만큼 알약이 위로 밀려 고른 표지를 덮는다 — 위에 붙여 말풍선이 아래로 흐르게 한다.
+        // z를 세우지 않는다: 쌓임 맥락이 생기면 안내 딤(fixed z101)이 그 안에 갇혀 탭바(z100)가 딤 위로 밝게 남는다. DOM 순서상
+        // 표지 뒤라 z 없이도 표지 위에 칠해진다. 안쪽 가운데 정렬 — 말풍선 폭으로 넓어져도 알약은 표지 가운데에 선다.
+        <div
+          data-door=""
+          style={{
+            position: 'absolute',
+            left: 0,
+            right: 0,
+            top: `calc(100% - ${DOOR_HEIGHT}px)`,
+            display: 'flex',
+            justifyContent: 'center',
+            pointerEvents: 'none',
+          }}
+        >
+          <div style={{ pointerEvents: 'auto', textAlign: 'center' }}>{door}</div>
+        </div>
+      )}
+      </div>
 
       {/* 표지만으론 무슨 책인지 확정되지 않는다(비슷한 표지·자리 표지) — 가운데 온 것을 글자로 못 박는다. */}
       <div
         data-selected-book={selected?.title ?? leadCard?.title}
-        style={{ marginTop: 12, textAlign: 'center' }}
+        style={{ marginTop: 14, textAlign: 'center' }}
       >
-        <Text typography="st10" fontWeight="medium" style={{ display: 'block', wordBreak: 'keep-all' }}>
+        {/* 제목 H1 — 명조 20/28(안 1 Carousel Caption). */}
+        <Text
+          typography="st10"
+          fontWeight="medium"
+          style={{ display: 'block', wordBreak: 'keep-all', ...SERIF_VALUE, fontSize: 20, lineHeight: '28px' }}
+        >
           {selected?.title ?? leadCard?.title}
         </Text>
         {selected === null ? (
@@ -1075,8 +1190,8 @@ export function RemainingNote({
           width: 10,
           height: 10,
           background: 'var(--adaptiveBackground, #F5F0E6)',
-          borderLeft: '1.5px solid var(--adaptiveGrey200, #D9D1C3)',
-          borderTop: '1.5px solid var(--adaptiveGrey200, #D9D1C3)',
+          borderLeft: '1px solid var(--adaptiveGrey200, #D9D1C3)',
+          borderTop: '1px solid var(--adaptiveGrey200, #D9D1C3)',
           transform: 'rotate(45deg)',
         }}
       />
@@ -1084,12 +1199,11 @@ export function RemainingNote({
         style={{
           position: 'relative',
           padding: '9px 12px',
-          borderRadius: 14,
+          borderRadius: 2,
           background: 'var(--adaptiveBackground, #F5F0E6)',
-          /* 선이 있어야 떨어진다 — 이 상자의 배경은 히어로 카드 면과 같은 색이라 그림자만으론 경계가
-             안 선다(옛 연필선 자리). Soft 시트 행(`SOFT_ROW`)과 같은 옅은 1.5px 실선이고, 캐럿도 같은 선을
-             두른다. 히어로는 밤에도 `.lamp-page`가 낮 토큰을 재선언하므로 이 선도 낮 값으로 선다. */
-          border: '1.5px solid var(--adaptiveGrey200, #D9D1C3)',
+          /* 선이 있어야 떨어진다 — 이 상자의 배경은 종이와 같은 색이다. 에디토리얼 PR-2: 가는 선 1px · 모서리 2(표 줄과 같은
+             재료). 캐럿도 같은 선을 두른다. 밤엔 `.lamp-page`가 낮 토큰을 재선언하므로 이 선도 낮 값으로 선다. */
+          border: '1px solid var(--adaptiveGrey200, #D9D1C3)',
         }}
       >
         {/* ⓘ가 답해야 할 유일한 질문 — "못 채우면 어떻게 되나". 빚이 있든 없든 규칙은 같으므로 늘
@@ -1111,7 +1225,7 @@ export function RemainingNote({
         {debtSeconds > 0 && (
           <>
             <div
-              style={{ marginTop: 8, paddingTop: 8, borderTop: '1px solid rgba(44, 42, 36, 0.12)' }}
+              style={{ marginTop: 8, paddingTop: 8, borderTop: '1px solid var(--adaptiveGrey200, #D9D1C3)' }}
             >
               {row('오늘 목표', formatDuration(goalSeconds))}
               {row('밀린 시간', formatDuration(debtSeconds))}
@@ -1322,13 +1436,16 @@ export function AccountSection({
       type="button"
       aria-label="프로필·설정"
       onClick={onGoSettings}
+      // 머리띠(안 1 `mini/Account Header`) — 계측 손잡이. 아래 간격 16은 아치가 12 늘어난 몫을 되찾는 자리다(D5 추천).
+      data-masthead=""
       style={{
         display: 'flex',
         alignItems: 'center',
         gap: 10,
         width: '100%',
-        marginBottom: 12,
-        padding: '2px 2px 0',
+        minHeight: 52,
+        marginBottom: MASTHEAD_GAP,
+        padding: 0,
         border: 'none',
         background: 'transparent',
         textAlign: 'left',
@@ -1344,9 +1461,10 @@ export function AccountSection({
             // 시안 25는 계단(typography.test `SCALE`)에 없어 t3(26)로 **올려** 붙였다 — A가 정한
             // 「섹션 제목은 올림, 내리면 시안 의도가 죽는다」 그대로다. 홈엔 `Screen` 제목이 없어
             // t3와 부딪히지 않는다. (책방 닉네임 Profile.tsx는 19 — 그 화면은 2a~2e 밖이다.)
-            // Soft(시안 Soft-Home)에서 28로 — 계단 t3(28)와 같은 칸이다.
+            // 에디토리얼 PR-2 — H2 22/30(안 1 §7.1 머리띠). 홈의 표제는 아치 속 시계라 이름은 한 단 내려선다.
             ...SERIF_VALUE,
-            fontSize: 28,
+            fontSize: 22,
+            lineHeight: '30px',
             color: 'var(--adaptiveGrey900, #1D1B18)',
             overflow: 'hidden',
             textOverflow: 'ellipsis',
@@ -1358,7 +1476,7 @@ export function AccountSection({
         {loginId !== null && (
           <span
             data-handle={loginId}
-            style={{ display: 'block', marginTop: 2, fontSize: 15, color: 'var(--adaptiveGrey600, #645E54)' }}
+            style={{ display: 'block', marginTop: 2, fontSize: 14, lineHeight: '20px', color: 'var(--adaptiveGrey600, #645E54)' }}
           >
             @{loginId}
           </span>
@@ -1406,7 +1524,8 @@ export function ReadingNowCard({
           <BookCover url={book.coverUrl} title={book.title} width={READING_NOW_COVER} eager />
         )}
         <div style={{ minWidth: 0 }}>
-          <Text typography="t7" fontWeight="medium" style={{ wordBreak: 'keep-all' }}>
+          {/* H3 18/26(옷 시안 M-HOME-06) — 명조 제목. */}
+          <Text typography="t7" fontWeight="medium" style={{ display: 'block', wordBreak: 'keep-all', ...SERIF_VALUE, fontSize: 18, lineHeight: '26px' }}>
             {book === null ? '책 없이 측정 중' : book.title}
           </Text>
           {book?.author != null && (
@@ -1455,19 +1574,19 @@ export function StudyMeasuringLine({
   onChangeBook: () => void;
 }) {
   return (
-    // 공부 측정 줄은 게이지·타일 없이 가운데 시계 <b>바로 밑</b>에 서서, 왼쪽 정렬이면 시계와 어긋나 보였다
-    // (목 모드 실측). 정렬은 감싼 div가 든다 — TDS `Text`는 style의 textAlign을 거른다(T-216).
-    <div style={{ textAlign: 'center' }}>
-      <Text typography="t5" color="blue500" style={{ display: 'block', marginTop: 16 }}>
+    // 에디토리얼 PR-2 — 오늘 표의 한 줄(왼쪽 정렬). 공부엔 남은 시간·하루 목표 줄이 없어 이 줄이 표의 첫 줄이다.
+    // 정렬은 감싼 div가 든다 — TDS `Text`는 style의 textAlign을 거른다(T-216).
+    <div data-today-row="measuring" style={{ ...TABLE_ROW, display: 'block', padding: '12px 0', textAlign: 'left' }}>
+      <Text typography="st11" fontWeight="medium" style={{ display: 'block', wordBreak: 'keep-all' }}>
         측정 중 {formatDuration(elapsed)}
         {title !== null && ` · ${title}`}
       </Text>
       {goal?.line != null && (
-        <Text typography="st11" color="blue700" style={{ display: 'block', marginTop: 6 }}>
+        <Text typography="st11" color="blue700" style={{ display: 'block', marginTop: 4 }}>
           {goal.line}
         </Text>
       )}
-      <div style={{ display: 'flex', justifyContent: 'center', flexWrap: 'wrap', gap: 8, marginTop: 8 }}>
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginTop: 8 }}>
         {goal !== null && (
           <Button variant="weak" size="small" onClick={goal.onOpen}>
             {goal.label}
@@ -1477,7 +1596,7 @@ export function StudyMeasuringLine({
           책 바꾸기
         </Button>
       </div>
-      <Text typography="st12" color="grey600" style={{ display: 'block', marginTop: 6 }}>
+      <Text typography="st12" color="grey600" style={{ display: 'block', marginTop: 8 }}>
         {ACTIVE_STUDY_RELIEF}
       </Text>
     </div>
@@ -1657,6 +1776,8 @@ export function Home({
   /** 공부 경과 — 서버가 준 완료 합에 진행 중 몫을 클라가 매초 얹는다(독서 히어로와 같은 분업). */
   const studyElapsed =
     study.hasActiveSession && study.activeStartedAt !== null ? elapsedSeconds(study.activeStartedAt, now) : 0;
+  /** 아치 속 시계 — 모드마다 다른 원장의 오늘 합. 크기는 글자 수가 정한다(한 시간을 넘기면 한 단 작게 — `HeroClock`). */
+  const clockText = formatClock(mode === 'study' ? study.todaySeconds + studyElapsed : todayRead);
   /**
    * 회당 시간 판정 — 측정 중인 책의 <b>현재 값</b>이 기준이라, 측정 중 값을 바꾸면 곧바로 새 값으로 그린다.
    * 매초 `now`가 오르니 따로 도는 타이머가 없다.
@@ -1712,7 +1833,7 @@ export function Home({
    *
    * <p>`weak`는 유지한다 — 화면의 주 동작(탭바의 초록 원)보다 낮은 무게가 맞다.
    */
-  const marginDoor = doorBook !== null && (
+  const withDoorGuide = (door: ReactNode) => (
     // 첫 방문 안내는 문이 실제로 선 자리에서만 뜬다 — 책 0권이면 문 자체가 없으므로, 이 안내는
     // 책을 담고 측정을 해 본 뒤에야 저절로 차례가 온다(순서를 제어하는 코드가 없다).
     <Coachmark
@@ -1721,143 +1842,138 @@ export function Home({
       title="읽다가 떠오른 생각을 여백에"
       detail="문장·감상을 몇 줄 남겨 두는 자리예요"
     >
-      <Button
-        display="block"
-        variant="weak"
-        size="medium"
-        style={{ marginTop: 16 }}
-        onClick={() => onComposeMargin(doorBook)}
-      >
-        여백에 글 남기기
-      </Button>
+      {door}
     </Coachmark>
   );
+  /** 측정 중 「읽는 중」 카드 바닥의 문 — 옷 시안 M-HOME-06 그대로 전폭 외곽선(weak). */
+  const marginDoor =
+    doorBook !== null &&
+    withDoorGuide(
+      <Button display="block" variant="weak" size="medium" style={{ marginTop: 16 }} onClick={() => onComposeMargin(doorBook)}>
+        여백에 글 남기기
+      </Button>,
+    );
+  /**
+   * 대기 중 고르기 선반의 문 — 고른 표지 아래 가장자리에 1/4 걸친 외곽선 알약(안 1 §7.3 + 계획 §4 H2). 표지를 덮으므로 바탕은
+   * 종이로 칠한다 — TDS `weak`는 css가 바탕을 투명으로 못 박아(`!important`) 표지가 비쳐서 맨 버튼에 외곽선 알약 상수를 쓴다.
+   * 보이는 높이 44 = 누름 영역.
+   */
+  const marginPill =
+    doorBook === null
+      ? null
+      : withDoorGuide(
+          <button
+            type="button"
+            onClick={() => onComposeMargin(doorBook)}
+            style={{
+              ...OUTLINE_PILL,
+              background: 'var(--adaptiveGrey100, #F5F0E6)',
+              width: 144,
+              height: DOOR_HEIGHT,
+              padding: 0,
+              fontFamily: 'inherit',
+              fontSize: 16,
+              fontWeight: 500,
+              cursor: 'pointer',
+            }}
+          >
+            여백에 글 남기기
+          </button>,
+        );
 
   return (
     <Screen>
-      {/* 계정 진입은 화면 맨 위 — 카드 위 한 줄이 곧 이 화면의 헤더다(인사말 + 아바타). */}
+      {/* 머리띠 — 화면 맨 위 한 줄이 곧 이 화면의 헤더다(인사말 + 아바타, 행 전체 → 설정). */}
       <AccountSection nickname={dashboard.nickname} loginId={dashboard.loginId} onGoSettings={onGoSettings} />
 
-      {/* 독서등이 켜지면 이 카드만 스탠드 밑에 펼쳐진 페이지로 남는다 — 표식만 붙이고, 켤지 말지와
-          색은 `body` 클래스와 css가 든다(그래서 측정 여부와 무관하게 늘 붙어 있다). */}
-      <div
-        className={LAMP_PAGE_CLASS}
-        style={{
-          // 에디토리얼(PR-1) — 면·그림자 없음. 밤(독서등)엔 `global.css`의 `.lamp-page`가 이 그릇을 미색 사각 페이지로
-          // 깐다(반경 2). 아치 배치는 PR-2 몫이다.
-          borderRadius: 2,
-          padding: 20,
-          // 이 카드 <b>한 장만</b>의 토큰이다(grey100은 전 화면 공용이라 스왑하면 앱이 통째로 파래진다).
-          // 공부 모드에서 화면 최대 면이 색으로 말하는 자리 — 값은 `global.css`가 정한다.
-          background: `var(${HERO_CARD_BG_VAR}, transparent)`,
-        }}
-      >
-        {/* 첫 사용 안내는 이 카드 <b>속을 통째로</b> 가져간다 — 처음 온 사람에게 이 박스는 타이머가
-            아니라 안내 시작 버튼이다(M-1, 2026-08-23 실기기 제보: 헤더 아래 얇은 배너는 놓치기 쉬웠다).
-            껍데기(연필 테두리·독서등 표식)가 여기 남아 자리가 안 흔들리고, 안내를 닫으면 그 자리에서
-            평소의 타이머로 돌아온다. 만드는 쪽은 흐름을 든 `MainTabs`다 — 안 본 길 안내가 있고 측정
-            중이 아닐 때만 노드가 오므로, 「측정 중 N분」이 안내에 덮이는 일은 없다.
-            주의: 메달이 안내보다 <b>먼저</b>다 — 안내 기록이 없는 기기(새 사용자)는 측정을 끝내는 순간 안내가
-            카드를 되찾는데, 순서가 반대면 그 순간의 메달이 가려지고, 나중에 ✕를 누를 때 맥락 없이 튄다. */}
-        {showMedal ? (
-          <GoalReachedView
-            streak={dashboard.graph.currentStreak}
-            goalSeconds={goal}
-            todayRead={todayRead}
-            onContinue={onContinueReading}
-            onGoHistory={onGoHistory}
-          />
-        ) : (
-          guide ?? (
-          <>
-          {/* 머리 줄(시안 Soft-Home) — 왼쪽 머리말, 오른쪽 모드 손잡이. 첫 사용 안내가 카드를 통째로 가져간
-              동안엔 서지 않는다(안내 위에 다른 손잡이를 겹치지 않는다). */}
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
-            {/* 머리말 — 흐린 잉크 16, 자간 없음(시안). 옛 자간 3 세이지 머리말은 가운데 정렬 카드의 것이었다. */}
-            <span style={{ minWidth: 0, fontSize: 16, color: 'var(--adaptiveGrey600, #645E54)' }}>
-              {/* 달성일 때만 새싹이 선다 — 평소 머리말은 글자 그대로여서 미달성 렌더가 안 흔들린다.
-                  새싹은 독서 하루 목표의 것이다 — 공부 하루 목표는 폐기돼(2026-09-13, Q6) 공부엔 오지 않는다. */}
-              {heroOverline(mode, mode === 'reading' && achieved) ?? (
-                <>
-                  <SproutMark size={15} /> 오늘 목표 달성
-                </>
-              )}
-            </span>
-            <ModeToggle
-              mode={mode}
-              locked={measuring}
-              onChange={onChangeMode}
-              onBlocked={onBlockedModeChange}
+      {/* 아치 + 오늘 표 한 그릇 — 독서등(밤)이 켜지면 이 그릇이 책상 위에 펼쳐진 미색 페이지로 남는다. 표식만 붙이고 켤지
+          말지·색은 `body` 클래스와 css가 든다(그래서 측정 여부와 무관하게 늘 붙어 있다). 그릇 자신은 칠하지 않는다 — 아치와 표가
+          각자 종이 토큰으로 칠해, 밤엔 아치 반경대로 잘린 미색 페이지가 된다(계획 §6-2 PR-2 단계). */}
+      <div className={LAMP_PAGE_CLASS}>
+        <div
+          data-arch=""
+          style={{
+            ...ARCH,
+            boxSizing: 'border-box',
+            minHeight: ARCH_MIN_HEIGHT,
+            padding: ARCH_PADDING,
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+            textAlign: 'center',
+          }}
+        >
+          {/* 첫 사용 안내·메달은 아치 <b>속을 통째로</b> 가져간다 — 처음 온 사람에게 이 자리는 타이머가 아니라 안내 시작
+              버튼이다(M-1, 2026-08-23 실기기 제보). 아치(껍데기·독서등 표식)는 남아 자리가 안 흔들리고 옆선이 늘어날 뿐이다.
+              만드는 쪽은 흐름을 든 `MainTabs`다 — 안 본 길 안내가 있고 측정 중이 아닐 때만 노드가 오므로 측정 줄이 안내에
+              덮이는 일은 없다. 주의: 메달이 안내보다 <b>먼저</b>다 — 안내 기록이 없는 기기는 측정을 끝내는 순간 안내가 아치를
+              되찾는데, 순서가 반대면 그 순간의 메달이 가려지고 나중에 ✕를 누를 때 맥락 없이 튄다. */}
+          {showMedal ? (
+            <GoalReachedView
+              streak={dashboard.graph.currentStreak}
+              goalSeconds={goal}
+              todayRead={todayRead}
+              onContinue={onContinueReading}
+              onGoHistory={onGoHistory}
             />
-          </div>
-          <div style={{ marginTop: 16, textAlign: 'center' }}>
-            {/* 세리프 + t2(62px) — 이 화면이 답하려는 유일한 수다. */}
-            {/* 공부 모드에선 잉크색이 바뀐다 — 화면 최대 활자가 「파란 펜」이 되는 것이라 종이·연필
-                서사를 깨지 않는다(토큰 경유라 값은 css가 정한다). */}
-            <Text
-              typography="t2"
-              fontWeight="medium"
-              color={mode === 'study' ? 'blue700' : undefined}
-              style={{ ...SERIF_VALUE }}
-            >
-              {formatClock(mode === 'study' ? study.todaySeconds + studyElapsed : todayRead)}
-            </Text>
-          </div>
-          {/*
-            공부 히어로는 「오늘 공부한 시간」 숫자까지다 — 하루 목표 게이지·손잡이는 2026-09-13 책별 「회당 시간」으로
-            대체돼 걷었다(Q6). 회당 시간은 대기 중엔 캐러셀 아래, 측정 중엔 아래 측정 줄이 말한다.
-          */}
-          {mode === 'study' ? null : progress !== null ? (
-            <div style={{ marginTop: 16 }}>
-              {/* 게이지 — 가는 선 색 트랙(TRACK, 높이 4) 위 같은 높이의 강조 잉크 채움(에디토리얼 PR-1). */}
-              <div
-                data-gauge-track=""
-                role="progressbar"
-                aria-label="오늘 목표 진행률"
-                aria-valuemin={0}
-                aria-valuemax={100}
-                aria-valuenow={Math.round(progress * 100)}
-                aria-valuetext={`${Math.round(progress * 100)}%`}
-                style={{ ...TRACK, position: 'relative', height: 4 }}
-              >
-                <div
-                  style={{
-                    position: 'absolute',
-                    left: 0,
-                    top: 0,
-                    bottom: 0,
-                    width: `calc(100% * ${progress})`,
-                    borderRadius: 2,
-                    background: GAUGE_FILL,
-                  }}
+          ) : (
+            guide ?? (
+              <>
+                {/* 독서·공부 — 아치 꼭대기 가운데(안 1 §7.1 modeToggle). 이 앱에서 모드를 바꾸는 유일한 손잡이다. */}
+                <ModeToggle mode={mode} locked={measuring} onChange={onChangeMode} onBlocked={onBlockedModeChange} />
+                {/* 눈썹 — L1 14/20 muted, 시계 바로 위 가운데. 달성일 때만 새싹이 선다(독서 하루 목표의 것 — 공부엔 오지 않는다). */}
+                <span style={{ display: 'block', marginTop: 12, fontSize: 14, lineHeight: '20px', color: 'var(--adaptiveGrey600, #645E54)' }}>
+                  {heroOverline(mode, mode === 'reading' && achieved) ?? (
+                    <>
+                      <SproutMark size={15} /> 오늘 목표 달성
+                    </>
+                  )}
+                </span>
+                {/* 시계 — 이 화면이 답하려는 유일한 수(D1 84/88, 8자면 68). 공부 모드에선 강조 잉크가 「파란 펜」이 된다(토큰 경유). */}
+                <HeroClock
+                  text={clockText}
+                  color={mode === 'study' ? 'var(--adaptiveBlue700, #1D1B18)' : 'var(--adaptiveGrey800, #1D1B18)'}
                 />
-              </div>
-              {/*
-                보조 줄 — 남은 시간 타일 + 목표 캡션. 옛 자리는 "남은시간 : 15:00 ⓘ" 대시 밑줄 한 줄이
-                전부였고, 그 한 줄이 **설명과 이동을 겸했다**(UX 감사 3e). 여기서 역할을 가른다:
-                ⓘ = 설명(툴팁) · 「바꾸기 ›」 = 이동.
+                {/* 게이지 — 독서 하루 목표가 있을 때만(공부 하루 목표는 2026-09-13 책별 「회당 시간」으로 대체돼 걷었다 · Q6).
+                    가는 선 트랙(TRACK, 높이 4) 위 강조 잉크 채움. 폭 240 가운데(D5 추천). */}
+                {mode === 'reading' && progress !== null && (
+                  <div
+                    data-gauge-track=""
+                    role="progressbar"
+                    aria-label="오늘 목표 진행률"
+                    aria-valuemin={0}
+                    aria-valuemax={100}
+                    aria-valuenow={Math.round(progress * 100)}
+                    aria-valuetext={`${Math.round(progress * 100)}%`}
+                    style={{ ...TRACK, position: 'relative', width: GAUGE_WIDTH, maxWidth: '100%', height: 4, marginTop: 12 }}
+                  >
+                    <div
+                      style={{
+                        position: 'absolute',
+                        left: 0,
+                        top: 0,
+                        bottom: 0,
+                        width: `calc(100% * ${progress})`,
+                        borderRadius: 2,
+                        background: GAUGE_FILL,
+                      }}
+                    />
+                  </div>
+                )}
+              </>
+            )
+          )}
+        </div>
 
-                2026-09-24 — 2열 「남은 시간 | 하루 목표」를 남은 시간 타일 하나 + 목표 캡션 한 줄로 바꿨다. 목표는
-                게이지의 분모라 남은 시간과 같은 체급(세리프 24)일 이유가 없고, 두 열에선 「01:00:00」 + 알약이 149px
-                열에 안 들어 알약이 떨어지며 두 상자를 137px로 부풀렸다(사용자 지적 · 설계 B안).
-
-                주의 — **목표가 있으면 남은 시간이 0이어도 그린다.** 옛 배치는 `remaining > 0`으로 이 줄을
-                잠갔는데, 그러면 **목표를 다 채운 사람은 홈에서 목표를 바꿀 길이 통째로 사라졌다** —
-                카드 안 `GoalHandle`은 목표가 0일 때만 서기 때문이다. 달성이 문을 닫아선 안 된다.
-              */}
-              {/* 남은 시간 타일 — 버터(모드 무관 정보색), 가로 한 줄(라벨 왼쪽 · 값 오른쪽). 타일 그림자는 화면당
-                  이것 하나다(설계 §6 예산). */}
-              <div
-                style={{
-                  ...TILE,
-                  flexDirection: 'row',
-                  alignItems: 'center',
-                  justifyContent: 'space-between',
-                  gap: 8,
-                  marginTop: 16,
-                  background: 'var(--butterBg, #ECE5D8)',
-                }}
-              >
+        {/* 오늘 표 — 아치 밑선이 위 테두리다(안 1 §7.1 table). 줄마다 아래 가는 선. 아치와 같은 종이 토큰으로 칠해 밤엔 페이지의
+            아랫부분이 된다. 메달·안내가 아치를 가져간 동안엔 숫자 줄을 세우지 않는다(옛 히어로 카드와 같은 규칙). */}
+        <div data-today-table="" style={{ background: 'var(--adaptiveGrey100, #F5F0E6)' }}>
+          {mode === 'reading' && !showMedal && guide == null && progress !== null && (
+            <>
+              {/* 줄 1 — 「남은 시간 ⓘ」 ↔ 값(D3 24/30). ⓘ = 설명(툴팁) · 줄 2 「바꾸기 ›」 = 이동으로 역할을 가른다(UX 감사 3e).
+                  주의 — 목표가 있으면 남은 시간이 0이어도 그린다(옛 `remaining > 0` 잠금은 달성한 사람의 목표 문을 닫았다). */}
+              {/* 줄 높이는 아래 선 1px을 포함해 48(안 1 — 선이 줄 안쪽에 그어진다) → 아래 패딩이 1 적다. */}
+              <div data-today-row="remaining" style={{ ...TABLE_ROW, minHeight: 48, padding: '9px 0 8px' }}>
                 {/* ⓘ는 라벨에 붙는다 — 값이 아니라 「남은 시간」이라는 개념을 설명하는 손잡이다. */}
                 <button
                   type="button"
@@ -1867,22 +1983,20 @@ export function Home({
                     display: 'flex',
                     alignItems: 'center',
                     gap: 4,
-                    // 손가락 몫 44 — 위아래 -10 마진으로 바깥 높이가 24라 옆 값 줄(세리프 24px, 목 모드 실측 36)보다 낮아
-                    // 타일이 안 부푼다(실측 60 그대로). 넘친 히트 영역은 타일 패딩 12 안에 머문다.
+                    // 손가락 몫 44 — 위아래 -10 마진으로 바깥 높이가 24라 줄 높이(48)를 안 부풀린다.
                     minHeight: 44,
                     margin: '-10px 0',
                     padding: 0,
                     border: 0,
                     background: 'transparent',
-                    color: 'var(--butterInk, #4A453E)',
+                    color: 'var(--adaptiveGrey600, #645E54)',
                     fontFamily: 'inherit',
-                    fontSize: 15,
+                    fontSize: 14,
                     cursor: 'pointer',
                   }}
                 >
                   남은 시간
-                  {/* 색은 속성이 아니라 style로 준다 — 프레젠테이션 속성엔 `var()`가 안 먹는다(토큰이
-                      죽으면 독서등에서 이 아이콘만 낮 색으로 남는다). */}
+                  {/* 색은 속성이 아니라 style로 준다 — 프레젠테이션 속성엔 `var()`가 안 먹는다. */}
                   <svg
                     width="15"
                     height="15"
@@ -1890,13 +2004,13 @@ export function Home({
                     fill="none"
                     strokeWidth="2"
                     strokeLinecap="round"
-                    style={{ stroke: 'var(--butterInk, #4A453E)', flex: 'none' }}
+                    style={{ stroke: 'currentColor', flex: 'none' }}
                   >
                     <circle cx="12" cy="12" r="9" />
                     <path d="M12 11v5M12 7.5v.5" />
                   </svg>
                 </button>
-                <div style={{ ...SERIF_VALUE, fontSize: 24 }}>{formatClock(remaining)}</div>
+                <div style={{ ...SERIF_VALUE, fontSize: 24, lineHeight: '30px' }}>{formatClock(remaining)}</div>
               </div>
               {showNote && (
                 <RemainingNote
@@ -1906,9 +2020,7 @@ export function Home({
                   remainingSeconds={remaining}
                   carryover={dashboard.carryover}
                 >
-                  {/* 목표 손잡이는 아래 캡션 줄 「바꾸기」가 가져갔다 — 같은 일을 하는 문이 한 상자에 둘이면
-                      어느 쪽이 진짜인지 사용자가 고민한다.
-                      광고는 죄책감이 뜬 이 자리에만 나타난다. 문구에 "광고"를 명시해 광고 위장 금지 조항을 지킨다. */}
+                  {/* 광고는 죄책감이 뜬 이 자리에만 나타난다. 문구에 "광고"를 명시해 광고 위장 금지 조항을 지킨다(수익 경로 — 배선 무변경). */}
                   {showWaiverButton(dashboard.carriedDebtSeconds, dashboard.debtWaiverAvailable, REWARD_AD_GROUP_ID) && (
                     <Button
                       display="block"
@@ -1928,92 +2040,80 @@ export function Home({
                   )}
                 </RemainingNote>
               )}
-              {/* 목표 캡션 줄 — 목표는 게이지의 분모라 세리프 값이 아니라 회색 말 한 줄이고, 손잡이도 알약이 아니라
-                  글자다(사용자 지적 2026-09-24: 강조될 필요 없는 요소가 UI를 엉성하게 했다). 초과분은 같은 줄 오른쪽. */}
-              <div
-                data-goal-caption=""
-                style={{
-                  display: 'flex',
-                  flexWrap: 'wrap', // 좁은 폰 + 긴 목표 + 초과분이 겹치면 초과분이 다음 줄로 — 넘치는 것보다 낫다
-                  alignItems: 'center',
-                  justifyContent: 'space-between',
-                  gap: '4px 8px',
-                  marginTop: 10,
-                  padding: '0 6px',
-                  minHeight: 24,
-                }}
-              >
-                <div
+              {/* 줄 2 — 「하루 목표 30분」 ↔ 「바꾸기 ›」. 가운데 점(·)은 뺐다 — 「바꾸기」가 줄 오른쪽 끝으로 가 가를 것이 없다(대조표 #11).
+                  목표는 게이지의 분모라 세리프 값이 아니라 흐린 말 한 줄이고, 초과분은 그 아래 한 줄이다. */}
+              <div data-today-row="goal" data-goal-caption="" style={{ ...TABLE_ROW, minHeight: 44, padding: '2px 0' }}>
+                <div style={{ minWidth: 0, fontSize: 14, lineHeight: '20px', color: 'var(--adaptiveGrey600, #645E54)' }}>
+                  {/* 한 텍스트 노드로 — 「0초」가 아니라 「없음」: 목표 0 + 밀린 시간이면 이 줄이 선다(웹은 0 저장이 된다). */}
+                  <span style={{ display: 'block', whiteSpace: 'nowrap' }}>{`하루 목표 ${goal > 0 ? formatDuration(goal) : '없음'}`}</span>
+                  {overflow > 0 && <span style={{ display: 'block', fontSize: 13, lineHeight: '18px' }}>+{formatDuration(overflow)} 더 읽었어요</span>}
+                </div>
+                {/* 전면광고 로드에 1~2초가 걸려 그동안 글자가 그대로면 눌러도 아무 일 없는 것처럼 보인다 — 대기 사실이
+                    목표값보다 우선이다. 손가락 몫 44는 음수 여백 + 패딩으로 든다. */}
+                <button
+                  type="button"
+                  onClick={onGoGoal}
+                  disabled={goalAdPending}
+                  // 보이는 「바꾸기」는 옆 말에 기대는 한 단어라 버튼만 훑는 스크린리더엔 뜻이 없다. 대기 중엔
+                  // 이름을 덮지 않아 「준비 중…」이 그대로 이름이 된다.
+                  aria-label={goalAdPending ? undefined : goal > 0 ? '하루 목표 바꾸기' : '하루 목표 정하기'}
                   style={{
-                    display: 'flex',
+                    display: 'inline-flex',
                     alignItems: 'center',
-                    gap: 6,
+                    gap: 1,
+                    flex: 'none',
+                    minHeight: 44,
+                    padding: '10px 6px',
+                    margin: '-10px -6px',
+                    border: 0,
+                    background: 'transparent',
+                    fontFamily: 'inherit',
                     fontSize: 14,
-                    color: 'var(--adaptiveGrey600, #645E54)',
-                    whiteSpace: 'nowrap',
+                    fontWeight: goalAdPending ? 400 : 500,
+                    color: goalAdPending ? 'var(--adaptiveGrey600, #645E54)' : 'var(--adaptiveBlue700, #1D1B18)',
+                    cursor: 'pointer',
                   }}
                 >
-                  {/* 한 텍스트 노드로 — 「0초」가 아니라 「없음」: 목표 0 + 밀린 시간이면 이 줄이 선다(웹은 0 저장이 된다). */}
-                  {`하루 목표 ${goal > 0 ? formatDuration(goal) : '없음'}`}
-                  <span aria-hidden="true">·</span>
-                  {/* 전면광고 로드에 1~2초가 걸려 그동안 글자가 그대로면 눌러도 아무 일 없는 것처럼 보인다 — 대기 사실이
-                      목표값보다 우선이다. 줄 높이 24는 지키고 손가락 몫 44는 음수 여백 + 패딩으로 든다. */}
-                  <button
-                    type="button"
-                    onClick={onGoGoal}
-                    disabled={goalAdPending}
-                    // 보이는 「바꾸기」는 옆 캡션에 기대는 한 단어라 버튼만 훑는 스크린리더엔 뜻이 없다. 대기 중엔
-                    // 이름을 덮지 않아 「준비 중…」이 그대로 이름이 된다.
-                    aria-label={goalAdPending ? undefined : goal > 0 ? '하루 목표 바꾸기' : '하루 목표 정하기'}
-                    style={{
-                      display: 'inline-flex',
-                      alignItems: 'center',
-                      gap: 1,
-                      minHeight: 44,
-                      padding: '10px 6px',
-                      margin: '-10px -6px',
-                      border: 0,
-                      background: 'transparent',
-                      fontFamily: 'inherit',
-                      fontSize: 14,
-                      fontWeight: goalAdPending ? 400 : 500,
-                      color: goalAdPending ? 'var(--adaptiveGrey600, #645E54)' : 'var(--adaptiveBlue700, #1D1B18)',
-                      cursor: 'pointer',
-                    }}
-                  >
-                    {goalAdPending ? '준비 중…' : goal > 0 ? '바꾸기' : '정하기'}
-                    {!goalAdPending && (
-                      <svg
-                        width="14"
-                        height="14"
-                        viewBox="0 0 24 24"
-                        fill="none"
-                        strokeWidth="2.2"
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        aria-hidden="true"
-                        style={{ stroke: 'currentColor', flex: 'none' }}
-                      >
-                        <path d="M9 6l6 6-6 6" />
-                      </svg>
-                    )}
-                  </button>
-                </div>
-                {overflow > 0 && (
-                  <Text typography="st12" color="grey600">
-                    +{formatDuration(overflow)} 더 읽었어요
-                  </Text>
-                )}
+                  {goalAdPending ? '준비 중…' : goal > 0 ? '바꾸기' : '정하기'}
+                  {!goalAdPending && (
+                    <svg
+                      width="14"
+                      height="14"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      strokeWidth="2.2"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      aria-hidden="true"
+                      style={{ stroke: 'currentColor', flex: 'none' }}
+                    >
+                      <path d="M9 6l6 6-6 6" />
+                    </svg>
+                  )}
+                </button>
               </div>
-            </div>
-          ) : (
-            // 목표 0 — 게이지 줄이 통째로 없어 상자로 갈 길이 없다. 목표를 정하러 가는 유일한 손잡이가 여기 남는다.
-            <div style={{ marginTop: 16 }}>
+            </>
+          )}
+          {mode === 'reading' && !showMedal && guide == null && progress === null && (
+            // 목표 0 — 줄 1·2 대신 「목표 정하기」 외곽선 알약. 목표를 정하러 가는 유일한 손잡이가 여기 남는다.
+            <div data-today-row="set-goal" style={{ ...TABLE_ROW, display: 'block', padding: '12px 0' }}>
               <GoalHandle goalSeconds={goal} pending={goalAdPending} onGoGoal={onGoGoal} />
             </div>
           )}
+          {mode === 'reading' && dashboard.hasActiveSession && (
+            // 측정 줄 — 이 앱의 핵심 계약(측정은 서버 권위)을 측정 중 화면에서 말하지 않으면, 사용자는 화면을 켜 둬야 하는 줄
+            // 알고 몇 초 만에 끈다(운영 실측에서 완료 세션 대부분이 1분 미만이었다).
+            <div data-today-row="measuring" style={{ ...TABLE_ROW, display: 'block', padding: '12px 0' }}>
+              <Text typography="st11" fontWeight="medium" style={{ display: 'block', wordBreak: 'keep-all' }}>
+                측정 중 {formatDuration(elapsed)}
+                {dashboard.activeBookTitle !== null && ` · ${dashboard.activeBookTitle}`}
+              </Text>
+              <Text typography="st12" color="grey600" style={{ display: 'block', marginTop: 4 }}>
+                {ACTIVE_SESSION_RELIEF}
+              </Text>
+            </div>
+          )}
           {mode === 'study' && study.hasActiveSession && (
-            // 독서 측정 줄은 전폭 타일 밑이라 타일의 왼쪽 선을 따르고, 공부 줄은 시계 밑 가운데다(StudyMeasuringLine).
             // 회당 시간 — 남은 시간/달성 한 줄(스톱워치면 없음) + 같은 시트를 여는 손잡이. 책 없이 재면 둘 다 없다.
             <StudyMeasuringLine
               elapsed={studyElapsed}
@@ -2030,21 +2130,31 @@ export function Home({
               onChangeBook={onChangeActiveBook}
             />
           )}
-          {mode === 'reading' && dashboard.hasActiveSession && (
-            <>
-              <Text typography="t5" color="blue500" style={{ display: 'block', marginTop: 16 }}>
-                측정 중 {formatDuration(elapsed)}
-                {dashboard.activeBookTitle !== null && ` · ${dashboard.activeBookTitle}`}
+          {/* 줄 3 — 읽지 않은 대화(미읽음이 있을 때만 · 설계 §7-1). 줄 전체가 버튼이고 눌러야 대화함이 열린다(진입 직후 덮지 않는다, T-183). */}
+          {chatUnread !== undefined && chatUnread > 0 && onOpenChat !== undefined && (
+            <button
+              type="button"
+              data-today-row="unread"
+              onClick={onOpenChat}
+              style={{
+                ...TABLE_ROW,
+                minHeight: 48,
+                padding: '12px 0 11px', // 아래 선 1px 포함 48(줄 1과 같은 셈)
+                color: 'inherit',
+                font: 'inherit',
+                textAlign: 'left',
+                cursor: 'pointer',
+              }}
+            >
+              <Text typography="st11" fontWeight="medium">
+                읽지 않은 대화 {chatUnread}
               </Text>
-              {/* 이 앱의 핵심 계약(측정은 서버 권위)을 측정 중 화면에서 말하지 않으면, 사용자는 화면을 켜 둬야
-                  하는 줄 알고 몇 초 만에 끈다 — 운영 실측에서 완료 세션 대부분이 1분 미만이었다. */}
-              <Text typography="st12" color="grey600" style={{ display: 'block', marginTop: 6 }}>
-                {ACTIVE_SESSION_RELIEF}
+              <Text typography="st12" color="grey600">
+                대화함 열기 ›
               </Text>
-            </>
+            </button>
           )}
-          </>
-          ))}
+        </div>
       </div>
 
       {/* 축하는 <b>독서</b> 기록에 대한 말이다(「기록 탭에 첫 칸이 생겼어요」 — 공부는 그 탭에 안 남는다).
@@ -2054,35 +2164,6 @@ export function Home({
       {/* 독서 알림 제안 — 측정을 끝낸 뒤 화면 안에 선다(진입 직후 덮는 것 금지, T-183). 눌러야 동의 창이 뜬다. */}
       {mode === 'reading' && readingReminderOffer !== null && (
         <ReadingReminderOffer {...readingReminderOffer} onGoSettings={onGoSettings} />
-      )}
-
-      {/* 새 메시지 — 화면 안 카드다(진입 직후 덮는 것 금지, T-183). 눌러야 대화함이 열린다. */}
-      {chatUnread !== undefined && chatUnread > 0 && onOpenChat !== undefined && (
-        <section style={sectionStyle}>
-          <button
-            type="button"
-            onClick={onOpenChat}
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'space-between',
-              width: '100%',
-              padding: 0,
-              border: 'none',
-              background: 'none',
-              color: 'inherit',
-              font: 'inherit',
-              cursor: 'pointer',
-            }}
-          >
-            <Text typography="st11" fontWeight="medium">
-              읽지 않은 대화 {chatUnread}
-            </Text>
-            <Text typography="st12" color="grey600">
-              대화함 열기 ›
-            </Text>
-          </button>
-        </section>
       )}
 
       {/* 알림 동의 — 발송은 동의한 유저에게만 가능하고, 동의를 받는 주체는 미니앱이다(콘솔 심사 조건). */}
@@ -2100,11 +2181,12 @@ export function Home({
       )}
 
       {/* 두 모드가 <b>같은 자리</b>에서 대상을 고른다 — 다만 목록도 문구도 갈린다(원장이 갈렸으니).
-          공부엔 「읽는 중」 카드·여백 문이 없어 측정 중엔 아무것도 안 선다(히어로가 이미 제목을 말한다). */}
+          공부엔 「읽는 중」 카드·여백 문이 없어 측정 중엔 아무것도 안 선다(표의 측정 줄이 이미 제목을 말한다).
+          고르기 선반의 머리는 아래 선이 없다 — 판이 그 일을 맡는다(안 1 §7.1). */}
       {mode === 'study' ? (
         study.hasActiveSession ? null : (
-          <section style={sectionStyle}>
-            <SectionTitle style={{ marginBottom: 10, paddingBottom: 9, borderBottom: SECTION_RULE }}>무엇을 공부할까요?</SectionTitle>
+          <section data-picker="" style={sectionStyle}>
+            <SectionTitle style={{ marginBottom: 16 }}>무엇을 공부할까요?</SectionTitle>
             <BookCarousel books={studyBooks} selectedId={studySelectedId} onSelect={onSelectStudyBook} />
             {/* 고른 책의 회당 시간 손잡이 — 시작 전에 정하라고 강요하지 않는다(없으면 스톱워치). */}
             {goalHandleBook !== null && (
@@ -2129,13 +2211,14 @@ export function Home({
           {marginDoor}
         </ReadingNowCard>
       ) : (
-        <section style={sectionStyle}>
+        <section data-picker="" style={sectionStyle}>
           {/* 상태와 무관한 고정 문구다 — 「책 없이」가 가운데면 "이 책으로"는 틀린 말이고, 상태별로
               갈아끼우면 헤더가 나타났다 사라지며 캐러셀이 세로로 들썩인다. */}
-          <SectionTitle style={{ marginBottom: 10, paddingBottom: 9, borderBottom: SECTION_RULE }}>무엇으로 측정할까요?</SectionTitle>
-          {/* 좌우로 밀어 고른다 — 가운데 온 칸이 곧 측정 대상이다(0번은 「책 없이」라 책 0권도 같은 화면). */}
-          <BookCarousel books={dashboard.readingBooks} selectedId={selectedBookId} onSelect={onSelectBook} />
-          {marginDoor}
+          {/* 머리 아래 16 = 안 1의 머리 아래 패딩 2 + 간격 14(판 y가 안 1과 같다). */}
+          <SectionTitle style={{ marginBottom: 16 }}>무엇으로 측정할까요?</SectionTitle>
+          {/* 좌우로 밀어 고른다 — 가운데 온 칸이 곧 측정 대상이다(0번은 「책 없이」라 책 0권도 같은 화면).
+              여백 문은 고른 표지에 걸친다(문이 없는 칸이어도 넘침 자리는 남는다 — `door`). */}
+          <BookCarousel books={dashboard.readingBooks} selectedId={selectedBookId} onSelect={onSelectBook} door={marginPill} />
         </section>
       )}
 

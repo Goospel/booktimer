@@ -601,13 +601,22 @@ describe('피드 탭 알약 (Soft PR-2)', () => {
   const pill = (markup: string, key: string) =>
     markup.match(new RegExp(`data-feed-tab="${key}"[^>]*style="([^"]*)"`))?.[1] ?? '';
 
-  it('현재 탭은 알약 틴트 + 500, 안 고른 탭은 흐린 잉크 400이다', () => {
+  it('현재 탭은 강조 잉크 + 500, 안 고른 탭은 흐린 잉크 400이다', () => {
     const markup = renderBox(feed(), 'news');
 
-    expect(pill(markup, 'news')).toContain('background:var(--accentPill');
+    expect(pill(markup, 'news')).toContain('color:var(--adaptiveBlue700');
     expect(pill(markup, 'news')).toContain('font-weight:500');
     expect(pill(markup, 'social')).toContain('--adaptiveGrey600');
     expect(pill(markup, 'social')).toContain('font-weight:400');
+  });
+
+  // 에디토리얼 PR-2(안 1 · spec §6.1 #25) — 고른 탭은 알약 틴트가 아니라 잉크 밑줄 2px이다. 안 고른 탭도 같은 2px(투명)이라 고르기가 바뀌어도 줄이 안 흔들린다.
+  it('REQ-07 · 피드 탭은 밑줄 2px 잉크, 알약 배경 0', () => {
+    const markup = renderBox(feed(), 'news');
+
+    expect(pill(markup, 'news')).toContain('border-bottom:2px solid var(--adaptiveBlue700');
+    expect(pill(markup, 'social')).toContain('border-bottom:2px solid transparent');
+    expect(markup).not.toContain('background:var(--accentPill');
   });
 });
 

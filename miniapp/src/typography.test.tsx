@@ -42,9 +42,9 @@ const rules = css.replace(/\/\*[\s\S]*?\*\//g, '');
  */
 const SERIF_SPREADS = {
   'App.tsx': 1, // 에디토리얼 PR-1: 시작 토스트의 책 이름은 `style={SERIF_VALUE}` 직접 참조가 됐다(굵기 덮기가 사라져 펼칠 이유가 없다)
-  'GuestHome.tsx': 5,
+  'GuestHome.tsx': 4, // 에디토리얼 PR-2: 체험 시계가 홈과 같은 `HeroClock`(Home.tsx)을 쓰게 되어 한 자리가 그쪽으로 갔다
   'History.tsx': 6, // 2026-09-25 펼친 책별 시간(세리프 16)이 측정 줄(비세리프)로 바뀌며 한 자리 줄었다(R2 PR-5)
-  'Home.tsx': 6, // 2026-09-24 하루 목표 세리프 값이 회색 캡션으로 내려가 한 자리 줄었다
+  'Home.tsx': 8, // 2026-09-24 하루 목표 세리프 값이 회색 캡션으로 내려가 한 자리 줄었다 · 에디토리얼 PR-2: 캐러셀 제목(H1)·「읽는 중」 제목(H3) 명조 +2
   'HomeFeed.tsx': 3,
   'Library.tsx': 1,
   'Profile.tsx': 1,

@@ -2254,10 +2254,10 @@ export function MainTabs({
  * (서재·홈에서 그 대상 옆에 뜨는 안내는 시트로 읽힐 자리가 아니고, 그때가 제 차례다).
  */
 export function GuideHero({ onStart, onDismiss }: { onStart: () => void; onDismiss: () => void }) {
-  const sage = 'var(--adaptiveBlue700, #1D1B18)';
-
   return (
-    <div style={{ position: 'relative' }}>
+    // 에디토리얼 PR-2 — 아치 속을 통째로 쓴다. 아치 머리가 반원이라 오른쪽 위 모서리에 ✕를 띄우면 곡선 밖으로 삐져나간다 —
+    // 그래서 닫기는 글 아래 가운데에 같은 무게의 글자 손잡이로 선다(「들이대지 않는다」가 여전히 눈에 보인다).
+    <div style={{ alignSelf: 'stretch', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
       <button
         type="button"
         onClick={onStart}
@@ -2266,18 +2266,16 @@ export function GuideHero({ onStart, onDismiss }: { onStart: () => void; onDismi
           width: '100%',
           border: 'none',
           background: 'transparent',
-          padding: 0,
+          padding: '8px 0 0',
           textAlign: 'center',
           cursor: 'pointer',
         }}
       >
-        {/* 오버라인 — 카드가 평소 「오늘 읽은 시간」을 놓는 자리다. 자간을 벌려 머리말로 읽히게 한다. */}
-        <span style={{ display: 'block', fontSize: 14, letterSpacing: 3, color: sage }}>처음이신가요?</span>
-        {/* 카드의 주인공 자리 — 세리프로 히어로의 수(오늘 읽은 시간)와 같은 무게를 받는다. */}
-        <span style={{ display: 'block', marginTop: 6, fontSize: 26, ...SERIF_VALUE }}>앱 사용법 보기 ›</span>
-        <span
-          style={{ display: 'block', marginTop: 10, fontSize: 14, color: 'var(--adaptiveGrey600, #645E54)' }}
-        >
+        {/* 눈썹 — 아치가 평소 「오늘 읽은 시간」을 놓는 자리다(L1 14/20 muted). */}
+        <span style={{ display: 'block', fontSize: 14, lineHeight: '20px', color: 'var(--adaptiveGrey600, #645E54)' }}>처음이신가요?</span>
+        {/* 아치의 주인공 자리 — 세리프로 시계와 같은 축을 받는다. */}
+        <span style={{ display: 'block', marginTop: 8, fontSize: 26, color: 'var(--adaptiveGrey800, #1D1B18)', ...SERIF_VALUE }}>앱 사용법 보기 ›</span>
+        <span style={{ display: 'block', marginTop: 10, fontSize: 14, color: 'var(--adaptiveGrey600, #645E54)' }}>
           서재·책방·여백까지 차례로 짚어드려요
         </span>
       </button>
@@ -2287,18 +2285,18 @@ export function GuideHero({ onStart, onDismiss }: { onStart: () => void; onDismi
         aria-label="안내 카드 닫기"
         onClick={onDismiss}
         style={{
-          position: 'absolute',
-          top: -12,
-          right: -8,
+          minHeight: 44,
+          marginTop: 4,
+          padding: '0 12px',
           border: 'none',
           background: 'transparent',
-          padding: 8,
           color: 'var(--adaptiveGrey600, #645E54)',
+          fontFamily: 'inherit',
           fontSize: 14,
           cursor: 'pointer',
         }}
       >
-        ✕
+        ✕ 닫기
       </button>
     </div>
   );
