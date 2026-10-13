@@ -3,6 +3,13 @@ import { useState } from 'react';
 import type { ComponentProps, CSSProperties, ReactNode } from 'react';
 
 import type { ContributionDay, UserRow } from './api';
+/*
+ * 판화 한 점 — Thomas Bewick, 「Barn Owl」(1797, 퍼블릭 도메인). 가공 레시피(일회성, 결과 PNG만 커밋):
+ * 원본 500px PNG → sharp `grayscale().linear(1.5, -0.5·128 + 0.12·255)` → 밝기 v ≥ 215는 투명, 그 아래는
+ * 알파 = min(255, (215 − v)/215 · 255 · 1.25), 색은 잉크 #1D1B18 한 색 → 투명 여백 trim → 폭 444 → PNG 16색 팔레트.
+ * 종이 위 MULTIPLY와 같은 그림을 런타임 필터·블렌드 0으로 얻는다(T-176). 한 파일을 64·80·148px에 쓴다(@3 기준 444).
+ */
+import woodcutOwl from './assets/woodcut-owl.png';
 
 /**
  * 글자색 토큰 이름 → CSS 색 — TDS `Text`의 `color`는 <b>CSS 색 문자열</b>이지 토큰 이름이 아니다.
@@ -344,43 +351,62 @@ export const SPROUT_PATHS = [
 ] as const;
 
 /**
- * 목표 달성 메달 — 코인 + 리본 둘 + 새싹(시안 Soft-Goal). 리본·새싹은 에디토리얼 잉크 농담으로 바꿨다(PR-1 — 세이지 0).
- * 도장 모양 개편은 PR-2(REQ-08) 몫이다.
+ * 목표 달성 도장 — 잉크 선 원 두 겹 + 새싹(에디토리얼 PR-2 · REQ-08). 옛 입체 금메달(그라데이션·금색·하이라이트)은
+ * 「이펙트 0 · 강조색 하나」 결정과 맞지 않아 종이에 찍힌 도장으로 바꿨다.
  *
  * <p>튀는 움직임은 `global.css`의 `.medal-pop`(transform·opacity만, 1회). SVG 안에 글자·이미지가 없어 튀는
- * 동안 다시 그릴 콘텐츠가 없다(T-176). 색은 그림의 색이라 리터럴이다 — 메달은 독서 모드·측정 밖에서만 선다.
+ * 동안 다시 그릴 콘텐츠가 없다(T-176). 선 색은 style로 준다 — 프레젠테이션 속성엔 `var()`가 안 먹는다.
  */
 export function GoalMedal({ size = 132 }: { size?: number }) {
-  const id = `medal-coin-${size}`;
+  const ink = { stroke: 'var(--adaptiveGrey800, #1D1B18)' } as const;
   return (
     <svg
       className="medal-pop"
       data-medal=""
       aria-hidden="true"
       width={size}
-      height={Math.round((size * 130) / 120)}
-      viewBox="0 0 120 130"
+      height={size}
+      viewBox="0 0 120 120"
       style={{ display: 'block', flex: 'none' }}
     >
-      <defs>
-        <radialGradient id={id} cx="0.38" cy="0.32" r="0.75">
-          <stop offset="0" stopColor="#FFF8DF" />
-          <stop offset="0.7" stopColor="#EEDB97" />
-          <stop offset="1" stopColor="#D9BF6A" />
-        </radialGradient>
-      </defs>
-      <path d="M40 86 L30 122 L44 114 L50 126 L58 92 Z" fill="#625A4F" />
-      <path d="M80 86 L90 122 L76 114 L70 126 L62 92 Z" fill="#1D1B18" />
-      <circle cx="60" cy="56" r="46" fill={`url(#${id})`} />
-      <circle cx="60" cy="56" r="36" fill="none" stroke="#FFFFFF" strokeWidth="3" opacity="0.7" />
-      <ellipse cx="44" cy="30" rx="14" ry="6" fill="#FFFFFF" opacity="0.55" transform="rotate(-24 44 30)" />
-      {/* 새싹 — 24 격자의 (12,14)를 코인 중심(60,56)에 맞춰 3배로 키운다. */}
-      <g transform="translate(24 14) scale(3)" stroke="#1D1B18" strokeWidth="1.1" strokeLinecap="round" strokeLinejoin="round">
-        <path d={SPROUT_PATHS[0]} fill="none" />
-        <path d={SPROUT_PATHS[1]} fill="#A29785" />
-        <path d={SPROUT_PATHS[2]} fill="#CDC3B2" />
+      <circle cx="60" cy="60" r="56" fill="none" strokeWidth="1.5" style={ink} />
+      <circle cx="60" cy="60" r="48" fill="none" strokeWidth="1" style={ink} />
+      {/* 새싹 — 24 격자의 (12,14)를 도장 중심(60,60)에 맞춰 3배로 키운다. 잎도 선만(채움 0). */}
+      <g transform="translate(24 18) scale(3)" fill="none" strokeWidth="0.9" strokeLinecap="round" strokeLinejoin="round" style={ink}>
+        {SPROUT_PATHS.map((d) => (
+          <path key={d} d={d} />
+        ))}
       </g>
     </svg>
+  );
+}
+
+/**
+ * 아치 — 반원 머리 + 곧은 옆선 + 밑선(밑선이 곧 아래 오늘 표의 위 테두리다 · 계획 §5-3).
+ * 반경 999가 폭/2로 자동 축소돼 화면 폭이 바뀌어도 반원이다. 배경을 종이 토큰으로 칠하는 이유는 밤(독서등)이다 —
+ * `.lamp-page`가 그 토큰을 낮 값으로 다시 정의해, 책상 위에 아치 모양으로 잘린 미색 페이지가 된다(낮엔 종이 = 종이라 안 보인다).
+ */
+export const ARCH = {
+  border: '1px solid var(--adaptiveGrey800, #1D1B18)',
+  borderRadius: '999px 999px 0 0',
+  background: 'var(--adaptiveGrey100, #F5F0E6)',
+} as const;
+
+/**
+ * 판화 한 점(REQ-12 — 화면당 ≤ 1). 장식이라 스크린리더에서 뺀다. 높이는 원본 비율(444×441)을 따르게 폭만 준다.
+ * `data-woodcut`은 「화면에 몇 점인가」를 세는 계측 손잡이다.
+ */
+export function Woodcut({ size }: { size: number }) {
+  return (
+    <img
+      src={woodcutOwl}
+      alt=""
+      aria-hidden="true"
+      data-woodcut=""
+      width={size}
+      height={Math.round((size * 441) / 444)}
+      style={{ display: 'block', margin: '0 auto' }}
+    />
   );
 }
 

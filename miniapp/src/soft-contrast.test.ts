@@ -73,8 +73,9 @@ const scopes: Scope[] = [
   { name: '낮', t: day, body: background('html body') },
   { name: '밤', t: night, body: background('body.reading-lamp') },
   // 등불 밑 페이지는 미색 한 장이다 — 글자가 책상 위에 서지 않으므로 캔버스 쌍은 재지 않는다.
-  // ⚠️ 그 페이지를 실제로 칠하는 것은 토큰이 아니라 블록의 `background: … !important` 리터럴이다.
-  { name: '등불 밑 페이지', t: { ...page, '--adaptiveGrey100': background('body.reading-lamp .lamp-page') } },
+  // 에디토리얼 PR-2부터 그 페이지를 칠하는 것은 블록 리터럴이 아니라 아치·오늘 표의 `var(--adaptiveGrey100)`이고,
+  // 블록이 그 토큰을 미색으로 다시 정의한다 — 그래서 블록의 토큰 그대로가 페이지의 바탕이다.
+  { name: '등불 밑 페이지', t: page },
   { name: '공부', t: study, body: background('html body') },
 ];
 

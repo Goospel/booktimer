@@ -15,7 +15,7 @@ import {
 } from './App';
 import type { DashboardResponse, StudyBookRow, StudyState } from './api';
 import { IDLE_STUDY } from './api';
-import { ACTIVE_STUDY_RELIEF, HERO_CARD_BG_VAR, Home, ModeToggle, heroOverline } from './screens/Home';
+import { ACTIVE_STUDY_RELIEF, Home, ModeToggle, heroOverline } from './screens/Home';
 import { SessionGoalSheet } from './screens/SessionGoalSheet';
 import { graph, stubLocalStorage, userAgent } from './test-fixtures';
 
@@ -186,20 +186,15 @@ describe('공부 모드 색 — css에 실재하는가', () => {
   });
 
   /**
-   * 히어로 카드 틴트(2차 §7-B) — 「토글했는데 색이 안 바뀐다」의 처방이다. 값이 <b>양쪽에</b> 있어야
-   * 의미가 있다: 낮 기본값이 빠지면 인라인 fallback만 남아 공부 모드에서도 종이색 그대로다.
+   * 히어로 카드 틴트(2차 §7-B)는 걷혔다(에디토리얼 PR-2) — 아치는 면이 없고, 「토글했는데 색이 안 바뀐다」의 처방은
+   * 면이 아니라 강조 잉크(파란 잉크)가 맡는다. 토큰이 css 어디에도, 홈 마크업 어디에도 남지 않는다.
    */
-  it('REQ-14 · 히어로 카드 면이 없다 — 낮은 투명, 공부 블록은 틴트를 정의하지 않는다(면 대신 강조 잉크가 모드를 말한다)', () => {
-    const root = css.slice(css.indexOf('html:root {'), css.indexOf('}', css.indexOf('html:root {')));
+  it('REQ-14 · 히어로 틴트 토큰이 사라졌다 — 공부 모드는 면이 아니라 강조 잉크로 말한다', () => {
     const study = css.slice(css.indexOf(`body.${STUDY_CLASS} {`), css.indexOf('}', css.indexOf(`body.${STUDY_CLASS} {`)));
 
-    expect(root).toContain(`${HERO_CARD_BG_VAR}: transparent`); // 아치는 면이 없다(PR-2가 사용처를 걷는다)
     expect(study).toContain('--adaptiveBlue700:'); // 블록을 제대로 잘랐다(아래 부재 단언이 공허하지 않음)
-    expect(study).not.toContain(`${HERO_CARD_BG_VAR}:`);
-  });
-
-  it('히어로 카드가 그 토큰을 실제로 소비한다 — 선언만 있고 안 쓰면 화면은 안 바뀐다', () => {
-    expect(renderHome('study')).toContain(`background:var(${HERO_CARD_BG_VAR}`);
+    expect(css).not.toContain('--heroCardBg');
+    expect(renderHome('study')).not.toContain('--heroCardBg');
   });
 
   /**
@@ -269,9 +264,13 @@ describe('공부 모드 색 — css에 실재하는가', () => {
 
   /** 큰 시계 잉크(2차 §7-C) — 화면 최대 활자가 「파란 펜」이 된다. 토큰 경유라 값은 css가 정한다. */
   it('공부 모드의 큰 시계는 파란 잉크다 — 독서 모드 시계는 그대로 잉크색', () => {
-    // 큰 시계만 집는다 — 머리말(오버라인)은 두 모드 다 ACCENT라 그걸로 재면 늘 파랑이 잡힌다.
-    const clockTag = (markup: string, clock: string) =>
-      markup.slice(markup.lastIndexOf('<span', markup.indexOf(clock)), markup.indexOf(clock));
+    // 큰 시계만 집는다 — 머리말(오버라인)은 두 모드 다 ACCENT라 그걸로 재면 늘 파랑이 잡힌다. 에디토리얼 PR-2부터 시계는
+    // 숫자를 1ch 칸으로 쪼개 그리므로 글자 대신 읽기 이름(aria-label)으로 그릇 태그를 집는다.
+    const clockTag = (markup: string, clock: string) => {
+      const at = markup.indexOf(`aria-label="${clock}"`);
+      return at < 0 ? '' : markup.slice(markup.lastIndexOf('<div', at), markup.indexOf('>', at));
+    };
+    expect(clockTag(renderHome('reading'), '45:00')).toContain('data-hero-clock'); // 그릇을 잡았다(아래 부재 단언이 공허하지 않음)
 
     expect(clockTag(renderHome('study', {}, { ...IDLE_STUDY, todaySeconds: 3_725 }), '01:02:05'))
       .toContain('--adaptiveBlue700');
@@ -733,9 +732,9 @@ describe('모드 토글', () => {
     expect(toggle('reading')).not.toContain('aria-disabled');
   });
 
-  it('세그먼트는 그릇 면 없이 고른 칸의 잉크 테가 말한다(결정 ①) — 절대위치가 아니라 머리 줄의 흐름 안이다', () => {
+  it('세그먼트는 그릇 면 없이 고른 칸의 잉크 밑줄이 말한다(안 1 밑줄형) — 절대위치가 아니라 아치 속 흐름 안이다', () => {
     const markup = toggle('reading');
-    expect(markup).toContain('border:1px solid var(--adaptiveBlue700');
+    expect(markup).toContain('border-bottom:2px solid var(--adaptiveBlue700');
     expect(markup).not.toContain('background:var(--softDent');
     expect(markup).not.toContain('position:absolute');
   });

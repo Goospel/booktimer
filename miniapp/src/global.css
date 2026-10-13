@@ -119,8 +119,6 @@ html:root {
   --butterInk: #4A453E;
   /* 잉크 원·검정 알약 위 획 — 미색(15.13). 밤엔 책상색으로 갈린다. */
   --filledInk: #F5F0E6;
-  /* 히어로 카드 면 — 아치는 면이 없다(PR-2가 사용처를 걷는다). */
-  --heroCardBg: transparent;
   --adaptiveGrey200: #D9D1C3; /* 가는 선 — 비글자 장식(종이 대비 1.33이라 입력칸 경계로는 못 쓴다 → FIELD) */
   /*
    * 입력칸 힌트 — TDS `TextField`가 `--text-field-box-placeholder-color: var(--adaptiveGrey500)`로 쓴다. 빈 `var()`는
@@ -483,7 +481,9 @@ body.reading-lamp main {
  * 정의하므로, 페이지 안쪽은 전부 낮의 색을 본다(변수는 가장 가까운 정의를 따른다).
  *
  * 표식(`lamp-page`)은 `Home.tsx`의 `LAMP_PAGE_CLASS`와 한 쌍이고, 측정 여부와 무관하게 늘 붙어 있다 — 켤지 말지는
- * 위 `body` 클래스가 정한다. PR-1은 지금 히어로 그릇 그대로의 **사각 페이지**다(PR-2가 아치 모양 페이지로 바꾼다).
+ * 위 `body` 클래스가 정한다. 이 그릇은 **배경을 칠하지 않는다**(PR-2 — 아치 모양 페이지): 안의 아치·오늘 표가 각자
+ * `var(--adaptiveGrey100)`으로 칠하고, 그 값을 여기서 미색으로 되돌리므로 아치 반경대로 잘린 미색 페이지가 된다.
+ * 사각 배경을 다시 깔면 아치 바깥 모서리가 미색으로 새어 「아치 페이지」가 사각이 된다(home.test REQ-14가 막는다).
  */
 body.reading-lamp .lamp-page {
   --brandButtonInk: #1D1B18;
@@ -505,8 +505,12 @@ body.reading-lamp .lamp-page {
   --adaptiveGrey800: #1D1B18;
   --adaptiveGrey900: #1D1B18;
 
-  background: #F5F0E6 !important; /* 인라인 배경은 자기 요소의 재정의를 못 본다 — 리터럴로 페이지를 깐다 */
   color: #1D1B18;
+}
+
+/* 밤의 오늘 표 — 미색 페이지 아랫부분이라 글자가 페이지 가장자리에 붙지 않게 안쪽 여백을 둔다(낮엔 표가 종이와 한 몸이라 0). */
+body.reading-lamp .lamp-page [data-today-table] {
+  padding: 0 16px 4px;
 }
 
 /*

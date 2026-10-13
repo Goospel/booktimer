@@ -16,6 +16,7 @@ import {
   startLogin,
   whenPageLoaded,
 } from './screens/GuestHome';
+import { COVER_GAP, COVER_WIDTH } from './screens/Home';
 import { stubLocalStorage, userAgent } from './test-fixtures';
 import { openExternal, trackEvent } from './toss';
 import type { Trial } from './trial';
@@ -182,6 +183,19 @@ describe('게스트 홈 — 무엇으로 측정할까요?', () => {
   it('재는 중에도 끝난 뒤에도 그대로 선다 — 상태마다 갈아끼우면 화면이 세로로 들썩인다', () => {
     expect(shell(running)).toContain('무엇으로 측정할까요?');
     expect(shell(done)).toContain('무엇으로 측정할까요?');
+  });
+
+  // 정적 렌더는 레이아웃을 못 잰다 — 줄의 gap 식을 내용 폭 W에 대해 풀어 「칸 셋 + 간격 둘」을 계산한다.
+  // 320 화면(내용 280)이 지원 하한이다(계획 §11 U-5). 고정 32px이면 88×3 + 64 = 328로 넘쳐 첫 화면에 가로 스크롤이 생긴다.
+  it('좁은 폰(내용 280)에서도 고르기 줄이 내용 폭을 넘지 않고, 넓은 폰에선 로그인 홈과 같은 간격이다', () => {
+    const row = shell(null).match(/<div style="([^"]*)"><span data-book-slot="free"/)?.[1] ?? '';
+    const gap = row.match(/gap:([^;]+)/)?.[1] ?? '';
+    const gapAt = (w: number) => {
+      const m = gap.match(/^min\((\d+)px, calc\(\(100% - (\d+)px\) \/ 2\)\)$/);
+      return m ? Math.min(Number(m[1]), (w - Number(m[2])) / 2) : parseFloat(gap);
+    };
+    for (const w of [280, 300, 350]) expect(3 * COVER_WIDTH + 2 * gapAt(w)).toBeLessThanOrEqual(w);
+    expect(gapAt(350)).toBe(COVER_GAP);
   });
 });
 
@@ -425,17 +439,17 @@ describe('게스트 홈 — 메달은 끝난 뒤에만', () => {
     expect(markup).not.toContain('data-medal');
   });
 
-  it('체험 전·중 히어로엔 책 더미 그림 하나가 선다(부푼 오브젝트는 한 화면에 하나)', () => {
-    expect(shell(null).match(/data-book-stack/g)).toHaveLength(1);
-    expect(shell(done)).not.toContain('data-book-stack'); // 끝난 뒤엔 메달이 그 하나다
+  it('체험 전·중 히어로엔 판화 한 점이 선다 — 끝난 뒤엔 도장이 그 자리를 잇는다(그림은 한 화면에 하나)', () => {
+    expect(shell(null).match(/data-woodcut/g)).toHaveLength(1);
+    expect(shell(done)).not.toContain('data-woodcut');
   });
 
-  it('히어로는 면·그림자가 없다(에디토리얼) — 아치 배치는 PR-2', () => {
+  it('히어로는 면·그림자가 없는 아치다(에디토리얼 PR-2)', () => {
     const markup = shell(null);
-    const at = markup.indexOf('data-guest-hero');
+    const at = markup.indexOf('data-arch');
     const tag = markup.slice(markup.lastIndexOf('<', at), markup.indexOf('>', at) + 1);
 
-    expect(tag).toContain('padding:24px 20px'); // 그 태그를 잡았다(아래 부재 단언이 공허하지 않음)
+    expect(tag).toContain('border-radius:999px 999px 0 0'); // 그 태그를 잡았다(아래 부재 단언이 공허하지 않음)
     expect(tag).not.toContain('box-shadow');
   });
 
@@ -564,5 +578,39 @@ describe('재는 중 다른 손잡이로 로그인 (startLogin)', () => {
     startLogin(done, () => {}, 'trial');
 
     expect(readTrial()).toEqual(done);
+  });
+});
+
+/**
+ * 에디토리얼 PR-2 — 게스트 홈도 로그인 홈과 같은 아치 규칙으로 선다. 책 더미(입체 그라데이션)는 올빼미 판화 한 점이 잇는다(D5).
+ * 검정 알약(TDS primary)은 상태마다 하나 — 「읽기 시작」·「그만 읽기」·「토스로 시작하기」.
+ */
+describe('REQ-09 · 게스트 홈 아치 (PR-2)', () => {
+  /** TDS primary 버튼 수 — 인라인 키 `#3182f6`이 primary의 표지다(global.css가 같은 키로 검정 알약을 칠한다). */
+  const primaries = (markup: string) => (markup.match(/--button-background-color:#3182f6/g) ?? []).length;
+
+  it('체험 전 — 아치 안에 판화 한 점, 책 더미 없음, 검정 알약 하나', () => {
+    const markup = shell(null);
+
+    expect(markup).toContain('data-arch');
+    expect(markup.match(/data-woodcut/g)).toHaveLength(1);
+    expect(markup).not.toContain('data-book-stack');
+    expect(primaries(markup)).toBe(1);
+  });
+
+  it('재는 중 — 같은 아치, 판화 한 점, 검정 알약은 「그만 읽기」 하나', () => {
+    const markup = shell(running);
+
+    expect(markup).toContain('data-arch');
+    expect(markup.match(/data-woodcut/g)).toHaveLength(1);
+    expect(primaries(markup)).toBe(1);
+  });
+
+  it('끝남 — 아치 안에 도장, 검정 알약은 「토스로 시작하기」 하나', () => {
+    const markup = shell(done);
+
+    expect(markup).toContain('data-arch');
+    expect(markup.indexOf('data-arch')).toBeLessThan(markup.indexOf('data-medal'));
+    expect(primaries(markup)).toBe(1);
   });
 });

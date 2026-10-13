@@ -364,7 +364,8 @@ describe('홈 오늘 진행률', () => {
     const markup = home({ remainingSeconds: 900 });
     const between = markup.slice(markup.indexOf('오늘 읽은 시간') + 8, markup.indexOf('45:00'));
 
-    expect(between).toContain('</div>');
+    // 에디토리얼 PR-2 — 눈썹(span, display:block)이 닫히고 시계가 제 블록(div)으로 선다.
+    expect(between).toContain('</span><div');
   });
 });
 
