@@ -682,3 +682,23 @@ describe('dev-mock 사람축 전체 여백', () => {
     expect(entries.map((e) => e.id)).toContain(921);
   });
 });
+
+describe('dev-mock 잔디 월 라벨', () => {
+  afterEach(() => vi.useRealTimers());
+
+  it('REQ-04 · 목 잔디도 이번 달 3주 미만이면 맨 앞 라벨을 뺀다', async () => {
+    vi.useFakeTimers();
+    // KST 정오 — 목 열은 오늘부터 7일씩이라 10-13엔 10월이 2열(10-13 · 10-06), 9월은 2열(09-29)부터
+    vi.setSystemTime(new Date('2026-10-13T03:00:00Z'));
+    const narrow = await mockRequest<DashboardResponse>('/api/dashboard', {});
+    expect(narrow.graph.monthLabels[0]).toEqual({ weekIndex: 2, label: '9월' });
+
+    // 10-15엔 10월이 3열(10-15 · 10-08 · 10-01) — 이번 달 라벨이 선다(경계)
+    vi.setSystemTime(new Date('2026-10-15T03:00:00Z'));
+    const wide = await mockRequest<DashboardResponse>('/api/dashboard', {});
+    expect(wide.graph.monthLabels.slice(0, 2)).toEqual([
+      { weekIndex: 0, label: '10월' },
+      { weekIndex: 3, label: '9월' },
+    ]);
+  });
+});

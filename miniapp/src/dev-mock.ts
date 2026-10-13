@@ -132,6 +132,8 @@ function graphOf(
     const previous = weekIndex === 0 ? '' : weeks[weekIndex - 1][6].date!.slice(5, 7);
     return month === previous ? [] : [{ weekIndex, label: `${Number(month)}월` }];
   });
+  // 서버 규칙(ContributionGraphBuilder.MIN_LABEL_WEEKS) 그대로 — 맨 앞(이번 달)은 다음 라벨까지 3열이 안 되면 뺀다.
+  if (monthLabels.length > 1 && monthLabels[1].weekIndex - monthLabels[0].weekIndex < 3) monthLabels.shift();
 
   // 오늘(offset 0)부터 처음 빈 날을 만나기까지 = 연속일. 두 패턴 모두 0이 있어 반드시 끝난다.
   let currentStreak = 0;
