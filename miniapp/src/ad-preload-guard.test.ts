@@ -58,5 +58,23 @@ describe('광고 로드는 preloadAd 한 곳뿐이다 (비게임 체크리스트
     const elsewhere = others.flatMap((file) => preloadLines(stripComments(readFileSync(file, 'utf8'))));
     expect(elsewhere).toHaveLength(2);
     for (const line of elsewhere) expect(line).toMatch(/action === 'retry' \? \(\) => preloadAd\(/);
+
+    // 호출 구문 없이 참조로 넘기는 자동 재시도(`setTimeout(preloadAd, …)`)도 막는다 — 토큰은 import 2 + 다시 불러오기 2뿐이다.
+    const tokens = others.reduce((n, file) => n + stripComments(readFileSync(file, 'utf8')).split('preloadAd').length - 1, 0);
+    expect(tokens).toBe(4);
+  });
+
+  it('REQ-05 · useAdSlot effect 본문이 그대로다 — prev 갱신·순서·의존성이 루프와 무호출을 가른다', () => {
+    // 실기기 onError는 비동기라 prev 갱신이 빠지면 failed마다 다시 부르는 노필 루프가 된다 — 목 모드(동기 throw)론
+    // 안 보여서 행동 테스트가 못 잡는다. 갱신을 게이트 앞으로 옮기면 영영 안 부르고, deps에서 status를 빼면 다 본 뒤 안 부른다.
+    const start = toss.indexOf('export function useAdSlot(');
+    expect(start).toBeGreaterThan(-1);
+    const body = toss
+      .slice(start, toss.indexOf('\n}', start))
+      .replace(/\/\/[^\n]*/g, '') // stripComments는 줄 끝 주석을 남긴다
+      .replace(/\s+/g, ' ');
+    expect(body).toContain(
+      'useEffect(() => { if (!wanted) { prev.current = undefined; return; } if (shouldPreload(prev.current, status, wanted)) preloadAd(adGroupId); prev.current = status; }, [adGroupId, wanted, status]);',
+    );
   });
 });
