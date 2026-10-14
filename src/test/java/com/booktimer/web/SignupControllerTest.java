@@ -29,6 +29,8 @@ import static org.hamcrest.Matchers.containsString;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.model;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.redirectedUrl;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
+import static org.hamcrest.Matchers.endsWith;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.view;
 
@@ -66,13 +68,42 @@ class SignupControllerTest {
     /** 전부 유효한 가입 페이로드 — 이메일·아이디만 갈아 끼운다. */
     private org.springframework.test.web.servlet.ResultActions submitSignup(String email, String loginId)
             throws Exception {
-        return mockMvc.perform(post("/signup").with(csrf())
+        return mockMvc.perform(signupRequest(email, loginId));
+    }
+
+    private org.springframework.test.web.servlet.request.MockHttpServletRequestBuilder signupRequest(
+            String email, String loginId) {
+        return post("/signup").with(csrf())
                 .param("email", email)
                 .param("loginId", loginId)
                 .param("password", "rawpw1234")
                 .param("nickname", "책벌레")
                 .param("timezone", "Asia/Seoul")
-                .param("ageConfirmed", "true"));
+                .param("ageConfirmed", "true");
+    }
+
+    private org.springframework.test.web.servlet.ResultActions forwardedSignup(
+            String email, String loginId, String forwardedFor) throws Exception {
+        return mockMvc.perform(signupRequest(email, loginId).header("X-Forwarded-For", forwardedFor));
+    }
+
+    @Test
+    @DisplayName("POST /signup: IP 상한의 키는 X-Forwarded-For의 IP다 — 한 IP가 상한을 다 써도 다른 XFF IP는 가입된다. XFF를 무시하면 운영의 모든 클라이언트가 앞단 프록시(Caddy) IP 하나로 묶여 한 명이 10회 쓰면 전원이 막힌다")
+    void postSignup_rateLimitKey_comesFromForwardedForHeader() throws Exception {
+        // XFF가 붙으면 ForwardedHeaderFilter가 Location을 절대 URL로 바꾸고, 필터가 XFF를 무시하면 상대 경로로 남는다 —
+        // 어느 쪽이든 같은 판정이 나도록 끝부분만 본다(그래야 돌연변이가 아래 「다른 IP」 단언에서 죽는다).
+        for (int i = 1; i <= 10; i++) {
+            forwardedSignup("xa" + i + "@booktimer.com", "xffa" + i, "203.0.113.9")
+                    .andExpect(header().string("Location", endsWith("/login?registered")));
+        }
+        // 같은 XFF IP의 11번째는 막힌다 — 이게 없으면 「상한이 아예 안 걸림」도 아래 단언을 통과한다.
+        forwardedSignup("xa11@booktimer.com", "xffa11", "203.0.113.9")
+                .andExpect(content().string(containsString("가입 요청이 너무 잦습니다")));
+
+        // 다른 XFF IP는 자기 몫이 남아 있다 — XFF가 무시되면 둘이 같은 키(127.0.0.1)를 써서 여기도 막힌다.
+        forwardedSignup("xb1@booktimer.com", "xffb1", "203.0.113.10")
+                .andExpect(header().string("Location", endsWith("/login?registered")));
+        assertThat(userRepository.findByEmail("xb1@booktimer.com")).isPresent();
     }
 
     @Test

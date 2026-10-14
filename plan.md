@@ -5383,7 +5383,8 @@ package-private static이라 호출이 공짜였고, 복제하면 0초 조각 �
     게스트 홈 로그인 이유·맨 아래 문장·연결 화면·탈퇴 시트 문구에서 자사 주소·웹 안내 삭제 · 웹 설정 「토스 앱 연결」 카드에 미니앱 버튼
     「기존 계정 연결」 명시 · 소스 가드 `miniapp/src/self-site-guard.test.ts` → ✅ **번들 20261014-169 라이브**(2026-10-14 19:37,
     `bundle_get_live_version` 실측 · 출시노트에 「PC 웹에서 이어 보기」 제거 명시) → 🔜 PR-①S(2026-10-14): 서버 발급 API·`/login/toss-code`·
-    웹 로그인 화면 「코드로 로그인」 칸 삭제(안내 한 줄로 대체, `Purpose.WEB_LOGIN` 상수는 탈퇴용으로 존치). 남은 것: PR-①S 머지·배포 뒤
+    웹 로그인 화면 「코드로 로그인」 칸 삭제(안내 한 줄로 대체, `Purpose.WEB_LOGIN` 상수는 탈퇴용으로 존치). 함께 지워진 「IP 상한 키 = X-Forwarded-For」
+    테스트는 `SignupControllerTest`로 옮겼다(✅ 2026-10-14). 남은 것: PR-①S 머지·배포 뒤
     운영 로그인 화면 확인(①U-07) · 콘솔 스토어 설명 마지막 문단 삭제(사용자)
   - [ ] ② 토스 로그인 연결 끊기 — 🔜 PR-②(2026-10-14): 콜백 `POST /api/toss/unlink-callback`(Basic 상수시간 대조 · fail-closed ·
     최상위 userKey만 · 멱등 · 로그에 헤더·userKey 원문 없음) · 토스 미니앱 가입·이메일 미인증 계정은 회원 탈퇴와 같이 삭제,
