@@ -9,6 +9,7 @@ import {
   loadFullScreenAd,
   showFullScreenAd,
 } from '@apps-in-toss/web-framework';
+import { useEffect, useRef, useSyncExternalStore } from 'react';
 
 /**
  * 전환 이벤트 1건 발사 — 앱인토스 콘솔 「핵심 지표」가 고를 커스텀 이벤트를 남긴다(발사 후 망각).
@@ -211,35 +212,159 @@ export function openExternal(url: string): void {
 }
 
 /**
- * 리워드 광고 1회 시청 — `true`=보상 조건 충족(끝까지 봄), `false`=중간 이탈.
+ * 전면형·보상형 광고 한 장의 상태 — 광고 그룹(= 지면)마다 하나다.
  *
- * <p>보상 시점 신호는 `userEarnedReward` 클라이언트 이벤트뿐이다(SDK에 서버사이드 보상 검증이 없다).
- * 그런데 **문서에 `userEarnedReward`와 `dismissed`의 순서 계약이 없어서**, 플래그로 들고 있다가
- * 광고가 닫히는 `dismissed`에서 확정한다 — 두 순서 어느 쪽이 와도 같은 답이 나온다.
+ *   idle ──preloadAd──▶ loading ──loaded──▶ ready ──watchRewardAd──▶ showing ──끝──▶ idle
+ *                          └─ 에러·동기 throw·60초 무응답 ─▶ failed ──preloadAd──▶ loading
  *
- * <p>사전 로드 최적화(버튼 노출 시 미리 load)는 하지 않는다 — 클릭 시 로드로 시작하고,
- * 로드 지연이 실측으로 거슬리면 그때 옮긴다.
+ * <p>앱인토스 계약을 옮긴 것이다: 같은 그룹은 한 번에 한 장만 미리 불러 둘 수 있고, 띄운 장은 다시 못
+ * 띄운다(load → show → load). 화면이 아니라 모듈에 두는 이유 — 탭을 오가면 화면이 다시 마운트되는데,
+ * 그때마다 새로 부르면 「한 장」 계약을 어기고 받아 둔 광고를 버린다.
  */
-export function watchRewardAd(adGroupId: string): Promise<boolean> {
-  return new Promise((resolve, reject) => {
-    let rewarded = false;
+export type AdSlotStatus = 'idle' | 'loading' | 'ready' | 'showing' | 'failed';
+
+/**
+ * 로드 무응답 상한(ms) — 문서의 최대 네트워크 타임아웃(AdMob 60초)과 같다. 더 짧으면 느린 AdMob 로드를
+ * 우리가 먼저 버린다. 이 벨트가 없으면 이벤트 하나가 사라질 때(문서: Android 5.266.0) 슬롯이 앱을 끌 때까지
+ * loading에 갇힌다 — 모듈 상태라 화면을 다시 열어도 안 풀린다.
+ */
+export const AD_LOAD_TIMEOUT_MS = 60_000;
+
+const adSlots = new Map<string, AdSlotStatus>();
+/** 지금 유효한 로드 — 시간 초과 뒤 다시 부른 로드를 옛 로드의 늦은 에러·타이머가 failed로 덮지 못하게 한다. */
+const adLoads = new Map<string, object>();
+const adSlotListeners = new Set<() => void>();
+
+function setAdSlot(adGroupId: string, status: AdSlotStatus): void {
+  adSlots.set(adGroupId, status);
+  adSlotListeners.forEach((listener) => listener());
+}
+
+export function adSlotStatus(adGroupId: string): AdSlotStatus {
+  return adSlots.get(adGroupId) ?? 'idle';
+}
+
+/** 슬롯이 바뀔 때마다 부른다 — 해지 함수를 돌려준다(`onCoachmarkChange`와 같은 꼴). */
+export function onAdSlotChange(listener: () => void): () => void {
+  adSlotListeners.add(listener);
+  return () => adSlotListeners.delete(listener);
+}
+
+/**
+ * 광고 한 장을 미리 불러 둔다 — 버튼을 누르기 <b>전에</b>. idle·failed일 때만 움직이고(그룹당 한 장),
+ * 그룹이 비면(config-gate) 아무것도 안 한다. 절대 던지지 않는다.
+ *
+ * <p>ponytail: SDK가 주는 해제 함수는 부르지 않는다 — 오늘 코드와 같고 세션에 몇 장이라 남는 콜백이 무시할
+ * 크기다. 시간 초과 뒤에 늦게 오는 loaded도 받아야 해서 일부러 열어 둔다.
+ */
+export function preloadAd(adGroupId: string): void {
+  const now = adSlotStatus(adGroupId);
+  if (adGroupId === '' || (now !== 'idle' && now !== 'failed')) return;
+  const load = {};
+  adLoads.set(adGroupId, load);
+  setAdSlot(adGroupId, 'loading');
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const fail = () => {
+    clearTimeout(timer);
+    // 내 로드가 아직 유효하고 그 로드를 기다리는 중일 때만 — 옛 로드의 늦은 에러는 새 로드를 망치지 않는다.
+    if (adLoads.get(adGroupId) === load && adSlotStatus(adGroupId) === 'loading') setAdSlot(adGroupId, 'failed');
+  };
+  timer = setTimeout(fail, AD_LOAD_TIMEOUT_MS);
+  try {
     loadFullScreenAd({
       options: { adGroupId },
-      onError: reject,
-      // LoadFullScreenAdEvent는 'loaded' 하나뿐이라 따로 분기하지 않는다.
+      // 로드 이벤트는 'loaded' 하나뿐이다. 받는 때는 둘뿐이다 — ① 내 로드를 기다리는 중 ② 실패(시간 초과)로 접힌 뒤
+      // (광고는 실제로 받아졌다). 다시 부른 새 로드가 도는 중에 옛 로드의 늦은 loaded가 오면 무시한다 — SDK엔 새 장이
+      // 아직 준비되지 않았을 수 있어, ready로 받으면 탭했을 때 failedToShow 에러 문구가 뜬다.
       onEvent: () => {
-        showFullScreenAd({
-          options: { adGroupId },
-          onError: reject,
-          onEvent: (event) => {
-            if (event.type === 'userEarnedReward') rewarded = true;
-            else if (event.type === 'dismissed') resolve(rewarded);
-            else if (event.type === 'failedToShow') reject(new Error('광고를 표시하지 못했어요'));
-          },
-        });
+        clearTimeout(timer);
+        const status = adSlotStatus(adGroupId);
+        const mine = adLoads.get(adGroupId) === load;
+        if ((status === 'loading' && mine) || status === 'failed') setAdSlot(adGroupId, 'ready');
       },
+      onError: fail,
     });
+  } catch {
+    fail(); // 앱 밖(목 모드)엔 웹뷰 브릿지가 없어 SDK가 동기로 던진다
+  }
+}
+
+/**
+ * 리워드 광고 1회 시청 — <b>미리 불러 둔(ready) 광고만</b> 띄운다. `true`=보상 조건 충족(끝까지 봄), `false`=중간 이탈.
+ *
+ * <p>재생 시점엔 불러오지 않는다(비게임 출시 체크리스트 「인앱 광고는 사전에 로딩돼 있어요」). 버튼은 ready에서만
+ * 눌리므로(`rewardAdButton`) ready가 아닌 채 여기 닿는 건 연타 경주뿐이고, 그때는 아무 일도 없었던 것 — 보상 없음
+ * (`false`) — 으로 접는다(에러 문구를 띄우지 않으려는 선택).
+ *
+ * <p>보상 판정은 그대로다: `userEarnedReward`와 `dismissed`의 순서 계약이 문서에 없어 플래그로 들고 있다가
+ * `dismissed`에서 확정한다. 끝나면(닫힘·표시 실패·에러) 슬롯을 idle로 돌린다 — 띄운 장은 다시 못 띄우고,
+ * 지면이 아직 보이면 `useAdSlot`이 다음 장을 불러 둔다.
+ */
+export function watchRewardAd(adGroupId: string): Promise<boolean> {
+  if (adSlotStatus(adGroupId) !== 'ready') return Promise.resolve(false);
+  setAdSlot(adGroupId, 'showing');
+  const end = () => setAdSlot(adGroupId, 'idle');
+  return new Promise((resolve, reject) => {
+    let rewarded = false;
+    try {
+      showFullScreenAd({
+        options: { adGroupId },
+        onError: (error) => {
+          end();
+          reject(error);
+        },
+        onEvent: (event) => {
+          if (event.type === 'userEarnedReward') rewarded = true;
+          else if (event.type === 'dismissed') {
+            end();
+            resolve(rewarded);
+          } else if (event.type === 'failedToShow') {
+            end();
+            reject(new Error('광고를 표시하지 못했어요'));
+          }
+        },
+      });
+    } catch (error) {
+      end();
+      reject(error);
+    }
   });
+}
+
+/**
+ * 지면이 지금 다음 장을 부를 때인가 — `useAdSlot`의 판정을 effect 의존성이 아니라 이 함수가 맡는다(단위 테스트로 잠근다).
+ * `prev`는 이 지면이 직전에 본 슬롯 상태이고, 지면이 막 섰으면(마운트·`wanted`가 다시 켜짐) `undefined`다.
+ *
+ *  - 지면이 막 섰다 → 부른다. idle·failed가 아니면 preloadAd가 거른다(상자를 다시 펴면 실패한 장도 한 번 다시 부른다).
+ *  - 방금 다 봤다(→ idle) → 부른다(load → show → load).
+ *  - 그 밖(→ loading·ready·showing·failed) → 부르지 않는다. 특히 failed로 접힐 때 부르면 노필에서 요청을 퍼붓는 루프다.
+ */
+export function shouldPreload(prev: AdSlotStatus | undefined, next: AdSlotStatus, wanted: boolean): boolean {
+  if (!wanted) return false;
+  if (prev === undefined) return true;
+  return next === 'idle' && prev !== 'idle';
+}
+
+/**
+ * 지면 하나의 광고 상태 — 화면이 버튼을 그릴 때 쓴다. `wanted`가 참인 동안(버튼이 서 있을 때) 미리 불러 둔다.
+ *
+ * <p>effect는 상태가 바뀔 때마다 돌지만 preloadAd는 {@link shouldPreload}가 참일 때만 부른다 — 루프를 막는 규칙이
+ * 의존성 배열이 아니라 테스트된 함수에 있다. 다시 부르는 건 사람이 「광고 다시 불러오기」를 누르거나 버튼이 다시
+ * 설 때, 그리고 다 본 뒤뿐이다. 정적 렌더(테스트 하니스)에선 effect가 안 돌고 지금 상태만 읽는다(세 번째 인자의 몫).
+ */
+export function useAdSlot(adGroupId: string, wanted: boolean): AdSlotStatus {
+  const read = () => adSlotStatus(adGroupId);
+  const status = useSyncExternalStore(onAdSlotChange, read, read);
+  const prev = useRef<AdSlotStatus | undefined>(undefined);
+  useEffect(() => {
+    if (!wanted) {
+      prev.current = undefined; // 지면이 내려갔다 — 다음에 서면 「막 섰다」로 본다
+      return;
+    }
+    if (shouldPreload(prev.current, status, wanted)) preloadAd(adGroupId); // 중복·config-gate는 preloadAd가 거른다
+    prev.current = status;
+  }, [adGroupId, wanted, status]);
+  return status;
 }
 
 /**

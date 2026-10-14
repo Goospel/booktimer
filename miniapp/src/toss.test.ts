@@ -1,17 +1,26 @@
 import { Analytics, Device, Notification, loadFullScreenAd, showFullScreenAd } from '@apps-in-toss/web-framework';
+import { createElement } from 'react';
+import { renderToStaticMarkup } from 'react-dom/server';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import {
+  AD_LOAD_TIMEOUT_MS,
+  type AdSlotStatus,
   BANNER_RENDER_TIMEOUT_MS,
   GOAL_MET_TEMPLATE_CODE,
   STUDY_GOAL_TEMPLATE_CODE,
+  adSlotStatus,
   hapticOnce,
   marginBannerEnabled,
   notificationAgreementSupported,
+  onAdSlotChange,
+  preloadAd,
   requestNotificationAgreement,
+  shouldPreload,
   subscribeNativeBack,
   trackEvent,
   trackScreen,
+  useAdSlot,
   watchRewardAd,
 } from './toss';
 
@@ -24,15 +33,6 @@ const { tossAdsMock } = vi.hoisted(() => {
   const supportable = () => Object.assign(vi.fn(), { isSupported: vi.fn() });
   return { tossAdsMock: { initialize: supportable(), attachBanner: supportable() } };
 });
-
-/**
- * 리워드 광고 래퍼 — SDK 이벤트 시퀀스를 "보상을 받았나"라는 boolean 하나로 접는다.
- *
- * <p>왜 테스트가 필요한가: 문서에 `userEarnedReward`와 `dismissed`의 **순서 계약이 없다**.
- * 그래서 플래그로 들고 있다가 `dismissed`에 확정하는 방식을 쓰는데, 그 방식이 두 순서 모두에서
- * 같은 답을 내는지가 이 기능의 신뢰 경계다(광고를 끝까지 안 본 유저에게 지급하면 안 된다).
- * 실기기 실측은 머지 게이트로 따로 남아 있고, 여기선 래퍼 로직만 격리 검증한다.
- */
 
 vi.mock('@apps-in-toss/web-framework', () => ({
   loadFullScreenAd: vi.fn(),
@@ -77,56 +77,306 @@ beforeEach(() => {
   vi.stubGlobal('window', {}); // 래퍼가 브라우저 밖(window 없음)을 미지원으로 접으므로, 앱 안 상황을 만든다
 });
 
-describe('watchRewardAd', () => {
-  it('시청 완료(userEarnedReward → dismissed)면 true', async () => {
-    stubAd([{ type: 'show' }, { type: 'impression' }, { type: 'userEarnedReward', data: { unitType: 'day', unitAmount: 1 } }, { type: 'dismissed' }]);
+/** 테스트마다 새 그룹 ID — 슬롯이 모듈 상태라 테스트 사이에 남는다. */
+let groupSeq = 0;
+const fresh = () => `ad-group-${++groupSeq}`;
 
-    await expect(watchRewardAd('ad-group-1')).resolves.toBe(true);
+/** 새 그룹을 미리 불러 `ready`로 만든다 — show는 넘겨준 이벤트들을 흘린다. */
+function readyAd(events: Array<{ type: string; data?: unknown }>): string {
+  stubAd(events);
+  const g = fresh();
+  preloadAd(g);
+  return g;
+}
+
+/**
+ * 광고 슬롯 — 그룹(지면)마다 한 장을 <b>누르기 전에</b> 불러 둔다(비게임 체크리스트 ③ 「광고 재생 시점에 실시간으로
+ * 로딩하지 않아요」). 앱인토스 계약을 옮긴 것이다: 같은 그룹은 한 번에 한 장, 띄운 장은 다시 못 띄운다(load → show → load).
+ *
+ * <p>응답 없는 load를 쓰는 테스트는 가짜 타이머 안에서 돈다 — 실제 60초 상한 타이머를 워커에 남기지 않는다.
+ */
+describe('광고 슬롯 — preloadAd', () => {
+  it('REQ-02 · 그룹 ID가 비면 SDK를 부르지 않는다', () => {
+    preloadAd('');
+
+    expect(loadMock).not.toHaveBeenCalled();
+    expect(adSlotStatus('')).toBe('idle');
   });
 
-  it('순서가 뒤바뀌어도(dismissed 직전이 아니라 앞서 와도) 같은 답 — 문서에 순서 보장이 없다', async () => {
-    stubAd([{ type: 'userEarnedReward', data: { unitType: 'day', unitAmount: 1 } }, { type: 'show' }, { type: 'dismissed' }]);
+  it('REQ-02 · 미리 부르면 그 그룹으로 load를 한 번 부르고 loaded 전엔 loading이다', () => {
+    vi.useFakeTimers();
+    try {
+      loadMock.mockImplementation(() => () => {});
+      const g = fresh();
 
-    await expect(watchRewardAd('ad-group-1')).resolves.toBe(true);
+      preloadAd(g);
+
+      expect(loadMock).toHaveBeenCalledTimes(1);
+      expect(loadMock.mock.calls[0][0].options).toEqual({ adGroupId: g });
+      expect(adSlotStatus(g)).toBe('loading');
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
-  it('중간 이탈(userEarnedReward 없이 dismissed)이면 false — 지급하면 안 되는 경로', async () => {
-    stubAd([{ type: 'show' }, { type: 'clicked' }, { type: 'dismissed' }]);
+  it('REQ-02 · loaded가 오면 ready다', () => {
+    const g = readyAd([]);
 
-    await expect(watchRewardAd('ad-group-1')).resolves.toBe(false);
+    expect(adSlotStatus(g)).toBe('ready');
   });
 
-  it('failedToShow면 reject', async () => {
-    stubAd([{ type: 'requested' }, { type: 'failedToShow' }]);
+  it('REQ-03 · 불러오는 중·준비됨·재생 중엔 다시 불러도 load는 한 번뿐이다', () => {
+    vi.useFakeTimers();
+    try {
+      loadMock.mockImplementation(() => () => {});
+      showMock.mockImplementation(() => () => {}); // 재생 중 — dismissed가 아직 안 왔다
+      const g = fresh();
 
-    await expect(watchRewardAd('ad-group-1')).rejects.toThrow();
+      preloadAd(g);
+      preloadAd(g);
+      preloadAd(g); // 탭 왕복·재마운트
+      expect(adSlotStatus(g)).toBe('loading');
+      expect(loadMock).toHaveBeenCalledTimes(1);
+
+      loadMock.mock.calls[0][0].onEvent({ type: 'loaded' });
+      preloadAd(g);
+      expect(adSlotStatus(g)).toBe('ready');
+      expect(loadMock).toHaveBeenCalledTimes(1);
+
+      void watchRewardAd(g);
+      preloadAd(g);
+      expect(adSlotStatus(g)).toBe('showing');
+      expect(loadMock).toHaveBeenCalledTimes(1);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
-  it('로드 실패(onError)면 reject하고 show를 부르지 않는다', async () => {
+  it('REQ-04 · 로드 에러면 failed이고, 다시 부르면 load를 다시 한다', () => {
     loadMock.mockImplementation((params: LoadParams) => {
       params.onError(new Error('no fill'));
       return () => {};
     });
+    const g = fresh();
 
-    await expect(watchRewardAd('ad-group-1')).rejects.toThrow('no fill');
+    preloadAd(g);
+    expect(adSlotStatus(g)).toBe('failed');
+
+    preloadAd(g); // 「광고 다시 불러오기」
+    expect(loadMock).toHaveBeenCalledTimes(2);
+  });
+
+  it('REQ-04 · SDK가 동기로 던져도 삼키고 failed다 — 앱 밖(목 모드)', () => {
+    loadMock.mockImplementation(() => {
+      throw new TypeError("Cannot read properties of undefined (reading 'loadFullScreenAd')");
+    });
+    const g = fresh();
+
+    expect(() => preloadAd(g)).not.toThrow();
+    expect(adSlotStatus(g)).toBe('failed');
+  });
+
+  it('REQ-04 · 60초 동안 답이 없으면 failed다 — 그 직전까진 loading', () => {
+    vi.useFakeTimers();
+    try {
+      loadMock.mockImplementation(() => () => {});
+      const g = fresh();
+
+      preloadAd(g);
+      vi.advanceTimersByTime(AD_LOAD_TIMEOUT_MS - 1);
+      expect(adSlotStatus(g)).toBe('loading');
+      vi.advanceTimersByTime(1);
+      expect(adSlotStatus(g)).toBe('failed');
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('REQ-04 · 시간 초과 뒤 다시 부른 로드를 옛 로드의 늦은 에러가 failed로 덮지 않는다', () => {
+    vi.useFakeTimers();
+    try {
+      loadMock.mockImplementation(() => () => {});
+      const g = fresh();
+
+      preloadAd(g);
+      vi.advanceTimersByTime(AD_LOAD_TIMEOUT_MS);
+      preloadAd(g);
+      expect(adSlotStatus(g)).toBe('loading');
+
+      loadMock.mock.calls[0][0].onError(new Error('late'));
+      expect(adSlotStatus(g)).toBe('loading');
+
+      loadMock.mock.calls[1][0].onError(new Error('now')); // 양성 대조 — 지금 로드의 에러는 접는다
+      expect(adSlotStatus(g)).toBe('failed');
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('REQ-04 · 시간 초과 뒤에 늦게 온 loaded는 ready로 받는다', () => {
+    vi.useFakeTimers();
+    try {
+      loadMock.mockImplementation(() => () => {});
+      const g = fresh();
+
+      preloadAd(g);
+      vi.advanceTimersByTime(AD_LOAD_TIMEOUT_MS);
+      expect(adSlotStatus(g)).toBe('failed');
+
+      loadMock.mock.calls[0][0].onEvent({ type: 'loaded' });
+      expect(adSlotStatus(g)).toBe('ready');
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('REQ-04 · 다시 부른 로드가 도는 중에 옛 로드의 늦은 loaded는 무시한다', () => {
+    vi.useFakeTimers();
+    try {
+      loadMock.mockImplementation(() => () => {});
+      const g = fresh();
+
+      preloadAd(g);
+      vi.advanceTimersByTime(AD_LOAD_TIMEOUT_MS);
+      expect(adSlotStatus(g)).toBe('failed');
+      preloadAd(g);
+      expect(adSlotStatus(g)).toBe('loading');
+
+      loadMock.mock.calls[0][0].onEvent({ type: 'loaded' });
+      expect(adSlotStatus(g)).toBe('loading'); // SDK엔 새 장이 아직 없을 수 있다
+
+      loadMock.mock.calls[1][0].onEvent({ type: 'loaded' }); // 양성 대조 — 지금 로드의 loaded는 받는다
+      expect(adSlotStatus(g)).toBe('ready');
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('REQ-05 · 상태가 바뀔 때마다 구독자에게 알리고 해지하면 멈춘다', async () => {
+    const g = fresh();
+    const seen: AdSlotStatus[] = [];
+    const unsubscribe = onAdSlotChange(() => seen.push(adSlotStatus(g)));
+    stubAd([{ type: 'dismissed' }]);
+
+    preloadAd(g);
+    expect(seen).toEqual(['loading', 'ready']);
+
+    unsubscribe();
+    await watchRewardAd(g); // showing → idle
+    expect(seen).toEqual(['loading', 'ready']);
+  });
+
+  it('REQ-05 · shouldPreload — 실패로 접힐 때는 부르지 않는다', () => {
+    expect(shouldPreload('loading', 'failed', true)).toBe(false);
+    expect(shouldPreload('failed', 'failed', true)).toBe(false);
+    expect(shouldPreload('failed', 'loading', true)).toBe(false);
+  });
+
+  it('REQ-05 · shouldPreload — 지면이 막 서거나 다 보고 idle로 돌아오면 부른다', () => {
+    expect(shouldPreload(undefined, 'idle', true)).toBe(true);
+    expect(shouldPreload(undefined, 'failed', true)).toBe(true); // 상자를 다시 편 때
+    expect(shouldPreload('showing', 'idle', true)).toBe(true);
+    // 같은 판정의 대조 — 위 true 셋이 앞 테스트의 false들이 「늘 false인 함수」가 아님을 보인다.
+    expect(shouldPreload('idle', 'loading', true)).toBe(false);
+    expect(shouldPreload('loading', 'ready', true)).toBe(false);
+    expect(shouldPreload('ready', 'showing', true)).toBe(false);
+    expect(shouldPreload('showing', 'idle', false)).toBe(false);
+  });
+
+  it('REQ-07 · useAdSlot은 슬롯의 지금 상태를 읽는다 — 정적 렌더에서도', () => {
+    const g = readyAd([]);
+    const Probe = () => createElement('span', null, useAdSlot(g, false));
+
+    expect(renderToStaticMarkup(createElement(Probe))).toBe('<span>ready</span>');
+  });
+});
+
+/**
+ * 리워드 광고 재생 — <b>미리 불러 둔(ready) 광고만</b> 띄우고, 보상 판정은 SDK 이벤트 시퀀스를 boolean 하나로 접는다.
+ *
+ * <p>왜 테스트가 필요한가: 문서에 `userEarnedReward`와 `dismissed`의 **순서 계약이 없다**.
+ * 그래서 플래그로 들고 있다가 `dismissed`에 확정하는 방식을 쓰는데, 그 방식이 두 순서 모두에서
+ * 같은 답을 내는지가 이 기능의 신뢰 경계다(광고를 끝까지 안 본 유저에게 지급하면 안 된다).
+ * 실기기 실측은 머지 게이트로 따로 남아 있고, 여기선 래퍼 로직만 격리 검증한다.
+ */
+describe('watchRewardAd', () => {
+  it('REQ-01 · 준비된 광고가 없으면 load도 show도 부르지 않고 false다', async () => {
+    const g = fresh();
+
+    const result = watchRewardAd(g);
+
+    expect(loadMock).not.toHaveBeenCalled(); // 재생 시점 로딩이 없다 — 옛 구현은 여기서 load를 불렀다
     expect(showMock).not.toHaveBeenCalled();
+    await expect(result).resolves.toBe(false);
+  });
+
+  it('REQ-01 · 준비된 광고는 load 없이 곧장 show한다', async () => {
+    const g = readyAd([{ type: 'dismissed' }]);
+    expect(loadMock).toHaveBeenCalledTimes(1); // 미리 부른 한 번
+
+    const result = watchRewardAd(g);
+
+    expect(showMock).toHaveBeenCalledTimes(1);
+    expect(loadMock).toHaveBeenCalledTimes(1);
+    await result;
+  });
+
+  it('REQ-05 · 재생이 끝나면 idle로 돌아간다 — 네 갈래 모두', async () => {
+    const dismissed = readyAd([{ type: 'dismissed' }]);
+    await watchRewardAd(dismissed);
+    expect(adSlotStatus(dismissed)).toBe('idle');
+
+    const failedToShow = readyAd([{ type: 'failedToShow' }]);
+    await watchRewardAd(failedToShow).catch(() => {});
+    expect(adSlotStatus(failedToShow)).toBe('idle');
+
+    const showError = readyAd([]);
+    showMock.mockImplementation((params: ShowParams) => {
+      params.onError(new Error('show failed'));
+      return () => {};
+    });
+    await watchRewardAd(showError).catch(() => {});
+    expect(adSlotStatus(showError)).toBe('idle');
+
+    const showThrow = readyAd([]);
+    showMock.mockImplementation(() => {
+      throw new TypeError('no bridge');
+    });
+    await watchRewardAd(showThrow).catch(() => {});
+    expect(adSlotStatus(showThrow)).toBe('idle');
+  });
+
+  it('시청 완료(userEarnedReward → dismissed)면 true', async () => {
+    const g = readyAd([{ type: 'show' }, { type: 'impression' }, { type: 'userEarnedReward', data: { unitType: 'day', unitAmount: 1 } }, { type: 'dismissed' }]);
+
+    await expect(watchRewardAd(g)).resolves.toBe(true);
+  });
+
+  it('순서가 뒤바뀌어도(dismissed 직전이 아니라 앞서 와도) 같은 답 — 문서에 순서 보장이 없다', async () => {
+    const g = readyAd([{ type: 'userEarnedReward', data: { unitType: 'day', unitAmount: 1 } }, { type: 'show' }, { type: 'dismissed' }]);
+
+    await expect(watchRewardAd(g)).resolves.toBe(true);
+  });
+
+  it('중간 이탈(userEarnedReward 없이 dismissed)이면 false — 지급하면 안 되는 경로', async () => {
+    const g = readyAd([{ type: 'show' }, { type: 'clicked' }, { type: 'dismissed' }]);
+
+    await expect(watchRewardAd(g)).resolves.toBe(false);
+  });
+
+  it('failedToShow면 reject', async () => {
+    const g = readyAd([{ type: 'requested' }, { type: 'failedToShow' }]);
+
+    await expect(watchRewardAd(g)).rejects.toThrow();
   });
 
   it('load·show 모두 같은 adGroupId를 받는다 — 다른 그룹을 보여주면 정산이 어긋난다', async () => {
-    stubAd([{ type: 'userEarnedReward', data: { unitType: 'day', unitAmount: 1 } }, { type: 'dismissed' }]);
+    const g = readyAd([{ type: 'userEarnedReward', data: { unitType: 'day', unitAmount: 1 } }, { type: 'dismissed' }]);
 
-    await watchRewardAd('reward-group-42');
+    await watchRewardAd(g);
 
-    expect(loadMock.mock.calls[0][0].options).toEqual({ adGroupId: 'reward-group-42' });
-    expect(showMock.mock.calls[0][0].options).toEqual({ adGroupId: 'reward-group-42' });
-  });
-
-  it('loaded 이전에는 show를 부르지 않는다 — 준비 안 된 광고를 노출하지 않는다', async () => {
-    loadMock.mockImplementation(() => () => {});
-
-    void watchRewardAd('ad-group-1');
-
-    expect(showMock).not.toHaveBeenCalled();
+    expect(loadMock.mock.calls[0][0].options).toEqual({ adGroupId: g });
+    expect(showMock.mock.calls[0][0].options).toEqual({ adGroupId: g });
   });
 });
 
