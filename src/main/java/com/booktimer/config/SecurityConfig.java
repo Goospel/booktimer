@@ -115,16 +115,25 @@ public class SecurityConfig {
     }
 
     /**
-     * 미니앱 교차 출처 설정. 허용 오리진이 <b>비어 있으면 설정을 하나도 등록하지 않은 빈 소스</b>를 준다 —
-     * 어느 경로에도 매칭되지 않으므로 CORS 헤더가 붙지 않는다. 실제 WebView 오리진은 PR-0 실측으로 확정되므로,
+     * 미니앱 교차 출처 설정. 허용 오리진이 <b>비어 있으면 연결 끊기 콜백 외엔 설정을 등록하지 않는다</b> —
+     * 나머지 경로엔 매칭되지 않으므로 CORS 헤더가 붙지 않는다. 실제 WebView 오리진은 PR-0 실측으로 확정되므로,
      * 그전까지는 교차 출처를 열지 않는 것이 안전 기본값이다.
      *
      * <p>{@code allowCredentials}는 false다 — 미니앱은 쿠키를 쓰지 않고 Bearer 헤더로만 인증한다(설계 §2.1).
      */
-    private static CorsConfigurationSource miniappCorsSource(MiniappProperties properties) {
+    static CorsConfigurationSource miniappCorsSource(MiniappProperties properties) {
         UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
+        // 연결 끊기 콜백은 허용 목록과 무관하게 어느 출처든 받는다 — 앱인토스 콘솔 「테스트하기」가 브라우저에서
+        // 직접 fetch한다(2026-10-14 실측: 프리플라이트 403 → 「Failed to fetch」). 보안은 컨트롤러의 Basic 대조가 맡는다.
+        // ⚠️ /api/** 보다 먼저 등록한다 — 이 소스는 등록 순서(LinkedHashMap)대로 첫 매치를 쓴다.
+        CorsConfiguration unlinkCallback = new CorsConfiguration();
+        unlinkCallback.addAllowedOrigin("*");
+        unlinkCallback.setAllowedMethods(List.of("POST"));
+        unlinkCallback.setAllowedHeaders(List.of("Authorization", "Content-Type"));
+        unlinkCallback.setAllowCredentials(false);
+        source.registerCorsConfiguration("/api/toss/unlink-callback", unlinkCallback);
         if (properties.getAllowedOrigins().isEmpty()) {
-            return source; // 등록된 설정 없음 = CORS 헤더 없음(동일 출처 웹 호출에는 아무 영향 없음)
+            return source; // 콜백 외 등록 없음 = 다른 경로엔 CORS 헤더 없음(동일 출처 웹 호출에는 아무 영향 없음)
         }
         CorsConfiguration config = new CorsConfiguration();
         config.setAllowedOrigins(properties.getAllowedOrigins());
