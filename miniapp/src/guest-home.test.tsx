@@ -419,11 +419,14 @@ describe('게스트 홈 — 다 재고 나서', () => {
     expect(shell(done)).toContain('기록 없이 둘게요');
   });
 
-  it('로그인의 이유(알림·PC 연동)는 로그인을 청하는 자리에서 말한다', () => {
+  // 서비스 오픈 정책 §2-2 — 자사 웹 사용을 로그인 이유로 홍보하지 않는다(2026-10).
+  it('REQ-03 · 로그인 이유는 토스 안에서 얻는 것만 말한다', () => {
     const markup = shell(done);
 
     expect(markup).toContain('토스 알림');
-    expect(markup).toContain('booktimer.app');
+    expect(markup).toContain('기기를 바꿔도');
+    expect(markup).not.toContain('booktimer.app');
+    expect(markup).not.toContain('PC 웹');
   });
 
   /** 계정을 만들면 무엇이 되는지를 <b>방금 잰 값으로</b> 보여 준다 — 「연속 1일」은 그 투영이다. */
@@ -560,20 +563,22 @@ describe('상한을 넘겨 돌아온 체험', () => {
 });
 
 /**
- * 「이미 booktimer.app 계정이 있나요?」 — 선택 화면을 없앤 뒤(2026-09-17) 웹 계정 보유자가 남은 유일한 문이다.
+ * 「기존 계정 연결」 — 선택 화면을 없앤 뒤(2026-09-17) 웹 계정 보유자가 남은 유일한 문이다.
  * 다른 손잡이는 누르는 즉시 토스 계정을 만들고, 만들어진 토스 신원은 웹 계정에 다시 못 붙는다(once-set).
- * 그래서 이 문은 <b>인가 전</b>, 게스트 홈 맨 아래에 선다.
+ * 그래서 이 문은 <b>인가 전</b>, 게스트 홈 맨 아래에 선다. 문구는 자사 주소를 적지 않는다(서비스 오픈 정책 §2-2,
+ * 2026-10) — 코드를 어디에 넣는지는 웹 설정 「토스 앱 연결」 카드가 이 버튼 이름으로 알려 준다.
  */
 describe('게스트 홈 — 기존 계정 연결', () => {
-  it('게스트 홈 맨 아래에 연결 손잡이가 선다 — 피드 박스 뒤다', () => {
+  it('REQ-04 · 연결 손잡이는 맨 아래에 남고 자사 주소를 적지 않는다', () => {
     const markup = shell(null);
 
-    expect(markup).toContain('이미 booktimer.app 계정이 있나요?');
+    expect(markup).toContain('연결 코드를 받으셨나요?');
     expect(markup).toContain('기존 계정 연결');
     // 맨 아래 — 피드 박스(잠긴 피드 문구) 뒤에 온다. 위로 올라오면 첫 화면이 계정 얘기로 시작한다.
-    expect(markup.indexOf('이미 booktimer.app 계정이 있나요?')).toBeGreaterThan(
+    expect(markup.indexOf('연결 코드를 받으셨나요?')).toBeGreaterThan(
       markup.indexOf('소식·여백·책 뉴스는 계정이 있어야 보여요'),
     );
+    expect(markup).not.toContain('booktimer.app');
   });
 
   it('덮는 것이 아니다 — 연결 손잡이가 서도 떠 있는 것은 탭바 하나뿐이다', () => {

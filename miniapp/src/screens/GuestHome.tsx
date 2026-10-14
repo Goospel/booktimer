@@ -81,7 +81,7 @@ export type LoginSource =
   | 'locked_library'
   | 'locked_bookshop'
   | 'locked_history'
-  /** 「이미 booktimer.app 계정이 있나요?」 — 조회만 하고 미등록이면 연결 화면으로 간다(계정을 만들지 않는다). */
+  /** 「기존 계정 연결」 — 조회만 하고 미등록이면 연결 화면으로 간다(계정을 만들지 않는다). */
   | 'web_link';
 
 /** 인트로 소개문 — "무엇을 하는 앱인지"를 로그인 전에 읽힌다(심사 필수 항목). */
@@ -90,7 +90,7 @@ const PITCH = '책 읽는 시간을 타이머로 기록하고, 매일의 독서�
 /** 로그인을 청하는 자리에서만 하는 말 — 「왜 계정이 필요한가」의 답이다. */
 const WHY_LOGIN = [
   '하루 목표를 정하면 달성 순간 토스 알림으로 알려드려요.',
-  'PC 웹(booktimer.app)과 같은 계정으로 이어서 쓸 수 있어요.',
+  '기기를 바꿔도 토스 계정으로 기록이 그대로 이어져요.',
 ];
 
 /** 끝난 체험에서 ▶를 눌렀을 때의 안내 — 체험은 한 건이라 새로 재지 않는다(조용한 유실 금지). */
@@ -654,10 +654,11 @@ export function GuestHome({
       />
 
       {/* 웹 계정 보유자의 문 — 다른 손잡이는 누르는 즉시 토스 계정을 만들어(once-set) 웹 계정에 다시 못
-          붙는다. 그래서 인가 <b>전</b>에 따로 둔다. 첫 화면이 계정 얘기로 시작하지 않게 맨 아래 조용히 선다. */}
+          붙는다. 그래서 인가 <b>전</b>에 따로 둔다. 첫 화면이 계정 얘기로 시작하지 않게 맨 아래 조용히 선다.
+          자사 주소·웹 안내는 적지 않는다(서비스 오픈 정책 §2-2) — 어디서 코드를 받는지는 웹 설정 카드가 이 버튼 이름으로 알려 준다. */}
       <div style={{ marginTop: 32, textAlign: 'center' }}>
         <Text typography="st12" color="grey600" style={{ display: 'block', wordBreak: 'keep-all' }}>
-          이미 booktimer.app 계정이 있나요?
+          연결 코드를 받으셨나요?
         </Text>
         <Button size="small" variant="weak" style={{ marginTop: 8 }} onClick={() => onLogin('web_link')}>
           기존 계정 연결

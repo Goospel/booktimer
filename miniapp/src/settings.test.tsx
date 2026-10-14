@@ -11,13 +11,11 @@ import {
   DeleteAccountSection,
   LogoutSection,
   Settings,
-  WebLoginSection,
-  groupCode,
   logoutAndLeave,
   replayGuide,
 } from './screens/Settings';
 import { readFileSync } from 'node:fs';
-import { clickHandlerFor, graph, stubLocalStorage, userAgent } from './test-fixtures';
+import { graph, stubLocalStorage, userAgent } from './test-fixtures';
 
 vi.mock('./api', async (importOriginal) => ({
   ...(await importOriginal<typeof import('./api')>()),
@@ -171,6 +169,22 @@ describe('약관·처리방침 링크', () => {
 });
 
 /**
+ * 자사 웹으로 보내지 않는다 — 앱인토스 서비스 오픈 정책 §2-2 · 비게임 체크리스트 「링크나 컴포넌트로 자사 서비스
+ * 이동 유도 금지」. 「PC 웹에서 이어 보기」(웹 로그인 코드 · 웹 로그인 화면 열기)를 2026-10에 걷었다.
+ * 정적 렌더(T-149)라 부재 단언은 같은 마크업의 존재 단언(처리방침·약관)과 짝을 짓는다.
+ */
+describe('자사 웹 유도 없음', () => {
+  it('REQ-01 · 설정 화면은 웹 로그인 코드를 주지 않는다 — 처리방침·약관 손잡이는 남는다', () => {
+    const markup = renderSettings();
+
+    expect(markup).toContain('개인정보 처리방침'); // 양성 짝 — 렌더가 실제로 됐다
+    expect(markup).toContain('이용약관');
+    expect(markup).not.toContain('웹 로그인 코드');
+    expect(markup).not.toContain('PC 웹');
+  });
+});
+
+/**
  * 회원 탈퇴 — 미니앱 전용 계정의 **유일한** 탈퇴 경로(웹 `/settings/delete`는 비밀번호가 없어 못 닿는다).
  *
  * <p>되돌릴 수 없는 동작이라 UI가 2단이다: 진입 버튼 → 시트(경고 + danger 버튼). 시트 상태를 프롭으로
@@ -208,9 +222,12 @@ describe('회원 탈퇴 섹션', () => {
     expect(markup).toContain('취소');
   });
 
-  it('웹 계정과 연결된 사람에게 웹 기록까지 지워진다고 상시 고지한다 — 반쪽 탈퇴는 존재하지 않는다', () => {
-    // 클라이언트는 authProvider를 모르므로 조건 노출이 아니라 상시 문구다(서버에 필드를 새로 파지 않는다).
-    expect(section(true)).toContain('웹(booktimer.app)에서 쓰던 계정이라면 웹 기록까지 모두 삭제됩니다');
+  it('REQ-02 · 탈퇴 시트는 웹 기록 삭제를 고지하되 자사 주소는 적지 않는다', () => {
+    // 반쪽 탈퇴는 없다 — 클라이언트는 authProvider를 모르므로 조건 노출이 아니라 상시 문구다.
+    const markup = section(true);
+
+    expect(markup).toContain('웹 기록까지 모두 삭제됩니다');
+    expect(markup).not.toContain('booktimer.app');
   });
 
   it('실패하면 서버 평문을 시트 안에 띄운다 — 화면을 닫아 버리면 왜 안 됐는지 알 길이 없다', () => {
@@ -295,87 +312,6 @@ describe('안내 다시 보기 섹션', () => {
 
     expect(coachmarkSeen('timer')).toBe(false);
     expect(onBack).toHaveBeenCalledTimes(1);
-  });
-});
-
-/**
- * PC 웹에서 이어 보기 — 토스로 시작한 계정이 booktimer.app에 들어가는 <b>유일한 문</b>.
- *
- * <p>여태 이 파일은 「booktimer.app이 안 나온다」를 단언했다: 비밀번호가 없어 웹 로그인이 원리상 불가라
- * 웹을 가리키는 것이 곧 죽은 안내였기 때문이다. 서버 PR-1이 일회용 코드 로그인을 열어 그 전제가 뒤집혔고,
- * 그 단언은 이 describe로 교체됐다(부재 → 존재).
- *
- * <p>상태를 프롭으로 받는 이유는 이 파일의 다른 섹션들과 같다 — 정적 렌더 하니스(T-149)가 클릭·effect를
- * 못 돌려, 프롭이 아니면 「발급된 뒤」 가지에 영영 닿지 못한다. 시트·모달이 아닌 것도 의도다(T-183 —
- * 진입 직후 화면을 덮는 것을 만들지 않는다. 사용자가 누른 뒤 화면 안에서 펼친다).
- */
-describe('PC 웹 로그인 코드 섹션', () => {
-  const section = (code: string | null, error: string | null = null) =>
-    renderToStaticMarkup(
-      <TDSMobileProvider userAgent={userAgent}>
-        <WebLoginSection code={code} busy={false} error={error} onIssue={() => {}} onOpenWeb={() => {}} />
-      </TDSMobileProvider>,
-    );
-
-  it('발급 전엔 코드를 받는 손잡이만 — 열 주소도 만료 안내도 아직 없다', () => {
-    const markup = section(null);
-
-    expect(markup).toContain('웹 로그인 코드 받기');
-    // 아래 발급 후 케이스가 이 둘의 존재를 못 박으므로 이 부재 단언은 공허하지 않다(T-149).
-    expect(markup).not.toContain('booktimer.app');
-    expect(markup).not.toContain('5분');
-  });
-
-  it('발급되면 4자씩 끊은 코드 · 만료 안내 · 웹 여는 손잡이 · 재발급을 함께 준다', () => {
-    const markup = section('ABCD2345');
-
-    expect(markup).toContain('ABCD 2345'); // 옮겨 적는 코드라 끊어 보여준다
-    expect(markup).toContain('5분'); // 5분 TTL을 모르면 느긋하게 옮기다 만료된다
-    expect(markup).toContain('booktimer.app/login 열기');
-    expect(markup).toContain('새 코드 받기'); // 만료됐을 때 화면을 나갔다 오지 않아도 되게
-  });
-
-  it('실패하면 서버 평문을 섹션 안에 띄운다 — 문구가 곧 안내다', () => {
-    expect(section(null, '토스 앱에 연결되지 않은 계정입니다')).toContain('토스 앱에 연결되지 않은 계정입니다');
-  });
-
-  it('설정 화면에 실제로 배선돼 있다 — 컴포넌트만 있고 안 걸려 있으면 사용자에겐 없는 기능이다', () => {
-    expect(renderSettings()).toContain('PC 웹에서 이어 보기');
-  });
-
-  /**
-   * 정적 렌더는 <b>마크업만</b> 본다 — 두 버튼의 `onClick`을 서로 바꿔 놓아도 HTML은 한 글자도 안 변해
-   * 위 단언이 전부 통과한다. 사용자에겐 「웹 열기를 눌렀더니 코드만 새로 발급되고 브라우저는 안 열린다」인데
-   * 아무도 안 보는 셈이다. 그래서 마크업 대신 <b>엘리먼트 트리</b>를 직접 읽어 라벨↔핸들러를 확인한다
-   * (`clickHandlerFor`는 공용 헬퍼 — test-fixtures).
-   */
-  it('두 버튼이 각자 제 핸들러에 걸려 있다 — 바꿔 걸어도 마크업은 그대로라 트리로만 보인다', () => {
-    const onIssue = vi.fn();
-    const onOpenWeb = vi.fn();
-    const tree = WebLoginSection({ code: 'ABCD2345', busy: false, error: null, onIssue, onOpenWeb });
-
-    clickHandlerFor(tree, 'booktimer.app/login 열기')?.();
-    expect(onOpenWeb).toHaveBeenCalledTimes(1);
-    expect(onIssue).not.toHaveBeenCalled();
-
-    clickHandlerFor(tree, '새 코드 받기')?.();
-    expect(onIssue).toHaveBeenCalledTimes(1);
-    expect(onOpenWeb).toHaveBeenCalledTimes(1); // 재발급이 웹 열기를 겸하지 않는다
-  });
-});
-
-/**
- * 코드 표기 — 사람이 <b>다른 기기로 손으로 옮기는</b> 유일한 값이라, 8자를 붙여 쓰면 자리를 잃는다.
- * 서버 `normalize`가 공백을 전부 지우므로 띄어 적어도 그대로 통과한다(그래서 띄울 수 있다).
- */
-describe('groupCode', () => {
-  it('8자 코드는 4자씩 끊는다', () => {
-    expect(groupCode('ABCD2345')).toBe('ABCD 2345');
-  });
-
-  it('8자가 아니면 손대지 않는다 — 서버 형식이 바뀌어도 엉뚱한 자리에 공백을 넣지 않는다', () => {
-    expect(groupCode('ABC')).toBe('ABC');
-    expect(groupCode('ABCD23456')).toBe('ABCD23456');
   });
 });
 

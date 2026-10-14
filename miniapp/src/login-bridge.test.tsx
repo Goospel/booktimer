@@ -90,7 +90,7 @@ describe('로그인 시작 (beginLogin)', () => {
   });
 
   /**
-   * 「이미 booktimer.app 계정이 있나요?」 — 웹 계정 보유자의 문이다. 여기서 register를 부르면 토스 신원이
+   * 「기존 계정 연결」 — 웹 계정 보유자의 문이다. 여기서 register를 부르면 토스 신원이
    * 새 계정에 once-set으로 박혀 <b>영영 웹 계정에 못 붙는다</b>. 그래서 조회(`login`)만 하고 미등록이면
    * 연결 화면으로 곧장 간다.
    */
@@ -201,6 +201,22 @@ describe('결말별 다음 화면 (routeLoginResult)', () => {
   it('화면은 받은 핸들러를 이름 그대로 넘긴다', () => {
     const src = readFileSync(new URL('./screens/LoginBridge.tsx', import.meta.url), 'utf8').replace(/\s+/g, ' ');
     expect(src).toContain('routeLoginResult(next, { onAuthenticated, onNewAccount, onLinkAccount })');
+  });
+});
+
+/** 서비스 오픈 정책 §2-2 — 연결 화면은 코드만 묻는다. 자사 웹으로 가서 무엇을 하라고 하지 않는다(2026-10). */
+describe('계정 연결 — 무엇을 안내하나', () => {
+  it('REQ-05 · 연결 화면은 코드만 묻고 웹으로 보내지 않는다', () => {
+    const markup = renderToStaticMarkup(
+      <TDSMobileProvider userAgent={userAgent}>
+        <LinkAccount onLinked={() => {}} />
+      </TDSMobileProvider>,
+    );
+
+    expect(markup).toContain('연결 코드');
+    expect(markup).toContain('5분');
+    expect(markup).not.toContain('booktimer.app');
+    expect(markup).not.toContain('PC 웹');
   });
 });
 

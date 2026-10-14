@@ -447,6 +447,22 @@ class SettingsControllerTest {
                 .andExpect(model().attribute("tossLinked", false));
     }
 
+    /**
+     * 미니앱 문구에서 웹 언급을 걷은 뒤(서비스 오픈 정책 §2-2, 2026-10) 코드를 미니앱의 <b>어느 버튼</b>에 넣는지
+     * 알려 줄 곳은 이 카드뿐이다. 모르면 눈에 띄는 「토스로 시작하기」로 새 계정을 만들고, 그 토스 신원은
+     * 웹 계정에 다시 못 붙는다(once-set).
+     */
+    @Test
+    @DisplayName("REQ-13 · 웹 설정의 토스 앱 연결 카드는 코드를 넣을 미니앱 버튼 「기존 계정 연결」을 짚어 준다")
+    void getSettings_tossLinkCard_namesMiniappButton() throws Exception {
+        register("toss-card@booktimer.com");
+
+        mockMvc.perform(get("/settings").with(user("toss-card@booktimer.com")))
+                .andExpect(status().isOk())
+                .andExpect(model().attribute("tossLinked", false)) // 양성 짝 — 미연결 분기가 실제로 그려졌다
+                .andExpect(content().string(containsString("「기존 계정 연결」을 눌러 입력하세요")));
+    }
+
     @Test
     @DisplayName("GET /settings: 이미 연결된 계정이면 tossLinked=true — 발급 버튼 대신 연결됨 표시")
     void getSettings_linked_showsLinkedBranch() throws Exception {
