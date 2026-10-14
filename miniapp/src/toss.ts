@@ -74,12 +74,6 @@ export function trackScreen(name: string): void {
 export const REWARD_AD_GROUP_ID: string = import.meta.env.VITE_REWARD_AD_GROUP_ID ?? '';
 
 /**
- * 「목표 바꾸기」 진입에 띄우는 **전면형** 광고 그룹 ID — 리워드와 다른 그룹이라 성과·정산이 분리된다.
- * 리워드와 같은 config-gate: 빈 값이면 안 뜬다(구글 반영 대기 중인 빌드·브라우저 목 모드).
- */
-export const INTERSTITIAL_AD_GROUP_ID: string = import.meta.env.VITE_INTERSTITIAL_AD_GROUP_ID ?? '';
-
-/**
  * 「책 성향 분석」(내 책방)에 띄우는 **리워드** 광고 그룹 ID — 부채 지우개와 포맷은 같지만 **다른 그룹**이다
  * (위 `REWARD_AD_GROUP_ID` 주석의 분리 이유). 콘솔 보상 표기도 그룹마다 달라 여기만 「성향 분석 / 1」이다
  * (부채 쪽은 「밀린 하루 지우기 / 1」 — 둘 다 콘솔 실측값이다).
@@ -202,8 +196,8 @@ export function subscribeNativeBack(onBack: () => void): () => void {
 /**
  * 외부 주소 열기 — 기기의 기본 브라우저·관련 앱으로 넘긴다(홈 피드의 「책 뉴스」 줄).
  *
- * <p>최상위 `openURL`은 deprecated라 `Device.openURL`을 쓴다. 실패 두 갈래를 `trackEvent`·
- * `showInterstitialAd`와 같은 모양으로 처리하되, 여기서는 **삼키는 대신 브라우저로 떨어뜨린다** —
+ * <p>최상위 `openURL`은 deprecated라 `Device.openURL`을 쓴다. 실패 두 갈래를 `trackEvent`와
+ * 같은 모양으로 처리하되, 여기서는 **삼키는 대신 브라우저로 떨어뜨린다** —
  * 목 모드(SDK 없음)에서 뉴스 줄이 죽은 링크가 되면 브라우저 확인 자체가 불가능해진다.
  */
 export function openExternal(url: string): void {
@@ -245,47 +239,6 @@ export function watchRewardAd(adGroupId: string): Promise<boolean> {
         });
       },
     });
-  });
-}
-
-/**
- * 광고를 포기하고 진행하는 상한(ms). SDK가 `onEvent`도 `onError`도 안 부르고 멈추는 경우가
- * 유일한 대비 대상이다 — 그때 기다리기만 하면 「목표 바꾸기」가 **영구 먹통**이 된다.
- * 정상 로드는 1~2초라 넉넉하되, 사용자가 버튼을 부순 줄 알기 전에 끊는 값으로 잡았다.
- */
-export const INTERSTITIAL_TIMEOUT_MS = 5000;
-
-/**
- * 전면 광고 1회 — 보상은 없지만 **끝을 알린다**. 광고가 닫히면(또는 못 뜨면) resolve하므로
- * 부르는 쪽은 `await` 후에 화면을 전환한다: **광고 먼저, 그다음 화면**.
- *
- * <p>2026-08-14 이전엔 발사 후 망각이라 부르는 쪽이 즉시 화면을 전환했고, 1~2초 뒤 로드가 끝난
- * 광고가 **그때 떠 있는 아무 화면 위에** 덮였다(실기기 실측: 목표 화면을 지나 메인으로 돌아온 뒤 노출).
- * 노출 시점이 로드 속도에 좌우되는 경주 상태였다 — Promise로 바꿔 순서를 확정한다.
- *
- * <p><b>절대 reject하지 않는다.</b> 이 호출이 화면 전환 앞을 막고 있어서, 안 끝나면 진입 자체가
- * 막힌다 — 그룹 미설정·노 필·SDK 부재·무응답(타임아웃) 전부 조용히 resolve한다.
- *
- * <p>ponytail: 사전 로드(preload)는 안 한다 — 탭 즉시 노출이 되지만 "로드해 놓고 안 쓴 광고"가
- * 노출 지표·유효기간에 어떻게 잡히는지 문서에 없다. 대기 1~2초가 실측으로 거슬리면 그때 옮긴다.
- */
-export function showInterstitialAd(adGroupId: string = INTERSTITIAL_AD_GROUP_ID): Promise<void> {
-  if (adGroupId === '') return Promise.resolve();
-  return new Promise<void>((resolve) => {
-    // 어느 경로로 끝나든 한 번만 통과시킨다(타임아웃과 dismissed가 겹쳐도 안전).
-    const timer = setTimeout(resolve, INTERSTITIAL_TIMEOUT_MS);
-    const done = () => {
-      clearTimeout(timer);
-      resolve();
-    };
-    try {
-      // 전면형은 `userEarnedReward`를 안 쏘므로 리워드 래퍼를 그대로 쓰고 결과(false)만 버린다.
-      // 실패 두 갈래를 둘 다 삼킨다 — 앱 밖에서는 SDK가 **동기 TypeError**(try가 받는다),
-      // 앱 안에서는 노 필·미등록 그룹이 **거부된 Promise**(catch가 받는다. 안 붙이면 unhandled rejection).
-      void watchRewardAd(adGroupId).then(done, done);
-    } catch {
-      done();
-    }
   });
 }
 
@@ -346,9 +299,8 @@ function initTossAdsOnce(): Promise<boolean> {
  * `setTimeout`은 스크립트 로더 하나뿐이라(실측) 광고 요청 자체엔 상한이 없고, 네이티브 브릿지가 답을
  * 안 주면 `onNoFill`도 `onAdFailedToRender`도 오지 않는다. 그러면 96px이 그 마운트 내내 빈 구멍이다.
  *
- * <p>{@link INTERSTITIAL_TIMEOUT_MS}와 같은 값으로 뒀다 — 이 앱이 「SDK가 아무 콜백도 안 부르는 경우」에
- * 이미 고른 수이고, 배너는 화면을 막지 않아 더 기다릴 이유도 더 서두를 이유도 없다(길면 빈 구멍이
- * 오래 가고, 짧으면 그려지려던 광고를 접었다가 되살리며 자리가 한 번 더 흔들린다).
+ * <p>5초는 「SDK가 아무 콜백도 안 부르는 경우」의 상한이다. 배너는 화면을 막지 않아 더 기다릴 이유도 더
+ * 서두를 이유도 없다(길면 빈 구멍이 오래 가고, 짧으면 그려지려던 광고를 접었다가 되살리며 자리가 한 번 더 흔들린다).
  */
 export const BANNER_RENDER_TIMEOUT_MS = 5000;
 

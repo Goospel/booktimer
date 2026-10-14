@@ -107,7 +107,6 @@ function renderTab(
         onStartTimer={() => Promise.resolve(dashboard)}
         onGraphChange={() => {}}
         onGoGoal={() => {}}
-        goalAdPending={false}
         onShelfChanged={() => {}}
         onHandleCreated={() => {}}
         onGoSettings={() => {}}

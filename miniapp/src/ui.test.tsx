@@ -326,7 +326,6 @@ function home(overrides: Partial<DashboardResponse>) {
         onTimerChange={() => {}}
         celebrate={false}
         onGoGoal={() => {}}
-        goalAdPending={false}
         onGoSettings={() => {}}
         onError={() => {}}
         onOpenMargin={() => {}}

@@ -353,13 +353,13 @@ describe('회당 시간 배선 (소스)', () => {
     expect(count(home, 'if (shouldHaptic(wasReached.current, studyReached)) hapticOnce()')).toBe(1);
   });
 
-  it('회당 시간 설정에는 전면광고가 없다(Q1)', () => {
-    expect(count(home, 'showInterstitialAd(')).toBe(0);
-    expect(count(sheet, 'showInterstitialAd(')).toBe(0);
-    // 저장 배선은 App에 산다 — App의 광고 호출은 독서 「목표 바꾸기」(goToGoal) 한 자리뿐이어야 한다.
-    expect(count(app, 'showInterstitialAd(')).toBe(1);
+  // 「목표 바꾸기」 전면 광고는 걷었다(비게임 체크리스트 ③ — 사전 로딩·예상 못 한 전면·인터랙션 2초가 이 한 자리였다).
+  it('REQ-10 · goToGoal은 광고를 기다리지 않고 곧장 목표 화면으로 간다', () => {
     const goToGoal = app.slice(app.indexOf('const goToGoal ='), app.indexOf('switch (view)'));
-    expect(goToGoal).toContain('showInterstitialAd(');
+    expect(goToGoal).toContain("setView('goal')");
+    expect(goToGoal).not.toContain('await');
+    // 전면 래퍼 이름째 쓰면 PR의 잔재 확인 grep에 이 줄이 걸린다 — 더 넓은 「Interstitial」로 센다.
+    expect(count(app, 'Interstitial')).toBe(0);
   });
 
   it('시트의 저장 버튼은 휠 판정을 본다 — 0시간 0분·6시간 초과에서 잠긴다', () => {
@@ -416,7 +416,6 @@ function renderHome(
         onTimerChange={() => {}}
         celebrate={celebrate}
         onGoGoal={() => {}}
-        goalAdPending={false}
         onGoSettings={() => {}}
         onError={() => {}}
         onOpenMargin={() => {}}
@@ -546,7 +545,6 @@ describe('홈 — 공부 회당 시간', () => {
           onTimerChange={() => {}}
           celebrate={false}
           onGoGoal={() => {}}
-          goalAdPending={false}
           onGoSettings={() => {}}
           onError={() => {}}
           onOpenMargin={() => {}}

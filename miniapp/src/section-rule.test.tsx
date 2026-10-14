@@ -138,7 +138,6 @@ describe('제목이 곧 줄인 자리 — 선은 제목에 건다', () => {
       onTimerChange={() => {}}
       celebrate={false}
       onGoGoal={() => {}}
-      goalAdPending={false}
       onGoSettings={() => {}}
       onError={() => {}}
       onOpenMargin={() => {}}

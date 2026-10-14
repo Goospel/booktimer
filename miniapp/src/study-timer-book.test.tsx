@@ -158,7 +158,6 @@ function renderHome(mode: 'reading' | 'study', study: StudyState, selectedStudyB
         onTimerChange={() => {}}
         celebrate={false}
         onGoGoal={() => {}}
-        goalAdPending={false}
         onGoSettings={() => {}}
         onError={() => {}}
         onOpenMargin={() => {}}

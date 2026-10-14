@@ -69,7 +69,6 @@ function renderSettings(extra: Partial<DashboardResponse> = {}) {
         onBack={() => {}}
         onProfileChanged={() => {}}
         onGoGoal={() => {}}
-        goalAdPending={false}
         onLogout={() => {}}
         onError={() => {}}
       />
