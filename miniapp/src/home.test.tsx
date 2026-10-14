@@ -1,6 +1,6 @@
 import { TDSMobileProvider } from '@toss/tds-mobile';
 import { readFileSync } from 'node:fs';
-import type { ReactNode } from 'react';
+import { isValidElement, type ReactNode } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -40,6 +40,7 @@ import {
   noBookSubtitle,
   notificationAgreementTarget,
   recenterIndex,
+  rewardAdButton,
   selectionAt,
   shouldShowNotificationCard,
   showWaiverButton,
@@ -49,9 +50,16 @@ import {
   waiverErrorMessage,
 } from './screens/Home';
 import { stripComments } from './source-scan';
-import { clickHandlerFor, graph, stubLocalStorage, userAgent } from './test-fixtures';
+import { clickHandlerFor, graph, stubLocalStorage, textOf, userAgent } from './test-fixtures';
 import { coverColor } from './ui';
-import { REWARD_AD_GROUP_ID, notificationAgreementSupported, requestNotificationAgreement, watchRewardAd } from './toss';
+import {
+  REWARD_AD_GROUP_ID,
+  notificationAgreementSupported,
+  preloadAd,
+  requestNotificationAgreement,
+  useAdSlot,
+  watchRewardAd,
+} from './toss';
 
 /**
  * 리워드 광고 진입점 — 노출 조건과 지급 흐름.
@@ -69,6 +77,9 @@ vi.mock('./api', async (importOriginal) => ({
 vi.mock('./toss', () => ({
   REWARD_AD_GROUP_ID: 'test-ad-group',
   watchRewardAd: vi.fn(),
+  // 광고 슬롯 — 기본은 준비됨(ready)이라 「광고 버튼을 누르면 광고가 열린다」 등이 뜻을 유지한다.
+  useAdSlot: vi.fn(() => 'ready'),
+  preloadAd: vi.fn(),
   GOAL_MET_TEMPLATE_CODE: 'test-template',
   STUDY_GOAL_TEMPLATE_CODE: 'test-study-template',
   notificationAgreementSupported: vi.fn(),
@@ -79,6 +90,8 @@ vi.mock('./toss', () => ({
 
 const waiveDebtMock = vi.mocked(waiveDebt);
 const watchRewardAdMock = vi.mocked(watchRewardAd);
+const useAdSlotMock = vi.mocked(useAdSlot);
+const preloadAdMock = vi.mocked(preloadAd);
 const supportedMock = vi.mocked(notificationAgreementSupported);
 const requestAgreementMock = vi.mocked(requestNotificationAgreement);
 
@@ -194,11 +207,43 @@ function renderHome(
 beforeEach(() => {
   waiveDebtMock.mockReset();
   watchRewardAdMock.mockReset();
+  useAdSlotMock.mockReset();
+  useAdSlotMock.mockReturnValue('ready');
+  preloadAdMock.mockReset();
   supportedMock.mockReset();
   requestAgreementMock.mockReset();
   supportedMock.mockReturnValue(true);
   stubLocalStorage(); // 홈이 렌더 중에 동의 캐시를 읽는다
   setCoachmarkWalking(true); // 여백 인라인 안내는 걷는 중에만 뜬다(잠금 계측은 coachmark.test)
+});
+
+/**
+ * 리워드 광고 버튼 = 광고 슬롯 상태(비게임 체크리스트 「광고 재생 시점에 실시간으로 로딩하지 않아요」) —
+ * 준비된 광고만 띄우고, 준비 전엔 누를 수 없고, 실패하면 불러오기만 다시 한다. 홈 지우개와 책방 성향이 같은 함수를 쓴다.
+ */
+describe('리워드 광고 버튼 (rewardAdButton)', () => {
+  it('REQ-07 · rewardAdButton — 준비됐으면 원래 문구로 재생한다', () => {
+    expect(rewardAdButton('ready', BUTTON_LABEL)).toEqual({ label: BUTTON_LABEL, action: 'show' });
+  });
+
+  it('REQ-07 · rewardAdButton — 부르기 전·불러오는 중엔 「광고 불러오는 중…」이고 누를 수 없다', () => {
+    expect(rewardAdButton('idle', BUTTON_LABEL)).toEqual({ label: '광고 불러오는 중…', action: null });
+    expect(rewardAdButton('loading', BUTTON_LABEL)).toEqual({ label: '광고 불러오는 중…', action: null });
+  });
+
+  it('REQ-07 · rewardAdButton — 실패면 「광고 다시 불러오기」이고 누르면 불러오기만 한다', () => {
+    expect(rewardAdButton('failed', BUTTON_LABEL)).toEqual({ label: '광고 다시 불러오기', action: 'retry' });
+  });
+
+  it('REQ-07 · rewardAdButton — 재생 중엔 누를 수 없다', () => {
+    expect(rewardAdButton('showing', BUTTON_LABEL)).toEqual({ label: BUTTON_LABEL, action: null });
+  });
+
+  it('REQ-07 · 세 문구 모두 「광고」를 말한다 — 광고 위장 금지', () => {
+    for (const status of ['idle', 'loading', 'ready', 'showing', 'failed'] as const) {
+      expect(rewardAdButton(status, BUTTON_LABEL).label).toContain('광고');
+    }
+  });
 });
 
 describe('버튼 노출 조건 (showWaiverButton)', () => {
@@ -589,12 +634,12 @@ describe('광고 손잡이 배선 (수익 경로)', () => {
    * ⓘ의 onClick을 그 렌더 도중에 부른다. 렌더 중 갱신이라 서버 렌더러가 탐침을 한 번 더 그리고(showNote = true),
    * 그 둘째 트리에 광고 버튼이 선다. 마크업이 아니라 트리라 버튼의 `onClick`을 꺼내 부를 수 있다(리뷰 돌연변이 X5).
    */
-  const homeTreeWithNoteOpen = (): ReactNode => {
+  const homeTreeWithNoteOpen = (overrides: Partial<DashboardResponse> = {}): ReactNode => {
     let tree: ReactNode = null;
     let opened = false;
     const Probe = () => {
       tree = Home({
-        dashboard: dashboard(),
+        dashboard: dashboard(overrides),
         mode: 'reading',
         study: IDLE_STUDY,
         onChangeMode: () => {},
@@ -634,6 +679,56 @@ describe('광고 손잡이 배선 (수익 경로)', () => {
     claim?.();
     expect(watchRewardAdMock).toHaveBeenCalledTimes(1);
     expect(watchRewardAdMock).toHaveBeenCalledWith(REWARD_AD_GROUP_ID);
+  });
+
+  /**
+   * 라벨이 든 버튼 엘리먼트의 프롭 — `clickHandlerFor`와 같은 재귀로 찾되 핸들러가 아니라 프롭을 돌려준다.
+   * 마크업 전체에서 `disabled`를 찾으면 TDS 전역 CSS의 `:disabled` 때문에 늘 참이 된다(아래 `goalHandleTag` 주석).
+   */
+  const buttonPropsFor = (node: ReactNode, label: string): Record<string, unknown> | undefined => {
+    if (Array.isArray(node)) {
+      for (const child of node) {
+        const hit = buttonPropsFor(child, label);
+        if (hit) return hit;
+      }
+      return undefined;
+    }
+    if (!isValidElement(node)) return undefined;
+    const props = node.props as { children?: ReactNode; onClick?: unknown };
+    if (typeof props.onClick === 'function' && textOf(props.children).includes(label)) return props;
+    return buttonPropsFor(props.children, label);
+  };
+
+  it('REQ-07 · 지우개가 불러오는 중이면 버튼이 「광고 불러오는 중…」이고 비활성이다', () => {
+    useAdSlotMock.mockReturnValue('loading');
+
+    const props = buttonPropsFor(homeTreeWithNoteOpen(), '광고 불러오는 중…');
+
+    expect(props).toBeDefined();
+    expect(props?.disabled).toBe(true);
+  });
+
+  it('REQ-07 · 지우개를 못 불러왔으면 「광고 다시 불러오기」를 눌러 다시 불러온다 — 광고는 열지 않는다', () => {
+    useAdSlotMock.mockReturnValue('failed');
+    const retry = clickHandlerFor(homeTreeWithNoteOpen(), '광고 다시 불러오기');
+
+    expect(retry).toBeTypeOf('function');
+    retry?.();
+    expect(preloadAdMock).toHaveBeenCalledWith('test-ad-group');
+    expect(watchRewardAdMock).not.toHaveBeenCalled();
+  });
+
+  it('REQ-08 · ⓘ 상자를 펴야 지우개 광고를 불러 둔다 — 접혀 있으면 안 부른다', () => {
+    homeTreeWithNoteOpen();
+
+    expect(useAdSlotMock.mock.calls[0]).toEqual(['test-ad-group', false]); // 첫 패스 — 상자가 접혀 있다
+    expect(useAdSlotMock.mock.calls.at(-1)).toEqual(['test-ad-group', true]); // 둘째 패스 — 상자를 폈다
+  });
+
+  it('REQ-08 · 지울 날이 없으면 상자를 펴도 불러 두지 않는다', () => {
+    homeTreeWithNoteOpen({ debtWaiverAvailable: false });
+
+    expect(useAdSlotMock.mock.calls.at(-1)).toEqual(['test-ad-group', false]);
   });
 
   it('문구에 「광고」를 명시한다 — 광고 위장 금지 조항이다', () => {

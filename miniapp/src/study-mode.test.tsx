@@ -30,6 +30,8 @@ import { graph, stubLocalStorage, userAgent } from './test-fixtures';
 vi.mock('./toss', () => ({
   REWARD_AD_GROUP_ID: '',
   watchRewardAd: vi.fn(),
+  useAdSlot: () => 'idle',
+  preloadAd: vi.fn(),
   GOAL_MET_TEMPLATE_CODE: 'test-template',
   notificationAgreementSupported: () => false,
   requestNotificationAgreement: vi.fn(),

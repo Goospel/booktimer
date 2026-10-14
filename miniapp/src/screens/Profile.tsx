@@ -33,7 +33,7 @@ import {
 } from '../api';
 import { useBackClose } from '../back';
 import { cacheGet, cacheKeyProfile, cacheKeyProfileBooks, cachePut } from '../cache';
-import { PERSONALITY_AD_GROUP_ID, watchRewardAd } from '../toss';
+import { PERSONALITY_AD_GROUP_ID, preloadAd, useAdSlot, watchRewardAd } from '../toss';
 import {
   Avatar,
   ErrorMessage,
@@ -47,7 +47,7 @@ import {
   Sheet,
   Text,
 } from '../ui';
-import { waiverErrorMessage } from './Home';
+import { rewardAdButton, waiverErrorMessage } from './Home';
 import { BookGrid, SECTIONS } from './Library';
 import { MarginBoard, MarginCard, hasFreshStory, tabStyle } from './Story';
 
@@ -719,6 +719,12 @@ export function ProfileCard({
   const sectionTitle = shelfTitle(activeTag, statusFilter, books.length);
   const openable = followCountsOpenable(profile.self, onOpenFollowList !== undefined);
   const actions = personalityActions(profile.self, personalityStatus, PERSONALITY_AD_GROUP_ID);
+  /** 성향 광고 — 버튼이 설 자격이 있을 때만 미리 불러 둔다. 광고 경로가 도는 동안(adBusy)은 다음 장을 부르지 않는다. */
+  const adStatus = useAdSlot(PERSONALITY_AD_GROUP_ID, actions.includes('ad') && !adBusy);
+  const ad = rewardAdButton(
+    adStatus,
+    personalityStatus?.hasSelected ? '광고 보고 다시 분석하기' : '광고 보고 성향 분석 받기',
+  );
 
   /*
    * 나가는 길은 **토스 네이티브 내비게이션 바의 뒤로가기**다(2026-09-02, T-220). 이 화면은 같은 자리에서
@@ -832,10 +838,10 @@ export function ProfileCard({
                     style={{ flex: 1 }}
                     variant="weak"
                     size="small"
-                    disabled={adBusy}
-                    onClick={onClaimPersonality}
+                    disabled={adBusy || ad.action === null}
+                    onClick={ad.action === 'retry' ? () => preloadAd(PERSONALITY_AD_GROUP_ID) : onClaimPersonality}
                   >
-                    {personalityStatus.hasSelected ? '광고 보고 다시 분석하기' : '광고 보고 성향 분석 받기'}
+                    {ad.label}
                   </Button>
                 ) : (
                   // 보관함 — 비교 대상이 둘 이상일 때만. 「문구가 바뀌었나」를 확인할 유일한 자리다.

@@ -16,12 +16,15 @@ import {
   studySessionLine,
 } from '../sessionGoal';
 import {
+  type AdSlotStatus,
   GOAL_MET_TEMPLATE_CODE,
   STUDY_GOAL_TEMPLATE_CODE,
   REWARD_AD_GROUP_ID,
   hapticOnce,
   notificationAgreementSupported,
+  preloadAd,
   requestNotificationAgreement,
+  useAdSlot,
   watchRewardAd,
 } from '../toss';
 import {
@@ -1248,6 +1251,20 @@ export function showWaiverButton(
 }
 
 /**
+ * 리워드 광고 버튼이 지금 말할 것과 누르면 할 일 — 광고 상태가 곧 버튼 상태다(준비된 광고만 띄운다).
+ * 문구에 「광고」를 넣는 규율(광고 위장 금지)은 세 상태 모두 지킨다. 책방 성향 버튼도 이 함수를 쓴다.
+ */
+export function rewardAdButton(
+  status: AdSlotStatus,
+  readyLabel: string,
+): { label: string; action: 'show' | 'retry' | null } {
+  if (status === 'ready') return { label: readyLabel, action: 'show' };
+  if (status === 'failed') return { label: '광고 다시 불러오기', action: 'retry' };
+  if (status === 'showing') return { label: readyLabel, action: null };
+  return { label: '광고 불러오는 중…', action: null }; // idle(곧 부른다)·loading
+}
+
+/**
  * 광고 시청 → 지급. 끝까지 안 봤으면 **지급 API를 부르지 않고** `null`(조용히 원상태).
  *
  * <p>클릭 흐름을 화면에서 꺼내 둔 이유: 테스트 하니스가 정적 렌더라 클릭이 안 돌아,
@@ -1737,6 +1754,13 @@ export function Home({
       .finally(() => setBusy(false));
   };
 
+  /** 지우개 광고 — ⓘ 상자가 열려 있고 버튼이 설 자격이 있을 때만 미리 불러 둔다(받아 놓고 안 쓰는 광고를 줄인다). */
+  const waiverAdStatus = useAdSlot(
+    REWARD_AD_GROUP_ID,
+    showNote && showWaiverButton(dashboard.carriedDebtSeconds, dashboard.debtWaiverAvailable, REWARD_AD_GROUP_ID) && !busy,
+  );
+  const waiverAd = rewardAdButton(waiverAdStatus, '광고 보고 밀린 하루 지우기');
+
   /** 알림 동의 요청 — 결과(동의·이미동의·거절)가 캐시되면 카드가 사라진다. 미지원(null)이면 그대로 둔다. */
   const askNotification = () => {
     const asked = mode; // 답이 오는 사이 모드가 바뀌어도 물었던 쪽 카드에 적는다
@@ -2011,10 +2035,10 @@ export function Home({
                       variant="weak"
                       size="small"
                       style={{ marginTop: 8 }}
-                      disabled={busy}
-                      onClick={claimWaiver}
+                      disabled={busy || waiverAd.action === null}
+                      onClick={waiverAd.action === 'retry' ? () => preloadAd(REWARD_AD_GROUP_ID) : claimWaiver}
                     >
-                      광고 보고 밀린 하루 지우기
+                      {waiverAd.label}
                     </Button>
                   )}
                   {waived !== null && (
