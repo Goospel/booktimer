@@ -72,10 +72,12 @@ public class TossUnlinkCallbackController {
         try {
             root = objectMapper.readTree(rawBody == null ? "" : rawBody); // 빈 본문은 예외 없이 MissingNode
         } catch (RuntimeException e) {                                     // StreamReadException
+            log.warn("toss-unlink bad-request reason=not-json"); // 본문 원문은 안 찍는다 — 형식 어긋남을 「안 불렀다」와 가른다
             return ResponseEntity.badRequest().build();
         }
         String userKey = text(root, "userKey");
         if (userKey == null) {
+            log.warn("toss-unlink bad-request reason=no-userkey");
             return ResponseEntity.badRequest().build();
         }
         String referrer = text(root, "referrer");

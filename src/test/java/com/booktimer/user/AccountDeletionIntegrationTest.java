@@ -199,6 +199,9 @@ class AccountDeletionIntegrationTest {
 
         assertThat(accountService.unlinkToss("uk-unlink")).isEqualTo(AccountService.TossUnlinkOutcome.PURGED);
         assertThat(userRepository.findByTossUserKey("uk-unlink")).isEmpty(); // 쿼리가 flush를 강제 — FK 위반이면 여기서 터진다
+        // 키만 비우고 PURGED를 돌려줘도 위 두 줄은 통과한다 — 계정과 기록이 실제로 사라졌는지 본다(리뷰 1회차 N26).
+        assertThat(userRepository.findById(me.getId())).isEmpty();
+        assertThat(bookRepository.findById(book.getId())).isEmpty();
         assertThat(userRepository.findByEmail("friend-unlink@booktimer.com")).isPresent();
     }
 
@@ -263,8 +266,11 @@ class AccountDeletionIntegrationTest {
         // 정책 ② 재배정이 운영에 남기는 꼴 — 미인증 LOCAL · 그 키의 합성 주소 · 키 있음.
         User old = userRepository.saveAndFlush(withTossKey(
                 User.of(synthetic, passwordEncoder.encode("rawpw1234"), "비켜난웹", "Asia/Seoul", Role.USER), "443731105"));
+        // login_id가 없어 principal이 합성 주소다 — 무효화를 주소 옮기기보다 뒤에 하면 새 주소로 찾아 이 세션을 놓친다.
+        String sessionId = createSession(sessions, synthetic);
 
         assertThat(accountService.unlinkToss("443731105")).isEqualTo(AccountService.TossUnlinkOutcome.SEVERED);
+        assertThat(sessions.findById(sessionId)).isNull();
         // 가입 시도를 이메일 단언보다 앞에 — 주소를 안 놓았으면 여기서 uk_users_email 위반으로 깨진다.
         assertThatCode(() -> {
             tossUserProvisioningService.register("443731105", null);

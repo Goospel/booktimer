@@ -103,12 +103,13 @@ class TossUnlinkCallbackControllerTest {
     @DisplayName("REQ-02 · 숫자로 온 userKey로 토스 전용 계정을 찾아 지우고 200 — 세션·CSRF 없이 닿는다")
     void numericUserKey_purgesTossOnlyAccount() throws Exception {
         registerTossOnly("443731103");
-        assertThat(userRepository.findByTossUserKey("443731103")).isPresent();
+        Long id = userRepository.findByTossUserKey("443731103").orElseThrow().getId();
 
         callback(basic(secret), "{\"userKey\": 443731103, \"referrer\": \"UNLINK\"}")
                 .andExpect(status().isOk());
 
         assertThat(userRepository.findByTossUserKey("443731103")).isEmpty();
+        assertThat(userRepository.findById(id)).isEmpty(); // 키만 비운 것이 아니라 계정이 지워졌다
     }
 
     @Test
@@ -172,6 +173,7 @@ class TossUnlinkCallbackControllerTest {
         callback(null, body).andExpect(status().isUnauthorized());
         callback(basic("wrong"), body).andExpect(status().isUnauthorized());
         callback("Bearer " + token, body).andExpect(status().isUnauthorized());
+        callback(null, "not json").andExpect(status().isUnauthorized()); // 인증이 본문 파싱보다 먼저 — 400이 새지 않는다
 
         assertThat(userRepository.findByTossUserKey("443731103")).isPresent();
     }
@@ -182,6 +184,7 @@ class TossUnlinkCallbackControllerTest {
         registerTossOnly("443731103");
 
         for (String body : new String[]{"", "not json", "{}", "{\"userKey\":null}", "{\"userKey\":{\"x\":1}}",
+                "{\"userKey\":\"\"}", "{\"userKey\":\"  \"}",
                 // 최상위에 없고 안쪽에만 있는 실제 키 — 안쪽까지 뒤지면 그 계정을 지우고 200을 냈을 것이다
                 "{\"x\":{\"userKey\":443731103}}", "[{\"userKey\":443731103}]"}) {
             callback(basic(secret), body).andExpect(status().isBadRequest());
@@ -198,12 +201,17 @@ class TossUnlinkCallbackControllerTest {
         callback(b64("leak-probe-7f3a"), body).andExpect(status().isUnauthorized()); // 스킴 없는 base64 = 원문이 곧 시크릿
         callback(basic("wrong-probe-9c1e"), body).andExpect(status().isUnauthorized());
         callback(basic(secret), body).andExpect(status().isOk());
+        callback(basic(secret), "not json 987654321012").andExpect(status().isBadRequest());
+        callback(basic(secret), "{\"x\":{\"userKey\":987654321012}}").andExpect(status().isBadRequest());
 
         // 양성 대조 먼저 — 캡처가 실제로 이 로그를 받고 있다는 증거
         assertThat(output.getAll())
                 .contains("toss-unlink auth-failed scheme=no-scheme")
                 .contains("toss-unlink auth-failed scheme=Basic")
-                .contains("toss-unlink outcome=NOT_FOUND referrer=UNLINK keyShape=digits:12");
+                .contains("toss-unlink outcome=NOT_FOUND referrer=UNLINK keyShape=digits:12")
+                // 400도 앱 로그에 남는다 — 줄이 없으면 「토스가 안 불렀다」로 오진한다(본문 원문은 안 찍는다)
+                .contains("toss-unlink bad-request reason=not-json")
+                .contains("toss-unlink bad-request reason=no-userkey");
         assertThat(output.getAll())
                 .doesNotContain(b64("leak-probe-7f3a"))
                 .doesNotContain(b64("wrong-probe-9c1e"))
