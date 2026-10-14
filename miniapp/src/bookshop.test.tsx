@@ -40,8 +40,8 @@ import {
   toggleSafety,
 } from './screens/Profile';
 import { bigShadow, tagWith } from './soft-guard';
-import { userAgent } from './test-fixtures';
-import { watchRewardAd } from './toss';
+import { clickHandlerFor, userAgent } from './test-fixtures';
+import { preloadAd, useAdSlot, watchRewardAd } from './toss';
 
 /**
  * 소셜 화면의 분기를 정적 렌더로 계측한다 — 뮤테이션(팔로우·차단·신고) 자체는 api 계층에서 이미 계측했고,
@@ -64,6 +64,8 @@ vi.mock('./toss', () => ({
   REWARD_AD_GROUP_ID: '',
   PERSONALITY_AD_GROUP_ID: 'test-ad-group',
   watchRewardAd: vi.fn(),
+  useAdSlot: vi.fn(),
+  preloadAd: vi.fn(),
   GOAL_MET_TEMPLATE_CODE: 'test-template',
   notificationAgreementSupported: vi.fn(),
   requestNotificationAgreement: vi.fn(),
@@ -75,9 +77,12 @@ vi.mock('./toss', () => ({
 const adRefreshMock = vi.mocked(adRefreshPersonality);
 const selectMock = vi.mocked(selectPersonality);
 const watchRewardAdMock = vi.mocked(watchRewardAd);
+const useAdSlotMock = vi.mocked(useAdSlot);
+const preloadAdMock = vi.mocked(preloadAd);
 
 beforeEach(() => {
   vi.clearAllMocks();
+  useAdSlotMock.mockReturnValue('ready'); // 광고가 준비된 평상시 — 성향 버튼 문구 단언들이 뜻을 유지한다
 });
 
 function render(node: React.ReactNode) {
@@ -113,7 +118,7 @@ function book(id: number, title: string, lastStoryAt: string | null = null): Pro
   return { id, title, author: '저자', coverUrl: null, status: '다 읽음', seconds: 600, purchaseLink: null, lastStoryAt };
 }
 
-function card(
+function cardProps(
   p: ProfileResponse,
   books: ProfileBook[] = [],
   activeTag: string | null = null,
@@ -135,41 +140,43 @@ function card(
     margins?: ProfileMarginEntry[] | null;
     marginsError?: string | null;
   } = {},
-) {
-  return render(
-    <ProfileCard
-      profile={p}
-      books={books}
-      activeTag={activeTag}
-      now={NOW}
-      onOpenMargin={view.openMargin === false ? undefined : () => {}}
-      busy={false}
-      personalityStatus={view.personalityStatus ?? null}
-      adBusy={false}
-      earnedRetry={view.earnedRetry ?? false}
-      personalityNotice={view.personalityNotice ?? null}
-      archiveOpen={view.archiveOpen ?? false}
-      onArchive={() => {}}
-      onSelectPersonality={() => {}}
-      onClaimPersonality={() => {}}
-      onRetryPersonality={() => {}}
-      onFollowToggle={() => {}}
-      onSelectTag={() => {}}
-      statusFilter={view.statusFilter ?? null}
-      onSelectStatus={() => {}}
-      onMore={() => {}}
-      safety={null}
-      header={view.header}
-      onOpenFollowList={view.openFollowList === true ? () => {} : undefined}
-      tab={view.tab ?? 'books'}
-      onSelectTab={() => {}}
-      margins={view.margins ?? null}
-      marginsError={view.marginsError ?? null}
-      onRetryMargins={() => {}}
-      expanded={new Set()}
-      onToggleExpand={() => {}}
-    />,
-  );
+): Parameters<typeof ProfileCard>[0] {
+  return {
+    profile: p,
+    books,
+    activeTag,
+    now: NOW,
+    onOpenMargin: view.openMargin === false ? undefined : () => {},
+    busy: false,
+    personalityStatus: view.personalityStatus ?? null,
+    adBusy: false,
+    earnedRetry: view.earnedRetry ?? false,
+    personalityNotice: view.personalityNotice ?? null,
+    archiveOpen: view.archiveOpen ?? false,
+    onArchive: () => {},
+    onSelectPersonality: () => {},
+    onClaimPersonality: () => {},
+    onRetryPersonality: () => {},
+    onFollowToggle: () => {},
+    onSelectTag: () => {},
+    statusFilter: view.statusFilter ?? null,
+    onSelectStatus: () => {},
+    onMore: () => {},
+    safety: null,
+    header: view.header,
+    onOpenFollowList: view.openFollowList === true ? () => {} : undefined,
+    tab: view.tab ?? 'books',
+    onSelectTab: () => {},
+    margins: view.margins ?? null,
+    marginsError: view.marginsError ?? null,
+    onRetryMargins: () => {},
+    expanded: new Set(),
+    onToggleExpand: () => {},
+  };
+}
+
+function card(...args: Parameters<typeof cardProps>) {
+  return render(<ProfileCard {...cardProps(...args)} />);
 }
 
 /**
@@ -1167,6 +1174,52 @@ describe('내 책방의 성향 관문 렌더', () => {
 
   it('남의 책방에는 성향 관문이 없다', () => {
     expect(card(profile({ self: false }), [], null, { personalityStatus: status() })).not.toContain('광고 보고');
+  });
+
+  // --- 광고는 버튼이 설 때 미리 불러 둔다(비게임 체크리스트 「광고 재생 시점에 실시간으로 로딩하지 않아요」) ---
+
+  it('REQ-09 · 내 책방에 광고 버튼이 서면 성향 그룹을 불러 두라고 한다', () => {
+    card(me(), [], null, { personalityStatus: status() });
+
+    expect(useAdSlotMock).toHaveBeenCalledWith('test-ad-group', true);
+  });
+
+  it('REQ-09 · 버튼이 안 서는 네 경우엔 불러 두지 않는다', () => {
+    const cases = [
+      card(me({ personality: null }), [], null, { personalityStatus: status({ coldStart: true }) }),
+      card(me(), [], null, { personalityStatus: status({ adRefreshRemaining: 0 }) }),
+      card(me(), [], null, { personalityStatus: null }),
+      card(profile({ self: false }), [], null, { personalityStatus: status() }),
+    ];
+
+    expect(cases).toHaveLength(4);
+    expect(useAdSlotMock).toHaveBeenCalledTimes(4);
+    expect(useAdSlotMock.mock.calls.every(([group, wanted]) => group === 'test-ad-group' && wanted === false)).toBe(true);
+    expect(useAdSlotMock).not.toHaveBeenCalledWith('test-ad-group', true);
+  });
+
+  it('REQ-07 · 성향 광고가 불러오는 중이면 「광고 불러오는 중…」이고 비활성이다', () => {
+    useAdSlotMock.mockReturnValue('loading');
+    const markup = card(me(), [], null, { personalityStatus: status() });
+
+    const at = markup.indexOf('광고 불러오는 중…');
+    expect(at).toBeGreaterThan(-1); // 라벨을 못 찾으면 아래 단언이 빈 문자열을 검사하게 된다
+    expect(markup.slice(markup.lastIndexOf('<button', at), at)).toContain('disabled=""');
+  });
+
+  it('REQ-07 · 성향 광고를 못 불러왔으면 「광고 다시 불러오기」— 누르면 다시 불러온다', () => {
+    useAdSlotMock.mockReturnValue('failed');
+    let retry: (() => void) | undefined;
+    const Probe = () => {
+      retry = clickHandlerFor(ProfileCard(cardProps(me(), [], null, { personalityStatus: status() })), '광고 다시 불러오기');
+      return null;
+    };
+    render(<Probe />);
+
+    expect(retry).toBeTypeOf('function');
+    retry?.();
+    expect(preloadAdMock).toHaveBeenCalledWith('test-ad-group');
+    expect(watchRewardAdMock).not.toHaveBeenCalled();
   });
 
   it('광고를 이미 본 뒤 실패했으면 광고 없는 재시도 손잡이를 준다 — 광고를 두 번 보게 하지 않는다', () => {

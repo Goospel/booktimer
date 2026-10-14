@@ -298,7 +298,6 @@ export function Settings({
   onBack,
   onProfileChanged,
   onGoGoal,
-  goalAdPending,
   onLogout,
   onError,
   onReminderChange = () => {},
@@ -308,8 +307,6 @@ export function Settings({
   /** 닉네임·핸들이 바뀌면 대시보드를 다시 받는다 — 홈 인사말·소셜이 같은 값을 봐야 한다. */
   onProfileChanged: () => void;
   onGoGoal: () => void;
-  /** 전면광고를 기다리는 중 — 홈 손잡이와 같은 신호를 준다(두 진입점이 같은 경로를 타므로 표시도 같다). */
-  goalAdPending: boolean;
   onLogout: () => void;
   onError: (error: Error) => void;
   /** 독서 알림 저장 성공 — App이 대시보드에 반영한다(홈 제안 카드가 같은 값을 봐야 한다). 옛 하니스는 안 넘긴다. */
@@ -495,8 +492,8 @@ export function Settings({
         {/* 「독서」를 붙인 건 목표가 둘이던 시절의 보정이다 — 공부 하루 목표는 2026-09-13 책별 「회당 시간」
             (홈 공부 캐러셀 아래 손잡이)으로 대체돼 지금 하루 목표는 독서뿐이지만, 공부 모드가 있는 앱에서
             「하루 목표」만으론 어느 쪽인지 모호해 문구는 그대로 둔다. */}
-        <Button display="block" variant="weak" onClick={onGoGoal} disabled={goalAdPending}>
-          {goalAdPending ? '준비 중…' : '독서 하루 목표 바꾸기'}
+        <Button display="block" variant="weak" onClick={onGoGoal}>
+          독서 하루 목표 바꾸기
         </Button>
         {/* 첫 진입 안내를 다시 부른다 — 누르면 홈으로 돌아가 첫 걸음부터 다시 걷는다. */}
         <Button display="block" variant="weak" style={{ marginTop: 8 }} onClick={() => replayGuide(onBack)}>

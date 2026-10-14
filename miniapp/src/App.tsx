@@ -40,7 +40,7 @@ import { StudyCalendar } from './screens/StudyCalendar';
 import { StudyHistory } from './screens/StudyHistory';
 import { StudyLibrary } from './screens/StudyLibrary';
 import { BookMargin, BookMarginAll, StoryComposer } from './screens/Story';
-import { notificationAgreementSupported, showInterstitialAd, subscribeNativeBack, trackEvent, trackScreen } from './toss';
+import { notificationAgreementSupported, subscribeNativeBack, trackEvent, trackScreen } from './toss';
 import { flushTrial } from './trial';
 import { CoverInitial, ErrorMessage, FLOAT, Loading, OUTLINE_PILL, RULE_ROW, SERIF_VALUE, Screen, Sheet } from './ui';
 
@@ -748,8 +748,6 @@ export function App() {
   );
   const [firstRun, setFirstRun] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  /** 목표 바꾸기 전면광고를 기다리는 중 — 버튼을 "준비 중"으로 바꾸고 중복 진입을 막는다. */
-  const [goalAdPending, setGoalAdPending] = useState(false);
   /** 열린 여백 — 탭 위에 전체 화면으로 선다(홈 문·서재 문·홈 소식이 모두 이 한 자리로 온다). */
   const [margin, setMargin] = useState<MarginState | null>(null);
   /**
@@ -1038,26 +1036,13 @@ export function App() {
   const stoppingForMargin = useRef(false);
 
   /**
-   * 목표 바꾸기 진입 — 홈 손잡이와 설정 화면이 **같은 경로**를 탄다(둘이 갈라지면 광고 규칙도 갈라진다).
+   * 목표 바꾸기 진입 — 홈 손잡이와 설정 화면이 같은 경로를 탄다. 광고 없이 곧장 간다.
    *
-   * <p>전면 광고는 이 경로에만 붙는다 — 신규 계정의 첫 목표 설정은 로그인 브릿지에서 곧장 `load('goal')`로
-   * 들어와 여기를 거치지 않으므로, 첫 인상이 광고가 되는 일은 없다.
-   *
-   * <p><b>광고가 끝난 뒤에 전환한다</b>(2026-08-14 수정). 예전엔 기다리지 않고 바로 전환해서, 1~2초 뒤
-   * 로드가 끝난 광고가 목표 화면이 아니라 **그때 떠 있는 아무 화면 위에** 덮였다(실기기 실측: 목표 화면을
-   * 지나 메인으로 돌아온 뒤 노출). `showInterstitialAd`는 못 뜨거나 무응답이어도 반드시 resolve하므로
-   * 여기서 진입이 막힐 일은 없다.
-   *
-   * <p>기다리는 1~2초 동안 `goalAdPending`으로 버튼을 "준비 중"으로 바꾼다 — 겉보기 무반응이면 사용자가
-   * 다시 누른다. 중복 호출 자체는 이 플래그가 먼저 막아 광고가 두 장 쌓이지 않는다.
+   * <p>전면 광고(2026-08-14~)는 걷었다: 비게임 출시 체크리스트의 사전 로딩 · 「광고를 예상할 수 없는 상태의 전면
+   * 광고」 · 「인터랙션 2초」가 모두 이 한 자리에서 나왔고, 2개월 노출 6회·수익 22원이었다.
+   * 신규 계정의 첫 목표 설정은 원래 이 경로를 안 거친다(로그인 브릿지 → `load('goal')`).
    */
-  const goToGoal = useCallback(async () => {
-    if (goalAdPending) return;
-    setGoalAdPending(true);
-    await showInterstitialAd();
-    setGoalAdPending(false);
-    setView('goal');
-  }, [goalAdPending]);
+  const goToGoal = useCallback(() => setView('goal'), []);
 
   switch (view) {
     case 'auth':
@@ -1120,7 +1105,6 @@ export function App() {
         // 닉네임·핸들이 바뀌면 대시보드가 옛 값을 들고 있다 — 홈 인사말·소셜이 같은 값을 봐야 한다.
         onProfileChanged={() => silentRefresh(true)}
         onGoGoal={goToGoal}
-        goalAdPending={goalAdPending}
         onLogout={toLogin}
         onError={handleError}
         onReminderChange={applyReminder}
@@ -1420,7 +1404,6 @@ export function App() {
       onGraphChange={applyGraph}
       // 홈 목표 손잡이(캡션 줄 「바꾸기 ›」·GoalHandle)는 독서 히어로에만 선다 — 공부 하루 목표는 회당 시간으로 대체됐다.
       onGoGoal={goToGoal}
-      goalAdPending={goalAdPending}
       onGoSettings={() => setView('settings')}
       onError={handleError}
       onShelfChanged={() => silentRefresh(true)}
@@ -1493,7 +1476,6 @@ export function MainTabs({
   onStartTimer,
   onGraphChange,
   onGoGoal,
-  goalAdPending,
   onGoSettings,
   onError,
   onShelfChanged,
@@ -1535,8 +1517,6 @@ export function MainTabs({
   onStartTimer: () => Promise<TimerState>;
   onGraphChange: (graph: DashboardResponse['graph']) => void;
   onGoGoal: () => void;
-  /** 전면광고를 기다리는 중 — 목표 손잡이를 "준비 중"으로 바꿔 탭이 먹통으로 보이지 않게 한다. */
-  goalAdPending: boolean;
   /** 홈 맨 위의 계정 진입 — 프로필·설정 화면(닉네임·@아이디·목표·로그아웃)으로 나간다. */
   onGoSettings: () => void;
   onError: (error: Error) => void;
@@ -2037,7 +2017,6 @@ export function MainTabs({
             onTimerChange={onTimerChange}
             celebrate={celebrate}
             onGoGoal={onGoGoal}
-            goalAdPending={goalAdPending}
             onGoSettings={onGoSettings}
             onError={onError}
             onOpenMargin={onOpenMargin}

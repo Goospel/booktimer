@@ -16,12 +16,15 @@ import {
   studySessionLine,
 } from '../sessionGoal';
 import {
+  type AdSlotStatus,
   GOAL_MET_TEMPLATE_CODE,
   STUDY_GOAL_TEMPLATE_CODE,
   REWARD_AD_GROUP_ID,
   hapticOnce,
   notificationAgreementSupported,
+  preloadAd,
   requestNotificationAgreement,
+  useAdSlot,
   watchRewardAd,
 } from '../toss';
 import {
@@ -1096,10 +1099,7 @@ export function todayProgress(
  * <p>목표 0이면 바꿀 값이 없으니 정하러 가는 말이 맞다 — 그 상태에선 게이지 줄이 통째로 안 그려져
  * (`todayProgress`의 `progress === null`) 이 버튼이 목표를 정하러 가는 화면 유일의 길이다.
  */
-export function goalHandleLabel(goalSeconds: number, adPending = false): string {
-  // 전면광고 로드에 1~2초가 걸린다(광고를 먼저 띄우고 전환하도록 바꾼 뒤 생긴 대기). 그동안 라벨이
-  // 그대로면 눌러도 아무 일 없는 것처럼 보여 사용자가 다시 누른다 — 목표값보다 대기 사실이 우선이다.
-  if (adPending) return '준비 중…';
+export function goalHandleLabel(goalSeconds: number): string {
   return goalSeconds > 0 ? '하루 목표 바꾸기' : '목표 정하기';
 }
 
@@ -1112,19 +1112,10 @@ export function goalHandleLabel(goalSeconds: number, adPending = false): string 
  * 같은 상자에 선 「광고 보고 밀린 하루 지우기」와 나란히 놓였을 때 **버튼으로 읽히지 않았다** — 광고 쪽과
  * 같은 꼴(풀폭 `weak`)로 맞춰 "눌러서 바꾸는 것"임을 모양이 말하게 한다.
  */
-function GoalHandle({
-  goalSeconds,
-  pending,
-  onGoGoal,
-}: {
-  goalSeconds: number;
-  /** 전면광고 로드 대기 — 라벨과 비활성 둘 다로 "누른 건 먹혔다"를 말한다. */
-  pending: boolean;
-  onGoGoal: () => void;
-}) {
+function GoalHandle({ goalSeconds, onGoGoal }: { goalSeconds: number; onGoGoal: () => void }) {
   return (
-    <Button display="block" variant="weak" size="small" style={{ marginTop: 10 }} disabled={pending} onClick={onGoGoal}>
-      {goalHandleLabel(goalSeconds, pending)}
+    <Button display="block" variant="weak" size="small" style={{ marginTop: 10 }} onClick={onGoGoal}>
+      {goalHandleLabel(goalSeconds)}
     </Button>
   );
 }
@@ -1257,6 +1248,20 @@ export function showWaiverButton(
   adGroupId: string,
 ): boolean {
   return carriedDebtSeconds > 0 && debtWaiverAvailable && adGroupId !== '';
+}
+
+/**
+ * 리워드 광고 버튼이 지금 말할 것과 누르면 할 일 — 광고 상태가 곧 버튼 상태다(준비된 광고만 띄운다).
+ * 문구에 「광고」를 넣는 규율(광고 위장 금지)은 세 상태 모두 지킨다. 책방 성향 버튼도 이 함수를 쓴다.
+ */
+export function rewardAdButton(
+  status: AdSlotStatus,
+  readyLabel: string,
+): { label: string; action: 'show' | 'retry' | null } {
+  if (status === 'ready') return { label: readyLabel, action: 'show' };
+  if (status === 'failed') return { label: '광고 다시 불러오기', action: 'retry' };
+  if (status === 'showing') return { label: readyLabel, action: null };
+  return { label: '광고 불러오는 중…', action: null }; // idle(곧 부른다)·loading
 }
 
 /**
@@ -1624,7 +1629,6 @@ export function Home({
   onTimerChange,
   celebrate,
   onGoGoal,
-  goalAdPending,
   onGoSettings,
   onError,
   onOpenMargin,
@@ -1670,8 +1674,6 @@ export function Home({
   /** 첫 완료 축하가 떠 있는지 — 상태는 측정 액션과 함께 `MainTabs`가 든다(다른 탭에서 끝내도 여기 뜨도록). */
   celebrate: boolean;
   onGoGoal: () => void;
-  /** 전면광고를 기다리는 중 — 손잡이를 「준비 중」으로 바꾸고 비활성화한다(연타 방지는 App도 함께 한다). */
-  goalAdPending: boolean;
   /** 홈 맨 위의 계정 진입 — 닉네임·@아이디·목표·로그아웃은 전부 설정 화면이 맡는다. */
   onGoSettings: () => void;
   onError: (error: Error) => void;
@@ -1751,6 +1753,13 @@ export function Home({
       .catch((e: Error) => setError(waiverErrorMessage(e)))
       .finally(() => setBusy(false));
   };
+
+  /** 지우개 광고 — ⓘ 상자가 열려 있고 버튼이 설 자격이 있을 때만 미리 불러 둔다(받아 놓고 안 쓰는 광고를 줄인다). */
+  const waiverAdStatus = useAdSlot(
+    REWARD_AD_GROUP_ID,
+    showNote && showWaiverButton(dashboard.carriedDebtSeconds, dashboard.debtWaiverAvailable, REWARD_AD_GROUP_ID) && !busy,
+  );
+  const waiverAd = rewardAdButton(waiverAdStatus, '광고 보고 밀린 하루 지우기');
 
   /** 알림 동의 요청 — 결과(동의·이미동의·거절)가 캐시되면 카드가 사라진다. 미지원(null)이면 그대로 둔다. */
   const askNotification = () => {
@@ -2026,10 +2035,10 @@ export function Home({
                       variant="weak"
                       size="small"
                       style={{ marginTop: 8 }}
-                      disabled={busy}
-                      onClick={claimWaiver}
+                      disabled={busy || waiverAd.action === null}
+                      onClick={waiverAd.action === 'retry' ? () => preloadAd(REWARD_AD_GROUP_ID) : claimWaiver}
                     >
-                      광고 보고 밀린 하루 지우기
+                      {waiverAd.label}
                     </Button>
                   )}
                   {waived !== null && (
@@ -2047,15 +2056,12 @@ export function Home({
                   <span style={{ display: 'block', whiteSpace: 'nowrap' }}>{`하루 목표 ${goal > 0 ? formatDuration(goal) : '없음'}`}</span>
                   {overflow > 0 && <span style={{ display: 'block', fontSize: 13, lineHeight: '18px' }}>+{formatDuration(overflow)} 더 읽었어요</span>}
                 </div>
-                {/* 전면광고 로드에 1~2초가 걸려 그동안 글자가 그대로면 눌러도 아무 일 없는 것처럼 보인다 — 대기 사실이
-                    목표값보다 우선이다. 손가락 몫 44는 음수 여백 + 패딩으로 든다. */}
+                {/* 손가락 몫 44는 음수 여백 + 패딩으로 든다. */}
                 <button
                   type="button"
                   onClick={onGoGoal}
-                  disabled={goalAdPending}
-                  // 보이는 「바꾸기」는 옆 말에 기대는 한 단어라 버튼만 훑는 스크린리더엔 뜻이 없다. 대기 중엔
-                  // 이름을 덮지 않아 「준비 중…」이 그대로 이름이 된다.
-                  aria-label={goalAdPending ? undefined : goal > 0 ? '하루 목표 바꾸기' : '하루 목표 정하기'}
+                  // 보이는 「바꾸기」는 옆 말에 기대는 한 단어라 버튼만 훑는 스크린리더엔 뜻이 없다.
+                  aria-label={goal > 0 ? '하루 목표 바꾸기' : '하루 목표 정하기'}
                   style={{
                     display: 'inline-flex',
                     alignItems: 'center',
@@ -2068,27 +2074,25 @@ export function Home({
                     background: 'transparent',
                     fontFamily: 'inherit',
                     fontSize: 14,
-                    fontWeight: goalAdPending ? 400 : 500,
-                    color: goalAdPending ? 'var(--adaptiveGrey600, #645E54)' : 'var(--adaptiveBlue700, #1D1B18)',
+                    fontWeight: 500,
+                    color: 'var(--adaptiveBlue700, #1D1B18)',
                     cursor: 'pointer',
                   }}
                 >
-                  {goalAdPending ? '준비 중…' : goal > 0 ? '바꾸기' : '정하기'}
-                  {!goalAdPending && (
-                    <svg
-                      width="14"
-                      height="14"
-                      viewBox="0 0 24 24"
-                      fill="none"
-                      strokeWidth="2.2"
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      aria-hidden="true"
-                      style={{ stroke: 'currentColor', flex: 'none' }}
-                    >
-                      <path d="M9 6l6 6-6 6" />
-                    </svg>
-                  )}
+                  {goal > 0 ? '바꾸기' : '정하기'}
+                  <svg
+                    width="14"
+                    height="14"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    strokeWidth="2.2"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    aria-hidden="true"
+                    style={{ stroke: 'currentColor', flex: 'none' }}
+                  >
+                    <path d="M9 6l6 6-6 6" />
+                  </svg>
                 </button>
               </div>
             </>
@@ -2096,7 +2100,7 @@ export function Home({
           {mode === 'reading' && !showMedal && guide == null && progress === null && (
             // 목표 0 — 줄 1·2 대신 「목표 정하기」 외곽선 알약. 목표를 정하러 가는 유일한 손잡이가 여기 남는다.
             <div data-today-row="set-goal" style={{ ...TABLE_ROW, display: 'block', padding: '12px 0' }}>
-              <GoalHandle goalSeconds={goal} pending={goalAdPending} onGoGoal={onGoGoal} />
+              <GoalHandle goalSeconds={goal} onGoGoal={onGoGoal} />
             </div>
           )}
           {mode === 'reading' && dashboard.hasActiveSession && (

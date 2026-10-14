@@ -1,6 +1,6 @@
 import { TDSMobileProvider } from '@toss/tds-mobile';
 import { readFileSync } from 'node:fs';
-import type { ReactNode } from 'react';
+import { isValidElement, type ReactNode } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -40,6 +40,7 @@ import {
   noBookSubtitle,
   notificationAgreementTarget,
   recenterIndex,
+  rewardAdButton,
   selectionAt,
   shouldShowNotificationCard,
   showWaiverButton,
@@ -49,9 +50,16 @@ import {
   waiverErrorMessage,
 } from './screens/Home';
 import { stripComments } from './source-scan';
-import { clickHandlerFor, graph, stubLocalStorage, userAgent } from './test-fixtures';
+import { clickHandlerFor, graph, stubLocalStorage, textOf, userAgent } from './test-fixtures';
 import { coverColor } from './ui';
-import { REWARD_AD_GROUP_ID, notificationAgreementSupported, requestNotificationAgreement, watchRewardAd } from './toss';
+import {
+  REWARD_AD_GROUP_ID,
+  notificationAgreementSupported,
+  preloadAd,
+  requestNotificationAgreement,
+  useAdSlot,
+  watchRewardAd,
+} from './toss';
 
 /**
  * 리워드 광고 진입점 — 노출 조건과 지급 흐름.
@@ -69,6 +77,9 @@ vi.mock('./api', async (importOriginal) => ({
 vi.mock('./toss', () => ({
   REWARD_AD_GROUP_ID: 'test-ad-group',
   watchRewardAd: vi.fn(),
+  // 광고 슬롯 — 기본은 준비됨(ready)이라 「광고 버튼을 누르면 광고가 열린다」 등이 뜻을 유지한다.
+  useAdSlot: vi.fn(() => 'ready'),
+  preloadAd: vi.fn(),
   GOAL_MET_TEMPLATE_CODE: 'test-template',
   STUDY_GOAL_TEMPLATE_CODE: 'test-study-template',
   notificationAgreementSupported: vi.fn(),
@@ -79,6 +90,8 @@ vi.mock('./toss', () => ({
 
 const waiveDebtMock = vi.mocked(waiveDebt);
 const watchRewardAdMock = vi.mocked(watchRewardAd);
+const useAdSlotMock = vi.mocked(useAdSlot);
+const preloadAdMock = vi.mocked(preloadAd);
 const supportedMock = vi.mocked(notificationAgreementSupported);
 const requestAgreementMock = vi.mocked(requestNotificationAgreement);
 
@@ -153,7 +166,6 @@ function book(id: number, title: string, extra: Partial<BookOption> = {}): BookO
 function renderHome(
   overrides: Partial<DashboardResponse> = {},
   props: {
-    goalAdPending?: boolean;
     selectedBookId?: number | null;
     celebrate?: boolean;
     guide?: ReactNode;
@@ -177,7 +189,6 @@ function renderHome(
         onTimerChange={() => {}}
         celebrate={props.celebrate ?? false}
         onGoGoal={() => {}}
-        goalAdPending={props.goalAdPending ?? false}
         onGoSettings={() => {}}
         onError={() => {}}
         onOpenMargin={() => {}}
@@ -196,11 +207,43 @@ function renderHome(
 beforeEach(() => {
   waiveDebtMock.mockReset();
   watchRewardAdMock.mockReset();
+  useAdSlotMock.mockReset();
+  useAdSlotMock.mockReturnValue('ready');
+  preloadAdMock.mockReset();
   supportedMock.mockReset();
   requestAgreementMock.mockReset();
   supportedMock.mockReturnValue(true);
   stubLocalStorage(); // 홈이 렌더 중에 동의 캐시를 읽는다
   setCoachmarkWalking(true); // 여백 인라인 안내는 걷는 중에만 뜬다(잠금 계측은 coachmark.test)
+});
+
+/**
+ * 리워드 광고 버튼 = 광고 슬롯 상태(비게임 체크리스트 「광고 재생 시점에 실시간으로 로딩하지 않아요」) —
+ * 준비된 광고만 띄우고, 준비 전엔 누를 수 없고, 실패하면 불러오기만 다시 한다. 홈 지우개와 책방 성향이 같은 함수를 쓴다.
+ */
+describe('리워드 광고 버튼 (rewardAdButton)', () => {
+  it('REQ-07 · rewardAdButton — 준비됐으면 원래 문구로 재생한다', () => {
+    expect(rewardAdButton('ready', BUTTON_LABEL)).toEqual({ label: BUTTON_LABEL, action: 'show' });
+  });
+
+  it('REQ-07 · rewardAdButton — 부르기 전·불러오는 중엔 「광고 불러오는 중…」이고 누를 수 없다', () => {
+    expect(rewardAdButton('idle', BUTTON_LABEL)).toEqual({ label: '광고 불러오는 중…', action: null });
+    expect(rewardAdButton('loading', BUTTON_LABEL)).toEqual({ label: '광고 불러오는 중…', action: null });
+  });
+
+  it('REQ-07 · rewardAdButton — 실패면 「광고 다시 불러오기」이고 누르면 불러오기만 한다', () => {
+    expect(rewardAdButton('failed', BUTTON_LABEL)).toEqual({ label: '광고 다시 불러오기', action: 'retry' });
+  });
+
+  it('REQ-07 · rewardAdButton — 재생 중엔 누를 수 없다', () => {
+    expect(rewardAdButton('showing', BUTTON_LABEL)).toEqual({ label: BUTTON_LABEL, action: null });
+  });
+
+  it('REQ-07 · 세 문구 모두 「광고」를 말한다 — 광고 위장 금지', () => {
+    for (const status of ['idle', 'loading', 'ready', 'showing', 'failed'] as const) {
+      expect(rewardAdButton(status, BUTTON_LABEL).label).toContain('광고');
+    }
+  });
 });
 
 describe('버튼 노출 조건 (showWaiverButton)', () => {
@@ -506,14 +549,6 @@ describe('목표 손잡이 (바꾸기 ›)', () => {
     expect(markup.indexOf('하루 목표')).toBeLessThan(markup.indexOf(GOAL_PILL));
   });
 
-  // 전면광고 로드에 1~2초가 걸린다 — 라벨이 그대로면 눌러도 아무 일 없는 것처럼 보여 다시 누른다.
-  it('전면광고를 기다리는 동안엔 「준비 중…」— 누른 게 먹혔다고 말한다', () => {
-    const markup = renderHome({ todayGoalSeconds: 3600 }, { goalAdPending: true });
-
-    expect(markup).toContain('준비 중…');
-    expect(markup).not.toContain(GOAL_PILL);
-  });
-
   it('목표가 0이면 통계 행이 없고 카드 안 손잡이가 그 길을 맡는다 — 게이지 줄이 통째로 안 그려진다', () => {
     const markup = renderHome({ todayGoalSeconds: 0, carriedDebtSeconds: 0 });
 
@@ -537,21 +572,17 @@ describe('목표 손잡이 (바꾸기 ›)', () => {
 
   /**
    * 스크린리더엔 무엇을 바꾸는지까지 말한다 — 보이는 글자 「바꾸기」는 옆 캡션에 기대는 한 단어라, 버튼만
-   * 훑는 탐색에선 뜻이 없다. 대기 중엔 이름을 덮지 않아 「준비 중…」이 그대로 이름이 된다.
+   * 훑는 탐색에선 뜻이 없다.
    */
-  it('손잡이 이름은 「하루 목표 바꾸기/정하기」, 대기 중엔 「준비 중…」 그대로다', () => {
+  it('손잡이 이름은 「하루 목표 바꾸기/정하기」다', () => {
     const handleTag = (markup: string) => {
       const at = markup.indexOf('<button', markup.indexOf('data-goal-caption'));
       return markup.slice(at, markup.indexOf('>', at) + 1);
     };
-    const pending = handleTag(renderHome({ todayGoalSeconds: 3600 }, { goalAdPending: true }));
-
     expect(handleTag(renderHome({ todayGoalSeconds: 3600 }))).toContain('aria-label="하루 목표 바꾸기"');
     expect(handleTag(renderHome({ todayGoalSeconds: 0, carriedDebtSeconds: 1800, carryover: true }))).toContain(
       'aria-label="하루 목표 정하기"',
     );
-    expect(pending).toContain('disabled=""'); // 같은 손잡이를 잡았다는 양성 확인
-    expect(pending).not.toContain('aria-label');
   });
 });
 
@@ -577,8 +608,8 @@ describe('광고 손잡이 배선 (수익 경로)', () => {
     expect(homeCode).toMatch(/\{\s*showWaiverButton\([\s\S]{0,200}?\)\s*&&\s*\(\s*<Button/);
   });
 
-  // 캡션 손잡이는 렌더로는 클릭·비활성 배선을 못 잰다(T-149) — 소스로 잠근다. 비활성이 빠지면 전면광고 로드 중
-  // 연타로 광고가 두 장 쌓이고, onClick이 빠지면 목표로 가는 평상시의 문이 조용히 죽는다(리뷰 M1·M4).
+  // 캡션 손잡이는 렌더로는 클릭 배선을 못 잰다(T-149) — 소스로 잠근다. onClick이 빠지면 목표로 가는
+  // 평상시의 문이 조용히 죽는다(리뷰 M4).
   it('캡션 손잡이가 목표 이동을 부른다', () => {
     const cap = homeCode.indexOf('data-goal-caption');
     const at = homeCode.indexOf('<button', cap);
@@ -586,7 +617,6 @@ describe('광고 손잡이 배선 (수익 경로)', () => {
 
     expect(cap).toBeGreaterThan(-1);
     expect(btn).toMatch(/onClick=\{onGoGoal\}/);
-    expect(btn).toMatch(/disabled=\{goalAdPending\}/);
   });
 
   it('그 버튼이 ⓘ 툴팁 안에 산다 — 밖으로 나오면 죄책감 없는 화면에 광고가 상주한다', () => {
@@ -604,12 +634,12 @@ describe('광고 손잡이 배선 (수익 경로)', () => {
    * ⓘ의 onClick을 그 렌더 도중에 부른다. 렌더 중 갱신이라 서버 렌더러가 탐침을 한 번 더 그리고(showNote = true),
    * 그 둘째 트리에 광고 버튼이 선다. 마크업이 아니라 트리라 버튼의 `onClick`을 꺼내 부를 수 있다(리뷰 돌연변이 X5).
    */
-  const homeTreeWithNoteOpen = (): ReactNode => {
+  const homeTreeWithNoteOpen = (overrides: Partial<DashboardResponse> = {}): ReactNode => {
     let tree: ReactNode = null;
     let opened = false;
     const Probe = () => {
       tree = Home({
-        dashboard: dashboard(),
+        dashboard: dashboard(overrides),
         mode: 'reading',
         study: IDLE_STUDY,
         onChangeMode: () => {},
@@ -619,7 +649,6 @@ describe('광고 손잡이 배선 (수익 경로)', () => {
         onTimerChange: () => {},
         celebrate: false,
         onGoGoal: () => {},
-        goalAdPending: false,
         onGoSettings: () => {},
         onError: () => {},
         onOpenMargin: () => {},
@@ -650,6 +679,56 @@ describe('광고 손잡이 배선 (수익 경로)', () => {
     claim?.();
     expect(watchRewardAdMock).toHaveBeenCalledTimes(1);
     expect(watchRewardAdMock).toHaveBeenCalledWith(REWARD_AD_GROUP_ID);
+  });
+
+  /**
+   * 라벨이 든 버튼 엘리먼트의 프롭 — `clickHandlerFor`와 같은 재귀로 찾되 핸들러가 아니라 프롭을 돌려준다.
+   * 마크업 전체에서 `disabled`를 찾으면 TDS 전역 CSS의 `:disabled` 때문에 늘 참이 된다(아래 `goalHandleTag` 주석).
+   */
+  const buttonPropsFor = (node: ReactNode, label: string): Record<string, unknown> | undefined => {
+    if (Array.isArray(node)) {
+      for (const child of node) {
+        const hit = buttonPropsFor(child, label);
+        if (hit) return hit;
+      }
+      return undefined;
+    }
+    if (!isValidElement(node)) return undefined;
+    const props = node.props as { children?: ReactNode; onClick?: unknown };
+    if (typeof props.onClick === 'function' && textOf(props.children).includes(label)) return props;
+    return buttonPropsFor(props.children, label);
+  };
+
+  it('REQ-07 · 지우개가 불러오는 중이면 버튼이 「광고 불러오는 중…」이고 비활성이다', () => {
+    useAdSlotMock.mockReturnValue('loading');
+
+    const props = buttonPropsFor(homeTreeWithNoteOpen(), '광고 불러오는 중…');
+
+    expect(props).toBeDefined();
+    expect(props?.disabled).toBe(true);
+  });
+
+  it('REQ-07 · 지우개를 못 불러왔으면 「광고 다시 불러오기」를 눌러 다시 불러온다 — 광고는 열지 않는다', () => {
+    useAdSlotMock.mockReturnValue('failed');
+    const retry = clickHandlerFor(homeTreeWithNoteOpen(), '광고 다시 불러오기');
+
+    expect(retry).toBeTypeOf('function');
+    retry?.();
+    expect(preloadAdMock).toHaveBeenCalledWith('test-ad-group');
+    expect(watchRewardAdMock).not.toHaveBeenCalled();
+  });
+
+  it('REQ-08 · ⓘ 상자를 펴야 지우개 광고를 불러 둔다 — 접혀 있으면 안 부른다', () => {
+    homeTreeWithNoteOpen();
+
+    expect(useAdSlotMock.mock.calls[0]).toEqual(['test-ad-group', false]); // 첫 패스 — 상자가 접혀 있다
+    expect(useAdSlotMock.mock.calls.at(-1)).toEqual(['test-ad-group', true]); // 둘째 패스 — 상자를 폈다
+  });
+
+  it('REQ-08 · 지울 날이 없으면 상자를 펴도 불러 두지 않는다', () => {
+    homeTreeWithNoteOpen({ debtWaiverAvailable: false });
+
+    expect(useAdSlotMock.mock.calls.at(-1)).toEqual(['test-ad-group', false]);
   });
 
   it('문구에 「광고」를 명시한다 — 광고 위장 금지 조항이다', () => {
@@ -790,17 +869,6 @@ describe('목표 손잡이 (goalHandleLabel · 렌더)', () => {
     expect(goalHandleLabel(0)).toBe('목표 정하기');
   });
 
-  // 전면광고 로드에 1~2초가 걸린다(2026-08-14: 광고를 먼저 띄우고 전환하도록 바꾼 뒤 생긴 대기).
-  // 그동안 라벨이 그대로면 눌러도 아무 일 없는 것처럼 보여 사용자가 다시 누른다.
-  it('광고를 기다리는 동안엔 「준비 중」— 목표값과 무관하게 대기 상태를 말한다', () => {
-    expect(goalHandleLabel(1800, true)).toBe('준비 중…');
-    expect(goalHandleLabel(0, true)).toBe('준비 중…');
-  });
-
-  it('기다리지 않을 때는 평소 라벨 그대로 — 대기 표시가 평상시를 건드리지 않는다', () => {
-    expect(goalHandleLabel(1800, false)).toBe('하루 목표 바꾸기');
-  });
-
   // ⚠️ 전체 마크업에 'disabled'가 있나로 재면 안 된다 — TDS 전역 CSS에 `:disabled` 셀렉터가 실려
   // 있어 그 단언은 항상 참이고, 반대 단언은 항상 거짓이다(공허한 테스트). 손잡이 버튼만 겨눈다.
   const goalHandleTag = (markup: string, label: string) => {
@@ -812,11 +880,7 @@ describe('목표 손잡이 (goalHandleLabel · 렌더)', () => {
   // 목표 0일 때만 손잡이가 카드에 남으므로(그 외엔 접힌 상자 안) 비활성 검사도 그 상태에서 한다.
   const noGoal = { todayGoalSeconds: 0, remainingSeconds: 0 };
 
-  it('대기 중이면 손잡이가 비활성이다 — 연타로 광고가 두 장 쌓이지 않게', () => {
-    expect(goalHandleTag(renderHome(noGoal, { goalAdPending: true }), '준비 중')).toContain('disabled=""');
-  });
-
-  it('평상시 손잡이는 눌린다 — 대기 표시가 평상시를 잠그지 않는다', () => {
+  it('손잡이는 눌린다 — 비활성 속성이 없다', () => {
     expect(goalHandleTag(renderHome(noGoal), '목표 정하기')).not.toContain('disabled=""');
   });
 
@@ -2466,7 +2530,6 @@ describe('측정 중 책 바꾸기 문', () => {
           onTimerChange={() => {}}
           celebrate={false}
           onGoGoal={() => {}}
-          goalAdPending={false}
           onGoSettings={() => {}}
           onError={() => {}}
           onOpenMargin={() => {}}
@@ -2619,7 +2682,6 @@ describe('REQ-07 안 1 배치 (PR-2)', () => {
           onTimerChange={() => {}}
           celebrate={false}
           onGoGoal={() => {}}
-          goalAdPending={false}
           onGoSettings={() => {}}
           onError={() => {}}
           onOpenMargin={() => {}}
