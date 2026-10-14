@@ -27,6 +27,7 @@ import com.booktimer.study.StudyPlanItemRepository;
 import com.booktimer.study.StudyRecall;
 import com.booktimer.study.StudyRecallRepository;
 import com.booktimer.timer.ReadingGoalService;
+import jakarta.persistence.EntityManager;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -93,6 +94,8 @@ class AccountDeletionIntegrationTest {
     private TossLinkCodeRepository tossLinkCodeRepository;
     @Autowired
     private TossUserProvisioningService tossUserProvisioningService;
+    @Autowired
+    private EntityManager entityManager;
 
     @Test
     @DisplayName("책을 가진 사용자가 탈퇴해도 FK 위반 없이 계정·책이 삭제된다")
@@ -177,6 +180,23 @@ class AccountDeletionIntegrationTest {
 
         // 남의 계정은 그대로 — 탈퇴가 이웃까지 쓸어가지 않는다.
         assertThat(userRepository.findByEmail("friend@booktimer.com")).isPresent();
+    }
+
+    @Test
+    @DisplayName("REQ-11 · 옛 웹 로그인 코드가 남은 토스 계정도 탈퇴된다")
+    void deleteTossVerifiedAccount_withLeftoverWebLoginCode_succeeds() {
+        User me = userRepository.saveAndFlush(withTossKey(User.ofOAuth("toss-oldcode@noreply.booktimer.app", "토스유저",
+                "Asia/Seoul", Role.USER, AuthProvider.TOSS), "uk-oldcode"));
+        // 발급 경로는 없어졌지만 운영 DB에는 이런 행이 남는다 — Purpose.WEB_LOGIN을 지우면 여기서 컴파일이 깨진다(지우지 말 것: TossLinkCode 주석).
+        tossLinkCodeRepository.saveAndFlush(TossLinkCode.issue(
+                me, "e".repeat(64), Instant.parse("2026-10-01T00:00:00Z"), TossLinkCode.Purpose.WEB_LOGIN));
+        entityManager.clear(); // 영속성 컨텍스트가 대신 답하지 않게 비운다 — 탈퇴가 그 행을 DB에서 실제로 읽어(파생 삭제) 지워야 한다
+        User fresh = userRepository.findById(me.getId()).orElseThrow();
+
+        assertThatCode(() -> {
+            accountService.deleteTossVerifiedAccount(fresh, "uk-oldcode");
+            assertThat(userRepository.findByTossUserKey("uk-oldcode")).isEmpty(); // 이 조회가 flush를 일으켜 FK 위반이면 여기서 터진다
+        }).doesNotThrowAnyException();
     }
 
     // ── 토스 연결 끊기 콜백(비게임 체크리스트 82·83) — 실 스키마로 FK·유니크까지 본다 ─────────────

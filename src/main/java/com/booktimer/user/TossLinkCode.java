@@ -60,11 +60,15 @@ public class TossLinkCode extends BaseTimeEntity {
     @Column(name = "purpose", nullable = false, length = 16)
     private Purpose purpose;
 
-    /** 코드의 방향. 한 사용자가 두 목적의 코드를 동시에 가질 수 없다(발급 조건이 상호 배타 — 서비스 주석). */
+    /** 코드의 방향. 지금 발급되는 것은 {@link #LINK_TOSS} 하나다. */
     public enum Purpose {
         /** 웹 → 토스: 웹에 로그인한 사람이 발급 → 미니앱에 입력해 그 계정에 토스 신원을 붙인다. */
         LINK_TOSS,
-        /** 토스 → 웹: 미니앱에서 발급 → PC 웹 로그인 화면에 입력해 그 계정의 세션을 연다. */
+        /**
+         * 토스 → 웹: 미니앱에서 발급 → PC 웹 로그인 화면에 입력해 그 계정의 세션을 열던 코드.
+         * 발급은 2026-10 폐지(서비스 오픈 정책 §2-2). 옛 행을 읽으려고만 남긴다 — 지우면 {@code deleteByUser}(탈퇴)가
+         * enum 매핑에서 깨진다(REQ-11, {@code AccountDeletionIntegrationTest}).
+         */
         WEB_LOGIN
     }
 
