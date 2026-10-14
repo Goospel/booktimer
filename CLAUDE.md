@@ -304,7 +304,7 @@ Claude Code 는 훅의 출력 파이프가 닫히기(EOF)를 기다릴 뿐이라
 **왜**: `defer`/`async`가 실행 시점을 바꿔, 헤드리스 재현이 동기 로드로 단순화되면 **버그가 사라진 가짜 green**이 나온다 — 정원 Phaser 위젯에서 반복 실측(#356~364). 전문은 [참조](claude-docs/claude-md-reference.md), 개념은 N-082·N-083·T-053·T-054.
 
 - 📌 **브라우저 표면 선택·CDP 함정은 글로벌 `~/.claude/CLAUDE.md` 「🖥️ 브라우저 확인」이 단일 출처다 (2026-08-21 글로벌 승격 — 2개 프로젝트 11회 재발).** 표면 3종(로그인 불필요=`chrome-devtools` MCP 1순위 / 인증 화면=확장 / dev 서버 기동만 내부 패널), `emulate` 기기 모드(F12 불요), 「1회 탭 갈아타기 → 다른 크롬 → 수치로 마감」 순서, **판정 수치 선행·스크린샷 후행** 규칙, 「이상값을 만나면 관측 경로부터 의심」이 전부 거기 있다. 아래는 **이 레포 고유분만**.
-- **목 모드 dev 서버 (이 레포)**: `npm --prefix miniapp run dev:mock` — 포트 5300은 `miniapp/vite.config.ts`에 고정(T-197).
+- **목 모드 dev 서버 (이 레포)**: Claude가 백그라운드로 띄울 땐 miniapp 폴더에서 `node node_modules/vite/bin/vite.js --mode mock --port 5300 --strictPort` — `npm run dev:mock`을 거치면 TaskStop이 손자 vite를 못 끄고 포트가 남는다(T-264, 훅 `warn-devmock-npm-background`가 경고). 사람이 터미널에서 돌릴 땐 `npm --prefix miniapp run dev:mock`. 포트 5300은 `miniapp/vite.config.ts`에 고정(T-197).
 - **진단**: 막히면 추측 전에 **실 배포/로컬 페이지에 붙어 콘솔·네트워크를 직접 읽는다.** "UI는 멀쩡한데 한 기능만 안 됨"일수록 콘솔에 답이 있다.
 - **스토어 스크린샷의 실데이터는 사용자 폰이 유일 경로다** — `chrome-devtools` 크롬은 빈 프로필이라 미니앱 실계정에 못 붙는다(API 토큰이 토스 SDK 경유). 목 모드로 찍고, 실데이터가 필요하면 **사용자에게 촬영을 요청**한다(찍은 척 목 화면을 올리지 않는다).
 - **재현 하니스**: 만든다면 production의 `defer`/로드 순서·반응성 래핑까지 충실히 복제한다 — 동기 로드로 단순화하면 그 버그를 못 잡는다(T-053).
@@ -386,7 +386,7 @@ PowerShell 5.1 에서 한글 커밋 메시지를 인라인으로 넘기면 깨�
 
 ### 미니앱 개발 루프 — 기본은 브라우저 목 모드 (2026-08-12 실측 갱신)
 
-미니앱 화면 작업 시 **Claude가 직접 `npm --prefix miniapp run dev:mock`을 백그라운드로 띄워 브라우저(vite HMR, 포트 5300)로 확인한다** — 사용자에게 명령어를 요구하지 않는다(사용자 지정). 목 모드는 `api.ts`가 서버 대신 `src/dev-mock.ts`의 픽스처를 돌려주고 토큰을 더미로 두므로, 서버·토스 SDK·에뮬레이터 없이 홈·서재·소셜·스토리·기록·목표가 전부 뜬다. 목에 없는 경로는 404로 던져 조용히 빈 화면이 되지 않는다.
+미니앱 화면 작업 시 **Claude가 직접 목 모드 vite를 백그라운드로 띄워 브라우저(vite HMR, 포트 5300)로 확인한다** — miniapp 폴더에서 `node node_modules/vite/bin/vite.js --mode mock --port 5300 --strictPort`(npm 경유는 TaskStop 뒤 포트가 남는다 — T-264) — 사용자에게 명령어를 요구하지 않는다(사용자 지정). 목 모드는 `api.ts`가 서버 대신 `src/dev-mock.ts`의 픽스처를 돌려주고 토큰을 더미로 두므로, 서버·토스 SDK·에뮬레이터 없이 홈·서재·소셜·스토리·기록·목표가 전부 뜬다. 목에 없는 경로는 404로 던져 조용히 빈 화면이 되지 않는다.
 
 - 픽스처를 고치려면 `miniapp/src/dev-mock.ts` 한 곳(모듈 메모리 상태라 새로고침이 초기화다).
 - 목 코드는 프로드 번들에서 통째로 잘린다(`import.meta.env.DEV` 게이트 + dynamic import). `deploy.sh`가 `__DEV_MOCK__` 부재를 배포 전에 재확인한다.
@@ -403,7 +403,7 @@ PowerShell 5.1 에서 한글 커밋 메시지를 인라인으로 넘기면 깨�
 - **심사·제출이 언급되면 스토어 스크린샷을 점검한다 (필수)**: 사용자가 심사·[출시하기]를 입에 올리거나 **Claude가 검수 요청(`bundle_submit_review`)을 실행하기 직전**이면 그 자리에서
   `miniapp/screenshots/`(01-home·02-library·03-history·04-goal)가 **지금 배포될 UI와 일치하는지** 확인하고, 어긋나면 갱신한다.
   화면이 바뀐 채 옛 그림이 콘솔에 남으면 "실제 앱과 다르다"는 반려 사유가 된다.
-  - **Claude가 찍을 수 있는 건 목 모드뿐이다** — `npm --prefix miniapp run dev:mock` + 크롬 기기 뷰포트(390×844@3x), 촬영 전 포커스 링 blur.
+  - **Claude가 찍을 수 있는 건 목 모드뿐이다** — 목 모드 vite(위 「목 모드 dev 서버」 줄의 직접 실행) + 크롬 기기 뷰포트(390×844@3x), 촬영 전 포커스 링 blur.
     **실계정 화면은 사용자 폰이 유일 경로**다: API 토큰이 토스 SDK의 `authorizationCode`로만 발급돼(`TossAuthApiController`) 브라우저·curl로 만들 수 없고,
     운영 CORS에도 localhost가 없다. 그러니 실데이터가 필요하면 **직접 찍지 말고 사용자에게 촬영을 요청**한다(찍은 척 목 화면을 올리지 않는다).
   - 규격(해상도·장수)은 콘솔 확인값을 `miniapp/screenshots/README.md`에 적어 단일 출처로 둔다 — 아이콘 크기를 규격 확인 없이 1024로 잡았다가
