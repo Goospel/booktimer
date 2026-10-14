@@ -303,7 +303,10 @@ export function preloadAd(adGroupId: string): void {
 export function watchRewardAd(adGroupId: string): Promise<boolean> {
   if (adSlotStatus(adGroupId) !== 'ready') return Promise.resolve(false);
   setAdSlot(adGroupId, 'showing');
-  const end = () => setAdSlot(adGroupId, 'idle');
+  // 재생 중일 때만 idle로 — 닫힌 뒤 같은 재생의 늦은 이벤트가, 이미 다음 장을 부르는 슬롯을 덮지 못하게 한다.
+  const end = () => {
+    if (adSlotStatus(adGroupId) === 'showing') setAdSlot(adGroupId, 'idle');
+  };
   return new Promise((resolve, reject) => {
     let rewarded = false;
     try {

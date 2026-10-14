@@ -177,6 +177,7 @@ describe('광고 슬롯 — preloadAd', () => {
   });
 
   it('REQ-04 · 60초 동안 답이 없으면 failed다 — 그 직전까진 loading', () => {
+    expect(AD_LOAD_TIMEOUT_MS).toBe(60_000); // 문서의 최대 네트워크 타임아웃(AdMob 60초) — 짧으면 느린 로드를 우리가 먼저 버린다
     vi.useFakeTimers();
     try {
       loadMock.mockImplementation(() => () => {});
@@ -310,6 +311,36 @@ describe('watchRewardAd', () => {
     await expect(result).resolves.toBe(false);
   });
 
+  it('REQ-01 · 불러오는 중·실패·재생 중(연타)에도 show를 부르지 않고 false다', async () => {
+    vi.useFakeTimers(); // 응답 없는 load의 60초 타이머를 워커에 남기지 않는다
+    try {
+      loadMock.mockImplementation(() => () => {});
+      const loading = fresh();
+      preloadAd(loading);
+      loadMock.mockImplementationOnce(() => {
+        throw new TypeError('no bridge');
+      });
+      const failed = fresh();
+      preloadAd(failed);
+      loadMock.mockImplementationOnce((params: LoadParams) => {
+        params.onEvent({ type: 'loaded' });
+        return () => {};
+      });
+      const showing = fresh();
+      preloadAd(showing);
+      showMock.mockImplementation(() => () => {}); // dismissed가 아직 안 왔다
+      void watchRewardAd(showing);
+      expect([adSlotStatus(loading), adSlotStatus(failed), adSlotStatus(showing)]).toEqual(['loading', 'failed', 'showing']);
+
+      const results = [watchRewardAd(loading), watchRewardAd(failed), watchRewardAd(showing)];
+
+      expect(showMock).toHaveBeenCalledTimes(1); // 처음 띄운 한 번뿐
+      await expect(Promise.all(results)).resolves.toEqual([false, false, false]);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it('REQ-01 · 준비된 광고는 load 없이 곧장 show한다', async () => {
     const g = readyAd([{ type: 'dismissed' }]);
     expect(loadMock).toHaveBeenCalledTimes(1); // 미리 부른 한 번
@@ -344,6 +375,33 @@ describe('watchRewardAd', () => {
     });
     await watchRewardAd(showThrow).catch(() => {});
     expect(adSlotStatus(showThrow)).toBe('idle');
+  });
+
+  it('REQ-05 · 닫힌 뒤 같은 재생의 늦은 이벤트가 다음 장의 로드를 idle로 덮지 않는다', async () => {
+    let show: ShowParams | undefined;
+    const g = readyAd([]);
+    showMock.mockImplementation((params: ShowParams) => {
+      show = params;
+      return () => {};
+    });
+    const result = watchRewardAd(g);
+    show!.onEvent({ type: 'dismissed' } as never);
+    await result;
+
+    vi.useFakeTimers();
+    try {
+      loadMock.mockImplementation(() => () => {}); // 다음 장은 아직 도는 중
+      preloadAd(g);
+      expect(adSlotStatus(g)).toBe('loading');
+
+      show!.onError(new Error('stray'));
+      show!.onEvent({ type: 'failedToShow' } as never);
+      show!.onEvent({ type: 'dismissed' } as never);
+
+      expect(adSlotStatus(g)).toBe('loading'); // idle로 덮이면 useAdSlot이 load를 한 번 더 부른다(그룹당 한 장 위반)
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it('시청 완료(userEarnedReward → dismissed)면 true', async () => {
