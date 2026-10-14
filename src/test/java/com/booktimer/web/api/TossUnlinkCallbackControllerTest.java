@@ -217,6 +217,9 @@ class TossUnlinkCallbackControllerTest {
     void authorized_failsClosed() {
         assertThat(TossUnlinkCallbackController.authorized(basic(""), "")).isFalse();
         assertThat(TossUnlinkCallbackController.authorized(basic("x"), " ")).isFalse();
+        // 판별 사례 — 서버 값이 공백뿐이면 같은 공백을 보낸 헤더와 바이트가 같다. 비어 있음 판정만이 이것을 막는다
+        // (위 두 줄은 길이 검사·바이트 불일치로도 false라, 판정을 지워도 통과한다 — 돌연변이 확인 2026-10-14).
+        assertThat(TossUnlinkCallbackController.authorized(basic(" "), " ")).isFalse();
         assertThat(TossUnlinkCallbackController.authorized(null, "x")).isFalse();
         assertThat(TossUnlinkCallbackController.authorized("basic " + b64("x"), "x")).isTrue(); // 스킴 대소문자 무시
         assertThat(TossUnlinkCallbackController.authorized("Basic !!!", "x")).isFalse();
