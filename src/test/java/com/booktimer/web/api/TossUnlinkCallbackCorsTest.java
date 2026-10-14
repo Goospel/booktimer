@@ -18,6 +18,7 @@ import java.nio.charset.StandardCharsets;
 import java.util.Base64;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.hamcrest.Matchers.containsStringIgnoringCase;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.options;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
@@ -61,11 +62,14 @@ class TossUnlinkCallbackCorsTest {
     }
 
     @Test
-    @DisplayName("콘솔 출처의 프리플라이트가 200이고 ACAO가 실린다")
+    @DisplayName("콘솔 출처의 프리플라이트가 200이고 ACAO가 실리며, ACAH에 authorization이 든다")
     void consolePreflight_isAllowed() throws Exception {
+        // ACAH 단언이 핵심 — 스프링은 허용 안 된 요청 헤더를 빼고도 200을 준다. 브라우저는 ACAH에 authorization이
+        // 없으면 본 요청을 막아 콘솔에 다시 「Failed to fetch」가 뜬다(200·ACAO만 보면 이 회귀가 초록으로 남는다).
         preflight(PATH, CONSOLE)
                 .andExpect(status().isOk())
-                .andExpect(header().exists("Access-Control-Allow-Origin"));
+                .andExpect(header().exists("Access-Control-Allow-Origin"))
+                .andExpect(header().string("Access-Control-Allow-Headers", containsStringIgnoringCase("authorization")));
     }
 
     @Test

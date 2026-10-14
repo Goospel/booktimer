@@ -33,6 +33,7 @@ class MiniappCorsSourceTest {
         assertThat(callback.getAllowCredentials()).isNotEqualTo(Boolean.TRUE);
 
         assertThat(configFor(source, "/api/other")).isNull();
+        assertThat(configFor(source, "/api/toss/login")).isNull(); // 같은 접두의 형제 경로는 열지 않는다
     }
 
     @Test
@@ -47,5 +48,6 @@ class MiniappCorsSourceTest {
         CorsConfiguration other = configFor(source, "/api/other");
         assertThat(other.getAllowedOrigins()).containsExactly("https://miniapp.test");
         assertThat(other.checkOrigin("https://apps-in-toss.toss.im")).isNull();
+        assertThat(configFor(source, "/api/toss/login").checkOrigin("https://apps-in-toss.toss.im")).isNull();
     }
 }
