@@ -60,7 +60,9 @@ public class SecurityConfig {
      * <p>매처에 두 가지를 더 얹는다:
      * <ul>
      *   <li>{@code /api/toss/**} — 로그인·가입·연결 요청은 <b>아직 토큰이 없어서</b> Bearer 헤더를 달 수 없다.
-     *       헤더 조건만 두면 이 경로가 기존 체인으로 흘러 {@code /login} 302가 되어 미니앱이 시작조차 못 한다.</li>
+     *       헤더 조건만 두면 이 경로가 기존 체인으로 흘러 {@code /login} 302가 되어 미니앱이 시작조차 못 한다.
+     *       토스 서버가 부르는 연결 끊기 콜백({@code /api/toss/unlink-callback})도 이 접두 아래라 이 체인에 걸린다
+     *       — 인증은 컨트롤러의 Basic 값 대조가 맡는다.</li>
      *   <li>{@code /api/public/**} — <b>익명 공개 계약</b>: 로그인 전 게스트가 토큰 없이 부르는 읽기 경로.
      *       기존 체인으로 흐르면 302 + CORS 헤더 없음이라 WebView가 못 읽는다. 이 접두 아래엔 <b>사용자 입력과
      *       무관하게</b> 인증 없이 보여도 되는 것만 둔다(끝 슬래시까지가 접두 — {@code /api/publicX}는 해당 없음).</li>
@@ -86,6 +88,8 @@ public class SecurityConfig {
                         // 토큰을 받기 전 단계라 인증을 요구할 수 없다. 대신 매 요청이 일회성 토스 인가코드로
                         // 신원을 다시 증명하고(서버에 pending 상태 없음), 레이트리밋이 남용을 막는다.
                         .requestMatchers("/api/toss/login", "/api/toss/register", "/api/toss/link").permitAll()
+                        // 토스 서버가 부르는 연결 끊기 콜백 — 우리 토큰이 없다. 콘솔에 등록한 Basic 값을 컨트롤러가 대조한다.
+                        .requestMatchers("/api/toss/unlink-callback").permitAll()
                         // 익명 공개 계약 — 로그인 전 게스트도 읽는다(사용자 입력과 무관한 것만 둔다).
                         .requestMatchers("/api/public/**").permitAll()
                         .anyRequest().authenticated())

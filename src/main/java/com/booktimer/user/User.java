@@ -160,7 +160,8 @@ public class User extends BaseTimeEntity {
      * 이메일로 자동 연결하면 계정 탈취 벡터가 된다(설계 §2.2, N-026/N-053과 같은 정신). 그래서 기존 계정과의
      * 연결은 본인이 웹 로그인 상태에서 발급한 일회용 코드로만 이뤄진다({@link #linkTossUserKey}).
      *
-     * <p>한 계정에 토스 신원은 하나뿐이고 <b>한 번 붙으면 불변</b>이다(login_id와 같은 once-set 규칙).
+     * <p>한 계정에 토스 신원은 하나뿐이고 <b>붙어 있는 동안 불변</b>이다(login_id와 같은 once-set 규칙).
+     * 해제는 토스 연결 끊기 콜백만 한다({@link #unlinkTossUserKey}).
      * 한 토스 신원이 두 계정에 붙지 않도록 DB UNIQUE(uk_users_toss_user_key)가 최종 방어선이다.
      */
     @Column(name = "toss_user_key", length = 64)
@@ -743,7 +744,7 @@ public class User extends BaseTimeEntity {
      * <p><b>한 번 연결되면 불변</b>이다({@link #assignLoginId}와 같은 once-set 규칙): 한 계정에 토스 신원은
      * 하나뿐이고, 나중에 다른 신원으로 갈아끼우는 것은 계정 이관에 가까워 도메인이 허용하지 않는다. 이미
      * 연결된 계정에 다시 호출하면(같은 값이든 다른 값이든) {@link IllegalStateException}을 던진다 —
-     * 서비스는 이걸 409로 매핑한다. 연결 해제는 v2(문의 처리)다.
+     * 서비스는 이걸 409로 매핑한다. 해제는 토스 연결 끊기 콜백만 한다({@link #unlinkTossUserKey}) — 붙어 있는 동안 불변.
      *
      * <p><b>유니크는 이 메서드의 책임이 아니다</b> — 다른 계정이 이미 그 userKey를 쓰는지는 서비스의 사전
      * 확인과 DB UNIQUE 제약이 담당한다(login_id 유니크 처리와 동일한 분업).
@@ -769,10 +770,26 @@ public class User extends BaseTimeEntity {
     }
 
     /**
+     * 토스 없이 로그인할 수단이 있는가 — 토스 연결이 끊길 때 계정을 지울지(없음) 연결만 뗄지(있음)를 가른다.
+     * 비밀번호(LOCAL)·구글 가입·인증된 이메일(같은 주소의 구글 로그인이 이 계정으로 흡수된다 — OAuthUserProvisioningService).
+     * 인증된 이메일이 구글 주소가 아니면 실제 수단이 없을 수 있지만, 지우는 오판(웹 기록 소실)이 남기는 오판보다 무겁다.
+     */
+    public boolean canSignInWithoutToss() {
+        return isLocalAccount() || authProvider == AuthProvider.GOOGLE || emailVerified;
+    }
+
+    /** 토스가 알려 온 연결 끊기 전용 — 토스 신원을 뗀다. 이후 그 신원은 이 계정을 못 찾고, 웹에서 다시 연결할 수 있다. */
+    public void unlinkTossUserKey() {
+        this.tossUserKey = null;
+    }
+
+    /**
      * <b>토스를 연결한 미검증 계정의 이메일 충돌 해소 전용</b> — 이 계정의 이메일을 합성 주소로 비켜 놓는다.
      * 일반적인 "이메일 변경"이 아니다(그런 기능은 도메인에 없다. 이름으로 못 박아 오용을 막는다).
      *
-     * <p>쓰이는 자리는 하나다: {@link AccountService#reassignUnverifiedTossEmail} — 그쪽을
+     * <p>쓰이는 자리는 둘이다. 하나는 토스 연결 끊기(SEVERED)가 이 토스 키의 합성 주소를 놓아 주는
+     * {@link AccountService#unlinkToss}(E7b — 안 놓으면 같은 토스 사용자의 재가입이 유니크 위반 500이 된다). 다른 하나는
+     * {@link AccountService#reassignUnverifiedTossEmail} — 그쪽을
      * {@link OAuthUserProvisioningService#provision}이 같은 이메일의 <b>미검증</b> 토스 연결 계정(TOSS
      * 가입이든 웹 LOCAL 가입 후 연결이든)을 만났을 때 부른다. 토스는 이메일 소유를 보증하지 않아 그 주소가
      * 남의 것일 수 있고, 그렇다고 계정을 폐기하면 그 사용자의 기록이 사라진다 — 그래서 계정은 남기고 이메일만 {@code toss-{userKey}@…}로 옮긴다

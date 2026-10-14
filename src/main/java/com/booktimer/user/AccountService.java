@@ -28,6 +28,8 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.Optional;
+
 /**
  * 계정 보안 유스케이스 — 비밀번호 변경, 회원 탈퇴.
  *
@@ -226,6 +228,52 @@ public class AccountService {
             throw new AccountDeletionConfirmationException();
         }
         purge(user);
+    }
+
+    /** 토스 연결 끊기 콜백의 처리 결과 — 컨트롤러가 로그 한 줄로 남긴다. */
+    public enum TossUnlinkOutcome { PURGED, SEVERED, NOT_FOUND }
+
+    /**
+     * 토스가 알려 온 로그인 연결 끊기(연결 끊기·약관 동의 철회·토스 탈퇴)를 처리한다 — 비게임 체크리스트 82·83.
+     *
+     * <ul>
+     *   <li>그 userKey의 계정이 없으면(이미 처리했거나 우리 계정이 없는 신원) 아무것도 바꾸지 않는다 — 재전송에도 안전.</li>
+     *   <li>토스 없이 로그인할 수단이 없는 계정({@link User#canSignInWithoutToss} = false)은 회원 탈퇴와 같은
+     *       {@link #purge}로 전부 지운다 — 아무도 못 들어가는 계정을 남기지 않는다.</li>
+     *   <li>수단이 있는 계정은 기록을 남기고 연결만 끊는다. <b>순서</b>: 웹 세션 무효화(principal 후보가 이메일이라
+     *       이메일을 바꾸기 전에) → 미니앱 토큰 → 연결·웹 로그인 코드 → 합성 주소 놓기 → 토스 신원 비우기.</li>
+     * </ul>
+     */
+    public TossUnlinkOutcome unlinkToss(String userKey) {
+        Optional<User> found = userRepository.findByTossUserKey(userKey);
+        if (found.isEmpty()) {
+            return TossUnlinkOutcome.NOT_FOUND;
+        }
+        User user = found.get();
+        if (!user.canSignInWithoutToss()) {
+            purge(user);
+            return TossUnlinkOutcome.PURGED;
+        }
+        sessionInvalidator.invalidate(user, null);   // 토스 코드로 열었을 수 있는 웹 세션까지 — 이메일을 바꾸기 전에
+        apiTokenRepository.deleteByUser(user);       // 모든 기기의 미니앱 토큰 — 다음 요청이 401
+        tossLinkCodeRepository.deleteByUser(user);   // 아직 안 쓴 연결·웹 로그인 코드
+        releaseSyntheticEmail(user, userKey);        // E7b — 이 키의 합성 주소를 쥐고 있으면 놓는다
+        user.unlinkTossUserKey();
+        userRepository.save(user);
+        return TossUnlinkOutcome.SEVERED;
+    }
+
+    /**
+     * 정책 ②({@link OAuthUserProvisioningService})가 이메일을 이 토스 키의 합성 주소({@code toss-{userKey}@…})로 비켜 둔
+     * 미인증 계정이면, 연결을 끊을 때 그 주소를 {@code -{id}} 꼴로 옮긴다. 안 그러면 같은 토스 사용자가 새로 가입할 때
+     * 가입 쪽 이메일 결정이 같은 합성 주소로 폴백해 {@code uk_users_email} 위반(500)이 나고, 그 뒤로 영영 가입하지 못한다.
+     * 미인증만 본다 — {@link User#reassignEmailToSynthetic}이 인증된 이메일을 거부하고, 합성 주소는 원래 인증될 수 없다.
+     */
+    private void releaseSyntheticEmail(User user, String userKey) {
+        String synthetic = TossUserProvisioningService.syntheticEmail(userKey);
+        if (!user.isEmailVerified() && synthetic.equals(user.getEmail())) {
+            user.reassignEmailToSynthetic(resolveFreeSyntheticEmail(user, synthetic)); // 자기가 쥔 주소라 늘 -{id}가 나온다
+        }
     }
 
     /**
