@@ -1,5 +1,6 @@
 package com.booktimer.user;
 
+import com.booktimer.auth.ApiTokenService;
 import com.booktimer.book.Book;
 import com.booktimer.book.BookRepository;
 import com.booktimer.book.BookStatus;
@@ -86,6 +87,12 @@ class AccountDeletionIntegrationTest {
     private PasswordEncoder passwordEncoder;
     @Autowired
     private FindByIndexNameSessionRepository<? extends Session> sessions;
+    @Autowired
+    private ApiTokenService apiTokenService;
+    @Autowired
+    private TossLinkCodeRepository tossLinkCodeRepository;
+    @Autowired
+    private TossUserProvisioningService tossUserProvisioningService;
 
     @Test
     @DisplayName("책을 가진 사용자가 탈퇴해도 FK 위반 없이 계정·책이 삭제된다")
@@ -170,6 +177,124 @@ class AccountDeletionIntegrationTest {
 
         // 남의 계정은 그대로 — 탈퇴가 이웃까지 쓸어가지 않는다.
         assertThat(userRepository.findByEmail("friend@booktimer.com")).isPresent();
+    }
+
+    // ── 토스 연결 끊기 콜백(비게임 체크리스트 82·83) — 실 스키마로 FK·유니크까지 본다 ─────────────
+
+    @Test
+    @DisplayName("REQ-03 · 연결 끊기: 토스로만 쓰던 계정은 세션·책·여백 글·팔로우까지 FK 위반 없이 전부 삭제된다")
+    void unlinkToss_tossOnlyAccount_isPurgedWithChildren() {
+        User me = userRepository.saveAndFlush(
+                withTossKey(User.ofOAuth("toss-unlink@noreply.booktimer.app", "토스유저", "Asia/Seoul",
+                        Role.USER, AuthProvider.TOSS), "uk-unlink"));
+        User friend = userRepository.saveAndFlush(
+                User.of("friend-unlink@booktimer.com", passwordEncoder.encode("rawpw1234"), "친구", "Asia/Seoul", Role.USER));
+        Book book = Book.register(me, "끊기 전에 읽던 책", null, null, null, null, null, BookStatus.READING);
+        book.makePublic();
+        bookRepository.saveAndFlush(book);
+        sessionRepository.saveAndFlush(ReadingSession.start(me, Instant.now().minusSeconds(3600), book));
+        storyRepository.saveAndFlush(Story.of(me, "마지막 기록.", book, "paper"));
+        followRepository.saveAndFlush(Follow.of(me, friend));
+        followRepository.saveAndFlush(Follow.of(friend, me));
+
+        assertThat(accountService.unlinkToss("uk-unlink")).isEqualTo(AccountService.TossUnlinkOutcome.PURGED);
+        assertThat(userRepository.findByTossUserKey("uk-unlink")).isEmpty(); // 쿼리가 flush를 강제 — FK 위반이면 여기서 터진다
+        // 키만 비우고 PURGED를 돌려줘도 위 두 줄은 통과한다 — 계정과 기록이 실제로 사라졌는지 본다(리뷰 1회차 N26).
+        assertThat(userRepository.findById(me.getId())).isEmpty();
+        assertThat(bookRepository.findById(book.getId())).isEmpty();
+        assertThat(userRepository.findByEmail("friend-unlink@booktimer.com")).isPresent();
+    }
+
+    @Test
+    @DisplayName("REQ-04 · 연결 끊기: 웹 계정은 기록을 남기고 토스 신원·미니앱 토큰·연결 코드·웹 세션만 끝낸다")
+    void unlinkToss_webAccount_isSeveredButKept() {
+        User user = User.of("web-unlink@booktimer.com", passwordEncoder.encode("rawpw1234"), "웹유저", "Asia/Seoul", Role.USER);
+        user.assignLoginId("webunlink");
+        user = userRepository.saveAndFlush(withTossKey(user, "uk-unlink-web"));
+        Book book = bookRepository.saveAndFlush(
+                Book.register(user, "남아야 할 책", null, null, null, null, null, BookStatus.READING));
+        String token = apiTokenService.issue(user);
+        // 웹 로그인 코드 발급 서비스를 쓰지 않는다 — ① 서버 정리 PR이 그 메서드를 지운다(통합 계획 K1).
+        // 직접 저장한 행은 운영 DB에 남는 옛 웹 로그인 코드 행과 같은 꼴이다.
+        tossLinkCodeRepository.saveAndFlush(TossLinkCode.issue(user, "d".repeat(64),
+                Instant.parse("2099-01-01T00:00:00Z"), TossLinkCode.Purpose.WEB_LOGIN));
+        String sessionId = createSession(sessions, "webunlink");
+
+        assertThat(accountService.unlinkToss("uk-unlink-web")).isEqualTo(AccountService.TossUnlinkOutcome.SEVERED);
+
+        User kept = userRepository.findById(user.getId()).orElseThrow();
+        assertThat(kept.getTossUserKey()).isNull();
+        assertThat(apiTokenService.authenticate(token)).isEmpty();
+        assertThat(tossLinkCodeRepository.findByUserAndUsedAtIsNull(kept)).isEmpty();
+        assertThat(sessions.findById(sessionId)).isNull();
+        assertThat(bookRepository.findById(book.getId())).isPresent();
+    }
+
+    /**
+     * 위 둘은 LOCAL과 미인증 TOSS만 거친다 — 두 갈래에선 {@code canSignInWithoutToss()}와 {@code isLocalAccount()}가
+     * 같은 답을 내서, 판정을 잘못 바꿔도 다른 테스트가 전부 통과한다. 구글로 웹을 쓰다 토스를 연결한 사람의 기록이
+     * 연결을 끊는 순간 지워지는 것을 이 테스트만 잡는다(결과 단언을 맨 앞에 — 돌연변이 메시지가 그 줄에서 나오게).
+     */
+    @Test
+    @DisplayName("REQ-04 · 연결 끊기: 구글 계정과 이메일 인증한 토스 계정도 지우지 않고 연결만 끊는다")
+    void unlinkToss_googleAndVerifiedTossAccounts_areSevered() {
+        User google = userRepository.saveAndFlush(withTossKey(User.ofOAuth("google-unlink@booktimer.com", "구글유저",
+                "Asia/Seoul", Role.USER, AuthProvider.GOOGLE), "uk-unlink-google"));
+        bookRepository.saveAndFlush(Book.register(google, "구글 책", null, null, null, null, null, BookStatus.READING));
+        User tossVerifiedFixture = User.ofOAuth("toss-verified@booktimer.com", "토스유저", "Asia/Seoul",
+                Role.USER, AuthProvider.TOSS);
+        tossVerifiedFixture.verifyEmail();
+        User tossVerified = userRepository.saveAndFlush(withTossKey(tossVerifiedFixture, "uk-unlink-tossv"));
+        bookRepository.saveAndFlush(Book.register(tossVerified, "인증 토스 책", null, null, null, null, null, BookStatus.READING));
+
+        assertThat(accountService.unlinkToss("uk-unlink-google")).as("구글 계정")
+                .isEqualTo(AccountService.TossUnlinkOutcome.SEVERED);
+        assertThat(accountService.unlinkToss("uk-unlink-tossv")).as("이메일 인증한 토스 계정")
+                .isEqualTo(AccountService.TossUnlinkOutcome.SEVERED);
+
+        for (User u : new User[]{google, tossVerified}) {
+            User kept = userRepository.findById(u.getId()).orElseThrow();
+            assertThat(kept.getTossUserKey()).isNull();
+            assertThat(bookRepository.findByUserOrderByCreatedAtDesc(kept)).hasSize(1);
+        }
+    }
+
+    @Test
+    @DisplayName("REQ-06 · 연결 끊기: 정책 ②로 합성 주소를 쓰던 웹 계정은 그 주소를 놓아, 같은 토스 신원이 새로 가입할 수 있다")
+    void unlinkToss_releasesSyntheticEmail_soSameTossIdentityCanRegister() {
+        String synthetic = TossUserProvisioningService.syntheticEmail("443731105");
+        // 정책 ② 재배정이 운영에 남기는 꼴 — 미인증 LOCAL · 그 키의 합성 주소 · 키 있음.
+        User old = userRepository.saveAndFlush(withTossKey(
+                User.of(synthetic, passwordEncoder.encode("rawpw1234"), "비켜난웹", "Asia/Seoul", Role.USER), "443731105"));
+        // login_id가 없어 principal이 합성 주소다 — 무효화를 주소 옮기기보다 뒤에 하면 새 주소로 찾아 이 세션을 놓친다.
+        String sessionId = createSession(sessions, synthetic);
+
+        assertThat(accountService.unlinkToss("443731105")).isEqualTo(AccountService.TossUnlinkOutcome.SEVERED);
+        assertThat(sessions.findById(sessionId)).isNull();
+        // 가입 시도를 이메일 단언보다 앞에 — 주소를 안 놓았으면 여기서 uk_users_email 위반으로 깨진다.
+        assertThatCode(() -> {
+            tossUserProvisioningService.register("443731105", null);
+            userRepository.flush();
+        }).doesNotThrowAnyException();
+        assertThat(userRepository.findByTossUserKey("443731105").orElseThrow().getEmail()).isEqualTo(synthetic);
+        assertThat(userRepository.findById(old.getId()).orElseThrow().getEmail())
+                .isEqualTo("toss-443731105-" + old.getId() + "@noreply.booktimer.app");
+    }
+
+    @Test
+    @DisplayName("REQ-07 · 연결 끊기: 모르는·이미 끊긴 userKey는 NOT_FOUND이고 아무것도 바꾸지 않는다")
+    void unlinkToss_unknownOrAlreadyUnlinked_isNotFound() {
+        User user = userRepository.saveAndFlush(withTossKey(
+                User.of("again-unlink@booktimer.com", passwordEncoder.encode("rawpw1234"), "또끊음", "Asia/Seoul", Role.USER),
+                "uk-unlink-again"));
+        bookRepository.saveAndFlush(Book.register(user, "그대로 책", null, null, null, null, null, BookStatus.READING));
+        assertThat(accountService.unlinkToss("uk-unlink-again")).isEqualTo(AccountService.TossUnlinkOutcome.SEVERED);
+
+        assertThat(accountService.unlinkToss("uk-unlink-again")).isEqualTo(AccountService.TossUnlinkOutcome.NOT_FOUND);
+        assertThat(accountService.unlinkToss("uk-never-seen")).isEqualTo(AccountService.TossUnlinkOutcome.NOT_FOUND);
+        User kept = userRepository.findById(user.getId()).orElseThrow();
+        assertThat(kept.getEmail()).isEqualTo("again-unlink@booktimer.com");
+        assertThat(bookRepository.findByUserOrderByCreatedAtDesc(kept)).hasSize(1);
     }
 
     /** {@code toss_user_key}는 생성자로 못 넣는다 — 웹 연결과 같은 진입점({@code linkTossUserKey})으로 채운다. */
