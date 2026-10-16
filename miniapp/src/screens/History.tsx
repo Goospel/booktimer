@@ -112,7 +112,7 @@ export function GrassPanel({ graph }: { graph: ContributionGraph }) {
         <div aria-hidden="true" style={{ position: 'absolute', top: 0, left: 0, height: 20 }}>
           {months.map(({ label, left }) => (
             <span
-              key={label}
+              key={left}
               style={{ position: 'absolute', left, fontSize: 14, color: 'var(--adaptiveGrey600, #645E54)', whiteSpace: 'nowrap' }}
             >
               {label}
