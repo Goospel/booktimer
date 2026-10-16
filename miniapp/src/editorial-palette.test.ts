@@ -149,7 +149,11 @@ describe('REQ-01 · 제품 소스 전부에 옛 값이 0', () => {
   });
 
   it('목록 — 빨강 날 값(TDS 기본 #F04452 · 옛 위험 행 #A32D2D)이 0회다 — 빨강은 --adaptiveRed500 경유라 밤이 따라온다', () => {
-    expect(hits(/#F04452|#A32D2D/i)).toEqual([]);
+    // 예외는 TDS danger 버튼 재색칠의 선택자 키뿐이다 — 인라인 값을 잡는 키라 값이 아니다(PR #1267 3회차).
+    const KEY = "[style*='--button-background-color:";
+    const all = hits(/#F04452|#A32D2D/i);
+    expect(all.filter((h) => h.includes(KEY)).length).toBeGreaterThan(0); // 예외가 실제로 걸러 낸다 — 거름망이 헛돌면 여기서 안다
+    expect(all.filter((h) => !h.includes(KEY))).toEqual([]);
   });
 
   it.each(['--accentPill', '--accentRing'])('%s의 인라인 폴백이 전부 낮 정의값과 같다(제품 소스 전부)', (name) => {

@@ -610,11 +610,16 @@ describe('TDS Button 재색칠 (global.css)', () => {
     expect(css).toMatch(/--button-loader-color:[^;]*!important/);
   });
 
-  it('danger 버튼은 건드리지 않는다 — 세이지로 물들면 "빨강=위험" 신호가 죽는다', () => {
-    // TDS danger 팔레트(solid #f04452 / weak fill rgba(251,136,144,.15) · 글자 #e42939)를
-    // 선택자로도 값으로도 언급하지 않아야 한다 — 언급하는 순간 위험 버튼이 사정권에 든다.
-    for (const dangerHex of ['#f04452', '#e42939', '251, 136, 144']) {
-      expect(css).not.toContain(dangerHex);
+  it('TDS danger 빨강은 선택자 키로만 나온다 — 값으로 적히면 위험 빨강이 css와 토큰 두 곳에 갈라진다', () => {
+    // TDS danger 팔레트(solid #f04452 / weak fill rgba(251,136,144,.15) · 글자 #e42939)는 종이 위 AA 미달이라
+    // 재색칠 규칙이 그 인라인 값을 선택자 키로 잡는다(PR #1267 3회차). 값은 전부 `var(--adaptiveRed500)` 등 토큰이고,
+    // 키를 지운 나머지에 TDS 빨강이 한 글자라도 남으면 값이 토큰과 따로 논다.
+    const live = css.replace(/\/\*[\s\S]*?\*\//g, '');
+    const keys = /\[style\*='--button-background-color:\s?(#f04452|rgba\(251, 136, 144, 0\.15\))'\]/g;
+    expect(live.match(keys)?.length ?? 0).toBeGreaterThanOrEqual(4); // 채움·weak × 공백 두 벌 — 키가 실제로 있다
+    const rest = live.replace(keys, '');
+    for (const dangerHex of ['#f04452', '#e42939', '251, 136, 144', '240, 68, 82']) {
+      expect(rest).not.toContain(dangerHex);
     }
   });
 });
