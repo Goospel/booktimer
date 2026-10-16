@@ -1754,7 +1754,7 @@ describe('서재 위계 (시안 2c)', () => {
     const danger = tagBefore(markup, '서재에서 삭제');
 
     expect(row).toContain('border-bottom:1px solid var(--adaptiveGrey200');
-    expect(danger).toContain('#A32D2D');
+    expect(danger).toContain('var(--adaptiveRed500, #A8322A)');
   });
 
   /**

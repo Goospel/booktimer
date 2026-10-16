@@ -328,12 +328,19 @@ describe('안내 다시 보기 섹션', () => {
  */
 /** 크기만 바꾸는 small 라벨 규칙(15px 바닥) — danger도 걸리는 게 의도다(`global.css` 그 규칙의 주석). */
 const SIZE_ONLY_KEYS = ['--button-font-size:var(--tds-t-t7', '--button-font-size: var(--tds-t-t7'];
+/** danger 자기 규칙의 키(토큰 빨강으로 덮는다 — PR #1267 3회차). 잉크 규칙이 아니라 빨강을 지키는 쪽이라 뺀다. */
+const DANGER_KEYS = [
+  '--button-background-color:#f04452',
+  '--button-background-color: #f04452',
+  '--button-background-color:rgba(251, 136, 144, 0.15)',
+  '--button-background-color: rgba(251, 136, 144, 0.15)',
+];
 
 describe('위험 버튼은 붉게 남는다 — Soft 버튼 규칙이 red를 삼키지 않는다 (PR-4)', () => {
   const css = readFileSync(new URL('./global.css', import.meta.url), 'utf8').replace(/\/\*[\s\S]*?\*\//g, '');
   const keys = [...css.matchAll(/\[style\*=(['"])(.+?)\1\]/g)]
     .map((m) => m[2])
-    .filter((key) => !SIZE_ONLY_KEYS.includes(key));
+    .filter((key) => !SIZE_ONLY_KEYS.includes(key) && !DANGER_KEYS.includes(key));
   const buttons = (html: string) => html.match(/<button[^>]*class="[^"]*tds-mobile-button[^"]*"[^>]*>/g) ?? [];
   const recolored = (tag: string) => keys.filter((key) => tag.includes(key));
   const wrap = (node: ReactNode) => renderToStaticMarkup(<TDSMobileProvider userAgent={userAgent}>{node}</TDSMobileProvider>);
@@ -342,6 +349,7 @@ describe('위험 버튼은 붉게 남는다 — Soft 버튼 규칙이 red를 삼
     expect(keys.length).toBeGreaterThanOrEqual(3);
     // 허용표가 실제 css 키와 맞는다 — 규칙 문자열이 바뀌어 허용표가 헛돌면(아무것도 안 뺌) 여기서 안다.
     expect(SIZE_ONLY_KEYS.every((key) => css.includes(`[style*='${key}']`))).toBe(true);
+    expect(DANGER_KEYS.every((key) => css.includes(`[style*='${key}']`))).toBe(true);
     const plain = buttons(
       wrap(
         <>
@@ -367,7 +375,8 @@ describe('위험 버튼은 붉게 남는다 — Soft 버튼 규칙이 red를 삼
       expect(at, label).toBeGreaterThanOrEqual(0); // 그 버튼이 렌더됐다(-1이면 slice가 엉뚱한 버튼을 집는다)
       const tag = buttons(html.slice(0, at)).at(-1) ?? '';
       expect(tag, label).toMatch(/--button-background-color:(#f04452|rgba\(251, 136, 144)/); // 붉다(아래 부재 단언이 공허하지 않음)
-      expect(recolored(tag), label).toEqual([]);
+      expect(recolored(tag), label).toEqual([]); // 잉크 규칙에 안 걸린다
+      expect(DANGER_KEYS.some((key) => tag.includes(key)), label).toBe(true); // danger 규칙(토큰 빨강)에 걸린다
       expect(tag, label).not.toContain('--adaptiveBlue');
     }
   });

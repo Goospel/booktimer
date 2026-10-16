@@ -1318,7 +1318,7 @@ const menuRow = (danger: boolean) =>
     width: '100%',
     height: 44,
     padding: '0 4px',
-    color: danger ? '#A32D2D' : ROW_TEXT,
+    color: danger ? 'var(--adaptiveRed500, #A8322A)' : ROW_TEXT,
     fontSize: 15,
     fontWeight: 500,
     textAlign: 'left',

@@ -89,6 +89,9 @@ const PAIRS: [string, string][] = [
   ['--filledInk', '--adaptiveBlue700'], // 체크 배지 · 잉크 원 위 획
   ['--butterInk', '--butterBg'],
   ['--brandButtonInk', '--adaptiveGrey100'], // 외곽선 알약 글자
+  // 오류·위험 빨강(ErrorMessage · Text red500 · 관리 시트 위험 행) — TDS 기본 #F04452는 종이 위 3.27이었다
+  ['--adaptiveRed500', '--adaptiveGrey100'],
+  ['--adaptiveRed500', 'body'],
 ];
 
 /**
@@ -105,7 +108,12 @@ function rulePair(selectorHead: string): [string, string] {
 }
 const PRIMARY = rulePair(".tds-mobile-button[style*='--button-background-color: #3182f6'] {");
 const DISABLED = rulePair(':disabled {');
-PAIRS.push(PRIMARY, DISABLED);
+// TDS danger 버튼(채움 · weak) — TDS 기본은 흰 글자/#f04452 3.71 · #e42939/옅은 분홍 3.55로 AA 미달이었다.
+const DANGER_FILL = rulePair(".tds-mobile-button[style*='--button-background-color: #f04452'] {");
+const DANGER_WEAK = rulePair(".tds-mobile-button[style*='--button-background-color: rgba(251, 136, 144, 0.15)'] {");
+// 비활성 danger — 위 DISABLED(`:disabled {`)는 주 버튼 규칙만 잡는다(이 규칙은 `:not(...) {`로 끝난다).
+const DANGER_OFF = rulePair(".tds-mobile-button[style*='--button-background-color: #f04452']:disabled:not([aria-busy='true']) {");
+PAIRS.push(PRIMARY, DISABLED, DANGER_FILL, DANGER_WEAK, DANGER_OFF);
 
 /**
  * 홈 피드 「다 읽음」 배지(채움 톤) — 같은 이유로 `HomeFeed.tsx`의 `badgeStyle`에서 뽑는다.
@@ -117,8 +125,8 @@ const BADGE_INK = /color:\s*'var\((--[\w-]+)/.exec(solidBadge)?.[1];
 PAIRS.push([BADGE_INK ?? '(배지 글자 토큰 없음)', BADGE_BG ?? '(배지 바탕 토큰 없음)']);
 
 describe('버튼 규칙·배지에서 글자·바탕 토큰을 뽑는다', () => {
-  it('검정 알약 · 비활성 주 버튼 · 피드 채움 배지 — 셋 다 var(--토큰)이다', () => {
-    for (const [ink, bg] of [PRIMARY, DISABLED, [BADGE_INK, BADGE_BG]]) {
+  it('검정 알약 · 비활성 주 버튼 · danger 채움·weak · 피드 채움 배지 — 전부 var(--토큰)이다', () => {
+    for (const [ink, bg] of [PRIMARY, DISABLED, DANGER_FILL, DANGER_WEAK, DANGER_OFF, [BADGE_INK, BADGE_BG]]) {
       expect(ink).toMatch(/^--/);
       expect(bg).toMatch(/^--/);
     }

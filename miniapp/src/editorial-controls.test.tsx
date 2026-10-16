@@ -44,9 +44,8 @@ describe('REQ-06 · TDS 버튼 2단', () => {
     expect(weak).toMatch(/(^|[\s;])background-color:\s*transparent\s*!important/);
   });
 
-  it('채움 마커 규칙(--btn-filled)이 없고 danger red 값이 css에 0이다 — 위험 빨강을 잉크가 삼키지 않는다', () => {
+  it('채움 마커 규칙(--btn-filled)이 없다 — FilledButton은 주 동작 표지로만 남는다', () => {
     expect(css).not.toContain('--btn-filled');
-    expect(css).not.toMatch(/#f04452|240,\s*68,\s*82/i);
   });
 
   /**
@@ -69,6 +68,91 @@ describe('REQ-06 · TDS 버튼 2단', () => {
     const tag = markup.slice(markup.lastIndexOf('<button', markup.indexOf('tds-mobile-button')), markup.indexOf('>', markup.indexOf('tds-mobile-button')) + 1);
     expect(tag).toContain('disabled=""');
     expect(tag).toMatch(/--button-background-color:\s*#3182f6/);
+  });
+});
+
+/**
+ * TDS danger 버튼(「정말 삭제」·로그아웃·탈퇴·차단 6곳) — TDS 기본 빨강은 종이 위 AA 미달이다(채움 흰 글자/#f04452 3.71 ·
+ * weak #e42939/rgba(251,136,144,.15) 3.55). 검정 알약과 같은 수법으로 인라인 값을 키로 잡아 토큰 빨강으로 덮는다.
+ * 대비 자체는 soft-contrast.test가 이 규칙에서 토큰을 뽑아 잰다 — 여기는 「규칙이 토큰을 쓴다」와 「키가 마크업에 있다」.
+ */
+describe('TDS danger 버튼 — 빨강 면·글자를 토큰으로', () => {
+  const FILL = ".tds-mobile-button[style*='--button-background-color: #f04452']";
+  const WEAK = ".tds-mobile-button[style*='--button-background-color: rgba(251, 136, 144, 0.15)']";
+  const fill = rule(`${FILL} {`);
+  const weak = rule(`${WEAK} {`);
+  const off = rule(`${FILL}:disabled:not([aria-busy='true']) {`);
+
+  it('채움 — 빨강 토큰 면 · filledInk 글자·로더 · TDS 그라디언트 끔', () => {
+    expect(fill).not.toBe('');
+    expect(fill).toMatch(/(^|[\s;])background-color:\s*var\(--adaptiveRed500\)\s*!important/);
+    expect(fill).toMatch(/--button-background-color:\s*transparent\s*!important/);
+    expect(fill).toMatch(/--button-color:\s*var\(--filledInk\)\s*!important/);
+    expect(fill).toMatch(/--button-loader-color:\s*var\(--filledInk\)\s*!important/);
+    expect(fill).toMatch(/--button-gradient-color:\s*transparent\s*!important/);
+  });
+
+  // 버튼은 전부 알약(사양 §5.3 「버튼·칩·탭바·원 999」) — TDS danger만 각진 8·14·16px로 남으면 같은 화면에서 혼자 튄다.
+  it('채움·weak 모두 알약 모서리 999', () => {
+    expect(fill).toMatch(/--button-border-radius:\s*999px\s*!important/);
+    expect(weak).toMatch(/--button-border-radius:\s*999px\s*!important/);
+  });
+
+  it('weak — 옅은 빨강 면 · 빨강 글자 · 로더 빨강 토큰 · 눌림·로딩 딤은 끈다', () => {
+    expect(weak).not.toBe('');
+    expect(weak).toMatch(/(^|[\s;])background-color:\s*var\(--dangerSoft\)\s*!important/);
+    expect(weak).toMatch(/--button-background-color:\s*transparent\s*!important/);
+    expect(weak).toMatch(/--button-color:\s*var\(--adaptiveRed500\)\s*!important/);
+    // 딤 레이어는 글자 위에 그려진다 — 빨강 딤(.26)이면 눌린 동안 빨강 글자/섞인 면 3.72로 AA 아래다. 눌림 피드백은 TDS scale만.
+    expect(weak).toMatch(/--button-dimmer-pressed-background-color:\s*transparent\s*!important/);
+    // 안 덮으면 loading 때 TDS 날 빨강 rgba(240, 68, 82, .26)이 얹힌다.
+    expect(weak).toMatch(/--button-dimmer-loading-background-color:\s*transparent\s*!important/);
+    expect(weak).toMatch(/--button-loader-color:\s*var\(--adaptiveRed500\)\s*!important/);
+    expect(weak).toMatch(/--button-gradient-color:\s*transparent\s*!important/);
+  });
+
+  it('비활성 채움 — 주 버튼과 같은 옅은 면 + muted 글자 + 불투명도 1(로딩 중은 빨강 유지)', () => {
+    expect(off).not.toBe('');
+    expect(off).toMatch(/(^|[\s;])background-color:\s*var\(--softDent\)\s*!important/);
+    expect(off).toMatch(/--button-color:\s*var\(--adaptiveGrey600\)\s*!important/);
+    expect(off).toMatch(/--button-disabled-text-color:\s*var\(--adaptiveGrey600\)\s*!important/);
+    expect(off).toMatch(/(^|[\s;])opacity:\s*1\s*!important/);
+  });
+
+  it('공백 두 벌 — 서버 렌더(`:#f04452`)·CSSOM(`: #f04452`) 어느 쪽도 빠지지 않는다', () => {
+    // 규칙마다 두 선택자가 쉼표로 이어진 실제 목록을 단언한다 — 접두사 toContain은 비활성 규칙 선택자가 대신 채워 줬다.
+    const esc = (v: string) => v.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const pair = (value: string, tail = '') =>
+      new RegExp(
+        `\\.tds-mobile-button\\[style\\*='--button-background-color:${esc(value)}'\\]${esc(tail)},\\s*` +
+          `\\.tds-mobile-button\\[style\\*='--button-background-color: ${esc(value)}'\\]${esc(tail)}\\s*\\{`,
+      );
+    expect(css).toMatch(pair('#f04452'));
+    expect(css).toMatch(pair('#f04452', ":disabled:not([aria-busy='true'])"));
+    expect(css).toMatch(pair('rgba(251, 136, 144, 0.15)'));
+  });
+
+  it('danger 키를 든 규칙의 값에 날 색(hex·rgb)이 0이다 — 빨강은 토큰 한 곳에서만 정해진다', () => {
+    const bodies = [...css.matchAll(/([^{}]+)\{([^}]*)\}/g)]
+      .filter(([, sel]) => sel.includes('#f04452') || sel.includes('251, 136, 144'))
+      .map(([, , body]) => body);
+    expect(bodies.length).toBeGreaterThanOrEqual(3); // 채움 · weak · 비활성 — 뽑기가 실제로 잡는다
+    for (const body of bodies) expect(body).not.toMatch(/#[0-9a-f]{3,8}\b|rgba?\(/i);
+  });
+
+  it('키가 실제 마크업에 있다 — 채움·weak·비활성 danger 버튼이 그 인라인 값을 든다', () => {
+    const tagOf = (markup: string) => {
+      const at = markup.lastIndexOf('<button', markup.indexOf('tds-mobile-button'));
+      return markup.slice(at, markup.indexOf('>', at) + 1);
+    };
+    expect(tagOf(render(<Button color="danger">삭제</Button>))).toContain('--button-background-color:#f04452;');
+    expect(tagOf(render(<Button color="danger" variant="weak">탈퇴</Button>))).toContain(
+      '--button-background-color:rgba(251, 136, 144, 0.15);',
+    );
+    const disabled = tagOf(render(<Button color="danger" disabled>삭제</Button>));
+    expect(disabled).toContain('disabled=""');
+    expect(disabled).toContain('aria-busy="false"');
+    expect(disabled).toContain('--button-background-color:#f04452;');
   });
 });
 

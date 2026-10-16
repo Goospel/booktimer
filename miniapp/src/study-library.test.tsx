@@ -423,7 +423,7 @@ describe('에디토리얼 표면 — 공부 서재 (PR-1)', () => {
       expect(tag).toContain('border-bottom:1px solid var(--adaptiveGrey200');
       expect(bigShadow(tag)).toBe(false);
     }
-    expect(button(html, '서재에서 삭제')).toContain('color:#A32D2D');
+    expect(button(html, '서재에서 삭제')).toContain('color:var(--adaptiveRed500, #A8322A)');
   });
 });
 
