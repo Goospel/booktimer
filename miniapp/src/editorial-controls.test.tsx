@@ -92,12 +92,15 @@ describe('TDS danger 버튼 — 빨강 면·글자를 토큰으로', () => {
     expect(fill).toMatch(/--button-gradient-color:\s*transparent\s*!important/);
   });
 
-  it('weak — 옅은 빨강 면 · 빨강 글자 · 눌림 딤·로더도 빨강 토큰', () => {
+  it('weak — 옅은 빨강 면 · 빨강 글자 · 로더 빨강 토큰 · 눌림·로딩 딤은 끈다', () => {
     expect(weak).not.toBe('');
     expect(weak).toMatch(/(^|[\s;])background-color:\s*var\(--dangerSoft\)\s*!important/);
     expect(weak).toMatch(/--button-background-color:\s*transparent\s*!important/);
     expect(weak).toMatch(/--button-color:\s*var\(--adaptiveRed500\)\s*!important/);
-    expect(weak).toMatch(/--button-dimmer-pressed-background-color:\s*var\(--adaptiveRed500\)\s*!important/);
+    // 딤 레이어는 글자 위에 그려진다 — 빨강 딤(.26)이면 눌린 동안 빨강 글자/섞인 면 3.72로 AA 아래다. 눌림 피드백은 TDS scale만.
+    expect(weak).toMatch(/--button-dimmer-pressed-background-color:\s*transparent\s*!important/);
+    // 안 덮으면 loading 때 TDS 날 빨강 rgba(240, 68, 82, .26)이 얹힌다.
+    expect(weak).toMatch(/--button-dimmer-loading-background-color:\s*transparent\s*!important/);
     expect(weak).toMatch(/--button-loader-color:\s*var\(--adaptiveRed500\)\s*!important/);
     expect(weak).toMatch(/--button-gradient-color:\s*transparent\s*!important/);
   });
@@ -111,9 +114,16 @@ describe('TDS danger 버튼 — 빨강 면·글자를 토큰으로', () => {
   });
 
   it('공백 두 벌 — 서버 렌더(`:#f04452`)·CSSOM(`: #f04452`) 어느 쪽도 빠지지 않는다', () => {
-    for (const key of ["--button-background-color:#f04452'", "--button-background-color:rgba(251, 136, 144, 0.15)'"]) {
-      expect(css).toContain(`.tds-mobile-button[style*='${key}]`);
-    }
+    // 규칙마다 두 선택자가 쉼표로 이어진 실제 목록을 단언한다 — 접두사 toContain은 비활성 규칙 선택자가 대신 채워 줬다.
+    const esc = (v: string) => v.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const pair = (value: string, tail = '') =>
+      new RegExp(
+        `\\.tds-mobile-button\\[style\\*='--button-background-color:${esc(value)}'\\]${esc(tail)},\\s*` +
+          `\\.tds-mobile-button\\[style\\*='--button-background-color: ${esc(value)}'\\]${esc(tail)}\\s*\\{`,
+      );
+    expect(css).toMatch(pair('#f04452'));
+    expect(css).toMatch(pair('#f04452', ":disabled:not([aria-busy='true'])"));
+    expect(css).toMatch(pair('rgba(251, 136, 144, 0.15)'));
   });
 
   it('danger 키를 든 규칙의 값에 날 색(hex·rgb)이 0이다 — 빨강은 토큰 한 곳에서만 정해진다', () => {

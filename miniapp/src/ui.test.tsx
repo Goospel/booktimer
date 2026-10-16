@@ -615,12 +615,11 @@ describe('TDS Button 재색칠 (global.css)', () => {
     // 재색칠 규칙이 그 인라인 값을 선택자 키로 잡는다(PR #1267 3회차). 값은 전부 `var(--adaptiveRed500)` 등 토큰이고,
     // 키를 지운 나머지에 TDS 빨강이 한 글자라도 남으면 값이 토큰과 따로 논다.
     const live = css.replace(/\/\*[\s\S]*?\*\//g, '');
-    const keys = /\[style\*='--button-background-color:\s?(#f04452|rgba\(251, 136, 144, 0\.15\))'\]/g;
+    const keys = /\[style\*='--button-background-color:\s?(#f04452|rgba\(251,\s*136,\s*144,\s*0\.15\))'\]/gi;
     expect(live.match(keys)?.length ?? 0).toBeGreaterThanOrEqual(4); // 채움·weak × 공백 두 벌 — 키가 실제로 있다
     const rest = live.replace(keys, '');
-    for (const dangerHex of ['#f04452', '#e42939', '251, 136, 144', '240, 68, 82']) {
-      expect(rest).not.toContain(dangerHex);
-    }
+    // 공백·대소문자 변형까지 — `rgb(240,68,82)`처럼 공백 없는 꼴도 잡는다.
+    expect(rest).not.toMatch(/#f04452|#e42939|251,\s*136,\s*144|240,\s*68,\s*82/i);
   });
 });
 
