@@ -379,9 +379,9 @@ describe('흐린 글자가 실제로 흐리다', () => {
     }
   });
 
-  it('토큰마다 fallback을 함께 준다 — 어느 쪽 모드에서도 정의하지 않는 토큰이 실제로 있다(Red500)', () => {
-    // `--adaptiveRed500`은 이 앱 어디서도 정의하지 않는다(웹 --danger와 TDS red가 사실상 같아 재테마를
-    // 건너뛴 자리). fallback이 없으면 `var()`가 미정의로 풀려 **다시 상속**이다 — 고친 자리가 원위치한다.
+  it('토큰마다 fallback을 함께 준다 — 정의가 빠진 토큰이 실제로 있었다(Red500, 2026-10-16까지)', () => {
+    // `--adaptiveRed500`은 오래 정의 없이 남아 있었다. fallback이 없으면 `var()`가 미정의로 풀려
+    // **다시 상속**이다 — 고친 자리가 원위치한다. 폴백 값 자체는 editorial-palette.test 「폴백 = 낮 정의값」이 잰다.
     const tag = tagOf(render(<Text color="red500">경고</Text>), '경고');
 
     expect(tag).toMatch(/--tds-paragraph-color:\s*var\(--adaptiveRed500,\s*#[0-9A-Fa-f]{6}\)/);

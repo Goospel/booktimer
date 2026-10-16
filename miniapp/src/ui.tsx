@@ -19,9 +19,9 @@ import woodcutOwl from './assets/woodcut-owl.png';
  * <b>색이 상속으로 떨어진다</b> — 곧 본문과 완전히 같은 잉크다. 그렇게 죽어 있던 호출부가 87곳이었다
  * (목 모드 실측 2026-08-23: `color="grey600"`인 Text와 prop 없는 Text가 똑같이 `rgb(33,37,41)`).
  *
- * <p>값의 출처는 `global.css`의 `html:root` 팔레트다. <b>fallback을 함께 주는 이유</b>: `--adaptiveRed500`
- * 처럼 이 앱이 아예 정의하지 않는 토큰이 실제로 있고, 미정의 `var()`는 다시 상속으로 풀려 고친 자리가
- * 조용히 원위치한다(그게 위 Grey900 폴백이 아무 일도 못 한 이유이기도 하다).
+ * <p>값의 출처는 `global.css`의 `html:root` 팔레트다. <b>fallback을 함께 주는 이유</b>: 미정의 `var()`는 다시
+ * 상속으로 풀려 고친 자리가 조용히 원위치한다(그게 위 Grey900 폴백이 아무 일도 못 한 이유이기도 하다). 폴백은
+ * 낮 정의값과 같아야 한다 — `--adaptiveRed500`은 정의 없이 TDS 기본 빨강(종이 위 3.27)으로 남아 있었다.
  */
 const INK: Record<string, string> = {
   grey600: 'var(--adaptiveGrey600, #645E54)',
@@ -29,7 +29,7 @@ const INK: Record<string, string> = {
   grey800: 'var(--adaptiveGrey800, #1D1B18)',
   blue500: 'var(--adaptiveBlue500, #1D1B18)',
   blue700: 'var(--adaptiveBlue700, #1D1B18)',
-  red500: 'var(--adaptiveRed500, #F04452)',
+  red500: 'var(--adaptiveRed500, #A8322A)',
 };
 
 /**
@@ -62,7 +62,7 @@ export const LEVEL_COLORS = [
   'var(--grass4, #1D1B18)',
 ];
 
-/** 수동 기록 칸의 테두리 — 웹 `--neutral-3`. 격자와 범례가 같은 값을 봐야 범례가 거짓말을 안 한다. */
+/** 수동 기록 칸의 테두리 — 비글자 장식 테(고정 리터럴). 격자와 범례가 같은 값을 봐야 범례가 거짓말을 안 한다. */
 export const MANUAL_OUTLINE = '1px solid #9A9486';
 
 /** 잔디 오늘 칸 링 — 범례 「오늘」 스와치도 같은 값을 둘러야 범례가 거짓말을 안 한다. */

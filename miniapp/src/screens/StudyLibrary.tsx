@@ -490,7 +490,7 @@ function StudySheetRow({
         display: 'block',
         width: '100%',
         padding: '15px 0',
-        color: danger ? '#A32D2D' : 'var(--adaptiveGrey800, #1D1B18)',
+        color: danger ? 'var(--adaptiveRed500, #A8322A)' : 'var(--adaptiveGrey800, #1D1B18)',
         fontSize: 15,
         textAlign: 'left',
         cursor: 'pointer',

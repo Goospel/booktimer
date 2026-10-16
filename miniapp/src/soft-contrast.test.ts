@@ -89,6 +89,9 @@ const PAIRS: [string, string][] = [
   ['--filledInk', '--adaptiveBlue700'], // 체크 배지 · 잉크 원 위 획
   ['--butterInk', '--butterBg'],
   ['--brandButtonInk', '--adaptiveGrey100'], // 외곽선 알약 글자
+  // 오류·위험 빨강(ErrorMessage · Text red500 · 관리 시트 위험 행) — TDS 기본 #F04452는 종이 위 3.27이었다
+  ['--adaptiveRed500', '--adaptiveGrey100'],
+  ['--adaptiveRed500', 'body'],
 ];
 
 /**

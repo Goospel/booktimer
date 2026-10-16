@@ -80,7 +80,10 @@ html body {
  * 정적 css의 `:root`는 주입 순서에 질 수 있지만 `html:root`(명시도 0-1-1 > 0-1-0)는 순서와 무관하게
  * 이긴다 — 이 선택자가 재테마 전체를 떠받치는 유일한 메커니즘이다. 값의 출처는 웹 app.css :root 토큰.
  *
- * danger 계열(red)은 웹 --danger(#dc2626)와 TDS red가 사실상 같아 건드리지 않는다.
+ * 빨강은 `--adaptiveRed500` 한 단만 정의한다 — 앱 코드(`ui.tsx` INK.red500 · 관리 시트 위험 행)가 읽는 단이 그것뿐이다.
+ * TDS 기본 빨강은 종이 위 3.27로 AA 미달이라 웹 에디토리얼 `--danger`와 같은 값으로 바꿨다(밤은 `main` 블록).
+ * ⚠️ TDS 컴포넌트는 `--adaptiveRed*`를 읽지 않는다 — danger 버튼·입력칸 오류는 JS 팔레트 리터럴을 인라인으로
+ * 박으므로 이 토큰이 닿지 않는다(아래 「TDS Button 재색칠」 주석).
  */
 html:root {
   /*
@@ -130,6 +133,7 @@ html:root {
   --adaptiveGrey700: #4A453E; /* text — 8.36 */
   --adaptiveGrey800: #1D1B18; /* ink — 15.13 */
   --adaptiveGrey900: #1D1B18; /* 낮에도 정의 — 미정의면 fallback 리터럴로 떨어진다 */
+  --adaptiveRed500: #A8322A; /* 오류·위험 글자 — 종이 5.86 · paper-2 5.31(웹 --danger와 같은 값) */
 
   /*
    * 타이포 스케일 — **Soft 눈금**이다(연령 반영 재테마, 2026-09-23).
@@ -472,6 +476,7 @@ body.reading-lamp main {
   --adaptiveGrey700: #D6CFC2;
   --adaptiveGrey800: #F2EDE3; /* 본문 잉크 */
   --adaptiveGrey900: #F2EDE3;
+  --adaptiveRed500: #E5766B; /* 책상 위 5.90 — 낮 빨강은 2.61이라 밤엔 못 쓴다(웹 밤 --danger와 같은 값) */
 
   color: #F2EDE3;
 }
@@ -504,6 +509,7 @@ body.reading-lamp .lamp-page {
   --adaptiveGrey700: #4A453E;
   --adaptiveGrey800: #1D1B18;
   --adaptiveGrey900: #1D1B18;
+  --adaptiveRed500: #A8322A;
 
   color: #1D1B18;
 }

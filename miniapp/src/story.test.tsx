@@ -843,8 +843,8 @@ describe('글 관리 시트 (MarginMenuSheet)', () => {
     for (const label of ['모두의 여백에 올리기', '지우기']) {
       expect(row(label)).toContain('border-bottom:1px solid var(--adaptiveGrey200');
     }
-    expect(row('지우기')).toContain('color:#A32D2D');
-    expect(row('모두의 여백에 올리기')).not.toContain('#A32D2D'); // 경고색이 다른 줄로 번지지 않는다
+    expect(row('지우기')).toContain('color:var(--adaptiveRed500, #A8322A)');
+    expect(row('모두의 여백에 올리기')).not.toContain('adaptiveRed500'); // 경고색이 다른 줄로 번지지 않는다
   });
 });
 

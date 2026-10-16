@@ -114,6 +114,10 @@ describe('REQ-01 · 낮 팔레트가 에디토리얼 값이다', () => {
     expect(root['--filledInk']).toBe('#F5F0E6');
   });
 
+  it('오류·위험 빨강 = 웹 에디토리얼 --danger와 같은 #A8322A(교차 채널 — 바꾸면 양쪽을 같이)', () => {
+    expect(root['--adaptiveRed500']).toBe('#A8322A');
+  });
+
   it('잔디는 잉크 농담 5단이다(D4=A)', () => {
     expect([0, 1, 2, 3, 4].map((i) => root[`--grass${i}`])).toEqual(['#E6DFD2', '#CDC3B2', '#A29785', '#625A4F', '#1D1B18']);
   });
@@ -142,6 +146,10 @@ describe('REQ-01 · 제품 소스 전부에 옛 값이 0', () => {
   it('목록 — 옛 갈색 그림자 틴트와 시트 딤(rgba(30, 30, 24)이 0회다', () => {
     expect(hits(/rgba\(\s*112,\s*96,\s*64/)).toEqual([]);
     expect(hits(/rgba\(\s*30,\s*30,\s*24/)).toEqual([]);
+  });
+
+  it('목록 — 빨강 날 값(TDS 기본 #F04452 · 옛 위험 행 #A32D2D)이 0회다 — 빨강은 --adaptiveRed500 경유라 밤이 따라온다', () => {
+    expect(hits(/#F04452|#A32D2D/i)).toEqual([]);
   });
 
   it.each(['--accentPill', '--accentRing'])('%s의 인라인 폴백이 전부 낮 정의값과 같다(제품 소스 전부)', (name) => {
@@ -216,12 +224,14 @@ describe('REQ-14 · 밤은 책상 + 미색 페이지(D2=A)', () => {
     expect(night['--adaptiveGrey800']).toBe('#F2EDE3');
     expect(night['--adaptiveBlue700']).toBe('#F2EDE3');
     expect(night['--filledInk']).toBe('#1C1A17');
+    expect(night['--adaptiveRed500']).toBe('#E5766B'); // 웹 밤 --danger와 같은 값
   });
 
   // PR-2 — 사각 배경 리터럴을 걷고 페이지 토큰만 미색으로 되돌린다(아치·오늘 표가 그 토큰으로 칠해 아치 모양 페이지가 된다).
   it('등불 밑 페이지는 미색 아치 페이지(토큰)이고 등불 글로우가 없다', () => {
     const page = block('body.reading-lamp .lamp-page');
     expect(page).toMatch(/--adaptiveGrey100:\s*#F5F0E6/);
+    expect(page).toMatch(/--adaptiveRed500:\s*#A8322A/);
     expect(page).not.toMatch(/(?:^|[\s;{])background\s*:/);
     expect(css).not.toMatch(/rgba\(\s*255,\s*220,\s*160/);
     expect(page).not.toMatch(/box-shadow/);
