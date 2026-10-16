@@ -82,8 +82,9 @@ html body {
  *
  * 빨강은 `--adaptiveRed500` 한 단만 정의한다 — 앱 코드(`ui.tsx` INK.red500 · 관리 시트 위험 행)가 읽는 단이 그것뿐이다.
  * TDS 기본 빨강은 종이 위 3.27로 AA 미달이라 웹 에디토리얼 `--danger`와 같은 값으로 바꿨다(밤은 `main` 블록).
- * ⚠️ TDS 컴포넌트는 `--adaptiveRed*`를 읽지 않는다 — danger 버튼·입력칸 오류는 JS 팔레트 리터럴을 인라인으로
- * 박으므로 이 토큰이 닿지 않는다(아래 「TDS Button 재색칠」 주석).
+ * ⚠️ 앱이 쓰는 TDS 컴포넌트(Button danger · TextField 오류)는 JS 팔레트 리터럴을 인라인으로 박아 이 토큰이
+ * 닿지 않는다(아래 「TDS Button 재색칠」 주석). Badge·TopNavigation 점·BarChart 등은 `var(--adaptiveRed*)`를
+ * 읽지만 이 앱이 쓰지 않는다.
  */
 html:root {
   /*

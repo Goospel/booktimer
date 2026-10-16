@@ -57,7 +57,7 @@ function decls(selector: string): Record<string, string> {
 }
 const root = decls('html:root');
 
-/** `var(--토큰, #hex)` 폴백 중 그 토큰의 낮 정의값과 다른 것 — 정의 없는 토큰(`--adaptiveRed500`)은 묻지 않는다. */
+/** `var(--토큰, #hex)` 폴백 중 그 토큰의 낮 정의값과 다른 것 — 낮 블록에 정의가 없는 토큰은 묻지 않는다. */
 function driftedFallbacks(scope: { name: string; text: string }[], defs: Record<string, string>): string[] {
   const out: string[] = [];
   for (const { name, text } of scope) {
