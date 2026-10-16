@@ -92,6 +92,12 @@ describe('TDS danger 버튼 — 빨강 면·글자를 토큰으로', () => {
     expect(fill).toMatch(/--button-gradient-color:\s*transparent\s*!important/);
   });
 
+  // 버튼은 전부 알약(사양 §5.3 「버튼·칩·탭바·원 999」) — TDS danger만 각진 8·14·16px로 남으면 같은 화면에서 혼자 튄다.
+  it('채움·weak 모두 알약 모서리 999', () => {
+    expect(fill).toMatch(/--button-border-radius:\s*999px\s*!important/);
+    expect(weak).toMatch(/--button-border-radius:\s*999px\s*!important/);
+  });
+
   it('weak — 옅은 빨강 면 · 빨강 글자 · 로더 빨강 토큰 · 눌림·로딩 딤은 끈다', () => {
     expect(weak).not.toBe('');
     expect(weak).toMatch(/(^|[\s;])background-color:\s*var\(--dangerSoft\)\s*!important/);

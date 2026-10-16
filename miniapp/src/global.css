@@ -231,7 +231,7 @@ html:root {
 
 /*
  * danger — 「정말 삭제」·로그아웃·탈퇴·차단(서재 1 · 프로필 2 · 설정 3). TDS 빨강은 종이 위 AA 미달이다(채움 흰 글자 3.71 ·
- * weak 글자 3.55). 위 두 규칙과 같은 수법으로 면·글자를 토큰 빨강으로 바꾼다 — 모양(반경·테)은 TDS 그대로, 색만.
+ * weak 글자 3.55). 위 두 규칙과 같은 수법으로 면·글자를 토큰 빨강으로 바꾸고 모서리도 같은 알약 999로 맞춘다(테는 TDS 그대로).
  * 값에 날 색을 적지 않는다(fallback 포함) — 빨강은 `html:root`·밤·등불 페이지 토큰 한 곳에서만 정해진다.
  * 눌림: TDS가 딤 레이어를 애니메이션으로 얹을 뿐 인라인 키는 그대로라 이 규칙이 눌린 동안에도 걸린다. 딤은 글자 span
  * **위에** 그려진다 — 채움(검정 .26)은 눌림 4.63으로 AA를 지키지만, weak에 빨강 딤을 주면 글자가 섞인 면에 묻혀 3.72라
@@ -243,6 +243,7 @@ html:root {
   --button-gradient-color: transparent !important;
   --button-color: var(--filledInk) !important; /* 빨강 위 미색 5.86 · 밤 책상색 5.90 */
   --button-loader-color: var(--filledInk) !important;
+  --button-border-radius: 999px !important;
   background-color: var(--adaptiveRed500) !important;
 }
 
@@ -263,6 +264,7 @@ html:root {
   --button-dimmer-pressed-background-color: transparent !important; /* 빨강 딤이면 눌림 3.72 */
   --button-dimmer-loading-background-color: transparent !important; /* 안 덮으면 TDS 날 빨강 .26이 얹힌다 */
   --button-loader-color: var(--adaptiveRed500) !important;
+  --button-border-radius: 999px !important;
   background-color: var(--dangerSoft) !important;
 }
 
