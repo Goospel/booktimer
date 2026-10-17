@@ -536,6 +536,19 @@ describe('StudyTimerCard — 자리 비움 선택', () => {
     });
 });
 
+describe('REQ-16 · StudyTimerCard 아치 시계 길이', () => {
+    test('5자면 is-long 없음, 1시간 넘은 8자면 is-long', () => {
+        vi.useFakeTimers();
+        const short = mountCard({ todaySeconds: 42 * 60 });
+        expect(short.find('.dash-timer-left .dash-timer-num').text()).toBe('42:00');
+        expect(short.find('.dash-timer-left .dash-timer-num').classes()).not.toContain('is-long');
+        short.unmount();
+        const long = mountCard({ todaySeconds: 3700 });
+        expect(long.find('.dash-timer-left .dash-timer-num').text()).toBe('01:01:40');
+        expect(long.find('.dash-timer-left .dash-timer-num').classes()).toContain('is-long');
+    });
+});
+
 describe('StudyTimerCard — 에디토리얼 검정 알약(PR-2)', () => {
     test('REQ-22 · 대기에서 회당 시간 폼을 열어도 검정 알약은 「공부 측정 시작」 하나다', async () => {
         vi.useFakeTimers();

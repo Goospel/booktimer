@@ -92,7 +92,7 @@ const SPROUT_PATHS = ['M12 20v-6', 'M12 14c0-3.5-2.5-6-6-6 0 3.5 2.5 6 6 6z', 'M
                      stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path v-for="p in SPROUT_PATHS" :key="p" :d="p" /></svg>
                 {{ progress.isAchieved ? '오늘 목표 달성' : '오늘 읽은 시간' }}
             </span>
-            <div class="dash-timer-num" :class="{ 'dash-timer-num-ok': progress.isAchieved }"><ClockDigits :text="todayReadDisplay" /></div>
+            <div class="dash-timer-num" :class="{ 'dash-timer-num-ok': progress.isAchieved, 'is-long': todayReadDisplay.length > 5 }"><ClockDigits :text="todayReadDisplay" /></div>
             <div class="dash-progress-wrap">
                 <div class="dash-progress-track">
                     <div class="dash-progress-fill" :class="{ 'dash-progress-fill-ok': progress.isAchieved }"
@@ -103,12 +103,9 @@ const SPROUT_PATHS = ['M12 20v-6', 'M12 14c0-3.5-2.5-6-6-6 0 3.5 2.5 6 6 6z', 'M
                     <span class="dash-progress-pct"><ClockDigits :text="remainingLabel" /></span>
                 </div>
             </div>
-            <p v-if="showForgive" class="dash-forgive-note">
-                밀린 {{ forgiveMinutes }}분은 목표보다 더 읽으면 줄어들어요 — 천천히 갚아도 괜찮아요.
-            </p>
         </div>
 
-        <!-- 우: 상태 3패널. <Transition mode="out-in">으로 패널 교체를 크로스페이드해
+        <!-- 우: 상태 3패널(오늘 표). <Transition mode="out-in">으로 패널 교체를 크로스페이드해
              측정 시작/종료 시 "툭" 끊기던 즉시 DOM 교체를 부드럽게 한다(key=state로 전환 트리거).
              reduced-motion이면 CSS에서 트랜지션 0초로 즉시 교체. -->
         <div class="dash-timer-right">
@@ -134,7 +131,8 @@ const SPROUT_PATHS = ['M12 20v-6', 'M12 14c0-3.5-2.5-6-6-6 0 3.5 2.5 6 6 6z', 'M
                     <button type="button" class="dash-btn-link dash-bookless" :disabled="changing" @click="emit('changeBook')">
                         책 바꾸기
                     </button>
-                    <button type="button" class="dash-btn-outline" @click="emit('stop')" :disabled="stopping">
+                    <!-- 측정 중엔 「측정 시작」이 없어 이 버튼이 화면의 검정 알약 하나다(미니앱 정지 = 잉크 채움). -->
+                    <button type="button" class="dash-btn-fill" @click="emit('stop')" :disabled="stopping">
                         {{ stopping ? '종료하는 중…' : '측정 종료' }}
                     </button>
                 </div>
@@ -181,6 +179,10 @@ const SPROUT_PATHS = ['M12 20v-6', 'M12 14c0-3.5-2.5-6-6-6 0 3.5 2.5 6 6 6z', 'M
                     />
                 </div>
             </Transition>
+            <!-- 밀린 시간 안내 — 오늘 표 끝(주 버튼 아래). 아치 안에 두면 시계 칸이 비좁아진다. -->
+            <p v-if="showForgive" class="dash-forgive-note">
+                밀린 {{ forgiveMinutes }}분은 목표보다 더 읽으면 줄어들어요 — 천천히 갚아도 괜찮아요.
+            </p>
         </div>
     </section>
 </template>

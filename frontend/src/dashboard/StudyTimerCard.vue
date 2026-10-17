@@ -179,7 +179,7 @@ defineExpose({ closeEdit })
         <template v-if="!hasActiveSession">
         <div class="dash-timer-left">
             <span class="dash-pill">오늘 공부한 시간</span>
-            <div class="dash-timer-num vt-clock"><ClockDigits :text="fmtMSS(todaySeconds + counted)" /></div>
+            <div class="dash-timer-num vt-clock" :class="{ 'is-long': fmtMSS(todaySeconds + counted).length > 5 }"><ClockDigits :text="fmtMSS(todaySeconds + counted)" /></div>
         </div>
 
         <div class="dash-timer-right">
