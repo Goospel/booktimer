@@ -254,7 +254,8 @@ const INK_FILL_ALLOWED = new Set([
     '.shop-badge-finished', 'body.bookdetail-page .bd-status-finished',
 ]);
 function inkFillLeaks(rs: Rule[]): string[] {
-    return rs.filter((r) => !r.selector.startsWith(':root') && !INK_FILL_ALLOWED.has(r.selector))
+    // 토큰 블록은 `declsOf`가 커스텀 속성을 걸러 빈 결과가 된다 — `:root` 접두로 건너뛰면 다크 범위 규칙(`:root[data-theme="dark"] .x`)이 샌다.
+    return rs.filter((r) => !INK_FILL_ALLOWED.has(r.selector))
         .filter((r) => declsOf(r.body).some(([p, v]) => (p === 'background' || p === 'background-color') && INK_FILL.test(v)))
         .map((r) => r.selector);
 }
@@ -453,11 +454,27 @@ describe('에디토리얼 옷 — 색 · 선 · 면 · 버튼 (PR-2)', () => {
     it('REQ-08 · 잉크 채움은 허용목록뿐이다', () => {
         // 음성 대조 — 목록 밖 셀렉터가 강조 토큰으로 칠하면 잡힌다.
         expect(inkFillLeaks(rulesP('.x { background: var(--accent); }'))).toEqual(['.x']);
+        expect(inkFillLeaks(rulesP(':root[data-theme="dark"] .x { background: var(--accent); }'))).toEqual([':root[data-theme="dark"] .x']);
+        expect(inkFillLeaks(rulesP(':root { --accent: #111; }'))).toEqual([]);
         const rs = ALL_RULES();
         // 양성 대조 — 허용목록 셀렉터가 전부 실재한다(목록이 낡으면 이 가드가 무엇을 봐주는지 모른다).
         const present = new Set(rs.map((r) => r.selector));
         expect([...INK_FILL_ALLOWED].filter((s) => !present.has(s))).toEqual([]);
         expect(inkFillLeaks(rs)).toEqual([]);
+    });
+
+    it('REQ-08 · 상태 배지 3톤(CSS) — 다 읽음 잉크 채움 · 읽는 중 가는 선 · 읽고 싶어요 옅은 면', () => {
+        const TONE: Array<[string, Record<string, string>]> = [
+            ['finished', { background: 'var(--accent-fill)', color: 'var(--on-accent)' }],
+            ['reading', { background: 'transparent', color: 'var(--muted)', 'border-color': 'var(--border)' }],
+            ['want', { background: 'var(--sage-soft)', color: 'var(--ink-2)' }],
+        ];
+        for (const [tone, want] of TONE) {
+            for (const s of [`.shop-badge-${tone}`, `body.bookdetail-page .bd-status-${tone}`]) {
+                const m = merged(APP(), s);
+                for (const [p, v] of Object.entries(want)) expect(m.get(p), `${s} ${p}`).toBe(v);
+            }
+        }
     });
 
     it('REQ-09 · 입력칸은 흐린 글자색 1px · 자리글자는 흐린 글자 그대로', () => {
@@ -466,6 +483,14 @@ describe('에디토리얼 옷 — 색 · 선 · 면 · 버튼 (PR-2)', () => {
         expect(borders.filter(([, c]) => !INPUT_BORDER_OK.has(c))).toEqual([]);
         // 자리글자 — 흐린 글자에 불투명도를 또 걸면 종이 위 3.32로 AA 미달(시안 사양서 §14 ⓓ). `opacity: 1`은 허용 —
         // 파이어폭스 UA가 ::placeholder를 .54로 흐리므로 그걸 되돌리는 선언이다.
+        // 바탕 — 흐린 글자 테를 두른 입력칸은 전부 투명(종이가 비친다). 선언이 없으면 UA 흰 상자가 뜨고 밤엔 UA 다크 필드색이 된다.
+        const based = rulesP(APP()).filter((r) => !r.selector.includes(':') && (FORM_TAG.test(r.selector) || INPUT_CLASS.test(r.selector))
+            && declsOf(r.body).some(([p, v]) => p === 'border' && v === '1px solid var(--muted)'));
+        expect(based.length, '입력칸 기본 규칙을 거의 못 읽었다').toBeGreaterThanOrEqual(10);
+        expect(based.map((r) => r.selector).filter((s) => {
+            const m = merged(APP(), s);
+            return (m.get('background') ?? m.get('background-color')) !== 'transparent';
+        })).toEqual([]);
         for (const s of ['.study-day ::placeholder', '.study-editor-placeholder']) {
             const m = merged(APP(), s);
             expect(m.get('color'), s).toBe('var(--muted)');

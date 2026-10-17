@@ -199,7 +199,10 @@ describe('REQ-14 · 무표지 칸 9컴포넌트가 공용 coverStyle(제목)을 
 
     test('지역 coverStyle 0 · isbn 해시 입력 0 · 공용 함수 호출은 9파일 전부', () => {
         expect(FILES.filter((f) => /function coverStyle/.test(src(f)))).toEqual([]);
-        expect(FILES.filter((f) => /isbn13\s*\|\|/.test(src(f)) && /coverColor\(/.test(src(f)))).toEqual([]);
+        // 모든 호출 인자가 `….title`로 끝난다 — `coverStyle(book.isbn13 || book.title)`이면 그 화면만 다른 색이 된다.
+        const args = FILES.flatMap((f) => [...src(f).matchAll(/coverStyle\(([^)]*)\)/g)].map((m) => [f, m[1].trim()]));
+        expect(args.length).toBeGreaterThanOrEqual(FILES.length);
+        expect(args.filter(([, a]) => !/^[\w.]+\.title$/.test(a))).toEqual([]);
         expect(FILES.filter((f) => !/:style="coverStyle\(/.test(src(f)))).toEqual([]);
     });
 });
