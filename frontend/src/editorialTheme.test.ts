@@ -617,15 +617,33 @@ describe('에디토리얼 홈 — 아치 표제창 + 오늘 표 (PR-3)', () => {
         // 위 맞춤 — 표 위 잉크 선이 아치 꼭대기와 같은 높이에 선다(시안 사양서 §14 ⓑ: 가운데 맞춤이면 표 높이에 따라 어긋난다).
         expect(mergedIn(APP(), '(min-width: 1100px)', '.dash-timer-hero').get('align-items')).toBe('flex-start');
         expect(mergedIn(APP(), '(min-width: 1100px)', '.dash-timer-right').get('border-top')).toBe('1px solid var(--text)');
-        expect(mergedIn(APP(), '(max-width: 1099px)', '.dash-timer-hero').get('flex-direction')).toBe('column');
-        // 옛 경계(520)에 히어로 규칙이 남으면 두 경계가 겹친다.
-        expect(rulesP(mediaInner(APP(), '(max-width: 520px)')).filter((r) => r.selector.startsWith('.dash-timer'))).toEqual([]);
+        // 경계는 1099.98 — 1099px이면 배율·확대로 생기는 1099~1100 사이 소수 폭에서 두 쿼리가 다 꺼져 기본(row·wrap·center)으로 돌아간다.
+        const narrow = '(max-width: 1099.98px)';
+        expect(mergedIn(APP(), narrow, '.dash-timer-hero').get('flex-direction')).toBe('column');
+        // stretch가 400 고정 아치를 늘이거나 왼쪽에 붙이지 않게 — 아치·표 둘 다 가운데.
+        expect(mergedIn(APP(), narrow, '.dash-timer-left').get('align-self')).toBe('center');
+        expect(mergedIn(APP(), narrow, '.dash-timer-right').get('align-self')).toBe('center');
+        expect(mergedIn(APP(), narrow, '.dash-timer-right').get('width')).toBe('100%');
+        // 공부 측정 중 머리 막대(아치 없음)는 ≥1100의 nowrap을 풀어야 막대·회당 시간 폼이 한 줄로 눌리지 않는다.
+        expect(mergedIn(APP(), '(min-width: 1100px)', '.dash-timer-hero:has(> .focus-bar)').get('flex-wrap')).toBe('wrap');
+        // 옛 경계(520·1099)에 히어로 규칙이 남으면 두 경계가 겹친다.
+        for (const q of ['(max-width: 520px)', '(max-width: 1099px)']) {
+            expect(rulesP(mediaInner(APP(), q)).filter((r) => r.selector.startsWith('.dash-timer')), q).toEqual([]);
+        }
+        // 측정 중 「이 책 누적 독서」 값(.dash-kv-v-num)도 표 값 크기 — 기본 14.5px로 떨어지면 줄 표에서 혼자 작다.
+        expect(merged(APP(), '.dash-kv .dash-kv-v-num').get('font-size')).toBe('24px');
+        // 「바꾸기 ›」 — 테가 없어 ›가 유일한 신호다. 대체 텍스트 문법을 모르는 브라우저가 선언을 버려도 ›가 남게 두 번 선언한다.
+        const after = rulesP(topLevel(APP())).filter((r) => r.selector === '.dash-book-chip-change::after')
+            .flatMap((r) => declsOf(r.body)).filter(([p]) => p === 'content').map(([, v]) => v);
+        expect(after).toEqual(['" \\203A"', '" \\203A" / ""']);
         // 회귀 — 상태 패널은 PR-2가 면·테를 걷었다.
         expect(cardFrameLeaks(rulesP(APP()).filter((r) => r.selector === '.dash-state-panel'))).toEqual([]);
     });
 
     it('REQ-16 · 홈 카드 머리(여백·필기)는 섹션 머리 — 명조 22/30 + 잉크 선', () => {
-        for (const s of ['.dash-margin-card > .dash-card-head', '.dash-recall-card > .dash-card-head']) {
+        // 필기는 홈 카드(.focus-body)만 — 같은 .dash-recall-card를 쓰는 /study/recall 백지노트 머리까지 바꾸지 않는다.
+        expect(rulesP(APP()).filter((r) => r.selector.startsWith('.dash-recall-card > .dash-card-head'))).toEqual([]);
+        for (const s of ['.dash-margin-card > .dash-card-head', '.dash-recall-card.focus-body > .dash-card-head']) {
             expect(merged(APP(), s).get('border-bottom'), s).toBe('1px solid var(--text)');
             const pill = merged(APP(), `${s} .dash-pill`);
             expect(pill.get('font-family'), s).toBe('var(--font-serif)');

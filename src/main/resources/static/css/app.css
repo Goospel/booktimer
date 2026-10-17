@@ -2528,9 +2528,6 @@ body.personality-page #personality-app { gap: 18px; }
 .dash-timer-num {
     font-family: var(--font-serif);
     font-weight: 500;
-    /* 상한 96 — 와이드(1160px) 히어로에서 숫자가 카드에 눌리지 않게. 8.5vw가 상한에 닿는 건
-       ≥1129px라 모바일·태블릿은 하한 52px 그대로(무영향). */
-    font-size: clamp(52px, 8.5vw, 96px);
     line-height: .95;
     color: var(--text);
     font-variant-numeric: tabular-nums;
@@ -2695,7 +2692,8 @@ img.dash-book-chip-cover { object-fit: cover; background: var(--line-1); }
     border-radius: 0;
     background: none; color: var(--text); font-size: 13px; font-weight: 500; cursor: pointer;
 }
-.dash-book-chip-change::after { content: " \203A" / ""; }
+/* 두 번 선언 — 대체 텍스트 문법(/ "")을 모르는 브라우저(Safari 17.4·Firefox 128 미만)는 뒤 줄을 버리고 앞 줄의 ›를 쓴다. */
+.dash-book-chip-change::after { content: " \203A"; content: " \203A" / ""; }
 .dash-book-chip-change:hover { text-decoration: underline; }
 .dash-book-chip-change:disabled { opacity: .5; cursor: default; }
 /* '책 없이 시작' — 눈에 띄지 않는 보조 링크(시작을 막지 않되 기본 강조는 '측정 시작'). */
@@ -2717,11 +2715,12 @@ img.dash-book-chip-cover { object-fit: cover; background: var(--line-1); }
     background: transparent; color: var(--muted);
     font-size: 13px; padding: 0; border-radius: 999px;
 }
-/* 홈 카드 머리(여백 · 공부 필기) = 섹션 머리 — 명조 22/30 잉크 + 잉크 1px 선(`.card h2`와 같은 값). 눈썹(.dash-pill)을 머리로 올린다. */
+/* 홈 카드 머리(여백 · 공부 필기) = 섹션 머리 — 명조 22/30 잉크 + 잉크 1px 선(`.card h2`와 같은 값). 눈썹(.dash-pill)을 머리로 올린다.
+   필기는 .focus-body(홈 StudyNotesCard)로 좁힌다 — /study/recall 백지노트도 .dash-recall-card라 거기까지 바뀐다. */
 .dash-margin-card > .dash-card-head,
-.dash-recall-card > .dash-card-head { padding-bottom: 8px; border-bottom: 1px solid var(--text); }
+.dash-recall-card.focus-body > .dash-card-head { padding-bottom: 8px; border-bottom: 1px solid var(--text); }
 .dash-margin-card > .dash-card-head .dash-pill,
-.dash-recall-card > .dash-card-head .dash-pill { font-family: var(--font-serif); font-weight: 500; font-size: 22px; line-height: 30px; color: var(--text); }
+.dash-recall-card.focus-body > .dash-card-head .dash-pill { font-family: var(--font-serif); font-weight: 500; font-size: 22px; line-height: 30px; color: var(--text); }
 .dash-streak-chip strong { font-variant-numeric: tabular-nums; }
 
 /* 홈 여백 미리보기 — 최근 2건. 넓어지면 2열로 눕는다(카드가 둘뿐이라 auto-fit이면 충분하다).
@@ -2749,9 +2748,10 @@ img.dash-book-chip-cover { object-fit: cover; background: var(--line-1); }
     display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 12px;
 }
 
-/* 1099px 이하: 아치 위 · 오늘 표 아래(둘 다 가운데, 표는 최대 560). 경계는 아래 ≥1100 절과 맞물린다 —
+/* 1099px 이하: 아치 위 · 오늘 표 아래(둘 다 가운데, 표는 최대 560). 경계는 아래 ≥1100 절과 맞물린다 — 1099.98인 것은
+   배율·확대로 생기는 1099~1100 사이 소수 폭에서 두 쿼리가 다 꺼지지 않게다(1099px이면 기본 row·wrap·center로 돌아간다).
    flex-wrap으로 접히면 CSS가 그 상태를 몰라 표 위 선을 켜고 끌 수 없다. 좁은 화면에선 아치 밑선이 표 위 선을 대신한다. */
-@media (max-width: 1099px) {
+@media (max-width: 1099.98px) {
     .dash-timer-hero { flex-direction: column; align-items: stretch; }
     /* column 축에선 flex-basis(320px)가 height로 잡혀 블록이 과잉 높이 → 공백.
        basis를 auto로 풀어 콘텐츠 높이로 (N-118 부류 아님, flexbox 축 전환 함정) */
