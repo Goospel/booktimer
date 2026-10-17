@@ -588,6 +588,8 @@ describe('에디토리얼 홈 — 아치 표제창 + 오늘 표 (PR-3)', () => {
         expect(m.get('min-height')).toBe('296px');
         // 아치 안 내용은 세로 가운데(시안 사양서 §14 ⓕ) — 위로 붙으면 돔 아래가 비어 보인다.
         expect(m.get('justify-content')).toBe('center');
+        // 아치 폭은 고정 — 넓게 늘이면 돔이 거대해진다(app.css 주석).
+        expect(m.get('flex')).toBe('0 0 auto');
         expect(mergedIn(APP(), '(max-width: 639px)', '.dash-timer-left').get('min-height')).toBe('252px');
     });
 
@@ -612,6 +614,7 @@ describe('에디토리얼 홈 — 아치 표제창 + 오늘 표 (PR-3)', () => {
         expect(v.get('font-size')).toBe('24px');
         expect(v.get('line-height')).toBe('30px');
         expect(merged(APP(), '.dash-kv .dash-kv-k').get('font-size')).toBe('14px');
+        expect(merged(APP(), '.dash-timer-right').get('max-width')).toBe('560px');
         // 넓으면 한 줄 두 칸 + 표 위 잉크 선, 좁으면 위아래(접히는 지점을 미디어 쿼리 하나로 — flex-wrap으로 접히면 선을 끌 수 없다).
         expect(mergedIn(APP(), '(min-width: 1100px)', '.dash-timer-hero').get('flex-wrap')).toBe('nowrap');
         // 위 맞춤 — 표 위 잉크 선이 아치 꼭대기와 같은 높이에 선다(시안 사양서 §14 ⓑ: 가운데 맞춤이면 표 높이에 따라 어긋난다).
