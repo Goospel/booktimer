@@ -2769,7 +2769,8 @@ img.dash-book-chip-cover { object-fit: cover; background: var(--line-1); }
 body .focus-stack.is-merged > .dash-card.is-study { border: 0; border-radius: 0; background: transparent; box-shadow: none; }
 /* 히어로(.dash-timer-hero)는 원래 flex row·wrap이다 — 막대가 한 줄을 다 차지하고(flex-basis 100%) 회당 시간 폼이 그 아래 줄로 떨어진다 */
 .focus-stack.is-merged > .focus-top { padding: 16px 26px 14px; gap: 0; border-bottom: 1px dashed var(--line-2); }
-.focus-stack.is-merged > .focus-body { padding-top: 18px; }
+/* 종이 한 장 안쪽 — .dash-card의 좌우 0(면 없는 덩어리)을 물려받으면 필기 칸이 종이 가장자리에 붙는다. */
+.focus-stack.is-merged > .focus-body { padding-top: 18px; padding-inline: 26px; }
 .focus-stack.is-merged > .focus-body > .dash-card-head { display: none; }
 .focus-bar { flex: 1 1 100%; display: flex; flex-wrap: wrap; align-items: center; gap: 12px 28px; }
 .focus-bar .dash-timer-num { font-size: 42px; }

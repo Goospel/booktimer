@@ -521,6 +521,12 @@ describe('에디토리얼 옷 — 색 · 선 · 면 · 버튼 (PR-2)', () => {
         expect(merged(APP(), '.dash-mode-toggle').get('overflow')).toBe('hidden');
     });
 
+    it('§5-4 · 독서등 종이 한 장 — 필기 칸도 머리와 같은 좌우 여백(면 없는 덩어리의 좌우 0을 물려받지 않는다)', () => {
+        const top = merged(APP(), '.focus-stack.is-merged > .focus-top').get('padding')?.split(' ');
+        expect(top?.length).toBe(3);
+        expect(merged(APP(), '.focus-stack.is-merged > .focus-body').get('padding-inline')).toBe(top?.[1]);
+    });
+
     it('REQ-15 · 직접 채운 잔디 칸은 가는 테', () => {
         const m = merged(APP(), '.grass-cell.manual');
         expect(m.has('box-shadow')).toBe(false);
