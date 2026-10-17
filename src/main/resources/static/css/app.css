@@ -614,36 +614,6 @@ body::before {
 /* "다시 분석" 버튼 안에 같이 보이는 오늘 남은 횟수 — 작고 옅게(버튼 라벨 보조) */
 .refresh-count { margin-left: 8px; font-weight: 400; font-size: .82em; opacity: .8; }
 
-/* 책BTI 독서 종족 태그 칩 — 책장 요약 카드 상단, 결정적 규칙 기반 태그 */
-.tag-chip-row { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 12px; }
-.tag-chip {
-    display: inline-block;
-    padding: 3px 10px;
-    border-radius: 999px;
-    background: var(--info-soft);
-    color: var(--accent);
-    font-size: .82rem;
-    font-weight: 500;
-    white-space: nowrap;
-}
-/* 클릭 가능한 태그 칩(장르 종족·한우물형) — 폭 태그와 구분되게 호버시 살짝 진해진다.
-   <button>으로 렌더되므로 button 기본값(테두리·폰트)을 리셋해 비클릭 span 칩과 동일하게 보이게 한다. */
-.tag-chip-click {
-    cursor: pointer;
-    text-decoration: none;
-    border: none;              /* button 기본 테두리 제거 */
-    font-family: inherit;      /* button 기본 폰트로 떨어지지 않게(size/weight는 .tag-chip이 지정) */
-    line-height: inherit;
-    width: auto;               /* 전역 button{width:100%} 상쇄 — 빠지면 칩이 가로 전체로 늘어남(#286 회귀 원인) */
-    background: var(--accent);  /* 책 기반(근거 책 드릴다운 가능) 칩 = 진한 채움으로 강조 → 비클릭(복합) 칩과 색 구분(안 A) */
-    color: var(--on-accent);
-}
-.tag-chip-click:hover { background: var(--accent-hover); }  /* 채움 칩이라 btn-primary와 동일 hover(배경만 진하게). 기존 filter+underline은 채움엔 과함 */
-
-.tag-books-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 8px; }
-.tag-books-head h3 { margin: 0; font-size: 1rem; }
-.tag-books-head .btn-close { padding: 4px 10px; font-size: .85rem; }
-
 /* 책BTI 공개 안내문은 아래 "책BTI 페이지 재스킨" 블록의 ? 헬프 팝오버(.pbti-help-pop)에서 정의. */
 
 /* 타이머와 한 카드로 합쳐진 측정 컨트롤 — 큰 숫자 바로 아래 답답하지 않게 위 여백을 둔다 */
@@ -3372,7 +3342,7 @@ body.study-lamp .lamp-page .is-study .btn-primary:hover:not(:disabled) { backgro
    비번재설정 등 형제 페이지가 공유하므로 절대 건드리지 않는다. 이 블록은 body.settings-page
    스코프 + .set-* 클래스로만 구성 → 타 페이지 회귀 0(auth-page 재스킨과 같은 격리 규약).
    색은 :root 토큰 재사용, 토큰 없는 경고(#F6ECD9/#8A6D3B)·위험(#C0524A 계열) 톤만 raw hex(시안값).
-   .btn-push-toggle 는 설정 전용(JS·구조 의존)이라 여기서 스위치로 재정의한다. ============================================================ */
+   ============================================================ */
 
 /* 셸 — 시안 프레임 폭(480) */
 .settings-page .set-shell { max-width: 480px; margin: 0 auto; padding: 20px 18px 40px; }
@@ -3495,25 +3465,6 @@ body.study-lamp .lamp-page .is-study .btn-primary:hover:not(:disabled) { backgro
 .settings-page .set-notif-mail { padding-top: 14px; }
 .settings-page .set-notif-mail .set-actions { margin-top: 16px; }
 
-/* 스위치(푸시 토글) — .btn-push-toggle(JS가 .is-on 토글). 전역 button{width:100%}를 스코프로 덮는다. */
-.settings-page .btn-push-toggle {
-    flex-shrink: 0; position: relative; width: 52px; height: 30px; margin-top: 2px;
-    border: none; border-radius: 999px; padding: 0; background: var(--line-2); cursor: pointer;
-    transition: background .2s;
-}
-.settings-page .btn-push-toggle.is-on { background: var(--accent); }
-.settings-page .btn-push-toggle:disabled { opacity: .5; cursor: not-allowed; }
-.settings-page .set-switch-knob {
-    position: absolute; top: 3px; left: 3px; width: 24px; height: 24px; border-radius: 999px;
-    background: var(--surface); display: flex; align-items: center; justify-content: center;
-    box-shadow: 0 1px 2px rgba(0, 0, 0, .25); color: var(--neutral-3-3); transition: transform .2s;
-}
-.settings-page .btn-push-toggle.is-on .set-switch-knob { transform: translateX(22px); color: var(--accent-hover); }
-/* 리마인더: 켜짐=종, 꺼짐=종끄기(모양 교체). 마케팅: 확성기 1개(색만 knob color로 변함). */
-.settings-page .set-switch-ico { display: block; }
-.settings-page .set-switch-ico-on { display: none; }
-.settings-page .btn-push-toggle.is-on .set-switch-ico-on { display: block; }
-.settings-page .btn-push-toggle.is-on .set-switch-ico-off { display: none; }
 /* ═══════════════ 여백 (책에 딸린 자리 — 2026-08-16 책 귀속 재설계) ═══════════════
    .story-* / .margin-* 전용 네임스페이스 — 전역 공유 클래스 미접촉(기존 페이지 격리 규약).
    z 층: 도감 50 < 여백 패널/작성 150 < 신고 모달 200 (옛 뷰어의 층을 그대로 계승).
