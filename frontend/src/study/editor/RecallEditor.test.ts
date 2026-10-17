@@ -4,6 +4,10 @@
 // 세 입구(툴바·Tab·슬래시)는 전부 같은 명령을 부르지만 <b>도달 경로가 다르다</b> — 하나가 끊겨도
 // 나머지가 초록이라, 셋을 따로 잰다. 실제 Tiptap을 마운트하는 것이 요점이다(명령 존재만 재는
 // 목이라면 키맵이 안 걸린 것도 통과한다).
+import { readFileSync } from 'node:fs';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
+
 import { describe, test, expect, beforeEach, vi } from 'vitest';
 import { mount, type VueWrapper } from '@vue/test-utils';
 
@@ -329,5 +333,40 @@ describe('빈자리 슬롯', () => {
 
     test('슬롯을 안 넘기면(백지노트) 상자 자체가 없다', async () => {
         expect((await mountEditor()).find('.study-editor-empty-slot').exists()).toBe(false);
+    });
+});
+
+/**
+ * 화면 아래 가운데에 떠 있는 「독서|공부」 알약 밑에 <b>지금 쓰는 줄</b>과 <b>키보드 포커스</b>가 깔리지 않는다.
+ *
+ * <p>알약 띠는 창 아래에서 54.8px(힌트가 뜨면 91.6px)까지다(653a855c 실측). 맨 아래 정적 콘텐츠는
+ * `body.has-rails`의 padding-bottom이 비켜 주지만, 스크롤을 <b>스스로</b> 정하는 두 길은 그 여백을 모른다 —
+ * ProseMirror는 캐럿을 창 아래 5px(기본 scrollMargin)까지만 올리고 `scroll-padding`을 읽지 않으며,
+ * 브라우저의 Tab 포커스 스크롤은 요소를 창 맨 아래 끝에 맞춘다. 그래서 세 자리가 같은 여백을 쓰는지 잰다.
+ *
+ * <p>⚠️ 값 검사라 <b>음성 판정 전용</b>이다 — 「실제로 안 깔린다」는 브라우저 실측(4폭)이 증명했다.
+ */
+describe('알약 밑에 지금 쓰는 줄·포커스가 깔리지 않는다', () => {
+    const HERE = dirname(fileURLToPath(import.meta.url));
+    const css = readFileSync(join(HERE, '..', '..', '..', '..', 'src', 'main', 'resources', 'static', 'css', 'app.css'), 'utf8');
+    /** 맨 아래 정적 콘텐츠가 이미 쓰는 여백 — 세 자리의 기준값. */
+    const clearance = Number(css.match(/^body\.has-rails\s*\{\s*padding-bottom:\s*calc\((\d+)px/m)?.[1]);
+
+    test('기준 여백이 힌트까지 뜬 알약 띠(91.6px)보다 크다', () => {
+        expect(clearance).toBeGreaterThan(91.6);
+    });
+
+    test('편집기 캐럿 스크롤 — scrollThreshold·scrollMargin의 아래가 기준 여백 이상', async () => {
+        const view = editorOf(await mountEditor()).view;
+        for (const prop of ['scrollThreshold', 'scrollMargin']) {
+            const v = view.someProp(prop);
+            expect(typeof v === 'number' ? v : v?.bottom, prop).toBeGreaterThanOrEqual(clearance);
+        }
+    });
+
+    test('알약 화면의 스크롤 루트(html)에 scroll-padding-bottom이 기준 여백 이상', () => {
+        const m = css.match(/^:root:has\(> body\.has-rails\)\s*\{[^}]*scroll-padding-bottom:\s*calc\((\d+)px/m);
+        expect(m, ':root:has(> body.has-rails) { scroll-padding-bottom: calc(Npx + …) }').not.toBeNull();
+        expect(Number(m![1])).toBeGreaterThanOrEqual(clearance);
     });
 });
