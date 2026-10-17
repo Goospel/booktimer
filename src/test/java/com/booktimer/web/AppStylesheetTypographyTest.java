@@ -23,7 +23,7 @@ import static org.assertj.core.api.Assertions.assertThat;
  * ① 기본값이 다수(기능 글자)를 맡고 장식이 손드는 쪽만 안정적이다(방향이 뒤집히면 지정 안 한
  * 다음 화면이 다시 장식 서체로 태어난다). ② 손글씨(Gaegu)를 <b>폴백으로도</b> 남기지 않는다 —
  * 남기면 본문 서체가 못 그리는 글리프만 손글씨로 떨어져 한 단어 안에서 서체가 갈린다.
- * ③ {@code font-weight} 를 400 으로 <b>명시</b>한다 — 실린 face 는 400·500 뿐이고({@code font-synthesis: none}),
+ * ③ {@code font-weight} 를 400 으로 <b>명시</b>한다 — 실린 face 는 400·500 뿐이고({@code font-synthesis: style} — 굵기 합성 끔),
  * 강조는 500 으로 선다(굵기 가드는 {@code frontend/src/editorialTheme.test.ts}).
  *
  * <p>Spring 컨텍스트 없이 <b>소스 파일을 직접 읽는다</b> — {@code PwaStaticAccessTest} 가

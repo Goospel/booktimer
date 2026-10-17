@@ -65,7 +65,7 @@ const ROOT_PX = 18;
  * em·%·`var()`·`calc()`는 계산값이라 여기선 모른다(화면에서 잰다 — 원장 U-19). 판정 못 하면 `false`(건너뜀).
  */
 function belowFloor(value: string): boolean {
-    const v = value.trim();
+    const v = value.trim().replace(/\s*!important$/i, '');
     const lit = /^([\d.]+)(px|rem)$/.exec(v);
     if (lit) return (lit[2] === 'rem' ? Number(lit[1]) * ROOT_PX : Number(lit[1])) < 13;
     const cl = /^clamp\(\s*([\d.]+)(px|rem)\s*,/.exec(v);
@@ -124,7 +124,8 @@ describe('에디토리얼 글꼴 — 두 패밀리 · 굵기 400·500 · 글자 
 
         const app = rules(read(APP_CSS));
         const body = app.filter((r) => r.selector === 'body').map((r) => r.body).join(';');
-        expect(decl(body, 'font-synthesis')).toBe('none');
+        // 굵기 합성만 끈다 — Noto KR엔 italic face가 없어 `none`이면 편집기 `<em>`(Ctrl+I)·명언 기울임이 똑바로 그려진다.
+        expect(decl(body, 'font-synthesis')).toBe('style');
         expect(decl(body, 'font-family') ?? '').toMatch(/^"Noto Sans KR"/);
         const strong = app.filter((r) => r.selector === 'b' || r.selector === 'strong');
         expect(strong.map((r) => r.selector).sort()).toEqual(['b', 'strong']);
@@ -141,9 +142,18 @@ describe('에디토리얼 글꼴 — 두 패밀리 · 굵기 400·500 · 글자 
         expect(belowFloor('min(13px, 3vw)')).toBe(false);
         expect(belowFloor('13px')).toBe(false);
         expect(belowFloor('.85em')).toBe(false); // 계산값 — 건너뜀(U-19)
+        expect(belowFloor('12px !important')).toBe(true); // !important가 판정을 비켜 가지 않는다
+        expect(belowFloor('13px !important')).toBe(false);
 
         const sizes = values(BOTH(), 'font-size');
         expect(sizes.length, 'font-size 선언을 거의 못 읽었다 — 정규식 고장').toBeGreaterThanOrEqual(280);
         expect(sizes.filter(belowFloor)).toEqual([]);
+    });
+
+    it('REQ-24 · 명언 작가 이름(em)은 좁은 화면에서도 13px 아래로 안 내려간다', () => {
+        // `.brand-quote`가 clamp로 줄어드는 폭(640 미만)에서 .78em이 13px 아래로 계산됐다(재검토 실측) — max()로 바닥을 함께 건다.
+        const m = /\.brand-quote-author\s*\{([^}]*)\}/.exec(read(APP_CSS));
+        expect(m, '.brand-quote-author 규칙을 못 찾음').not.toBeNull();
+        expect(decl(m![1], 'font-size') ?? '').toMatch(/^max\(13px,\s*[\d.]+em\)$/);
     });
 });
