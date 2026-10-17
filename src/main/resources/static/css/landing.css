@@ -70,17 +70,19 @@ body.landing-page {
 
 .lp-nav-cta {
     text-decoration: none;
-    background: var(--accent);
-    color: var(--on-accent);
+    background: transparent;
+    color: var(--text);
+    border: 1px solid var(--text);
     padding: 9px 20px;
-    border-radius: var(--radius-sm);
+    border-radius: 999px;
     font-size: 0.875rem;
     font-weight: 500;
     transition: background .15s;
     white-space: nowrap;
 }
 
-.lp-nav-cta:hover { background: var(--accent-hover); }
+/* 고정 내비라 히어로 주 버튼과 늘 함께 보인다 — 외곽선(검정 알약은 한 층에 하나 · REQ-22). */
+.lp-nav-cta:hover { background: var(--sage-hover); }
 
 /* ================================================================
    1080px 메인 셸
@@ -153,14 +155,14 @@ body.landing-page {
 .lp-cta-stack .btn {
     text-decoration: none;
     text-align: center;
-    border-radius: var(--radius-sm); /* nav-cta·bottom-cta와 라운드 통일(8px) */
+    border-radius: 999px; /* nav-cta·bottom-cta와 같은 알약 */
 }
 
 /* ================================================================
    플레이스홀더 — 비주얼 자리(실제 캡처로 교체 예정)
    ================================================================ */
 .lp-placeholder {
-    background: linear-gradient(140deg, var(--sage-soft) 0%, var(--sage-5) 100%);
+    background: var(--sage-soft);   /* 단색 상자 — 아치·판화는 PR-4 */
     border-radius: 2px;
     min-height: 380px;
     display: flex;
@@ -504,11 +506,13 @@ body.landing-page {
     width: 48px;
     height: 48px;
     border-radius: 50%;
-    background: var(--accent);
-    color: var(--on-accent);
+    background: var(--card-bg);   /* 외곽선 원 — 랜딩의 검정 덩어리는 히어로 주 버튼 하나다(연결선 위에 종이로 선다) */
+    border: 1px solid var(--text);
+    color: var(--text);
     display: flex;
     align-items: center;
     justify-content: center;
+    font-family: var(--font-serif);
     font-size: 1.2rem;
     font-weight: 500;
     margin: 0 auto 20px;
@@ -573,17 +577,18 @@ body.landing-page {
 .lp-bottom-cta-btn {
     display: inline-block;
     text-decoration: none;
-    background: var(--accent);
-    color: var(--on-accent);
+    background: transparent;
+    color: var(--text);
+    border: 1px solid var(--text);
     padding: 16px 44px;
-    border-radius: var(--radius-sm);
+    border-radius: 999px;
     font-size: 1.05rem;
     font-weight: 500;
     transition: background .15s;
     letter-spacing: -.01em;
 }
 
-.lp-bottom-cta-btn:hover { background: var(--accent-hover); }
+.lp-bottom-cta-btn:hover { background: var(--sage-hover); }
 
 /* ================================================================
    푸터
