@@ -680,6 +680,10 @@ describe('에디토리얼 판화 · 화면 마감 (PR-4)', () => {
         const all = rulesP(APP()).filter((r) => /\.woodcut(?![\w-])/.test(r.selector)).flatMap((r) => declsOf(r.body)).map(([p]) => p);
         expect(all).not.toContain('filter');
         expect(all).not.toContain('background-image');
+        // 색을 칠하는 규칙은 `.woodcut` 하나뿐 — 다크 전용 덮어쓰기가 생기면 「낮·밤 규칙 하나」가 깨진다(2026-10-17 사용자: 다크 판화 그대로).
+        const painters = rulesP(APP()).filter((r) => /\.woodcut(?![\w-])/.test(r.selector)
+            && declsOf(r.body).some(([p]) => p === 'background' || p === 'background-color')).map((r) => r.selector);
+        expect(painters).toEqual(['.woodcut']);
         for (const [s, px] of [['.woodcut-64', '64px'], ['.woodcut-148', '148px'], ['.woodcut-180', '180px']]) expect(merged(APP(), s).get('width'), s).toBe(px);
     });
 
