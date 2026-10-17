@@ -2,6 +2,7 @@
 import { ref, onMounted, onBeforeUnmount } from 'vue'
 import ShopIcon from './ShopIcon.vue'
 import { hasCover, coverInitial, statusBadgeClass, formatReadingTime } from './format'
+import { coverStyle } from '../books/pure'
 import { hasFreshStory, showMarginHandle } from '../shared/story/storyFeed'
 
 // 공개한 책 패널 — 상태필터칩 + 책 리스트 + 구매 + 제휴 고지. 모바일 탭·와이드 메인 공유.
@@ -114,7 +115,7 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onNoteKeydown))
                 <span class="shop-cover-wrap" :class="{ 'margin-fresh': hasFreshStory(b.lastStoryAt, now) }">
                     <img v-if="hasCover(b.coverUrl)" class="shop-cover" :src="b.coverUrl!"
                          alt="" loading="lazy" referrerpolicy="no-referrer">
-                    <div v-else class="shop-cover shop-cover-ph" aria-hidden="true">{{ coverInitial(b.title) }}</div>
+                    <div v-else class="shop-cover shop-cover-ph" :style="coverStyle(b.title)" aria-hidden="true">{{ coverInitial(b.title) }}</div>
                     <span v-if="hasFreshStory(b.lastStoryAt, now)" class="margin-fresh-dot">
                         <span class="sr-only">새 글</span>
                     </span>

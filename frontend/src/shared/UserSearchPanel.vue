@@ -88,7 +88,7 @@ function onSearch() {
                     <span v-if="r.self" class="book-status-badge">나</span>
                     <button
                         v-else
-                        :class="r.following ? 'btn-ghost' : 'btn-primary'"
+                        class="btn-ghost"
                         type="button"
                         @click="doToggleFollow(r)"
                     >{{ r.following ? '언팔로우' : '팔로우' }}</button>
@@ -114,7 +114,7 @@ function onSearch() {
                     <span v-if="r.self" class="book-status-badge">나</span>
                     <button
                         v-else
-                        :class="r.following ? 'btn-ghost' : 'btn-primary'"
+                        class="btn-ghost"
                         type="button"
                         @click="doToggleFollow(r)"
                     >{{ r.following ? '언팔로우' : '팔로우' }}</button>

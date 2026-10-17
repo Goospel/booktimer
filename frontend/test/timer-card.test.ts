@@ -5,6 +5,9 @@
 // 패널 위치·색 등 순수 시각은 jsdom 무의미 → 실 브라우저 게이트. 여기선 어떤 컨트롤이 뜨는지만.
 import { describe, test, expect, afterEach } from 'vitest';
 import { mount, type VueWrapper } from '@vue/test-utils';
+import { readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
+import { dirname, join } from 'node:path';
 import TimerCard from '../src/dashboard/TimerCard.vue';
 import type { BookOption } from '../src/dashboard/types';
 
@@ -132,5 +135,38 @@ describe('TimerCard 측정 중 — 책 없이 · 책 바꾸기 (R2)', () => {
     test('changing=true면 [책 바꾸기]가 잠긴다(교체 왕복 중)', () => {
         const w = make({ ...measuring, activeBookTitle: '데미안', changing: true });
         expect(w.findAll('button').find(b => b.text() === '책 바꾸기')!.attributes('disabled')).toBeDefined();
+    });
+});
+
+// 미니앱과 같은 자리·같은 획(ui.tsx SPROUT_PATHS — editorialTheme.test.ts가 문자열을 대조한다). 꾸밈이라 화면 읽기에선 빠진다.
+describe('REQ-18 · 목표 달성 표식은 선 새싹·잉크 도장 SVG다', () => {
+    test('달성: 눈썹에 선 새싹 1(획 3) · 달성 칸에 도장 1(원 2 + 획 3) · 이모지 칸 0', () => {
+        const w = make();
+        const sprout = w.findAll('svg[data-sprout]');
+        expect(sprout).toHaveLength(1);
+        expect(sprout[0].attributes('aria-hidden')).toBe('true');
+        expect(sprout[0].findAll('path')).toHaveLength(3);
+        expect(w.find('.dash-pill').text()).toBe('오늘 목표 달성');
+
+        const stamp = w.findAll('svg[data-goal-stamp]');
+        expect(stamp).toHaveLength(1);
+        expect(stamp[0].attributes('aria-hidden')).toBe('true');
+        expect(stamp[0].findAll('circle')).toHaveLength(2);
+        expect(stamp[0].findAll('path')).toHaveLength(3);
+        expect(w.find('.dash-achieved-emoji').exists()).toBe(false);
+    });
+
+    test('미달성 대기엔 둘 다 없다(양성 쌍)', () => {
+        const w = make({ todayReadSeconds: 0 });
+        expect(w.find('.dash-state-panel').exists()).toBe(true);
+        expect(w.findAll('svg[data-sprout]')).toHaveLength(0);
+        expect(w.findAll('svg[data-goal-stamp]')).toHaveLength(0);
+    });
+
+    test('선 색은 토큰이다 — 프레젠테이션 속성엔 var()가 안 먹어 app.css가 칠한다', () => {
+        const css = readFileSync(join(dirname(fileURLToPath(import.meta.url)), '..', '..', 'src', 'main', 'resources', 'static', 'css', 'app.css'), 'utf8')
+            .replace(/\/\*[\s\S]*?\*\//g, '');
+        expect(/\.dash-sprout\s*\{[^}]*stroke:\s*var\(--accent\)/.test(css)).toBe(true);
+        expect(/\.dash-goal-stamp\s*\{[^}]*stroke:\s*var\(--text\)/.test(css)).toBe(true);
     });
 });

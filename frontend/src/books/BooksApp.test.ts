@@ -271,3 +271,33 @@ describe('BooksApp 책장 여백 진입', () => {
         expect(wrapper.findAll('.shop-margin-btn').length).toBe(0);
     });
 });
+
+// 에디토리얼(PR-2) — 한 층에 검정 알약 하나(REQ-22) · 「읽는 중 = 가는 선」이 함수가 아니라 화면에 선다(REQ-08).
+describe('BooksApp 에디토리얼 옷', () => {
+    const BLACK = '.btn-primary, .dash-btn-fill, .auth-btn-primary';
+    const searchRow = (title: string) => ({
+        title, author: '지은이', isbn13: title, coverUrl: null,
+        publisher: null, purchaseLink: null, category: null, pubDate: null, owned: false,
+    });
+
+    test('REQ-22 · 검색 결과 2건 + 직접 추가가 함께 있어도 검정 알약은 「검색」 하나다', async () => {
+        vi.mocked(fetch).mockResolvedValueOnce(okJson({ books: [], searchEnabled: true }));
+        const wrapper = mount(BooksApp, { attachTo: document.body });
+        await vi.waitFor(() => expect(wrapper.find('.book-search-form').exists()).toBe(true));
+        vi.mocked(fetch).mockResolvedValueOnce(okJson({ results: [searchRow('역행자'), searchRow('데미안')] }));
+        await wrapper.find('.book-search-form input').setValue('책');
+        await wrapper.find('.book-search-form').trigger('submit');
+        await vi.waitFor(() => expect(wrapper.findAll('.book-add-form button').length).toBe(2));
+        // 양성 대조 — 행마다 「추가」와 직접 추가 「추가」가 실제로 그려졌다.
+        expect(wrapper.find('.book-manual-form button').exists()).toBe(true);
+
+        expect(wrapper.findAll(BLACK).map((b) => b.text())).toEqual(['검색']);
+    });
+
+    test('REQ-08 · 읽는 중 배지는 인라인 가는 선까지 받는다(소비처가 border를 버리면 선이 안 선다)', async () => {
+        vi.mocked(fetch).mockResolvedValueOnce(okJson({ books: [book({ status: 'READING', statusLabel: '읽는 중' })] }));
+        const wrapper = mount(BooksApp, { attachTo: document.body });
+        await vi.waitFor(() => expect(wrapper.find('.book-status-badge').exists()).toBe(true));
+        expect(wrapper.find('.book-status-badge').attributes('style')).toContain('border: 1px solid var(--border)');
+    });
+});

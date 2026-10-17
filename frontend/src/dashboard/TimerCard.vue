@@ -77,6 +77,10 @@ const forgiveMinutes = computed(() => Math.max(1, Math.round(props.carriedDebtSe
 function totalHM(s: number): string {
     return `${Math.floor(s / 3600)}시간 ${Math.floor((s % 3600) / 60)}분`
 }
+
+// 목표 달성 표식 — 미니앱 ui.tsx와 같은 새싹 세 획(editorialTheme.test.ts가 두 파일의 문자열을 대조한다).
+// 눈썹엔 선 새싹, 달성 칸엔 잉크 도장(원 두 겹 + 새싹). 기본 이모지 대신이고, 튀는 움직임은 두지 않는다(새 애니메이션 0).
+const SPROUT_PATHS = ['M12 20v-6', 'M12 14c0-3.5-2.5-6-6-6 0 3.5 2.5 6 6 6z', 'M12 14c0-3.5 2.5-6 6-6 0 3.5-2.5 6-6 6z'] as const
 </script>
 
 <template>
@@ -84,7 +88,9 @@ function totalHM(s: number): string {
         <!-- 좌: 대형 숫자 + 진행바 -->
         <div class="dash-timer-left">
             <span class="dash-pill" :class="{ 'dash-pill-ok': progress.isAchieved }">
-                {{ progress.isAchieved ? '🌿 오늘 목표 달성!' : '오늘 읽은 시간' }}
+                <svg v-if="progress.isAchieved" class="dash-sprout" data-sprout viewBox="0 0 24 24" width="15" height="15" fill="none"
+                     stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path v-for="p in SPROUT_PATHS" :key="p" :d="p" /></svg>
+                {{ progress.isAchieved ? '오늘 목표 달성' : '오늘 읽은 시간' }}
             </span>
             <div class="dash-timer-num" :class="{ 'dash-timer-num-ok': progress.isAchieved }"><ClockDigits :text="todayReadDisplay" /></div>
             <div class="dash-progress-wrap">
@@ -150,7 +156,13 @@ function totalHM(s: number): string {
                 <!-- ACHIEVED (측정 안 하는데 오늘 달성) — 격려는 유지하되 측정 시작 폼도 함께 노출.
                      목표를 채워도 계속 시간을 측정할 수 있어야 한다(시작 버튼이 사라지면 안 됨). -->
                 <div v-else key="achieved" class="dash-state-panel dash-state-achieved">
-                    <span class="dash-achieved-emoji">🌱</span>
+                    <svg class="dash-goal-stamp" data-goal-stamp viewBox="0 0 120 120" width="76" height="76" fill="none" aria-hidden="true">
+                        <circle cx="60" cy="60" r="56" stroke-width="1.5" />
+                        <circle cx="60" cy="60" r="48" stroke-width="1" />
+                        <g transform="translate(24 18) scale(3)" stroke-width="0.9" stroke-linecap="round" stroke-linejoin="round">
+                            <path v-for="p in SPROUT_PATHS" :key="p" :d="p" />
+                        </g>
+                    </svg>
                     <p class="dash-achieved-title">오늘도 약속을 지켰어요</p>
                     <p class="dash-achieved-sub">
                         <template v-if="streak > 0">연속 {{ streak }}일째 — 천천히, 꾸준히</template>

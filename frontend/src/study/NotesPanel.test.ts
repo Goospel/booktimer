@@ -318,6 +318,8 @@ describe('필기 패널 — 실패는 셋으로 갈린다', () => {
         expect(wrapper.find('[data-testid="notes-status"]').text()).toContain('다른 곳에서 고쳐진');
         expect(wrapper.find('[data-testid="notes-reload"]').exists()).toBe(true);
         expect(wrapper.find('[data-testid="recall-body"]').attributes('disabled')).toBeDefined();
+        // REQ-22 — 홈 공부 카드 안에서도 이 패널이 뜬다(「공부 측정 시작」과 같은 층). 충돌 「새로고침」은 검정이 아니다.
+        expect(wrapper.findAll('.btn-primary, .dash-btn-fill, .auth-btn-primary').length).toBe(0);
 
         await type(wrapper, 'ㄱㄴㄷ');
         await settle(5000);

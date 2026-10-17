@@ -1,9 +1,11 @@
 // pure.ts를 직접 ESM import — 함수 하나 누락/시그니처 불일치 시 import 실패로 즉시 RED.
 import { describe, test, expect } from 'vitest';
+import { readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
 import {
     summarize, type ShelfSummary,
     initialOf,
-    coverColor, COVER_PALETTE, COVER_FG,
+    coverColor, coverStyle, COVER_PALETTE, COVER_FG,
     byline,
     statusBadge, STATUS_BADGE_FALLBACK,
     marginHandleLabel,
@@ -77,8 +79,9 @@ describe('coverColor — 무표지 플레이스홀더 색(결정적 해시 매�
         }
     });
 
-    test('fg 는 시안 cover-present 톤으로 고정', () => {
+    test('fg 는 미색 이니셜로 고정(밤에도 안 뒤집는다 — 표지는 물건이다)', () => {
         expect(coverColor('불안').fg).toBe(COVER_FG);
+        expect(COVER_FG).toBe('#F5F0E6');
     });
 
     test('빈/누락 seed 도 폴백 색 반환(throw 안 함)', () => {
@@ -93,8 +96,21 @@ describe('coverColor — 무표지 플레이스홀더 색(결정적 해시 매�
         expect(distinct.size).toBeGreaterThan(1);
     });
 
-    test('팔레트는 시안 mock의 12색', () => {
+    test('팔레트는 천 장정 12색(미니앱 ui.tsx와 같은 순서 — editorialTheme.test.ts가 파일을 읽어 대조한다)', () => {
         expect(COVER_PALETTE).toHaveLength(12);
+        expect(COVER_PALETTE[0]).toBe('#7A2E28');
+    });
+});
+
+// 해시 입력은 **제목** 하나다 — isbn을 쓰면 같은 책이 웹(isbn)과 미니앱(제목)에서 다른 칸이 된다(설계 §5-1).
+describe('REQ-14 · 무표지 표지는 제목 하나로 칠한다', () => {
+    test('coverStyle(제목) = 그 칸의 천 색 + 미색 이니셜 — 「미움받을 용기」는 칸 2', () => {
+        expect(coverStyle('미움받을 용기')).toEqual({ background: COVER_PALETTE[2], color: '#F5F0E6' });
+    });
+
+    test('같은 제목이면 isbn이 달라도 같은 색이다(입력이 제목뿐이라 isbn을 받을 자리가 없다)', () => {
+        expect(coverStyle('데미안')).toEqual(coverStyle('데미안'));
+        expect(coverStyle.length).toBe(1);
     });
 });
 
@@ -128,32 +144,34 @@ describe('byline — 검색 결과 저자·출판사 한 줄', () => {
 // 색은 hex가 아니라 **토큰 참조**로 돌려준다. 이 값은 `:style`로 인라인 박히므로 hex면
 // 다크에서 그 배지만 크림색으로 남는다 — CSS 쪽 래칫(darkTokens.test.ts)이 못 보는 사각이라
 // 여기서 따로 못 박는다. `var(--…)` 형태 자체를 단언해야 「다크에서 갈리는가」가 걸린다.
-describe('statusBadge — 상태배지 색 매핑(시안 STATUS)', () => {
-    test('읽는 중 → 세이지', () => {
-        expect(statusBadge('READING')).toEqual({ bg: 'var(--sage-soft)', fg: 'var(--accent-hover)' });
+// 에디토리얼(D8=①)은 상태색을 한 색으로 모은다 — 그대로 두면 세 배지가 같은 회색 칩이 된다. 그래서 **역할 3톤**으로 가른다
+// (미니앱 HomeFeed 배지와 같은 역할): 다 읽음 = 잉크 채움 · 읽는 중 = 가는 선 · 읽고 싶어요 = 옅은 면.
+describe('REQ-08 · 상태 배지 3톤', () => {
+    test('다 읽음 → 잉크 채움 + 종이 글자', () => {
+        expect(statusBadge('FINISHED')).toEqual({ bg: 'var(--accent-fill)', fg: 'var(--on-accent)' });
     });
 
-    test('완독 → 선명한 초록', () => {
-        expect(statusBadge('FINISHED')).toEqual({ bg: 'var(--ok-soft)', fg: 'var(--ok)' });
+    test('읽는 중 → 채움 없이 가는 선 + 흐린 글자', () => {
+        expect(statusBadge('READING')).toEqual({ bg: 'transparent', fg: 'var(--muted)', border: '1px solid var(--border)' });
     });
 
-    test('읽고 싶음 → 베이지', () => {
-        // `--warn-bg-4`는 설정 배너(`--warn-bg`)와 **다른 라이트 값**이다(#F0E8DB vs #F6ECD9).
-        // 근접값이라 한 토큰으로 합칠 뻔했으나, 라이트 픽셀을 origin/main 그대로 두기로 해서 갈랐다.
-        expect(statusBadge('WANT_TO_READ')).toEqual({ bg: 'var(--warn-bg-4)', fg: 'var(--warn-fg)' });
+    test('읽고 싶음 → 옅은 면 + 보조 글자', () => {
+        expect(statusBadge('WANT_TO_READ')).toEqual({ bg: 'var(--sage-soft)', fg: 'var(--ink-2)' });
     });
 
-    test('모든 상태가 토큰 참조다 — hex가 하나라도 섞이면 그 배지만 다크에서 라이트로 남는다', () => {
+    test('모든 상태가 토큰 참조(또는 투명)다 — hex가 하나라도 섞이면 그 배지만 다크에서 라이트로 남는다', () => {
         for (const s of ['READING', 'FINISHED', 'WANT_TO_READ', 'PAUSED', '']) {
             const b = statusBadge(s);
-            expect(b.bg, `${s} bg`).toMatch(/^var\(--[\w-]+\)$/);
+            expect(b.bg, `${s} bg`).toMatch(/^(var\(--[\w-]+\)|transparent)$/);
             expect(b.fg, `${s} fg`).toMatch(/^var\(--[\w-]+\)$/);
+            if (b.border) expect(b.border, `${s} border`).toMatch(/^1px solid var\(--[\w-]+\)$/);
         }
     });
 
-    test('알 수 없는 상태 → 중립 폴백', () => {
+    test('알 수 없는 상태 → 읽는 중과 같은 꼴(가는 선)', () => {
         expect(statusBadge('PAUSED')).toEqual(STATUS_BADGE_FALLBACK);
         expect(statusBadge('')).toEqual(STATUS_BADGE_FALLBACK);
+        expect(STATUS_BADGE_FALLBACK).toEqual(statusBadge('READING'));
     });
 });
 
@@ -170,5 +188,18 @@ describe('marginHandleLabel — 책장 여백 손잡이 라벨', () => {
 
     test('storyCount 없는 옛 응답도 「여백」 (undefined 노출·throw 방지)', () => {
         expect(marginHandleLabel(undefined)).toBe('여백');
+    });
+});
+
+// 무표지 칸을 그리는 Vue 9컴포넌트가 한 함수를 쓴다 — 지역 함수가 한 벌이라도 남으면 그 화면만 isbn으로 칠해 채널·화면마다 색이 갈린다.
+describe('REQ-14 · 무표지 칸 9컴포넌트가 공용 coverStyle(제목)을 쓴다', () => {
+    const FILES = ['books/BooksApp.vue', 'dashboard/BookPickForm.vue', 'dashboard/BookPickSheet.vue', 'dashboard/StudyBookSheet.vue',
+        'dashboard/StudyTimerCard.vue', 'study/StudyBooksApp.vue', 'profile/ShelfPanel.vue', 'profile/BtiPanel.vue', 'shared/story/MarginPanel.vue'];
+    const src = (f: string) => readFileSync(fileURLToPath(new URL(`../src/${f}`, import.meta.url)), 'utf8');
+
+    test('지역 coverStyle 0 · isbn 해시 입력 0 · 공용 함수 호출은 9파일 전부', () => {
+        expect(FILES.filter((f) => /function coverStyle/.test(src(f)))).toEqual([]);
+        expect(FILES.filter((f) => /isbn13\s*\|\|/.test(src(f)) && /coverColor\(/.test(src(f)))).toEqual([]);
+        expect(FILES.filter((f) => !/:style="coverStyle\(/.test(src(f)))).toEqual([]);
     });
 });

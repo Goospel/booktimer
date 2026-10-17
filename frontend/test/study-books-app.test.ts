@@ -151,10 +151,12 @@ describe('공부 서재 — 담기', () => {
         expect(found).toHaveLength(2);
         // 민법총칙: 응답 owned:false 인데 내 서재(i1)에 있다 → 배지, 담기 없음
         expect(found[0].find('.shelf-owned-badge').exists()).toBe(true);
-        expect(found[0].find('.book-actions .btn-primary').exists()).toBe(false);
+        expect(found[0].find('.book-actions .btn-ghost').exists()).toBe(false);
         // 형법: 응답 owned:true 인데 내 서재엔 없다 → 담기 있음, 배지 없음
-        expect(found[1].find('.book-actions .btn-primary').exists()).toBe(true);
+        expect(found[1].find('.book-actions .btn-ghost').exists()).toBe(true);
         expect(found[1].find('.shelf-owned-badge').exists()).toBe(false);
+        // REQ-22 — 결과 행마다 반복되는 「담기」는 검정이 아니다. 이 층의 검정 알약은 「검색」 하나다.
+        expect(w.findAll('.btn-primary, .dash-btn-fill, .auth-btn-primary').map((b) => b.text())).toEqual(['검색']);
     });
 
     test('(e) 담기 본문엔 status가 없다 — 독서 /api/books 계약이 아니다', async () => {
@@ -162,7 +164,7 @@ describe('공부 서재 — 담기', () => {
         await w.find('.book-search-form input').setValue('형법');
         await w.find('.book-search-form').trigger('submit');
         await new Promise((r) => setTimeout(r, 0));
-        await w.findAll('.search-scroll .book-row')[1].find('.book-actions .btn-primary').trigger('click');
+        await w.findAll('.search-scroll .book-row')[1].find('.book-actions .btn-ghost').trigger('click');
         await new Promise((r) => setTimeout(r, 0));
 
         const body = calls.find((c) => c.url.endsWith('/api/study/books') && c.body)?.body as Record<string, unknown>;

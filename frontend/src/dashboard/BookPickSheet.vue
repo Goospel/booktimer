@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { onMounted, ref, computed } from 'vue'
 import { getCsrfToken } from '../shared/follow'
-import { initialOf, coverColor, byline, statusBadge } from '../books/pure'
+import { initialOf, coverStyle, byline, statusBadge } from '../books/pure'
 import type { BookOption } from './types'
 
 // 통합 책 시트(발견 1, §6.5) — 하나의 컴포넌트가 네 모드를 겸한다(문구는 아래 TEXT 한 곳):
@@ -150,13 +150,10 @@ async function addRow(row: SearchRow) {
     emit('added', { id: saved.id, title: saved.title, status: saved.status })
 }
 
-function coverStyle(b: { isbn13: string | null; title: string }) {
-    const c = coverColor(b.isbn13 || b.title)
-    return { background: c.bg, color: c.fg }
-}
+// 상태 배지 3톤 — 테까지 넘겨야 「읽는 중 = 가는 선」이 화면에 선다(책장 BooksApp과 같은 꼴).
 function statusStyle(status: string) {
     const s = statusBadge(status)
-    return { background: s.bg, color: s.fg }
+    return { background: s.bg, color: s.fg, border: s.border ?? '1px solid transparent' }
 }
 
 const overlayEl = ref<HTMLElement | null>(null)
@@ -186,7 +183,7 @@ onMounted(() => { overlayEl.value?.focus(); loadShelf() })
             <ul v-if="rows.length" class="book-sheet-list book-sheet-results">
                 <li v-for="row in rows" :key="(row.isbn13 ?? '') + row.title" class="book-sheet-result">
                     <img v-if="row.coverUrl" class="book-sheet-cover" :src="row.coverUrl" alt="" loading="lazy" referrerpolicy="no-referrer">
-                    <span v-else class="book-sheet-cover" :style="coverStyle(row)" aria-hidden="true">{{ initialOf(row.title) }}</span>
+                    <span v-else class="book-sheet-cover" :style="coverStyle(row.title)" aria-hidden="true">{{ initialOf(row.title) }}</span>
                     <div class="book-sheet-meta">
                         <span class="book-sheet-book-title">{{ row.title }}</span>
                         <span v-if="byline(row.author, row.publisher)" class="book-sheet-byline">{{ byline(row.author, row.publisher) }}</span>
@@ -210,7 +207,7 @@ onMounted(() => { overlayEl.value?.focus(); loadShelf() })
                             :aria-current="b.id === currentBookId ? 'true' : undefined"
                             @click="emit('pick', b)">
                         <img v-if="b.coverUrl" class="book-sheet-cover" :src="b.coverUrl" alt="" loading="lazy" referrerpolicy="no-referrer">
-                        <span v-else class="book-sheet-cover" :style="coverStyle(b)" aria-hidden="true">{{ initialOf(b.title) }}</span>
+                        <span v-else class="book-sheet-cover" :style="coverStyle(b.title)" aria-hidden="true">{{ initialOf(b.title) }}</span>
                         <span class="book-sheet-meta">
                             <span class="book-sheet-book-title">{{ b.title }}</span>
                             <span v-if="b.author" class="book-sheet-byline">{{ b.author }}</span>

@@ -165,7 +165,7 @@ async function onApply(): Promise<void> {
 
         <button
             type="button"
-            class="btn btn-primary btn-small"
+            class="btn btn-small"
             :disabled="busy || capSpent"
             data-testid="plan-generate"
             @click="onGenerate"
@@ -200,7 +200,7 @@ async function onApply(): Promise<void> {
                 >버리기</button>
                 <button
                     type="button"
-                    class="btn btn-primary btn-small"
+                    class="btn btn-small"
                     :disabled="busy"
                     data-testid="plan-apply"
                     @click="onApply"

@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, onBeforeUnmount } from 'vue'
 import { getCsrfToken } from '../shared/follow'
-import { summarize, initialOf, coverColor, byline, statusBadge, marginHandleLabel } from './pure'
+import { summarize, initialOf, coverStyle, byline, statusBadge, marginHandleLabel } from './pure'
 import MarginPanel from '../shared/story/MarginPanel.vue'
 
 const STATUSES = [
@@ -75,16 +75,10 @@ const shelfBooks = computed(() => books.value.filter(b =>
 const manualOpen = computed(() => !searchEnabled.value || (searched.value && searchResults.value.length === 0))
 const summary = computed(() => summarize(books.value))
 
-// 무표지 책의 표지 플레이스홀더 색 — seed 는 isbn13 우선, 없으면 제목(결정적 매핑).
-function coverStyle(b: { isbn13: string | null; title: string }): Record<string, string> {
-    const c = coverColor(b.isbn13 || b.title)
-    return { background: c.bg, color: c.fg }
-}
-
-// 상태 배지 색(읽는중/완독/읽고싶음) — 시안 STATUS 매핑.
+// 상태 배지 3톤(다 읽음 잉크 채움 · 읽는 중 가는 선 · 읽고 싶어요 옅은 면) — 테까지 넘겨야 「읽는 중 = 선」이 화면에 선다.
 function statusStyle(status: string): Record<string, string> {
     const s = statusBadge(status)
-    return { background: s.bg, color: s.fg }
+    return { background: s.bg, color: s.fg, border: s.border ?? '1px solid transparent' }
 }
 
 function popularityFor(isbn: string | null): Popularity | null {
@@ -267,7 +261,7 @@ async function removeBook(book: MyBookSummary) {
     <div class="shelf-layout">
     <header class="shelf-greeting">
       <div class="shelf-greeting-text">
-        <h1>{{ nickname }}님의 책장 <span class="leaf" aria-hidden="true">🌿</span></h1>
+        <h1>{{ nickname }}님의 책장</h1>
         <p class="shelf-summary tnum">총 {{ summary.total }}권 · 읽는 중 {{ summary.reading }} · 완독 {{ summary.finished }} · 읽고 싶음 {{ summary.want }}</p>
       </div>
     </header>
@@ -294,7 +288,7 @@ async function removeBook(book: MyBookSummary) {
       <ul v-if="searchResults.length" class="book-list search-scroll">
         <li v-for="row in searchResults" :key="(row.isbn13 ?? '') + row.title" class="book-row">
           <img v-if="row.coverUrl" class="book-cover" :src="row.coverUrl" alt="" loading="lazy" referrerpolicy="no-referrer">
-          <span v-else class="book-cover book-cover-ph" :style="coverStyle(row)" aria-hidden="true">{{ initialOf(row.title) }}</span>
+          <span v-else class="book-cover book-cover-ph" :style="coverStyle(row.title)" aria-hidden="true">{{ initialOf(row.title) }}</span>
           <div class="book-meta">
             <span class="book-title">{{ row.title }}</span>
             <span v-if="byline(row.author, row.publisher)" class="book-byline">{{ byline(row.author, row.publisher) }}</span>
@@ -314,7 +308,7 @@ async function removeBook(book: MyBookSummary) {
             <select v-model="row.selectedStatus">
               <option v-for="s in STATUSES" :key="s.name" :value="s.name">{{ s.label }}</option>
             </select>
-            <button @click="addFromResult(row)" class="btn-primary">추가</button>
+            <button @click="addFromResult(row)" class="btn-ghost">추가</button>
           </div>
         </li>
       </ul>
@@ -328,7 +322,7 @@ async function removeBook(book: MyBookSummary) {
           <select v-model="manualStatus">
             <option v-for="s in STATUSES" :key="s.name" :value="s.name">{{ s.label }}</option>
           </select>
-          <button type="submit" class="btn-primary">추가</button>
+          <button type="submit" class="btn-ghost">추가</button>
         </form>
       </details>
     </section>
@@ -374,7 +368,6 @@ async function removeBook(book: MyBookSummary) {
       </div>
 
       <div v-if="shelfBooks.length === 0 && statusFilter === null && visFilter === null" class="shelf-empty">
-        <div class="shelf-empty-icon" aria-hidden="true">🌱</div>
         <p>아직 등록한 책이 없습니다.<br>위에서 검색해 추가해 보세요.</p>
       </div>
       <p v-else-if="shelfBooks.length === 0" class="status-line">이 조건의 책이 없습니다.</p>
@@ -382,7 +375,7 @@ async function removeBook(book: MyBookSummary) {
       <ul v-if="shelfBooks.length" class="book-list shelf-scroll shelf-list">
         <li v-for="book in shelfBooks" :key="book.id" class="book-row">
           <img v-if="book.coverUrl" class="book-cover" :src="book.coverUrl" alt="" loading="lazy" referrerpolicy="no-referrer">
-          <span v-else class="book-cover book-cover-ph" :style="coverStyle(book)" aria-hidden="true">{{ initialOf(book.title) }}</span>
+          <span v-else class="book-cover book-cover-ph" :style="coverStyle(book.title)" aria-hidden="true">{{ initialOf(book.title) }}</span>
           <div class="book-meta">
             <a class="book-title" :href="`/books/${book.id}`">{{ book.title }}</a>
             <span v-if="book.author" class="book-author">{{ book.author }}</span>

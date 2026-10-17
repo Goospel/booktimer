@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import ShopIcon from './ShopIcon.vue'
 import { hasCover, coverInitial } from './format'
+import { coverStyle } from '../books/pure'
 
 // 책BTI 패널 — 서술/콜드스타트 + 태그 드릴다운. 모바일 탭·와이드 사이드바 양쪽에서 공유.
 // 태그칩 자체는 헤더 카드(ProfileApp)가 소유하고 openTag를 호출 → tagPanel/tagLabel을
@@ -48,7 +49,7 @@ defineEmits<{ (e: 'closeTag'): void }>()
                 <li v-for="b in tagPanel" :key="b.id" class="shop-book">
                     <img v-if="hasCover(b.coverUrl)" class="shop-cover" :src="b.coverUrl!"
                          alt="" loading="lazy" referrerpolicy="no-referrer">
-                    <div v-else class="shop-cover shop-cover-ph" aria-hidden="true">{{ coverInitial(b.title) }}</div>
+                    <div v-else class="shop-cover shop-cover-ph" :style="coverStyle(b.title)" aria-hidden="true">{{ coverInitial(b.title) }}</div>
                     <div class="shop-book-meta">
                         <span class="shop-book-title">{{ b.title }}</span>
                         <span v-if="b.author" class="shop-book-author">{{ b.author }}</span>
