@@ -534,6 +534,15 @@ describe('StudyTimerCard — 자리 비움 선택', () => {
         expect(byId(box.getAttribute('aria-labelledby'))).toBe(w.find('.dash-away-pref-title').element);
         expect(byId(box.getAttribute('aria-describedby'))).toBe(w.find('.dash-away-pref-desc').element);
     });
+
+    test('에디토리얼 · 진짜 체크박스 바로 뒤 형제가 그림 상자(.set-check-box, 체크 획 svg)다', () => {
+        // `input:checked ~ .set-check-box`가 닿으려면 형제여야 한다. CSS 짝(설정 문법 공유)은 src/editorialTheme.test.ts.
+        const w = mountCard({ awayAvailable: true });
+        const box = w.find('.dash-away-pref input[type="checkbox"]').element.nextElementSibling as HTMLElement | null;
+        expect(box?.classList.contains('set-check-box')).toBe(true);
+        expect(box?.getAttribute('aria-hidden')).toBe('true');
+        expect(box?.querySelector('svg path')).not.toBeNull();
+    });
 });
 
 describe('REQ-16 · StudyTimerCard 아치 시계 길이', () => {

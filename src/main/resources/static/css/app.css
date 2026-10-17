@@ -284,8 +284,6 @@ a { color: var(--text); }
     margin: 7px 0 0;
 }
 
-/* 내 책장 인사말 — 명조 serif 제목 + 요약통계 한 줄(시안 My Shelf).
-   history-greeting 과 같은 '화면 전용 분리' 패턴(전역 .greeting 영향 0). */
 /* 판화 한 점 — Thomas Bewick 「Barn Owl」(1797, 퍼블릭 도메인 — 미니앱 ui.tsx 6-10 주석과 같은 출처). 미니앱 assets/woodcut-owl.png와 같은 파일.
    모양은 PNG 알파, 색은 토큰 — 낮엔 잉크, 다크엔 밝은 잉크가 같은 규칙으로 칠해진다(반전 필터를 쓰면 차가운 회색 #E2E4E7이 된다).
    자리는 랜딩 히어로 · 책장 머리 · 빈 여백 셋, 한 층(페이지 또는 열린 모달)에 하나. 장식이라 aria-hidden 빈 span.
@@ -295,6 +293,8 @@ a { color: var(--text); }
            mask: url('../icons/woodcut-owl.png') center / contain no-repeat; }
 .woodcut-64 { width: 64px; } .woodcut-148 { width: 148px; } .woodcut-180 { width: 180px; }
 
+/* 내 책장 인사말 — 명조 serif 제목 + 요약통계 한 줄(시안 My Shelf).
+   history-greeting 과 같은 '화면 전용 분리' 패턴(전역 .greeting 영향 0). */
 .shelf-greeting { margin: 0 0 20px; }
 /* 책장 머리 아치 — 미니앱 서재 아치와 같은 숫자(폭 260 · 패딩 24 · 판화 64 · 간격 8 · 명조 32/40).
    제목은 「내 책장」 고정 — 닉네임을 넣으면 긴 이름이 260 아치를 넘는다(닉네임은 아래 요약 줄로). */
@@ -1436,7 +1436,7 @@ body.bookdetail-page .bd-empty .status-line { margin: 0; line-height: 1.6; font-
 /* 인사말 헤더 — 제목·통계만. 페이지 이동은 양옆 세로 바(fragments/side-rails)가 담당. */
 .shelf-greeting { display: flex; justify-content: space-between; align-items: flex-end; gap: 16px; flex-wrap: wrap; }
 
-/* '내 책장' 카드 헤드 — 제목(좌) + 제휴 고지 ⓘ(우). 책방 .shop-shelf-head 대응(카드 안 우상단).
+/* '책 목록' 카드 헤드 — 제목(좌) + 제휴 고지 ⓘ(우). 책방 .shop-shelf-head 대응(카드 안 우상단).
    .card h2의 margin-bottom(12px)을 헤드 행으로 옮겨 제목·ⓘ를 한 줄에 정렬. */
 .shelf-mine-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin: 0 0 12px; }
 .shelf-mine-head { padding-bottom: 8px; border-bottom: 1px solid var(--text); }
@@ -2844,7 +2844,7 @@ body .focus-stack.is-merged > .dash-card.is-study { border: 0; border-radius: 0;
 .focus-away { flex-basis: 100%; margin: 10px 0 0; font-size: 13px; color: var(--muted); }
 .focus-away .dash-bookless { display: inline; padding: 0 2px; }
 .focus-away .focus-away-close { margin-left: 10px; }
-/* 자리 비움 선택(설계 §9) — 대기 패널 맨 끝 조용한 설정 줄. 점선 구분은 .dash-forgive-note, 체크박스는 .auth-check와 같은 꼴. */
+/* 자리 비움 선택(설계 §9) — 대기 패널 맨 끝 조용한 설정 줄(위 점선 구분). 체크박스는 설정 .set-check-box와 같은 상자(아래 설정 절에서 셀렉터 공유). */
 .dash-away-pref { display: flex; align-items: flex-start; gap: 8px; padding-top: 12px; border-top: 1px dashed var(--border); cursor: pointer; }
 .dash-away-pref-title { display: block; font-size: 13px; color: var(--text); }
 .dash-away-pref-desc { display: block; margin-top: 3px; font-size: 13px; line-height: 1.5; color: var(--muted); word-break: keep-all; }

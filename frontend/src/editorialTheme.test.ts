@@ -713,6 +713,12 @@ describe('에디토리얼 판화 · 화면 마감 (PR-4)', () => {
         expect(panel.length).toBeGreaterThan(0);   // 양성 대조 — 규칙을 실제로 읽었다
         expect(panel.filter(([p]) => p === 'text-align')).toEqual([]);
         for (const s of ['.dash-achieved-title', '.dash-achieved-sub']) expect(merged(APP(), s).get('text-align'), s).toBe('center');
+        // 다른 셀렉터(`.dash-state-achieved > *` 등)로 같은 가운데를 되살리는 회귀도 막는다 — 축하 문구 둘만 허용.
+        const leaks = rulesP(APP())
+            .filter((r) => r.selector.includes('.dash-state-achieved') && !/\.dash-achieved-(title|sub)$/.test(r.selector))
+            .filter((r) => declsOf(r.body).some(([p, v]) => p === 'text-align' && v === 'center'))
+            .map((r) => r.selector);
+        expect(leaks).toEqual([]);
     });
 
     it('마감 · 공부 홈 「자리 비우면 멈추기」 체크박스는 설정 체크박스와 같은 문법', () => {
