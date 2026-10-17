@@ -535,3 +535,15 @@ describe('StudyTimerCard — 자리 비움 선택', () => {
         expect(byId(box.getAttribute('aria-describedby'))).toBe(w.find('.dash-away-pref-desc').element);
     });
 });
+
+describe('StudyTimerCard — 에디토리얼 검정 알약(PR-2)', () => {
+    test('REQ-22 · 대기에서 회당 시간 폼을 열어도 검정 알약은 「공부 측정 시작」 하나다', async () => {
+        vi.useFakeTimers();
+        const w = mountCard({ books: [STUDY_BOOK(5, '헌법', 3000)], recentBookId: 5 });
+        await w.find('.dash-goal-change').trigger('click');
+        // 양성 대조 — 폼이 실제로 열렸고 그 안에 「저장」이 있다.
+        expect(w.find('form.dash-goal-edit').exists()).toBe(true);
+        expect(w.findAll('form.dash-goal-edit button').some((b) => b.text().includes('저장'))).toBe(true);
+        expect(w.findAll('.btn-primary, .dash-btn-fill, .auth-btn-primary').map((b) => b.text())).toEqual(['공부 측정 시작']);
+    });
+});

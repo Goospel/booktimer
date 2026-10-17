@@ -4,6 +4,7 @@ import ReportModal from '../ReportModal.vue'
 import UserRow from '../UserRow.vue'
 import StoryComposer from './StoryComposer.vue'
 import { coverInitial, hasCover } from '../../profile/format'
+import { coverStyle } from '../../books/pure'
 import type { UserRowData } from '../follow'
 import { excerptForReport, formatStoryAge, type MarginEntry, type MarginResponse } from './storyFeed'
 import { deleteStory, fetchMargin, fetchStoryLikers, toggleStoryLike } from './storyApi'
@@ -112,7 +113,7 @@ onUnmounted(() => document.removeEventListener('keydown', onKeydown))
                 <template v-if="margin">
                     <img v-if="hasCover(margin.book.coverUrl)" class="shop-cover margin-book-cover"
                          :src="margin.book.coverUrl!" alt="" referrerpolicy="no-referrer">
-                    <div v-else class="shop-cover shop-cover-ph margin-book-cover" aria-hidden="true">
+                    <div v-else class="shop-cover shop-cover-ph margin-book-cover" :style="coverStyle(margin.book.title)" aria-hidden="true">
                         {{ coverInitial(margin.book.title) }}
                     </div>
                     <div class="margin-book-meta">

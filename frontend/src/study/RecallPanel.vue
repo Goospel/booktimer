@@ -329,7 +329,7 @@ async function onSave(thenAnalyze: boolean): Promise<void> {
                         </p>
                         <button
                             type="button"
-                            class="btn btn-primary btn-small"
+                            class="btn btn-small"
                             :disabled="!canTranscribe"
                             data-testid="recall-transcribe"
                             @click="onTranscribe"

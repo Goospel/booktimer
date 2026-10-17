@@ -3,7 +3,7 @@ import { ref, watch, computed, nextTick, onUnmounted, useId } from 'vue'
 import { useReadingTimer } from './useReadingTimer'
 import { fmtMSS, goalLabel } from './timerProgress'
 import { sessionGoalView, minutesToSessionGoal } from './sessionGoal'
-import { initialOf, coverColor, hasCover } from '../books/pure'
+import { initialOf, coverStyle, hasCover } from '../books/pure'
 import { defaultStudyBookOf } from './defaultBook'
 import type { StudyBookRow } from '../study/api'
 import type { AwayInterval } from './studyAway'
@@ -52,11 +52,6 @@ const emit = defineEmits<{
 const defaultBook = computed<StudyBookRow | null>(() =>
     defaultStudyBookOf(props.books, props.recentBookId, props.pickedBook))
 
-// 칩 표지색 — 표지 없는 책의 결정적 플레이스홀더(독서 칩과 같은 seed 규칙).
-function coverStyle(b: StudyBookRow) {
-    const c = coverColor(b.isbn13 || b.title)
-    return { background: c.bg, color: c.fg }
-}
 
 // props를 ref로 래핑해 composable에 전달(TimerCard와 같은 3줄). 공부엔 부채가 없어 base는 0 —
 // remainingNow는 안 쓰고 elapsed(벽시계 경과)만 쓴다.
@@ -162,7 +157,7 @@ defineExpose({ closeEdit })
                 <input ref="goalInput" type="number" min="10" max="360" step="1" v-model.number="goalMinutes"
                        aria-label="이 책 회당 시간(분)"> 분
             </label>
-            <button type="submit" class="dash-btn-fill" :disabled="savingSessionGoal">
+            <button type="submit" class="dash-btn-outline" :disabled="savingSessionGoal">
                 {{ savingSessionGoal ? '저장하는 중…' : '저장' }}
             </button>
             <button type="button" class="dash-btn-link dash-bookless" @click="editing = false">취소</button>
@@ -198,7 +193,7 @@ defineExpose({ closeEdit })
                     <div class="dash-book-chip">
                         <img v-if="hasCover(defaultBook.coverUrl)" class="dash-book-chip-cover"
                              :src="defaultBook.coverUrl!" alt="" loading="lazy" referrerpolicy="no-referrer">
-                        <span v-else class="dash-book-chip-cover" :style="coverStyle(defaultBook)" aria-hidden="true">{{ initialOf(defaultBook.title) }}</span>
+                        <span v-else class="dash-book-chip-cover" :style="coverStyle(defaultBook.title)" aria-hidden="true">{{ initialOf(defaultBook.title) }}</span>
                         <span class="dash-book-chip-title" :title="defaultBook.title">{{ defaultBook.title }}</span>
                         <button type="button" class="dash-book-chip-change" :disabled="starting" @click="emit('openSheet')">바꾸기</button>
                     </div>
@@ -229,7 +224,7 @@ defineExpose({ closeEdit })
                         <input ref="goalInput" type="number" min="10" max="360" step="1" v-model.number="goalMinutes"
                                aria-label="이 책 회당 시간(분)"> 분
                     </label>
-                    <button type="submit" class="dash-btn-fill" :disabled="savingSessionGoal">
+                    <button type="submit" class="dash-btn-outline" :disabled="savingSessionGoal">
                         {{ savingSessionGoal ? '저장하는 중…' : '저장' }}
                     </button>
                     <!-- 보조 둘은 「책 없이 시작」과 같은 조용한 링크 관용구(.dash-bookless). -->

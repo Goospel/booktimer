@@ -462,7 +462,7 @@ async function remove(): Promise<void> {
                 <button
                     v-if="state.kind === 'conflict'"
                     type="button"
-                    class="btn btn-primary btn-small"
+                    class="btn btn-small"
                     data-testid="notes-reload"
                     @click="reload"
                 >새로고침</button>
