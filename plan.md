@@ -5387,7 +5387,7 @@ package-private static이라 호출이 공짜였고, 복제하면 0초 조각 �
 - ⏸ 30일 뒤(2026-10-25 이후) 변환 스크립트·테스트 삭제(그때까지 리베이스·되돌리기 도구) · 트래커 44군 → `guard:`/`promoted:` 소급(사람 판정, 별건)
 
 ### 웹 「에디토리얼」 재테마 (완료 ✅ — PR-1 글꼴 ✅ · PR-2 옷 ✅ · PR-3 홈 아치 ✅ · PR-4 판화·마감 ✅)
-> 미니앱 에디토리얼(2026-10-14 출시)의 옷을 웹에 옮긴다 — 같은 사람이 PC 웹과 토스 미니앱에서 같은 앱으로 느끼게. 설계 md는 `claude-docs/plans/2026-10-16-web-editorial-retheme.md`(gitignore, 작업 워크트리 한정).
+> 미니앱 에디토리얼(2026-10-14 출시)의 옷을 웹에 옮긴다 — 같은 사람이 PC 웹과 토스 미니앱에서 같은 앱으로 느끼게. 설계 md는 `claude-docs/plans/2026-10-16-web-editorial-retheme.md`(gitignore — 메인 체크아웃 같은 폴더에 사본. 피그마 R6 시안 사양서·캡처 `2026-10-16-web-editorial-figma/` · PR별 「지금 | 바뀐」 사진 `2026-10-16-web-editorial-pr1~pr4/` · 알약 겹침 조사 `2026-10-17-mode-toggle-overlap/`도 같은 곳).
 > 결정 D1~D9는 사용자가 **전부 추천**으로 골랐다(2026-10-17, 피그마 R6 시안 확인 뒤 — D1 옷 + 아치·판화 · D2 밤 책상 · D3 랜딩 빈 상자에 판화 · D4 관리자·이메일 범위 밖 · D5 `@import` 유지 · D6 공부 파란 잉크 · D7 연필테 전부 걷기 · D8 빨강만 · D9 하나씩 공개).
 > 웹은 **머지 = 곧바로 공개**라 PR마다 끝난 모습이 그대로 보여도 어색하지 않게 끊었다. PR-2·3·4는 머지 전에 브랜치 화면을 사용자에게 보인다.
 - ✅ **PR-0 비교 시안** — 코드 덮어 찍기 대신 사용자 요청으로 피그마 시안(R6)으로 대체해 끝냈다
@@ -5412,6 +5412,7 @@ package-private static이라 호출이 공짜였고, 복제하면 0초 조각 �
   편집기(RecallEditor — 백지노트·필기·홈 필기 카드)는 캐럿을 창 아래 5px까지만 올려 지금 쓰는 줄이 알약 밑에 깔렸고(4폭 겹침 10.6~15.4px), Tab 포커스는 창 맨 아래 끝에 맞춰 일부가 숨었다(4폭 10건).
   편집기 `scrollThreshold`·`scrollMargin` bottom 100 + `:root:has(> body.has-rails) { scroll-padding-bottom }` — ProseMirror는 scroll-padding을 안 읽어 둘 다 필요했다(②만이면 Enter 직후 빈 줄이 52px 깔림). 실측 겹침 0 · 가림 0.
   남긴 것: 힌트 칩 자동 숨김 같은 알약 동작 변경은 범위 밖
+- **다음 세션 시작점**: 이 절은 완료 — 이어서 할 일 없음. 웹 화면을 새로 만들거나 고칠 땐 에디토리얼 가드(`frontend/src/editorialTheme.test.ts`·`darkTokens.test.ts`)가 값·검정 알약 한 층 하나·연필테 0·글자 바닥 13을 잡는다 — 가드를 끄지 말고 규칙에 맞춘다. ⚠️ 아이폰 `viewport-fit=cover`를 켜는 날 편집기 아래 여유(`RecallEditor` scrollMargin 100)도 `scroll-padding-bottom`에서 읽게 바꾼다(코드 주석)
 
 ### 미니앱 「에디토리얼」 재테마 (완료 ✅ 2026-10-14 — 번들 168 출시 · 후속 「위반 소지 3건」은 아래 🔜 항목)
 > Soft의 뒤를 잇는 재테마. 설계 md는 `claude-docs/plans/2026-10-12-miniapp-editorial-retheme.md`(gitignore, 작업 워크트리 한정) — PR 순서 PR-0(비교 시안) → 1a → 1 → 2 → 3 → 4 → 5(출시).

@@ -185,7 +185,7 @@
 - [T-111](troubleshooting/T-111.md) · "머지 전 브랜치 최신화 필수" 정책에서 BEHIND인 PR에 `--auto`만 걸면 영영 안 머지된다 — GitHub가 BEHIND 브랜치를 자동 갱신하지 않음
 - [T-110](troubleshooting/T-110.md) · 정션 둔 워크트리를 `git worktree remove --force`하면 정션 타깃(main node_modules)이 비워진다 — 정션 먼저 끊어라 **→ hookify/warn-node-modules-junction.md**
 - [T-109](troubleshooting/T-109.md) · vitest include가 test/ 디렉토리만 잡아 src/ 곁 테스트가 조용히 미실행 — include에 src/** 추가
-- [T-108](troubleshooting/T-108.md) · `gradlew.bat`이 phantom-modified로 rebase를 막는다 — `.gitattributes eol=crlf`와 커밋된 블롭 EOL 불일치, `--assume-unchanged`로 우회
+- [T-108](troubleshooting/T-108.md) · `gradlew.bat`이 phantom-modified로 rebase를 막는다 — `.gitattributes eol=crlf`와 커밋된 블롭 EOL 불일치, `--assume-unchanged`로 우회 **→ 가드: CI 첫 단계 「Verify line endings match .gitattributes」(`git add --renormalize . && git diff --cached --name-only --exit-code`) — 어긋난 blob을 넣는 PR은 머지 전에 빨갛게 멈춘다(2026-10-18)**
 - [T-107](troubleshooting/T-107.md) · `git add`와 `git commit`을 한 명령으로 묶으면 PreToolUse 자동수정 훅(목차·번들)이 skip된다 — add는 별도 호출로
 - [T-106](troubleshooting/T-106.md) · auto-merge `--delete-branch`는 비동기 머지라 원격 브랜치가 안 지워진다 — 머지 확인 후 gh API로 삭제
 - [T-105](troubleshooting/T-105.md) · 빈 워크트리 폴더가 `Device or resource busy`로 안 지워짐 — 죽은 세션 좀비 셸이 cwd 점유, cwd 검증 PID만 종료
