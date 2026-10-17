@@ -61,7 +61,7 @@ function importUrl(css: string): string {
 const ROOT_PX = 18;
 
 /**
- * 글자 크기 값 하나가 13px 바닥 아래인가. px·rem 리터럴과 `clamp()` 첫 인자(하한)만 판정한다 —
+ * 글자 크기 값 하나가 13px 바닥 아래인가. px·rem 리터럴 · `clamp()` 첫 인자(하한) · `min()`·`max()` 최소 인자만 판정한다 —
  * em·%·`var()`·`calc()`는 계산값이라 여기선 모른다(화면에서 잰다 — 원장 U-19). 판정 못 하면 `false`(건너뜀).
  */
 function belowFloor(value: string): boolean {
@@ -70,6 +70,11 @@ function belowFloor(value: string): boolean {
     if (lit) return (lit[2] === 'rem' ? Number(lit[1]) * ROOT_PX : Number(lit[1])) < 13;
     const cl = /^clamp\(\s*([\d.]+)(px|rem)\s*,/.exec(v);
     if (cl) return (cl[2] === 'rem' ? Number(cl[1]) * ROOT_PX : Number(cl[1])) < 13;
+    // min()·max()는 인자 중 가장 작은 px·rem 리터럴로 본다(보수적 — max의 실제 값은 그보다 클 수 있다).
+    if (/^(min|max)\(/.test(v)) {
+        const px = [...v.matchAll(/([\d.]+)(px|rem)\b/g)].map((m) => (m[2] === 'rem' ? Number(m[1]) * ROOT_PX : Number(m[1])));
+        return px.length > 0 && Math.min(...px) < 13;
+    }
     return false;
 }
 
@@ -107,6 +112,12 @@ describe('에디토리얼 글꼴 — 두 패밀리 · 굵기 400·500 · 글자 
         // 음성 대조 — 판정 함수가 700을 실제로 빨강으로 친다.
         expect(values('a { font-weight: 700; }', 'font-weight').some(badWeight)).toBe(true);
 
+        // `font:` 단축 선언은 굵기·크기를 함께 싣는다 — inherit 말고는 금지(가드 우회로 차단).
+        expect(values('.x { font: 700 12px/1 sans-serif; font-size: 13px; }', 'font')).toEqual(['700 12px/1 sans-serif']);
+        const shorthands = values(BOTH(), 'font');
+        expect(shorthands.length, '`font:` 선언을 못 읽었다 — 정규식 고장').toBeGreaterThanOrEqual(18);
+        expect(shorthands.filter((v) => v !== 'inherit')).toEqual([]);
+
         const weights = values(BOTH(), 'font-weight');
         expect(weights.length, '굵기 선언을 거의 못 읽었다 — 정규식 고장').toBeGreaterThanOrEqual(120);
         expect(weights.filter(badWeight)).toEqual([]);
@@ -125,6 +136,9 @@ describe('에디토리얼 글꼴 — 두 패밀리 · 굵기 400·500 · 글자 
         expect(belowFloor('12.5px')).toBe(true);
         expect(belowFloor('.72rem')).toBe(true); // 12.96px
         expect(belowFloor('clamp(.72rem, 1vw, 1rem)')).toBe(true);
+        expect(belowFloor('min(11px, 3vw)')).toBe(true);
+        expect(belowFloor('max(.6rem, 1vw)')).toBe(true);
+        expect(belowFloor('min(13px, 3vw)')).toBe(false);
         expect(belowFloor('13px')).toBe(false);
         expect(belowFloor('.85em')).toBe(false); // 계산값 — 건너뜀(U-19)
 

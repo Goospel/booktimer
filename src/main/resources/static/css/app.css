@@ -1125,6 +1125,7 @@ button:disabled, .btn-primary:disabled { opacity: .5; cursor: not-allowed; }
     gap: 3px;
     height: 14px;
     font-size: 13px;
+    line-height: 14px;
     color: var(--neutral-3-2);
 }
 .grass-months span { white-space: nowrap; }
@@ -3994,8 +3995,8 @@ body.study-lamp .lamp-page .is-study .btn-primary:hover:not(:disabled) { backgro
 .study-plan-scope { resize: vertical; }
 .study-plan-form > .btn { align-self: flex-start; width: auto; }
 .study-plan-row { display: flex; flex-wrap: wrap; gap: 10px; }
-/* 작은 캡션 크기는 <span>에만 준다 — label에 두면 위 `font: inherit`을 타고 값 입력칸까지 12px로
-   끌어내려, 같은 폼의 다른 칸(18px)과 글씨 크기가 어긋난다. 12px은 이름표의 크기이지 값의 크기가 아니다. */
+/* 작은 캡션 크기는 <span>에만 준다 — label에 두면 위 `font: inherit`을 타고 값 입력칸까지 13px로
+   끌어내려, 같은 폼의 다른 칸(18px)과 글씨 크기가 어긋난다. 13px은 이름표의 크기이지 값의 크기가 아니다. */
 .study-plan-row label { display: flex; flex-direction: column; gap: 4px; }
 .study-plan-row label > span { font-size: 13px; color: var(--muted); }
 .study-plan-row input { width: 100%; max-width: 180px; }
