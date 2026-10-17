@@ -1,4 +1,4 @@
-/* BookTimer — 공통 스타일 (종이톤+세이지 디자인 리프레시: 입구부터 미감 통일) */
+/* BookTimer — 공통 스타일 (에디토리얼: 미색 종이 · 잉크 하나 · 명조 + 고딕 · 선과 여백 — 미니앱과 같은 옷) */
 
 /* 글꼴 — 에디토리얼(2026-10, 미니앱과 같은 URL·같은 세 face): 제목·값·이니셜·시계 = 명조 Noto Serif KR 500,
    본문 = 고딕 Noto Sans KR 400·500. 기능 글자(고딕)가 기본값이고 명조는 `var(--font-serif)`로 '명시'한 자리만이다
@@ -1102,7 +1102,7 @@ button:disabled { opacity: .5; cursor: not-allowed; }
 
 /* 검색 폼: 검색 기준 칩을 위에 두고, 입력+버튼을 아래 한 줄로. */
 .book-search-form { flex-direction: column; align-items: stretch; }
-/* 검색 기준 칩 — 라디오 대신 제목/저자/출판사 토글(활성=세이지 채움). 시안 My Shelf. */
+/* 검색 기준 칩 — 라디오 대신 제목/저자/출판사 토글(활성=잉크 테 + 500, 채움 없음). */
 .search-chips { display: flex; flex-wrap: wrap; gap: 8px; }
 .search-chip {
     width: auto;                                   /* 전역 button{width:100%} 상쇄(#286 가드) */
@@ -1876,7 +1876,7 @@ a.shop-count:hover, a.shop-count:hover strong { color: var(--accent); }
 .follow-tabs a.active { color: var(--text); font-weight: 500; box-shadow: inset 0 -2px 0 var(--text); }
 
 .book-time { font-size: .8rem; color: var(--ok); font-weight: 500; }
-/* 내 책장 필터 칩 — 상태/공개여부 토글(활성=세이지 채움). books 전용. 시안 My Shelf.
+/* 내 책장 필터 — 상태/공개여부 토글(활성=잉크 2px 밑줄 탭). books 전용.
    (옛 주석은 "프로필 .shelf-filter와 별개"라 했는데 그 클래스는 죽어서 2026-09-12 삭제됐다 — 이름이
     접두로 겹쳐 문자열 검색에 같이 걸리니, 지울 때 이쪽을 건드리지 않도록 주의한다.)
    두 칩 그룹(상태·공개여부)을 같은 모양으로 통일 — 기존 세그먼티드 '서브 필터' 룩 대신 시안의 단일 칩. */
@@ -2415,7 +2415,7 @@ body.personality-page #personality-app { gap: 18px; }
 
 /* 헤더 한 줄 명언 — 홈 카드 묶음을 "닫는 각주"로 정리(2026-07-10, C안 하이브리드).
    기존엔 카드 밖 맨몸 좌측정렬 이탤릭이라 위 카드들과 동떨어져 보였다. 카드로 감싸지 않되
-   (1) 위로 넉넉한 여백 + 양끝이 사라지는 페이드 구분선, (2) 본문을 감싼 은은한 세이지 따옴표,
+   (1) 위로 넉넉한 여백 + 짧은 가는 구분선, (2) 본문을 감싼 흐린 글자 따옴표,
    (3) 중앙정렬 + 폰트 축소로 "각주" 위상을 만들어 위 카드 묶음과의 소속감을 준다.
    슬롯(#brand-quote-slot)은 dashboard.html SSR — Vue(BrandQuote)가 Teleport로 채운다.
    장식(구분선·따옴표)은 명언 있을 때만 렌더되는 .brand-quote/.brand-quote-text에만 붙여
@@ -2844,11 +2844,11 @@ body.dashboard-page #dashboard-app { gap: 20px; }
 .dash-card-link:hover { text-decoration: underline; }
 /* 모드 스위치 — 페이지 단위(타이머 카드·아래 카드·세로 바)라 카드 밖 화면 아래 가운데에 띄운다(2026-09-17 D안).
    비홈 화면의 SSR 알약(fragments/side-rails)도 이 규칙들을 그대로 쓴다 — 공부 잉크는 #side-rails 토큰 상속(설계 2026-09-17-single-rail-mode-switch).
-   z 94 = 결(body::before 90) 위 · 바(95) 아래 · 칩·스킵링크(100) 아래. 결 위에 뜨므로 표면에 결을 직접 얹는다(.rail과 같은 이유, T-192).
+   z 94 = 바(95) 아래 · 칩·스킵링크(100) 아래(옛 종이 결 90은 에디토리얼에서 걷었다).
    PWA 설치 칩(pwa-install.js — bottom 72px+safe-area, 띠 72~109px)과는 세로 띠가 다르다(여긴 16~55px) — 가로 폭·바 유무와 무관하게 안 겹친다.
    좁은 창에서 펼친 바가 힌트 칩에 닿으면 바가 이긴다(힌트는 일시적). 공부 잉크는 .is-study 스코프 스왑을 그대로 탄다
    (ModeToggle이 공부 모드에 is-study를 붙인다 — 다크·독서등판 0줄). 잠김은 버튼만 옅게 —
-   떠 있는 종이 자체를 반투명으로 두면 밑 콘텐츠가 비쳐 깨진 것처럼 보인다. 전역 button{width:100%; border-image}는 width:auto·border:0으로 상쇄. */
+   떠 있는 종이 자체를 반투명으로 두면 밑 콘텐츠가 비쳐 깨진 것처럼 보인다. 전역 button{width:100%; 잉크 테}는 width:auto·border:0으로 상쇄. */
 .dash-mode-toggle-wrap {
     position: fixed; left: 0; right: 0; bottom: calc(16px + env(safe-area-inset-bottom, 0px));
     z-index: 94; width: max-content; margin-inline: auto;
@@ -2897,7 +2897,7 @@ body.has-rails { padding-bottom: calc(100px + env(safe-area-inset-bottom, 0px));
 .study-count-actions { display: flex; gap: 6px; align-items: center; }
 
 /* 공부 책별 회당 시간 — 히어로 인라인 편집(2026-09-13, 하루 목표 대체). 전부 공부 카드 안 클래스라 독서엔 0줄이다.
-   전역 button{width:100%; padding:12px 18px; border-image:연필테}보다 특이성이 한 단 위(0,1,0 / 0,2,0)라
+   전역 button{width:100%; padding:12px 18px; 잉크 테}보다 특이성이 한 단 위(0,1,0 / 0,2,0)라
    여기 선언이 이긴다 — .dash-mode-toggle button이 쓰는 것과 같은 관용구(font:inherit 뒤에 font-size). */
 .dash-goal-change {
     width: auto; padding: 0 6px; border: 0; background: transparent;
@@ -3510,7 +3510,7 @@ body.has-rails { padding-bottom: calc(100px + env(safe-area-inset-bottom, 0px));
 .study-legend-mark { width: 12px; height: 12px; border-radius: 50%; border: 1px solid var(--accent-hover); }
 .study-legend-mark.is-kept { background: var(--accent); border-color: var(--accent); }
 
-/* 입력칸 — 다른 폼 화면(.field · .fb-field)이 쓰는 것과 같은 연필선 재료다. 새 값을 만들지 않는다.
+/* 입력칸 — 다른 폼 화면(.field · .fb-field)과 같은 재료(흐린 글자색 1px · 2px)다. 새 값을 만들지 않는다.
    ⚠️ type을 열거하는 것은 일부러다: 사진 탭의 file 입력에 프레임을 씌우면 브라우저가 그리는
    「파일 선택」 버튼이 종이 테두리 안에 갇혀 테두리가 두 겹으로 보인다. */
 .study-day input[type="text"],
@@ -3588,10 +3588,7 @@ body.has-rails { padding-bottom: calc(100px + env(safe-area-inset-bottom, 0px));
     box-shadow: 0 0 0 3px var(--focus-ring);
 }
 /* 폰에서 키보드가 올라와도 툴바가 남게 sticky — 스크롤되는 것은 글이지 도구가 아니다.
-   좌우 4px margin도 같은 이유(연필선 보호)다. 툴바 배경이 편집기와 같은 --card-bg라 그 4px은 안 보이고,
-   sticky로 붙었을 때 옆 4px 띠에는 편집기 세로 연필선만 지나간다(본문은 .ProseMirror padding 12px 안쪽).
-   위쪽은 margin-top이 아니라 부모 padding-top으로 띄운다 — sticky 요소의 위 margin이 top:0 계산에
-   끼는지는 구현 디테일이라, 확실히 안 끼는 부모 패딩으로 둔다. */
+   좌우 4px margin은 옛 연필선 보호 몫이 남은 것이다(1px 테에선 무해하다 — 툴바 배경이 편집기와 같은 --card-bg). */
 .study-editor-toolbar {
     position: sticky; top: 0; z-index: 2;
     display: flex; flex-wrap: wrap; gap: 2px;
@@ -3747,7 +3744,7 @@ body.has-rails { padding-bottom: calc(100px + env(safe-area-inset-bottom, 0px));
    상자는 클릭을 통과시키고(빈 곳을 누르면 편집기에 캐럿) 칩만 받는다. */
 .study-editor-empty-slot { position: absolute; top: 48px; left: 12px; right: 12px; pointer-events: none; }
 .study-notes-chips { display: flex; flex-wrap: wrap; gap: 6px; }
-/* 알약에는 연필테를 두르지 않는다 — 999px 둥근 알약에 border-image를 얹으면 각진 사각형으로 보인다. */
+/* 이어 쓰기 칩 — 가는 선 알약(전역 button의 잉크 테를 칩 선으로 낮춘다). */
 .study-notes-chip {
     pointer-events: auto; width: auto; padding: 6px 12px;
     border: 1px solid var(--border); border-radius: 999px;
@@ -3793,10 +3790,8 @@ body.has-rails { padding-bottom: calc(100px + env(safe-area-inset-bottom, 0px));
 .study-plan-actions { display: flex; flex-wrap: wrap; gap: 8px; }
 .study-plan-actions .btn { width: auto; flex: 0 0 auto; }
 
-/* 테마 토글 — theme.js가 header.brand / header.auth-brand 끝에 꽂는다(아직 다크런치라 안 꽂힌다).
-   `border` 단축 선언이 전역 `button`의 border-image를 initial로 되돌리는 것을 그대로 이용한다 —
-   32px 원형에 300px 연필 타일을 8px로 눌러 넣으면 결이 뭉개진다(.margin-card-btn과 같은 이유).
-   width를 고정하는 것도 전역 `button { width: 100% }`를 상쇄하기 위한 것이다. */
+/* 테마 토글 — theme.js가 header.brand / header.auth-brand 끝에 꽂는다. 가는 선 원 아이콘 버튼.
+   width를 고정하는 것은 전역 `button { width: 100% }`를 상쇄하기 위한 것이다. */
 .theme-toggle {
     width: 32px;
     height: 32px;
@@ -3824,8 +3819,7 @@ body.has-rails { padding-bottom: calc(100px + env(safe-area-inset-bottom, 0px));
    평소 92px 접힘. 펼침(232px, 본문 위에 덮음)은 `.is-open`(rail.js — 데스크톱 머묾·태블릿 탭)과
    `:focus-within`(키보드) 한 벌뿐이다. `.rail:hover` 펼침 규칙은 두지 않는다 — hover로 펼치면 안의 가로 배치가
    즉시 뒤집혀 스치기만 해도 글자가 깨져 보인다(머묾 지연은 rail.js 타이머가 맡는다).
-   z-index 95 = 종이 결(body::before 90) 위 · 첫 오버레이(100) 아래. 결이 고정 요소 위에 있으면 스크롤 때
-   무늬가 바 위를 미끄러진다(T-192) — 그래서 바 표면엔 결을 직접 얹는다. */
+   z-index 95 = 첫 오버레이(100) 아래. 접힌 바는 면 + 오른쪽 가는 선, 펼친 바는 떠 있는 것(종이 + 잉크 1px). */
 body.has-rails { padding-left: 124px; padding-right: 124px; }   /* 16 + 92 + 16 */
 
 /* ── 본문 폭(바 있는 화면) — 설계 claude-docs/plans/2026-09-15-web-wider-body.md
