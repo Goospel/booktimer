@@ -286,10 +286,28 @@ a { color: var(--text); }
 
 /* 내 책장 인사말 — 명조 serif 제목 + 요약통계 한 줄(시안 My Shelf).
    history-greeting 과 같은 '화면 전용 분리' 패턴(전역 .greeting 영향 0). */
+/* 판화 한 점 — Thomas Bewick 「Barn Owl」(1797, 퍼블릭 도메인 — 미니앱 ui.tsx 6-10 주석과 같은 출처). 미니앱 assets/woodcut-owl.png와 같은 파일.
+   모양은 PNG 알파, 색은 토큰 — 낮엔 잉크, 다크엔 밝은 잉크가 같은 규칙으로 칠해진다(반전 필터를 쓰면 차가운 회색 #E2E4E7이 된다).
+   자리는 랜딩 히어로 · 책장 머리 · 빈 여백 셋, 한 층(페이지 또는 열린 모달)에 하나. 장식이라 aria-hidden 빈 span.
+   ⚠️ 파일을 고칠 땐 이름을 바꾼다 — 해시가 안 붙으면 SW cache-first가 옛 그림을 계속 준다. */
+.woodcut { display: block; margin-inline: auto; aspect-ratio: 444 / 441; background-color: var(--text);
+           -webkit-mask: url('../icons/woodcut-owl.png') center / contain no-repeat;
+           mask: url('../icons/woodcut-owl.png') center / contain no-repeat; }
+.woodcut-64 { width: 64px; } .woodcut-148 { width: 148px; } .woodcut-180 { width: 180px; }
+
 .shelf-greeting { margin: 0 0 20px; }
+/* 책장 머리 아치 — 미니앱 서재 아치와 같은 숫자(폭 260 · 패딩 24 · 판화 64 · 간격 8 · 명조 32/40).
+   제목은 「내 책장」 고정 — 닉네임을 넣으면 긴 이름이 260 아치를 넘는다(닉네임은 아래 요약 줄로). */
+.shelf-arch {
+    width: 260px; max-width: 100%; box-sizing: border-box;
+    padding: 24px; gap: 8px;
+    display: flex; flex-direction: column; align-items: center; text-align: center;
+    border: 1px solid var(--text); border-radius: 999px 999px 0 0;
+}
 .shelf-greeting h1 {
     font-family: var(--font-serif);
-    font-size: 30px;
+    font-size: 32px;
+    line-height: 40px;
     font-weight: 500;
     color: var(--text);
     margin: 0;
@@ -1589,6 +1607,7 @@ body.bookdetail-page .bd-empty .status-line { margin: 0; line-height: 1.6; font-
 /* 카운트 + 액션 */
 .shop-counts { display: flex; align-items: center; gap: 18px; flex-wrap: wrap; }
 .shop-count { font-size: 13.5px; color: var(--muted); text-decoration: none; }
+a.shop-count { text-decoration: underline; text-underline-offset: 3px; }   /* 누를 수 있는 수(팔로워 목록) — 맨 글자라 밑줄이 신호(U-15) */
 .shop-count strong { font-family: var(--font-serif); font-weight: 500; color: var(--text); font-variant-numeric: tabular-nums; }
 a.shop-count:hover, a.shop-count:hover strong { color: var(--accent); }
 .shop-actions { margin-left: auto; display: flex; gap: 8px; }
@@ -2629,9 +2648,11 @@ body.personality-page #personality-app { gap: 18px; }
 .dash-btn-link { display: block; width: 100%; box-sizing: border-box; text-align: center; text-decoration: none; }
 
 /* ACHIEVED */
-.dash-state-achieved { text-align: center; align-items: center; gap: 12px; }
-.dash-achieved-title { margin: 0; font-family: var(--font-serif); font-weight: 500; font-size: 19px; color: var(--text); line-height: 1.4; }
-.dash-achieved-sub { margin: 0; font-size: 13.5px; color: var(--muted); line-height: 1.5; }
+/* 가운데는 축하 문구(도장·제목·한 줄)만 — 패널에 text-align을 두면 아래 시작 폼(책 줄·「이 책으로…」)까지
+   상속돼 대기 상태와 정렬이 갈린다(에디토리얼 PR-4 마감). */
+.dash-state-achieved { align-items: center; gap: 12px; }
+.dash-achieved-title { margin: 0; font-family: var(--font-serif); font-weight: 500; font-size: 19px; color: var(--text); line-height: 1.4; text-align: center; }
+.dash-achieved-sub { margin: 0; font-size: 13.5px; color: var(--muted); line-height: 1.5; text-align: center; }
 /* 달성 패널에 측정 시작 폼이 함께 들어갈 때: 격려 텍스트는 가운데 유지, 폼 컨트롤은 풀폭으로
    (패널이 align-items:center라 폼 자식이 좁아지는 것 방지). */
 .dash-state-achieved .dash-divider,
@@ -2825,7 +2846,6 @@ body .focus-stack.is-merged > .dash-card.is-study { border: 0; border-radius: 0;
 .focus-away .focus-away-close { margin-left: 10px; }
 /* 자리 비움 선택(설계 §9) — 대기 패널 맨 끝 조용한 설정 줄. 점선 구분은 .dash-forgive-note, 체크박스는 .auth-check와 같은 꼴. */
 .dash-away-pref { display: flex; align-items: flex-start; gap: 8px; padding-top: 12px; border-top: 1px dashed var(--border); cursor: pointer; }
-.dash-away-pref input { width: 16px; height: 16px; margin: 2px 0 0; flex-shrink: 0; accent-color: var(--accent); }
 .dash-away-pref-title { display: block; font-size: 13px; color: var(--text); }
 .dash-away-pref-desc { display: block; margin-top: 3px; font-size: 13px; line-height: 1.5; color: var(--muted); word-break: keep-all; }
 .focus-stack.is-merged .study-editor .ProseMirror { min-height: max(300px, calc(100vh - 464px)); font-size: 16px; }
@@ -3292,20 +3312,27 @@ body.has-rails { padding-bottom: calc(100px + env(safe-area-inset-bottom, 0px));
 .settings-page .set-btn-danger { width: 100%; background: transparent; color: var(--danger); border: 1px solid var(--danger); border-radius: 999px; padding: 12px 24px; font-family: inherit; font-size: 14px; font-weight: 500; cursor: pointer; transition: background .15s; }
 .settings-page .set-btn-danger:hover { background: var(--danger-soft); }
 
-/* 커스텀 체크박스(밀린시간 합산 / 복귀 메일) — 실제 <input>은 숨기고 박스 span으로 그린다 */
+/* 커스텀 체크박스(밀린시간 합산 / 복귀 메일 · 공부 홈 「자리 비우면 멈추기」) — 실제 <input>은 숨기고 박스 span으로 그린다.
+   공부 홈도 같은 규칙을 탄다 — 브라우저 기본 흰 상자는 종이 위에서 혼자 흰 면이었다(에디토리얼 PR-4). */
 .settings-page .set-check { display: flex; align-items: flex-start; gap: 11px; cursor: pointer; }
 .settings-page .set-check--card { background: var(--card-bg); border: 0;
     border-radius: 0; padding: 14px 0; }
-.settings-page .set-check input[type="checkbox"] { position: absolute; opacity: 0; width: 0; height: 0; }
-.settings-page .set-check-box {
+.settings-page .set-check input[type="checkbox"],
+.dash-away-pref input[type="checkbox"] { position: absolute; opacity: 0; width: 0; height: 0; }
+.settings-page .set-check-box,
+.dash-away-pref .set-check-box {
     flex-shrink: 0; width: 22px; height: 22px; border-radius: 2px; border: 1.6px solid var(--accent);
     background: var(--surface); display: flex; align-items: center; justify-content: center; margin-top: 1px;
     color: var(--on-accent); transition: background .15s;
 }
-.settings-page .set-check-box svg { opacity: 0; }
-.settings-page .set-check input:checked ~ .set-check-box { background: var(--accent); }
-.settings-page .set-check input:checked ~ .set-check-box svg { opacity: 1; }
-.settings-page .set-check input:focus-visible ~ .set-check-box { outline: 2px solid var(--accent-hover); outline-offset: 2px; }
+.settings-page .set-check-box svg,
+.dash-away-pref .set-check-box svg { opacity: 0; }
+.settings-page .set-check input:checked ~ .set-check-box,
+.dash-away-pref input:checked ~ .set-check-box { background: var(--accent); }
+.settings-page .set-check input:checked ~ .set-check-box svg,
+.dash-away-pref input:checked ~ .set-check-box svg { opacity: 1; }
+.settings-page .set-check input:focus-visible ~ .set-check-box,
+.dash-away-pref input:focus-visible ~ .set-check-box { outline: 2px solid var(--accent-hover); outline-offset: 2px; }
 .settings-page .set-check-body { flex: 1; }
 .settings-page .set-check-title { display: block; font-size: 14px; font-weight: 500; color: var(--text); }
 .settings-page .set-check-title-row { display: flex; align-items: center; gap: 7px; }
@@ -3409,6 +3436,9 @@ body.has-rails { padding-bottom: calc(100px + env(safe-area-inset-bottom, 0px));
 .margin-count { margin: 6px 0 0; font-size: 13px; color: var(--muted); }
 .margin-compose { justify-content: center; }
 .margin-empty { margin: 8px 0 0; font-size: 14px; color: var(--muted); line-height: 1.6; }
+/* 빈 여백(글 0건)만 판화 + 명조 문장 — 실패·불러오는 중엔 없다(오류 화면에 장식 0). */
+.margin-empty.is-blank { margin-top: 24px; font-family: var(--font-serif); font-size: 16px; line-height: 26px; text-align: center; word-break: keep-all; }
+.margin-empty.is-blank .woodcut { margin-bottom: 16px; }
 .margin-cards { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 12px; }
 .margin-card { border-radius: 2px; padding: 16px; }
 .margin-card-text {

@@ -247,6 +247,8 @@ defineExpose({ closeEdit })
                     <!-- 이름은 제목만, 설명은 따로 — label 통째가 이름이면 긴 문장이 체크박스 이름이 된다. -->
                     <input type="checkbox" :checked="awayOn" :aria-labelledby="`${prefId}-t`" :aria-describedby="`${prefId}-d`"
                            @change="emit('setAwayOn', ($event.target as HTMLInputElement).checked)">
+                    <!-- 그림 상자 — 설정 체크박스와 같은 문법(진짜 input은 숨긴다). input 바로 뒤 형제여야 :checked ~ 가 닿는다. -->
+                    <span class="set-check-box" aria-hidden="true"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg></span>
                     <span>
                         <span :id="`${prefId}-t`" class="dash-away-pref-title">자리 비우면 멈추기</span>
                         <span :id="`${prefId}-d`" class="dash-away-pref-desc">다른 탭이나 앱에 {{ AWAY_GRACE_MS / 1000 }}초 넘게 가 있으면 그동안은 재지 않아요. 측정 중엔 화면을 켜 둬요.</span>

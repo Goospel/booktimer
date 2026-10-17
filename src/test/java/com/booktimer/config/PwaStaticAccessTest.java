@@ -98,6 +98,14 @@ class PwaStaticAccessTest {
                 .andExpect(status().isOk());
     }
 
+    @Test
+    @DisplayName("REQ-17 · 판화 PNG는 비로그인으로 200이다 (랜딩 히어로 판화 — 파일이 빠진 채 배포되지 않게)")
+    void woodcutPng_isPublic_returns200() throws Exception {
+        // isOk() — not(302) 꼴이면 파일이 없을 때 404도 통과한다(/icons/**는 이미 permitAll이라 이 테스트가 잡는 것은 「파일 존재」다).
+        mvc().perform(get("/icons/woodcut-owl.png"))
+                .andExpect(status().isOk());
+    }
+
     /**
      * content-hash 정적자산 인증 누수 회귀 가드 — {@code @{/pwa-install.js}}·{@code @{/manifest.json}} 는
      * spring.web.resources.chain 으로 {@code /pwa-install-<md5>.js}·{@code /manifest-<md5>.json} 으로 렌더된다.

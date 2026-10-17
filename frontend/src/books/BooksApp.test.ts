@@ -301,3 +301,22 @@ describe('BooksApp 에디토리얼 옷', () => {
         expect(wrapper.find('.book-status-badge').attributes('style')).toContain('border: 1px solid var(--border)');
     });
 });
+
+// 에디토리얼 PR-4 — 책장 머리는 판화 한 점 + 「내 책장」 아치. 카드 머리는 「책 목록」(한 화면에 같은 제목 두 번 0).
+describe('BooksApp 머리 아치', () => {
+    test('REQ-17 · 머리 아치에 판화 1 · h1 「내 책장」 · 카드 머리 h2 「책 목록」 · 닉네임은 요약 줄로', async () => {
+        vi.mocked(fetch).mockResolvedValueOnce(okJson({ books: [book()], nickname: '닉' }));
+        const wrapper = mount(BooksApp, { attachTo: document.body });
+        await vi.waitFor(() => expect(wrapper.find('.book-row').exists()).toBe(true));
+
+        expect(wrapper.findAll('.shelf-greeting .shelf-arch .woodcut')).toHaveLength(1);
+        expect(wrapper.find('.shelf-greeting .woodcut').attributes('aria-hidden')).toBe('true');
+        expect(wrapper.find('.shelf-greeting h1').text()).toBe('내 책장');
+        expect(wrapper.find('.shelf-mine-head h2').text()).toBe('책 목록');
+        expect(wrapper.find('.shelf-summary').text()).toMatch(/^닉님 · 총 1권/);
+        // 같은 제목이 h1·h2에 두 번 서지 않는다 · 페이지(층)에 판화는 하나.
+        const heads = wrapper.findAll('h1, h2').map((h) => h.text());
+        expect(heads.filter((t) => t === '내 책장')).toHaveLength(1);
+        expect(wrapper.findAll('.woodcut')).toHaveLength(1);
+    });
+});

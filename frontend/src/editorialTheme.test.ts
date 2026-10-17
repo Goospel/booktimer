@@ -1,4 +1,4 @@
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 
 import { describe, expect, it } from 'vitest';
@@ -244,13 +244,15 @@ function blurFree(layer: string): boolean {
 
 /** 잉크(강조) 채움 값 — 토큰이 잉크가 되면 이 값으로 칠한 면은 전부 검정이 된다. */
 const INK_FILL = /^var\(--(accent|accent-fill|accent-hover|accent-hover-2|ok|ok-fill|ok-ink|text)\)$/;
-/** 잉크 채움이 허락된 자리 — 검정 알약 3 · 데이터 표식 9 · 대표 배지 · 체크박스 · 다 읽음 배지 2(설계 §5-6 「채움 자리」). */
+/** 잉크 채움이 허락된 자리 — 검정 알약 3 · 데이터 표식 9 · 대표 배지 · 체크박스 2(설정 · 공부 홈) · 다 읽음 배지 2 · 판화(설계 §5-6 「채움 자리」 · PR-4). */
 const INK_FILL_ALLOWED = new Set([
     '.btn-primary', '.dash-btn-fill', '.auth-page .auth-btn-primary',
     '.dash-progress-fill', '.dash-progress-fill-ok', '.dash-pulse-dot', '.margin-fresh-dot', '.pbti-dot.is-active',
     '.study-mark.is-kept', '.study-legend-mark.is-kept', '.study-dot', '.lp-grass-cell.g5',
     '.personality-badge-rep',
     '.settings-page .set-check input:checked ~ .set-check-box',
+    // PR-4 — 공부 홈 체크박스(설정과 같은 상자) · 판화(마스크 모양을 잉크로 칠한다 — 누를 것이 아니라 그림이다).
+    '.dash-away-pref input:checked ~ .set-check-box', '.woodcut',
     '.shop-badge-finished', 'body.bookdetail-page .bd-status-finished',
 ]);
 function inkFillLeaks(rs: Rule[]): string[] {
@@ -657,5 +659,85 @@ describe('에디토리얼 홈 — 아치 표제창 + 오늘 표 (PR-3)', () => {
         const chip = merged(APP(), '.dash-streak-chip');
         expect(chip.get('background')).toBe('transparent');
         expect(chip.get('color')).toBe('var(--muted)');
+    });
+});
+
+/** 판화 PNG — 미니앱 자산과 웹 정적 파일(교차 채널 — 바이트가 갈리면 운다). */
+const WOODCUT_WEB = join(HERE, '..', '..', 'src', 'main', 'resources', 'static', 'icons', 'woodcut-owl.png');
+const WOODCUT_MINI = join(HERE, '..', '..', 'miniapp', 'src', 'assets', 'woodcut-owl.png');
+
+describe('에디토리얼 판화 · 화면 마감 (PR-4)', () => {
+    it('REQ-17 · 판화 파일이 미니앱 것과 같은 바이트다', () => {
+        const mini = readFileSync(WOODCUT_MINI);
+        expect(mini.length).toBeGreaterThan(1000);   // 양성 대조 — 빈 파일끼리 같다고 통과하지 않게
+        expect(existsSync(WOODCUT_WEB)).toBe(true);
+        expect(readFileSync(WOODCUT_WEB).equals(mini)).toBe(true);
+        // 모양은 PNG 알파, 색은 토큰 — 낮·밤을 같은 규칙 하나가 칠한다(반전 필터·배경 그림으로 되돌아가지 않게).
+        const w = merged(APP(), '.woodcut');
+        expect(w.get('-webkit-mask')).toBe("url('../icons/woodcut-owl.png') center / contain no-repeat");
+        expect(w.get('mask')).toBe("url('../icons/woodcut-owl.png') center / contain no-repeat");
+        expect(w.get('background-color')).toBe('var(--text)');
+        const all = rulesP(APP()).filter((r) => /\.woodcut(?![\w-])/.test(r.selector)).flatMap((r) => declsOf(r.body)).map(([p]) => p);
+        expect(all).not.toContain('filter');
+        expect(all).not.toContain('background-image');
+        for (const [s, px] of [['.woodcut-64', '64px'], ['.woodcut-148', '148px'], ['.woodcut-180', '180px']]) expect(merged(APP(), s).get('width'), s).toBe(px);
+    });
+
+    it('REQ-17 · 랜딩 빈 상자 → 아치 창(잉크 1px · 둥근 머리 · 면 없음)', () => {
+        const m = merged(LAND(), '.lp-placeholder');
+        expect(m.get('border')).toBe('1px solid var(--text)');
+        expect(m.get('border-radius')).toBe('999px 999px 0 0');
+        expect(m.get('width')).toBe('min(360px, 100%)');
+        expect(m.get('min-height')).toBe('380px');
+        expect(m.has('background')).toBe(false);
+        // 개발 메모 두 줄의 규칙이 남지 않는다(마크업과 함께 지웠다).
+        expect(rulesP(LAND()).filter((r) => /lp-placeholder-(label|sub)/.test(r.selector))).toEqual([]);
+    });
+
+    it('REQ-17 · 책장 머리는 작은 아치(폭 260 · 패딩 24 · 간격 8 · 명조 32/40)', () => {
+        const a = merged(APP(), '.shelf-arch');
+        expect(a.get('width')).toBe('260px');
+        expect(a.get('padding')).toBe('24px');
+        expect(a.get('gap')).toBe('8px');
+        expect(a.get('border')).toBe('1px solid var(--text)');
+        expect(a.get('border-radius')).toBe('999px 999px 0 0');
+        const h = merged(APP(), '.shelf-greeting h1');
+        expect(h.get('font-size')).toBe('32px');
+        expect(h.get('line-height')).toBe('40px');
+        expect(h.get('font-weight')).toBe('500');
+    });
+
+    it('마감 · 달성 패널은 축하 문구만 가운데 — 아래 시작 폼은 대기 상태와 같은 정렬', () => {
+        // 패널에 text-align: center를 두면 시작 폼(책 줄·「이 책으로…」)까지 상속돼 대기 상태와 갈린다.
+        const panel = rulesP(APP()).filter((r) => r.selector === '.dash-state-achieved').flatMap((r) => declsOf(r.body));
+        expect(panel.length).toBeGreaterThan(0);   // 양성 대조 — 규칙을 실제로 읽었다
+        expect(panel.filter(([p]) => p === 'text-align')).toEqual([]);
+        for (const s of ['.dash-achieved-title', '.dash-achieved-sub']) expect(merged(APP(), s).get('text-align'), s).toBe('center');
+    });
+
+    it('마감 · 공부 홈 「자리 비우면 멈추기」 체크박스는 설정 체크박스와 같은 문법', () => {
+        // 브라우저 기본 흰 상자는 종이 위에서 혼자 흰 면이다 — 진짜 input은 숨기고 잉크 테 상자를 그린다.
+        const pairs: Array<[string, string]> = [
+            ['.settings-page .set-check input[type="checkbox"]', '.dash-away-pref input[type="checkbox"]'],
+            ['.settings-page .set-check-box', '.dash-away-pref .set-check-box'],
+            ['.settings-page .set-check-box svg', '.dash-away-pref .set-check-box svg'],
+            ['.settings-page .set-check input:checked ~ .set-check-box', '.dash-away-pref input:checked ~ .set-check-box'],
+            ['.settings-page .set-check input:checked ~ .set-check-box svg', '.dash-away-pref input:checked ~ .set-check-box svg'],
+            ['.settings-page .set-check input:focus-visible ~ .set-check-box', '.dash-away-pref input:focus-visible ~ .set-check-box'],
+        ];
+        for (const [set, away] of pairs) {
+            const s = merged(APP(), set);
+            expect(s.size, set).toBeGreaterThan(0);   // 양성 대조 — 설정 쪽 규칙을 실제로 읽었다
+            expect(Object.fromEntries(merged(APP(), away)), away).toEqual(Object.fromEntries(s));
+        }
+        // 옛 기본 상자(accent-color 16px)가 남으면 숨긴 input 규칙과 싸운다.
+        expect(rulesP(APP()).filter((r) => r.selector === '.dash-away-pref input')).toEqual([]);
+    });
+
+    it('REQ-22 · 맨 글자 링크엔 밑줄 — 랜딩 내비·바닥글 · 책방 팔로워 수(U-15 신호 감사)', () => {
+        for (const [css, s] of [[LAND(), '.lp-nav-links a'], [LAND(), '.lp-footer a'], [APP(), 'a.shop-count']] as const) {
+            expect(merged(css, s).get('text-decoration'), s).toBe('underline');
+            expect(merged(css, s).get('text-underline-offset'), s).toBe('3px');
+        }
     });
 });

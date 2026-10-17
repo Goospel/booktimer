@@ -261,8 +261,12 @@ async function removeBook(book: MyBookSummary) {
     <div class="shelf-layout">
     <header class="shelf-greeting">
       <div class="shelf-greeting-text">
-        <h1>{{ nickname }}님의 책장</h1>
-        <p class="shelf-summary tnum">총 {{ summary.total }}권 · 읽는 중 {{ summary.reading }} · 완독 {{ summary.finished }} · 읽고 싶음 {{ summary.want }}</p>
+        <!-- 머리 아치 — 판화 한 점 + 「내 책장」(바 메뉴·페이지 제목과 같은 말). 닉네임은 아래 요약 줄로 내려 긴 이름이 아치를 넘지 않는다. -->
+        <div class="shelf-arch">
+          <span class="woodcut woodcut-64" aria-hidden="true"></span>
+          <h1>내 책장</h1>
+        </div>
+        <p class="shelf-summary tnum">{{ nickname }}님 · 총 {{ summary.total }}권 · 읽는 중 {{ summary.reading }} · 완독 {{ summary.finished }} · 읽고 싶음 {{ summary.want }}</p>
       </div>
     </header>
 
@@ -331,7 +335,7 @@ async function removeBook(book: MyBookSummary) {
     <section class="card shelf-mine">
       <!-- 카드 헤드: 제목(좌) + 제휴 고지 ⓘ(우). 책방 '공개한 책' 카드 헤드와 동일 — 카드 안 우상단. -->
       <div class="shelf-mine-head">
-        <h2>내 책장</h2>
+        <h2>책 목록</h2>
         <span class="affiliate-pop-wrap" :class="{ 'is-open': noteOpen }">
           <button type="button" class="affiliate-pop-btn" :aria-expanded="noteOpen" aria-label="구매 링크 안내 보기"
                   @click="noteOpen = !noteOpen">

@@ -256,3 +256,35 @@ describe('MarginPanel 좋아요 명단', () => {
         expect(wrapper.text()).not.toContain('아직 아무도')
     })
 })
+
+// 에디토리얼 PR-4 — 판화 한 점은 「빈 여백」에만. 실패·불러오는 중·글 있음엔 없다(오류 화면에 장식 0).
+describe('MarginPanel 빈 여백 판화', () => {
+    test('REQ-17 · 글이 0건이면 판화 1 + 문장', async () => {
+        respond({ book: BOOK, ownerNickname: '주인', self: true, entries: [] })
+        const wrapper = open()
+        await vi.waitFor(() => expect(wrapper.text()).toContain('아직 남긴 글이 없어요'))
+
+        expect(wrapper.findAll('.woodcut.woodcut-148')).toHaveLength(1)
+        expect(wrapper.find('.woodcut').attributes('aria-hidden')).toBe('true')
+    })
+
+    test('REQ-17 · 글이 있으면 판화 0', async () => {
+        respond({ book: BOOK, ownerNickname: '주인', self: false, entries: [entry(7, '있는 글')] })
+        const wrapper = open()
+        await vi.waitFor(() => expect(wrapper.text()).toContain('있는 글'))
+
+        expect(wrapper.findAll('.woodcut')).toHaveLength(0)
+    })
+
+    test('REQ-17 · 불러오는 중·실패엔 판화 0', async () => {
+        let release!: (r: Response) => void
+        vi.mocked(fetch).mockReturnValue(new Promise<Response>((r) => { release = r }))
+        const wrapper = open()
+        await vi.waitFor(() => expect(wrapper.text()).toContain('불러오는 중'))
+        expect(wrapper.findAll('.woodcut')).toHaveLength(0)
+
+        release({ ok: false, status: 500 } as Response)
+        await vi.waitFor(() => expect(wrapper.text()).toContain('불러오지 못했어요'))
+        expect(wrapper.findAll('.woodcut')).toHaveLength(0)
+    })
+})
