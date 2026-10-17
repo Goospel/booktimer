@@ -84,8 +84,9 @@ const error = ref(false);
 const activeTab = ref<'records' | 'missed'>('records');
 
 // 반응형 레이아웃: 좁으면 pill 탭(stacked), 넓으면 2단(split). 판단은 순수함수 chooseLayout에 위임.
-// split일 때 body에 history-wide를 달아 컨테이너를 넓힌다(미디어쿼리 대신 JS로 토글 — innerWidth와
-// CSS @media의 스크롤바 폭 불일치로 경계에서 어긋나는 것 방지, 단일 출처=chooseLayout(innerWidth)).
+// body.history-wide는 컨테이너를 940으로 묶는다. 첫 프레임은 history.html이 미리 달아 두고(마운트 뒤에 달면
+// 1160→940 이동이 CLS로 잡혔다) 여기선 layout을 따라 토글만 한다 — 940 상한은 창 1188px 이상에서만 걸려
+// 좁을 때 떼어도 폭은 그대로다.
 const layout = ref<RecordsLayout>(chooseLayout(typeof window !== 'undefined' ? window.innerWidth : 0));
 
 function applyLayout(): void {
