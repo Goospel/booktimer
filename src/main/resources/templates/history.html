@@ -13,7 +13,9 @@
     <!-- 광고 로더(게시자 ID 설정 시에만) -->
     <th:block th:replace="~{ads :: loader}"></th:block>
 </head>
-<body class="history-page has-rails">
+<!-- history-wide(본문 940)는 첫 HTML부터 단다 — 섬이 마운트 뒤에 달면 1160→940 이동이 CLS로 잡혔다(넓은 창 0.05).
+     좁은 창(<1100)에선 HistoryApp이 떼지만 폭은 그대로다: 940 상한은 창 1188px 이상에서만 걸린다. -->
+<body class="history-page has-rails history-wide">
 <th:block th:replace="~{fragments/side-rails :: rails}"></th:block>
 <div class="container" id="main-content" tabindex="-1">
     <header class="brand">

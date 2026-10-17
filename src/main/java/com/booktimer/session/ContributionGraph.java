@@ -26,6 +26,7 @@ public record ContributionGraph(
 
     /**
      * 상단 월 라벨 — 해당 월이 처음 등장하는 주 열 위에 표시.
+     * 맨 앞(이번 달) 라벨은 3열 미만이면 빠진다 — 소비자는 {@code monthLabels[0]}이 0열이라 가정하지 말 것.
      *
      * @param weekIndex {@link #weeks}의 열 인덱스
      * @param label     표시 문자열(예: "6월")

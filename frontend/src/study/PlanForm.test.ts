@@ -119,3 +119,15 @@ describe('PlanForm', () => {
         expect(wrapper.find('[data-testid="plan-cap-spent"]').exists()).toBe(true);
     });
 });
+
+describe('PlanForm 에디토리얼 검정 알약(PR-2)', () => {
+    test('REQ-22 · 초안이 떠도 일정 폼엔 검정 알약이 없다(이 층의 검정은 하루 일정 「추가」)', async () => {
+        vi.mocked(fetch).mockResolvedValueOnce(okJson(DRAFT));
+        const wrapper = mountForm();
+        await fillAndGenerate(wrapper);
+        // 양성 대조 — 「일정 만들기」·「달력에 적용」이 실제로 그려졌다.
+        expect(wrapper.find('[data-testid="plan-generate"]').exists()).toBe(true);
+        expect(wrapper.findAll('button').some((b) => b.text().includes('적용'))).toBe(true);
+        expect(wrapper.findAll('.btn-primary, .dash-btn-fill, .auth-btn-primary').length).toBe(0);
+    });
+});

@@ -15,7 +15,7 @@ import {
 } from './App';
 import type { DashboardResponse, StudyBookRow, StudyState } from './api';
 import { IDLE_STUDY } from './api';
-import { ACTIVE_STUDY_RELIEF, HERO_CARD_BG_VAR, Home, ModeToggle, heroOverline } from './screens/Home';
+import { ACTIVE_STUDY_RELIEF, Home, ModeToggle, heroOverline } from './screens/Home';
 import { SessionGoalSheet } from './screens/SessionGoalSheet';
 import { graph, stubLocalStorage, userAgent } from './test-fixtures';
 
@@ -30,6 +30,8 @@ import { graph, stubLocalStorage, userAgent } from './test-fixtures';
 vi.mock('./toss', () => ({
   REWARD_AD_GROUP_ID: '',
   watchRewardAd: vi.fn(),
+  useAdSlot: () => 'idle',
+  preloadAd: vi.fn(),
   GOAL_MET_TEMPLATE_CODE: 'test-template',
   notificationAgreementSupported: () => false,
   requestNotificationAgreement: vi.fn(),
@@ -106,9 +108,9 @@ describe('탭바 원 — 무엇을 재기 시작하는지 라벨이 말한다', 
     expect(timerActionView(true, 'study').label).toBe('측정 끝내기');
   });
 
-  it('대기 링·배경은 토큰을 탄다 — 공부 모드 색 전환이 css 한 벌로 따라오게', () => {
-    expect(timerActionView(false, 'study').ring).toContain('--accentRing');
+  it('원 배경은 강조 토큰을 탄다 — 공부 모드 파란 잉크가 css 한 벌로 따라오게(링은 에디토리얼에서 걷었다)', () => {
     expect(timerActionView(false, 'study').background).toContain('--adaptiveBlue700');
+    expect(timerActionView(true, 'study').background).toContain('--adaptiveBlue700');
   });
 });
 
@@ -174,8 +176,9 @@ describe('공부 모드 색 — css에 실재하는가', () => {
   });
 
   it('시안 accent·deep이 세이지 사다리 자리를 대신한다', () => {
-    expect(css).toContain('--adaptiveBlue500: #5F7E96');
-    expect(css).toContain('--adaptiveBlue700: #47657C');
+    // REQ-14 · 공부는 강조 자리만 파란 잉크(D3=A) — 500~900이 한 값 #2B4A6F(종이 대비 8.00)
+    expect(css).toContain('--adaptiveBlue500: #2B4A6F');
+    expect(css).toContain('--adaptiveBlue700: #2B4A6F');
   });
 
   it('낮 기본값 토큰 두 개가 html:root에 있다 — 없으면 fallback만 남아 공부 모드가 안 따라온다', () => {
@@ -185,19 +188,15 @@ describe('공부 모드 색 — css에 실재하는가', () => {
   });
 
   /**
-   * 히어로 카드 틴트(2차 §7-B) — 「토글했는데 색이 안 바뀐다」의 처방이다. 값이 <b>양쪽에</b> 있어야
-   * 의미가 있다: 낮 기본값이 빠지면 인라인 fallback만 남아 공부 모드에서도 종이색 그대로다.
+   * 히어로 카드 틴트(2차 §7-B)는 걷혔다(에디토리얼 PR-2) — 아치는 면이 없고, 「토글했는데 색이 안 바뀐다」의 처방은
+   * 면이 아니라 강조 잉크(파란 잉크)가 맡는다. 토큰이 css 어디에도, 홈 마크업 어디에도 남지 않는다.
    */
-  it('히어로 카드 배경 토큰이 낮·공부 양쪽에 있다 — 한쪽만 있으면 틴트가 조용히 죽는다', () => {
-    const root = css.slice(css.indexOf('html:root {'), css.indexOf('}', css.indexOf('html:root {')));
+  it('REQ-14 · 히어로 틴트 토큰이 사라졌다 — 공부 모드는 면이 아니라 강조 잉크로 말한다', () => {
     const study = css.slice(css.indexOf(`body.${STUDY_CLASS} {`), css.indexOf('}', css.indexOf(`body.${STUDY_CLASS} {`)));
 
-    expect(root).toContain(`${HERO_CARD_BG_VAR}: #FBF9F4`); // 독서 = 따뜻한 부푼 면(톤 조율 A)
-    expect(study).toContain(`${HERO_CARD_BG_VAR}: #ECEFEE`); // 공부 = 채도 낮춘 청회색 — 따뜻한 바탕 위에서 안 튄다
-  });
-
-  it('히어로 카드가 그 토큰을 실제로 소비한다 — 선언만 있고 안 쓰면 화면은 안 바뀐다', () => {
-    expect(renderHome('study')).toContain(`background:var(${HERO_CARD_BG_VAR}`);
+    expect(study).toContain('--adaptiveBlue700:'); // 블록을 제대로 잘랐다(아래 부재 단언이 공허하지 않음)
+    expect(css).not.toContain('--heroCardBg');
+    expect(renderHome('study')).not.toContain('--heroCardBg');
   });
 
   /**
@@ -221,7 +220,8 @@ describe('공부 모드 색 — css에 실재하는가', () => {
 
   it('공부 블록은 옅은 타일만 파랑으로 갈고 그림자는 낮 값을 물려받는다 — 파랑 틴트 그림자는 따뜻한 바탕 위에서 튄다(톤 조율 A)', () => {
     const study = css.slice(css.indexOf(`body.${STUDY_CLASS} {`), css.indexOf('}', css.indexOf(`body.${STUDY_CLASS} {`)));
-    expect(study).toContain('--adaptiveBlue50: #D6E0E7'); // 블록을 제대로 잘랐다(아래 부재 단언이 공허하지 않음)
+    expect(study).toContain('--adaptiveBlue700: #2B4A6F'); // 블록을 제대로 잘랐다(아래 부재 단언이 공허하지 않음)
+    expect(study).not.toMatch(/--adaptiveBlue50\s*:/); // 옅은 면은 낮 그대로 — 종이가 파래지지 않는다
     expect(study).not.toMatch(/--puffShadow\s*:/);
     expect(study).not.toMatch(/--dentShadow\s*:/);
   });
@@ -243,11 +243,11 @@ describe('공부 모드 색 — css에 실재하는가', () => {
     const root = css.slice(css.indexOf('html:root {'), css.indexOf('}', css.indexOf('html:root {')));
 
     for (const decl of [
-      '--grass0: #E7E2D5',
-      '--grass1: #CFD9C0',
-      '--grass2: #A9BD99',
-      '--grass3: #6E9565',
-      '--grass4: #3F5A3C',
+      '--grass0: #E6DFD2',
+      '--grass1: #CDC3B2',
+      '--grass2: #A29785',
+      '--grass3: #625A4F',
+      '--grass4: #1D1B18',
     ]) {
       expect(root).toContain(decl);
     }
@@ -257,7 +257,7 @@ describe('공부 모드 색 — css에 실재하는가', () => {
     const study = css.slice(css.indexOf(`body.${STUDY_CLASS} {`), css.indexOf('}', css.indexOf(`body.${STUDY_CLASS} {`)));
 
     // 세이지 4단과 같은 명도의 파랑 짝수 칸(200·400·600·800) — 새 색을 만들지 않는다.
-    for (const decl of ['--grass1: #AFC4D2', '--grass2: #83A0B4', '--grass3: #536F85', '--grass4: #3A5266']) {
+    for (const decl of ['--grass1: #B8C3D1', '--grass2: #8598B0', '--grass3: #4F6A8B', '--grass4: #2B4A6F']) {
       expect(study).toContain(decl);
     }
     // 0단은 「기록 없음」의 종이색이라 모드가 갈려도 같다 — 덮으면 빈 칸이 파래진다.
@@ -266,9 +266,13 @@ describe('공부 모드 색 — css에 실재하는가', () => {
 
   /** 큰 시계 잉크(2차 §7-C) — 화면 최대 활자가 「파란 펜」이 된다. 토큰 경유라 값은 css가 정한다. */
   it('공부 모드의 큰 시계는 파란 잉크다 — 독서 모드 시계는 그대로 잉크색', () => {
-    // 큰 시계만 집는다 — 머리말(오버라인)은 두 모드 다 ACCENT라 그걸로 재면 늘 파랑이 잡힌다.
-    const clockTag = (markup: string, clock: string) =>
-      markup.slice(markup.lastIndexOf('<span', markup.indexOf(clock)), markup.indexOf(clock));
+    // 큰 시계만 집는다 — 머리말(오버라인)은 두 모드 다 ACCENT라 그걸로 재면 늘 파랑이 잡힌다. 에디토리얼 PR-2부터 시계는
+    // 숫자를 1ch 칸으로 쪼개 그리므로 글자 대신 읽기 이름(aria-label)으로 그릇 태그를 집는다.
+    const clockTag = (markup: string, clock: string) => {
+      const at = markup.indexOf(`aria-label="${clock}"`);
+      return at < 0 ? '' : markup.slice(markup.lastIndexOf('<div', at), markup.indexOf('>', at));
+    };
+    expect(clockTag(renderHome('reading'), '45:00')).toContain('data-hero-clock'); // 그릇을 잡았다(아래 부재 단언이 공허하지 않음)
 
     expect(clockTag(renderHome('study', {}, { ...IDLE_STUDY, todaySeconds: 3_725 }), '01:02:05'))
       .toContain('--adaptiveBlue700');
@@ -351,13 +355,13 @@ describe('회당 시간 배선 (소스)', () => {
     expect(count(home, 'if (shouldHaptic(wasReached.current, studyReached)) hapticOnce()')).toBe(1);
   });
 
-  it('회당 시간 설정에는 전면광고가 없다(Q1)', () => {
-    expect(count(home, 'showInterstitialAd(')).toBe(0);
-    expect(count(sheet, 'showInterstitialAd(')).toBe(0);
-    // 저장 배선은 App에 산다 — App의 광고 호출은 독서 「목표 바꾸기」(goToGoal) 한 자리뿐이어야 한다.
-    expect(count(app, 'showInterstitialAd(')).toBe(1);
+  // 「목표 바꾸기」 전면 광고는 걷었다(비게임 체크리스트 ③ — 사전 로딩·예상 못 한 전면·인터랙션 2초가 이 한 자리였다).
+  it('REQ-10 · goToGoal은 광고를 기다리지 않고 곧장 목표 화면으로 간다', () => {
     const goToGoal = app.slice(app.indexOf('const goToGoal ='), app.indexOf('switch (view)'));
-    expect(goToGoal).toContain('showInterstitialAd(');
+    expect(goToGoal).toContain("setView('goal')");
+    expect(goToGoal).not.toContain('await');
+    // 전면 래퍼 이름째 쓰면 PR의 잔재 확인 grep에 이 줄이 걸린다 — 더 넓은 「Interstitial」로 센다.
+    expect(count(app, 'Interstitial')).toBe(0);
   });
 
   it('시트의 저장 버튼은 휠 판정을 본다 — 0시간 0분·6시간 초과에서 잠긴다', () => {
@@ -414,7 +418,6 @@ function renderHome(
         onTimerChange={() => {}}
         celebrate={celebrate}
         onGoGoal={() => {}}
-        goalAdPending={false}
         onGoSettings={() => {}}
         onError={() => {}}
         onOpenMargin={() => {}}
@@ -544,7 +547,6 @@ describe('홈 — 공부 회당 시간', () => {
           onTimerChange={() => {}}
           celebrate={false}
           onGoGoal={() => {}}
-          goalAdPending={false}
           onGoSettings={() => {}}
           onError={() => {}}
           onOpenMargin={() => {}}
@@ -647,6 +649,15 @@ describe('회당 시간 시트 (SessionGoalSheet)', () => {
     expect(markup).toContain('aria-label="시간 선택"');
     expect(markup).toContain('aria-label="분 선택"');
     expect(markup).toContain('data-wheel-band');
+    // 에디토리얼 PR-4 — 목표 화면과 같은 밴드: 면 없이 위아래 muted 선
+    const at = markup.indexOf('data-wheel-band');
+    const band = markup.slice(markup.lastIndexOf('<', at), markup.indexOf('>', at));
+    expect(band).toContain('border-top:1px solid var(--adaptiveGrey600');
+    expect(band).toContain('border-bottom:1px solid var(--adaptiveGrey600');
+    // 선이 휠 안개 위에 서되(z 1) 누름은 휠로 통과해야 한다 — 하나만 빠지면 가운데 줄이 휠을 막는다
+    expect(band).toContain('z-index:1');
+    expect(band).toContain('pointer-events:none');
+    expect(band).not.toMatch(/background|border-radius/);
     expect(markup).toContain('height:180px');
     expect(markup).toContain('goal-wheels');
   });
@@ -730,9 +741,10 @@ describe('모드 토글', () => {
     expect(toggle('reading')).not.toContain('aria-disabled');
   });
 
-  it('세그먼트는 눌린 트랙 위에 선다(시안 Soft-Home) — 절대위치가 아니라 머리 줄의 흐름 안이다', () => {
+  it('세그먼트는 그릇 면 없이 고른 칸의 잉크 밑줄이 말한다(안 1 밑줄형) — 절대위치가 아니라 아치 속 흐름 안이다', () => {
     const markup = toggle('reading');
-    expect(markup).toContain('background:var(--softDent');
+    expect(markup).toContain('border-bottom:2px solid var(--adaptiveBlue700');
+    expect(markup).not.toContain('background:var(--softDent');
     expect(markup).not.toContain('position:absolute');
   });
 

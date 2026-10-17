@@ -85,7 +85,7 @@ function onCreated(): void {
 
         <template v-if="!book">
             <p class="dash-card-note">책을 고르면 그 책의 여백에 글을 남길 수 있어요.</p>
-            <button type="button" class="dash-btn-fill" @click="emit('open-sheet')">책 고르기</button>
+            <button type="button" class="dash-btn-outline" @click="emit('open-sheet')">책 고르기</button>
         </template>
 
         <template v-else>
@@ -109,7 +109,7 @@ function onCreated(): void {
                 </li>
             </ul>
 
-            <button type="button" class="dash-btn-fill" @click="composerOpen = true">
+            <button type="button" class="dash-btn-outline" @click="composerOpen = true">
                 《{{ book.title }}》에 여백 남기기
             </button>
         </template>

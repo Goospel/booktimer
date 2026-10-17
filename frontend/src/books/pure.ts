@@ -49,16 +49,18 @@ export function byline(author: string | null, publisher: string | null): string 
 }
 
 // ── 무표지 플레이스홀더 색(결정적 해시 매핑) ──────────────────────────────
-// coverUrl 이 없을 때 색 배경 + 이니셜로 표지를 대신한다. 같은 책은 항상 같은 색이
-// 되도록 seed(isbn13 우선, 없으면 title)를 해시해 고정 팔레트에서 결정적으로 고른다.
-// 팔레트·fg 는 시안 mock 의 cov 색 12종과 cover-present fg 를 그대로 사용.
+// coverUrl 이 없을 때 천 장정 색 + 미색 이니셜로 표지를 대신한다(에디토리얼 — 「표지가 색의 주인공」).
+// 같은 책은 언제 어디서 그려도 같은 색이어야 해서 **제목**을 해시해 고정 팔레트에서 결정적으로 고른다.
+// 팔레트·해시·이니셜은 미니앱 ui.tsx와 같다(순서까지 — editorialTheme.test.ts가 그 파일을 읽어 대조한다).
+// 순서: oxblood · navy · forest · plum · teal · sienna · slate · umber · olive · wine · indigo · moss.
 
 export const COVER_PALETTE: readonly string[] = [
-    '#B8C2A6', '#D6C3B0', '#C7B89B', '#A9B9A0', '#B0B7A8', '#CBB9A3',
-    '#C3CBC0', '#BFC8B4', '#CFC0AE', '#D9C8A9', '#C2BBA8', '#B5A98F',
+    '#7A2E28', '#233A57', '#2F4B3A', '#5B3A55', '#2C5C5E', '#A0522D',
+    '#3E4A56', '#5A4632', '#4F5A2E', '#6B2C3E', '#2E3F66', '#3F5B45',
 ];
 
-export const COVER_FG = 'rgba(44,42,36,0.5)';
+/** 천 표지 위 이니셜 — 미색 리터럴(최저 대비 sienna 4.94). 표지는 물건이라 다크에서도 안 뒤집는다. */
+export const COVER_FG = '#F5F0E6';
 
 export interface CoverColor {
     bg: string;
@@ -74,25 +76,35 @@ export function coverColor(seed: string): CoverColor {
     return { bg: COVER_PALETTE[h % COVER_PALETTE.length], fg: COVER_FG };
 }
 
+/** 무표지 자리 표지의 인라인 색 — 해시 입력은 **제목**(미니앱 ui.tsx와 같다 — isbn을 쓰면 같은 책이 채널마다 다른 색이 된다). */
+export function coverStyle(title: string): { background: string; color: string } {
+    const c = coverColor(title);
+    return { background: c.bg, color: c.fg };
+}
+
 // ── 상태 배지 색 ──────────────────────────────────────────────────────────
-// status(BookStatus.name())별 배지 배경·글자색. 시안 My Shelf 의 STATUS 매핑 그대로.
+// status(BookStatus.name())별 배지 톤 — 에디토리얼 3톤(미니앱 피드 배지와 같은 역할):
+// 다 읽음 = 잉크 채움 · 읽는 중 = 가는 선 · 읽고 싶어요 = 옅은 면. 상태색을 한 색으로 모은 재테마(D8=①)에서
+// 세 배지가 같은 회색 칩이 되지 않게 모양으로 가른다.
 
 export interface StatusBadge {
     bg: string;
     fg: string;
+    /** 테 — 「읽는 중」만 가는 선. 소비처(statusStyle)가 이 값을 버리면 화면에 선이 안 선다. */
+    border?: string;
 }
 
 // 값은 hex가 아니라 **토큰 참조**다. 이 색은 `:style`로 인라인 박히므로 hex를 그대로 두면
-// 다크에서 그 배지만 크림색으로 남는다 — 인라인 스타일은 CSS의 어떤 테마 규칙보다 세다.
-// 토큰 정의는 app.css 한 곳(라이트 `:root` + 다크 블록)이고, 라이트 값은 여섯 자리 전부
-// 옮기기 전 hex 그대로다(`--warn-bg-4` = #F0E8DB 처럼 — 사용자 결정 「라이트는 지금 그대로」).
+// 다크에서 그 배지만 라이트 값으로 남는다 — 인라인 스타일은 CSS의 어떤 테마 규칙보다 세다.
+const READING_BADGE: StatusBadge = { bg: 'transparent', fg: 'var(--muted)', border: '1px solid var(--border)' };
 const STATUS_BADGE: Record<string, StatusBadge> = {
-    READING: { bg: 'var(--sage-soft)', fg: 'var(--accent-hover)' },  // 읽는 중 — 세이지
-    FINISHED: { bg: 'var(--ok-soft)', fg: 'var(--ok)' },             // 완독 — 선명한 초록
-    WANT_TO_READ: { bg: 'var(--warn-bg-4)', fg: 'var(--warn-fg)' },    // 읽고 싶음 — 베이지
+    READING: READING_BADGE,                                           // 읽는 중 — 가는 선
+    FINISHED: { bg: 'var(--accent-fill)', fg: 'var(--on-accent)' },   // 다 읽음 — 잉크 채움
+    WANT_TO_READ: { bg: 'var(--sage-soft)', fg: 'var(--ink-2)' },     // 읽고 싶음 — 옅은 면
 };
 
-export const STATUS_BADGE_FALLBACK: StatusBadge = { bg: 'var(--line-1-4)', fg: 'var(--muted)' };
+/** 알 수 없는 상태 — 읽는 중과 같은 꼴(가장 조용한 톤). */
+export const STATUS_BADGE_FALLBACK: StatusBadge = READING_BADGE;
 
 export function statusBadge(status: string): StatusBadge {
     return STATUS_BADGE[status] ?? STATUS_BADGE_FALLBACK;

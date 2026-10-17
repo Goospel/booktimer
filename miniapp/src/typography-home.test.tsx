@@ -114,12 +114,12 @@ describe('소식 피드 (2b)', () => {
     return at < 0 ? '' : markup.slice(markup.lastIndexOf('<', at), at);
   };
 
-  it('책 제목이 세리프 700이다 — 문장 안에서 「무슨 책인가」가 값이다', () => {
+  it('책 제목이 명조 500이다 — 문장 안에서 「무슨 책인가」가 값이다', () => {
     const tag = tagOf(feed(event()), '『데미안』');
 
     expect(tag).not.toBe('');
-    expect(tag).toContain('Gowun Batang');
-    expect(tag).toContain('700');
+    expect(tag).toContain('Noto Serif KR');
+    expect(tag).toContain('font-weight:500');
   });
 
   /**
@@ -131,7 +131,7 @@ describe('소식 피드 (2b)', () => {
     const tag = tagOf(feed(event()), '나비독서님이 ');
 
     expect(tag).not.toBe('');
-    expect(tag).not.toContain('Gowun Batang');
+    expect(tag).not.toContain('Noto Serif KR');
   });
 
   /**
@@ -139,7 +139,7 @@ describe('소식 피드 (2b)', () => {
    * 라벨과 같은 서체면 「여백」과 「3」이 한 덩어리로 뭉개진다.
    */
   it('「여백 N」 배지의 숫자가 세리프다', () => {
-    expect(tagOf(feed(event({ type: 'STORY', count: 3 })), '3')).toContain('Gowun Batang');
+    expect(tagOf(feed(event({ type: 'STORY', count: 3 })), '3')).toContain('Noto Serif KR');
   });
 
   /** Soft 재테마(2026-09-23)가 배지 바닥을 13으로 올렸다 — 규칙 1 「최소 13px」. */

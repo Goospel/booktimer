@@ -1,6 +1,8 @@
 import type { CSSProperties, ReactNode } from 'react';
 import { useEffect, useRef, useState } from 'react';
 
+import { FLOAT } from './ui';
+
 /**
  * 코치마크 — 처음 온 사람에게 「이 버튼이 무엇인가」를 1회 가리키는 말풍선.
  *
@@ -118,24 +120,22 @@ export function CoachmarkBubble({
   dots?: { index: number; total: number };
   style: CSSProperties;
 }) {
-  const sage = 'var(--adaptiveBlue500, #6E8A6A)';
+  // 에디토리얼(PR-1) — 떠 있는 면 = 미색 + 잉크 1px(FLOAT), 그림자 0. 꼬리는 잉크 삼각형이라 테두리와 한 몸으로 읽힌다.
+  const ink = 'var(--adaptiveGrey800, #1D1B18)';
 
   return (
     <div
       style={{
         padding: '14px 16px',
-        borderRadius: 14,
-        background: sage,
-        boxShadow: '0 6px 20px rgba(0, 0, 0, 0.25)',
+        ...FLOAT,
         textAlign: 'center',
         pointerEvents: 'none', // 말풍선은 읽는 것뿐 — 눌린 곳은 덮개(닫기)나 대상 자신이어야 한다.
         ...style,
       }}
     >
-      {/* 제목과 설명은 크기·불투명도로 갈린다 — 개구엔 600이 없어 700으로 올림되므로, 굵기로
-          층을 만들려던 시도는 화면에 아무 자국도 남기지 않았다. */}
-      <div style={{ color: '#FFFFFF', fontSize: 16, fontWeight: 700, lineHeight: 1.45 }}>{title}</div>
-      <div style={{ color: '#FFFFFF', fontSize: 14, lineHeight: 1.45, opacity: 0.85 }}>{detail}</div>
+      {/* 제목(잉크 500)과 설명(보조 글자 400)은 굵기·색으로 갈린다. */}
+      <div style={{ color: ink, fontSize: 16, fontWeight: 500, lineHeight: 1.45 }}>{title}</div>
+      <div style={{ color: 'var(--adaptiveGrey700, #4A453E)', fontSize: 14, lineHeight: 1.45 }}>{detail}</div>
 
       {dots !== undefined && (
         <div style={{ display: 'flex', gap: 5, justifyContent: 'center', marginTop: 9 }}>
@@ -147,7 +147,7 @@ export function CoachmarkBubble({
                 width: 5,
                 height: 5,
                 borderRadius: '50%',
-                background: '#FFFFFF',
+                background: ink,
                 opacity: i === dots.index ? 0.95 : 0.35,
               }}
             />
@@ -166,8 +166,8 @@ export function CoachmarkBubble({
           borderLeft: '9px solid transparent',
           borderRight: '9px solid transparent',
           ...(tail === 'down'
-            ? { bottom: -9, borderTop: `9px solid ${sage}` }
-            : { top: -9, borderBottom: `9px solid ${sage}` }),
+            ? { bottom: -9, borderTop: `9px solid ${ink}` }
+            : { top: -9, borderBottom: `9px solid ${ink}` }),
         }}
       />
     </div>
@@ -191,6 +191,7 @@ export function Coachmark({
   title,
   detail,
   enabled = true,
+  tailLeft,
   children,
 }: {
   name: string;
@@ -204,6 +205,8 @@ export function Coachmark({
    * 안내가 한 곳에 남아 「없는 것을 가리키는 안내」가 갈라져 생기지 않는다.
    */
   enabled?: boolean;
+  /** 꼬리의 가로 위치 — 감싼 것이 가리킬 것보다 넓을 때만(서재: 줄 전체를 감싸고 맨 앞 칸을 가리킨다). 없으면 가운데. */
+  tailLeft?: string;
   children: ReactNode;
 }) {
   // 이 안내를 닫았는가 — 상태로 드는 것은 이 한 가지다(마운트 때 기기 기록에서 시작한다).
@@ -273,6 +276,7 @@ export function Coachmark({
         title={title}
         detail={detail}
         tail="up"
+        tailLeft={tailLeft}
         style={{ position: 'relative', zIndex: INLINE_DIM_Z_INDEX + 1, marginTop: 12 }}
       />
     </>

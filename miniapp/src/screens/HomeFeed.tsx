@@ -57,7 +57,7 @@ export const PREVIEW_COUNT = 3;
  *
  * <p>이모지(`✅📖✍️`)를 쓰다 <b>자체 팔레트의 색 점</b>으로 바꿨다(2026-08-18). 흔한 기본 이모지는
  * 「AI가 만든 화면」이라는 인상을 줘서다. 다만 여기는 여러 줄이 세로로 쌓여 <b>훑어보는</b> 자리라
- * 아이콘이 제 값을 하던 유일한 곳이라, 지우는 대신 이 앱 색으로 대체했다 — 세이지(완독)·베이지(시작)·
+ * 아이콘이 제 값을 하던 유일한 곳이라, 지우는 대신 이 앱 색으로 대체했다 — 잉크(완독)·베이지(시작)·
  * 연보라(글)는 표지 색 팔레트와 같은 계열이다.
  */
 /**
@@ -114,8 +114,7 @@ export function eventBadge(event: SocialEvent): { label: string; tone: 'solid' |
 }
 
 /**
- * 배지 세 톤 — <b>새 색을 하나도 만들지 않는다</b>. 채움은 세이지 800(시안 2b의 `#40573E`가
- * 마침 이 램프의 한 칸이다), 연한 채움은 이 파일이 「내 책」 칩에 이미 쓰는 회갈색 짝(grey200/700),
+ * 배지 세 톤 — <b>새 색을 하나도 만들지 않는다</b>. 채움은 강조 잉크(옛 시안 2b의 세이지 800 자리), 연한 채움은 이 파일이 「내 책」 칩에 이미 쓰는 회갈색 짝(grey200/700),
  * 외곽선은 카드 경계와 같은 선이다.
  *
  * <p>시안 2b에서 <b>일부러 안 따라간 두 자리</b>(ABANDON): ① 연한 채움의 `rgba(199,184,155,.35)` —
@@ -127,17 +126,18 @@ const badgeStyle = (tone: 'solid' | 'tint' | 'outline') =>
   ({
     display: 'inline-block',
     padding: '1px 8px',
-    borderRadius: 6,
+    // 에디토리얼 PR-2(spec §6.1 #29) — 배지 3톤: 다 읽음 잉크 채움 · 여백 N 옅은 면(paper-2) · 읽는 중 외곽선. 모서리 2.
+    borderRadius: 2,
     fontSize: 13,
     lineHeight: 1.6,
     ...(tone === 'solid'
-      ? { background: 'var(--adaptiveBlue800, #40573E)', color: 'var(--adaptiveGrey100, #FCFAF5)' }
+      ? { background: 'var(--adaptiveBlue800, #1D1B18)', color: 'var(--adaptiveGrey100, #F5F0E6)' }
       : tone === 'tint'
-        ? { background: 'var(--adaptiveGrey200, #E4DDD0)', color: 'var(--adaptiveGrey700, #57534A)' }
+        ? { background: 'var(--softDent, #ECE5D8)', color: 'var(--adaptiveGrey700, #4A453E)' }
         : {
             background: 'transparent',
-            color: 'var(--adaptiveGrey600, #6F6A5E)',
-            border: '1px solid var(--adaptiveGrey200, #E4DDD0)',
+            color: 'var(--adaptiveGrey600, #645E54)',
+            border: '1px solid var(--adaptiveGrey200, #D9D1C3)',
           }),
   }) as const;
 
@@ -242,18 +242,20 @@ export function eventLine(event: SocialEvent): string {
 }
 
 /**
- * 탭 알약 — 선택된 쪽만 알약 틴트 + 700(시안 Soft 탭바의 현재 칸과 같은 값). 안 고른 탭은 흐린 잉크 400이라
- * 「지금 어디인가」가 색과 굵기 둘로 갈린다. 틴트가 반투명 토큰이라 독서등(밤)·공부 모드에 저절로 맞는다.
+ * 탭 머리 — 고른 쪽만 강조 잉크 밑줄 2px + 500(안 1 · spec §6.1 #25 — 에디토리얼 PR-2에서 알약 틴트를 걷었다).
+ * 안 고른 탭도 같은 2px(투명)이라 고르기가 바뀌어도 줄이 안 흔들리고, 흐린 잉크 400이라 「지금 어디인가」가 선·굵기 둘로 갈린다.
+ * 강조 토큰이라 공부 모드에서 파란 잉크가 된다.
  */
 const pillStyle = (active: boolean) =>
   ({
     padding: '6px 14px',
     border: 0,
-    borderRadius: 999,
-    background: active ? 'var(--accentPill, rgba(91,127,85,.16))' : 'transparent',
-    color: active ? 'var(--adaptiveBlue700, #3F5A3C)' : 'var(--adaptiveGrey600, #5B5A4D)',
+    borderBottom: `2px solid ${active ? 'var(--adaptiveBlue700, #1D1B18)' : 'transparent'}`,
+    borderRadius: 0,
+    background: 'transparent',
+    color: active ? 'var(--adaptiveBlue700, #1D1B18)' : 'var(--adaptiveGrey600, #645E54)',
     fontSize: 14,
-    fontWeight: active ? 700 : 400,
+    fontWeight: active ? 500 : 400,
     cursor: 'pointer',
   }) as const;
 
@@ -270,7 +272,7 @@ const tabSplitStyle = {
   width: 1,
   height: 17,
   margin: '0 5px',
-  background: 'var(--adaptiveGrey200, #E4DDD0)',
+  background: 'var(--adaptiveGrey200, #D9D1C3)',
 } as const;
 
 /**
@@ -294,17 +296,17 @@ const liveDotStyle = {
   width: 10,
   height: 10,
   borderRadius: '50%',
-  background: 'var(--adaptiveBlue500, #6E8A6A)',
-  border: '2px solid var(--adaptiveGrey100, #FCFAF5)',
+  background: 'var(--adaptiveBlue500, #1D1B18)',
+  border: '2px solid var(--adaptiveGrey100, #F5F0E6)',
 } as const;
 
 /** 맞팔 배지 — 친구 시스템을 새로 만들지 않고 「친구감」만 가져오는 자리. */
 const mutualBadgeStyle = {
   flex: '0 0 auto',
   padding: '0 5px 1px',
-  border: '0.5px solid var(--adaptiveGrey200, #E4DDD0)',
+  border: '0.5px solid var(--adaptiveGrey200, #D9D1C3)',
   borderRadius: 6,
-  color: 'var(--adaptiveGrey600, #6F6A5E)',
+  color: 'var(--adaptiveGrey600, #645E54)',
   fontSize: 14,
   lineHeight: 1.5,
 } as const;
@@ -330,8 +332,8 @@ export function ReaderRow({ reader, index, now }: { reader: ReaderStatus; index:
           display: 'inline-flex',
           alignItems: 'center',
           justifyContent: 'center',
-          background: reading ? 'var(--adaptiveBlue50, #E7EEE2)' : 'var(--adaptiveGrey200, #E4DDD0)',
-          color: reading ? 'var(--adaptiveBlue700, #4F6B4C)' : 'var(--adaptiveGrey600, #6F6A5E)',
+          background: reading ? 'var(--adaptiveBlue50, #ECE5D8)' : 'var(--adaptiveGrey200, #D9D1C3)',
+          color: reading ? 'var(--adaptiveBlue700, #1D1B18)' : 'var(--adaptiveGrey600, #645E54)',
           fontSize: 15,
           // 기록이 없는 사람은 문구로 한 번, 형태로 한 번 — 훑어도 읽힌다.
           opacity: !reading && reader.lastReadAt === null ? 0.45 : 1,
@@ -359,8 +361,8 @@ export function ReaderRow({ reader, index, now }: { reader: ReaderStatus; index:
             flex: '0 0 auto',
             alignSelf: 'center',
             fontSize: 14,
-            fontWeight: 700,
-            color: 'var(--adaptiveBlue700, #4F6B4C)',
+            fontWeight: 500,
+            color: 'var(--adaptiveBlue700, #1D1B18)',
           }}
         >
           {formatDuration(elapsedSeconds(reader.readingSince!, now))}째
@@ -377,7 +379,7 @@ const rowStyle = (index: number) =>
     width: '100%',
     padding: '10px 0',
     border: 0,
-    borderTop: index === 0 ? undefined : '0.5px solid var(--adaptiveGrey200, #E4DDD0)',
+    borderTop: index === 0 ? undefined : '0.5px solid var(--adaptiveGrey200, #D9D1C3)',
     background: 'transparent',
     textAlign: 'left',
     textDecoration: 'none',
@@ -445,10 +447,9 @@ function socialRow(
               overflow: 'hidden',
               marginTop: 4,
               paddingLeft: 9,
-              // 시안 2b의 `rgba(110,138,106,.5)` — 세이지 500을 반투명으로 깐 색이고,
-              // 크림 위에서 이 램프의 200 칸에 내려앉는다. 카드 경계(회갈색)와 달라야
-              // 「남의 말」로 읽힌다.
-              borderLeft: '2px solid var(--adaptiveBlue200, #B6C9AE)',
+              // 인용 세로줄 = 따뜻한 회갈 #B9AF9F(에디토리얼 PR-4 — 옛 세이지 반투명을 대신한다).
+              // 카드 경계(가는 선 #D9D1C3)보다 한 단 진해야 「남의 말」로 읽힌다.
+              borderLeft: '2px solid var(--adaptiveBlue200, #B9AF9F)',
               wordBreak: 'keep-all',
               // 여백 인용은 인용 축(세리프)이다 — 남이 적어 둔 글이라 기능 글자와 갈린다.
               ...SERIF_VALUE,
@@ -523,7 +524,7 @@ function FeedList<T>({
               padding: '8px 12px',
               border: 0,
               background: 'transparent',
-              color: 'var(--adaptiveGrey600, #6F6A5E)',
+              color: 'var(--adaptiveGrey600, #645E54)',
               fontSize: 14,
               cursor: 'pointer',
             }}
@@ -614,8 +615,8 @@ export function FeedBox({
               marginTop: 6,
               padding: '3px 8px',
               borderRadius: 20,
-              background: 'var(--adaptiveGrey200, #E4DDD0)',
-              color: 'var(--adaptiveGrey700, #57534A)',
+              background: 'var(--adaptiveGrey200, #D9D1C3)',
+              color: 'var(--adaptiveGrey700, #4A453E)',
               fontSize: 14,
             }}
           >

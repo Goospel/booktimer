@@ -11,11 +11,13 @@ import {
   GuestShell,
   LockedFeedBody,
   guestAction,
+  guestRowCover,
   lockedCopy,
   openGuestNews,
   startLogin,
   whenPageLoaded,
 } from './screens/GuestHome';
+import { COVER_GAP, COVER_WIDTH } from './screens/Home';
 import { stubLocalStorage, userAgent } from './test-fixtures';
 import { openExternal, trackEvent } from './toss';
 import type { Trial } from './trial';
@@ -106,6 +108,21 @@ describe('게스트 홈 — 첫 화면', () => {
    * 「진입 직후 덮는 것 0」의 정적 절반 — 떠 있는 것은 탭바 하나뿐이다(T-183: 시트·딤·모달·툴팁 전부 금지).
    * 동적 절반(첫 진입 실측)은 목 모드 원장 U-3이 잰다.
    */
+  /**
+   * 머리 로그인 문은 로그인 홈 `Avatar`와 같은 문법(채움 없음 + 잉크 1px 테 + 잉크 획)이다(§6-4). 천 색으로 채우면
+   * plum 위에 옛 반투명 획이 얹혀 대비 1.24:1 — 심사관이 처음 보는 화면에서 로그인 문이 안 보였다(PR-1 리뷰).
+   */
+  it('머리 로그인 문은 채우지 않은 잉크 선 원이다 — 로그인 홈 아바타와 같은 꼴', () => {
+    const markup = shell(null);
+    const start = markup.indexOf('aria-label="토스로 시작하기"');
+    const door = markup.slice(markup.lastIndexOf('<button', start), markup.indexOf('</button>', start));
+
+    expect(door).toContain('background:transparent');
+    expect(door).toContain('border:1px solid var(--adaptiveGrey800, #1D1B18)');
+    expect(door).toContain('stroke="currentColor"');
+    expect(door).not.toContain('rgba(44,42,36');
+  });
+
   it('떠 있는 것은 탭바 하나뿐이다 — 진입 직후 화면을 덮는 것이 없다', () => {
     const markup = shell(null);
     const fixed = markup.match(/position:fixed/g) ?? [];
@@ -167,6 +184,67 @@ describe('게스트 홈 — 무엇으로 측정할까요?', () => {
   it('재는 중에도 끝난 뒤에도 그대로 선다 — 상태마다 갈아끼우면 화면이 세로로 들썩인다', () => {
     expect(shell(running)).toContain('무엇으로 측정할까요?');
     expect(shell(done)).toContain('무엇으로 측정할까요?');
+  });
+
+  // 정적 렌더는 레이아웃을 못 잰다 — 줄의 gap 식을 내용 폭 W에 대해 풀어 「칸 셋 + 간격 둘」을 계산한다.
+  // 320 화면(내용 280)이 지원 하한이다(계획 §11 U-5). 고정 32px이면 88×3 + 64 = 328로 넘쳐 첫 화면에 가로 스크롤이 생긴다.
+  it('좁은 폰(내용 280)에서도 고르기 줄이 내용 폭을 넘지 않고, 넓은 폰에선 로그인 홈과 같은 간격이다', () => {
+    const row = shell(null).match(/<div style="([^"]*)"><span data-book-slot="free"/)?.[1] ?? '';
+    const gap = row.match(/gap:([^;]+)/)?.[1] ?? '';
+    const gapAt = (w: number) => {
+      const m = gap.match(/^min\((\d+)px, calc\(\(100% - (\d+)px\) \/ 2\)\)$/);
+      return m ? Math.min(Number(m[1]), (w - Number(m[2])) / 2) : parseFloat(gap);
+    };
+    for (const w of [280, 300, 350]) expect(3 * COVER_WIDTH + 2 * gapAt(w)).toBeLessThanOrEqual(w);
+    expect(gapAt(350)).toBe(COVER_GAP);
+  });
+
+  // 「책 없이」는 104/88로 커져 양옆으로 칸 폭의 8/88씩 삐져나온다 — 보이는 틈 = gap − 그 삐짐.
+  // 320 화면(내용 280)에서 칸 88이면 gap 8 − 8 = 0으로 잠긴 칸에 닿았다(PR-2 리뷰 low 이월, 사용자 결정 2026-10-13
+  // 「좁은 폰만 간격 띄우기」). 내용 폭 W = 화면 − Screen 좌우 패딩 40.
+  const visibleGap = (w: number, cover: number) => Math.min(COVER_GAP, (w - 3 * cover) / 2) - (cover * 8) / 88;
+
+  // 틈 ≥ 12면 (W − 3·칸)/2 > 0이라 줄이 내용 폭을 안 넘는 것도 따라 나온다 — 따로 재지 않는다.
+  it('좁은 폰(내용 280)에선 칸을 줄여 「책 없이」와 잠긴 칸 사이가 12px 이상 뜬다', () => {
+    for (const w of [280, 290, 303]) {
+      const cover = guestRowCover(w);
+      expect(cover).toBeLessThan(COVER_WIDTH);
+      expect(visibleGap(w, cover)).toBeGreaterThanOrEqual(12);
+    }
+  });
+
+  it('375·390 폰(내용 335·350)과 경계(내용 304)에선 칸이 그대로 88이다 — 넓은 폰의 배치는 한 픽셀도 안 바뀐다', () => {
+    for (const w of [304, 335, 350, Infinity]) expect(guestRowCover(w)).toBe(COVER_WIDTH);
+  });
+
+  // 화면 폭 → 내용 폭 배선을 그린 줄로 잠근다. 0은 WebView가 폭을 아직 모를 때다 — 「모름」으로 보고 88.
+  const rowAt = (innerWidth: number) => {
+    vi.stubGlobal('innerWidth', innerWidth);
+    try {
+      const markup = shell(null);
+      return { markup, row: markup.match(/<div style="([^"]*)"><span data-book-slot="free"/)?.[1] ?? '' };
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  };
+  const coversOf = (markup: string, cover: number) =>
+    markup.match(new RegExp(`width:${cover}px;height:${Math.round(cover * 1.4)}px`, 'g'));
+
+  it('320 화면에서 그린 줄은 줄인 칸 폭으로 선다 — 칸 셋·gap 식·윗여백이 같은 폭을 쓴다', () => {
+    const cover = guestRowCover(280);
+    const { markup, row } = rowAt(320);
+    expect(row).toContain(`gap:min(${COVER_GAP}px, calc((100% - ${3 * cover}px) / 2))`);
+    // 104/88로 키운 「책 없이」가 위로 솟는 만큼 — 320 폭에선 21px(칸 88 기준이면 23).
+    expect(row).toContain('padding-top:21px');
+    expect(coversOf(markup, cover)).toHaveLength(3);
+  });
+
+  it('375·390 화면과 폭을 모르는 WebView(0)에선 그린 줄이 칸 88·간격 32 그대로다', () => {
+    for (const innerWidth of [375, 390, 0]) {
+      const { markup, row } = rowAt(innerWidth);
+      expect(row).toContain(`gap:min(${COVER_GAP}px, calc((100% - ${3 * COVER_WIDTH}px) / 2))`);
+      expect(coversOf(markup, COVER_WIDTH)).toHaveLength(3);
+    }
   });
 });
 
@@ -341,11 +419,14 @@ describe('게스트 홈 — 다 재고 나서', () => {
     expect(shell(done)).toContain('기록 없이 둘게요');
   });
 
-  it('로그인의 이유(알림·PC 연동)는 로그인을 청하는 자리에서 말한다', () => {
+  // 서비스 오픈 정책 §2-2 — 자사 웹 사용을 로그인 이유로 홍보하지 않는다(2026-10).
+  it('REQ-03 · 로그인 이유는 토스 안에서 얻는 것만 말한다', () => {
     const markup = shell(done);
 
     expect(markup).toContain('토스 알림');
-    expect(markup).toContain('booktimer.app');
+    expect(markup).toContain('기기를 바꿔도');
+    expect(markup).not.toContain('booktimer.app');
+    expect(markup).not.toContain('PC 웹');
   });
 
   /** 계정을 만들면 무엇이 되는지를 <b>방금 잰 값으로</b> 보여 준다 — 「연속 1일」은 그 투영이다. */
@@ -385,12 +466,13 @@ describe('게스트 홈 — 다 재고 나서', () => {
     expect(markup.slice(markup.lastIndexOf('<', markup.indexOf('medal-pop')))).toMatch(/^<svg\b/);
   });
 
-  it('「기록 없이 둘게요」는 1.5px 실선 보조 손잡이다', () => {
+  it('「기록 없이 둘게요」는 외곽선 알약(강조 1px) 보조 손잡이다', () => {
     const markup = shell(done);
     const at = markup.indexOf('기록 없이 둘게요');
     const tag = markup.slice(markup.lastIndexOf('<button', at), at);
 
-    expect(tag).toContain('1.5px solid var(--adaptiveBlue700');
+    expect(tag).toContain('1px solid var(--adaptiveBlue700');
+    expect(tag).toContain('border-radius:999px');
   });
 });
 
@@ -409,28 +491,27 @@ describe('게스트 홈 — 메달은 끝난 뒤에만', () => {
     expect(markup).not.toContain('data-medal');
   });
 
-  it('체험 전·중 히어로엔 책 더미 그림 하나가 선다(부푼 오브젝트는 한 화면에 하나)', () => {
-    expect(shell(null).match(/data-book-stack/g)).toHaveLength(1);
-    expect(shell(done)).not.toContain('data-book-stack'); // 끝난 뒤엔 메달이 그 하나다
+  it('체험 전·중 히어로엔 판화 한 점이 선다 — 끝난 뒤엔 도장이 그 자리를 잇는다(그림은 한 화면에 하나)', () => {
+    expect(shell(null).match(/data-woodcut/g)).toHaveLength(1);
+    expect(shell(done)).not.toContain('data-woodcut');
   });
 
-  it('히어로는 반경 30의 부푼 면이다 — 연필선이 되살아나지 않는다', () => {
+  it('히어로는 면·그림자가 없는 아치다(에디토리얼 PR-2)', () => {
     const markup = shell(null);
-    const at = markup.indexOf('data-guest-hero');
+    const at = markup.indexOf('data-arch');
     const tag = markup.slice(markup.lastIndexOf('<', at), markup.indexOf('>', at) + 1);
 
-    expect(tag).toContain('var(--puffShadow');
-    expect(tag).toContain('border-radius:30px');
-    expect(tag).not.toContain('border-image');
+    expect(tag).toContain('border-radius:999px 999px 0 0'); // 그 태그를 잡았다(아래 부재 단언이 공허하지 않음)
+    expect(tag).not.toContain('box-shadow');
   });
 
-  it('잠긴 탭 카드도 부푼 면이다', () => {
+  it('잠긴 탭 안내도 면·그림자가 없다', () => {
     const markup = shell(null, 'library');
     const at = markup.indexOf('서재는 계정이 있어야 열려요');
     const card = markup.slice(markup.lastIndexOf('<div', markup.lastIndexOf('<svg', at)), at);
 
-    expect(card).toContain('var(--puffShadow');
-    expect(card).not.toContain('border-image');
+    expect(card).toContain('padding:24px 20px');
+    expect(card).not.toContain('box-shadow');
   });
 });
 
@@ -482,20 +563,22 @@ describe('상한을 넘겨 돌아온 체험', () => {
 });
 
 /**
- * 「이미 booktimer.app 계정이 있나요?」 — 선택 화면을 없앤 뒤(2026-09-17) 웹 계정 보유자가 남은 유일한 문이다.
+ * 「기존 계정 연결」 — 선택 화면을 없앤 뒤(2026-09-17) 웹 계정 보유자가 남은 유일한 문이다.
  * 다른 손잡이는 누르는 즉시 토스 계정을 만들고, 만들어진 토스 신원은 웹 계정에 다시 못 붙는다(once-set).
- * 그래서 이 문은 <b>인가 전</b>, 게스트 홈 맨 아래에 선다.
+ * 그래서 이 문은 <b>인가 전</b>, 게스트 홈 맨 아래에 선다. 문구는 자사 주소를 적지 않는다(서비스 오픈 정책 §2-2,
+ * 2026-10) — 코드를 어디에 넣는지는 웹 설정 「토스 앱 연결」 카드가 이 버튼 이름으로 알려 준다.
  */
 describe('게스트 홈 — 기존 계정 연결', () => {
-  it('게스트 홈 맨 아래에 연결 손잡이가 선다 — 피드 박스 뒤다', () => {
+  it('REQ-04 · 연결 손잡이는 맨 아래에 남고 자사 주소를 적지 않는다', () => {
     const markup = shell(null);
 
-    expect(markup).toContain('이미 booktimer.app 계정이 있나요?');
+    expect(markup).toContain('연결 코드를 받으셨나요?');
     expect(markup).toContain('기존 계정 연결');
     // 맨 아래 — 피드 박스(잠긴 피드 문구) 뒤에 온다. 위로 올라오면 첫 화면이 계정 얘기로 시작한다.
-    expect(markup.indexOf('이미 booktimer.app 계정이 있나요?')).toBeGreaterThan(
+    expect(markup.indexOf('연결 코드를 받으셨나요?')).toBeGreaterThan(
       markup.indexOf('소식·여백·책 뉴스는 계정이 있어야 보여요'),
     );
+    expect(markup).not.toContain('booktimer.app');
   });
 
   it('덮는 것이 아니다 — 연결 손잡이가 서도 떠 있는 것은 탭바 하나뿐이다', () => {
@@ -549,5 +632,39 @@ describe('재는 중 다른 손잡이로 로그인 (startLogin)', () => {
     startLogin(done, () => {}, 'trial');
 
     expect(readTrial()).toEqual(done);
+  });
+});
+
+/**
+ * 에디토리얼 PR-2 — 게스트 홈도 로그인 홈과 같은 아치 규칙으로 선다. 책 더미(입체 그라데이션)는 올빼미 판화 한 점이 잇는다(D5).
+ * 검정 알약(TDS primary)은 상태마다 하나 — 「읽기 시작」·「그만 읽기」·「토스로 시작하기」.
+ */
+describe('REQ-09 · 게스트 홈 아치 (PR-2)', () => {
+  /** TDS primary 버튼 수 — 인라인 키 `#3182f6`이 primary의 표지다(global.css가 같은 키로 검정 알약을 칠한다). */
+  const primaries = (markup: string) => (markup.match(/--button-background-color:#3182f6/g) ?? []).length;
+
+  it('체험 전 — 아치 안에 판화 한 점, 책 더미 없음, 검정 알약 하나', () => {
+    const markup = shell(null);
+
+    expect(markup).toContain('data-arch');
+    expect(markup.match(/data-woodcut/g)).toHaveLength(1);
+    expect(markup).not.toContain('data-book-stack');
+    expect(primaries(markup)).toBe(1);
+  });
+
+  it('재는 중 — 같은 아치, 판화 한 점, 검정 알약은 「그만 읽기」 하나', () => {
+    const markup = shell(running);
+
+    expect(markup).toContain('data-arch');
+    expect(markup.match(/data-woodcut/g)).toHaveLength(1);
+    expect(primaries(markup)).toBe(1);
+  });
+
+  it('끝남 — 아치 안에 도장, 검정 알약은 「토스로 시작하기」 하나', () => {
+    const markup = shell(done);
+
+    expect(markup).toContain('data-arch');
+    expect(markup.indexOf('data-arch')).toBeLessThan(markup.indexOf('data-medal'));
+    expect(primaries(markup)).toBe(1);
   });
 });

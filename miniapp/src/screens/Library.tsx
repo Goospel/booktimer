@@ -1,6 +1,6 @@
 import { Button } from '@toss/tds-mobile';
 import type { CSSProperties } from 'react';
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 
 import type { BookStatus, MarginResponse, MyBookSummary, Recommendation, SearchRow, ShelfResponse } from '../api';
 import {
@@ -18,23 +18,24 @@ import { CACHE_SHELF, cacheGet, cacheKeyMargin, cachePut } from '../cache';
 import { Coachmark } from '../coachmark';
 import { formatDuration } from '../format';
 import {
+  ARCH,
   BookCover,
   ErrorMessage,
   Loading,
-  PUFF,
+  OUTLINE_PILL,
+  RULE_ROW,
   SECTION_RULE,
-  SOFT_OUTLINE,
-  SOFT_ROW,
   Screen,
   SearchField,
   SectionTitle,
   SERIF_VALUE,
   Sheet,
   Text,
+  Woodcut,
   sectionStyle,
 } from '../ui';
 import { openExternal } from '../toss';
-import { BookCarousel, type LeadCard } from './Home';
+import { CheckBadge, NoBookCard } from './Home';
 import { MarginCard } from './Story';
 
 /**
@@ -50,14 +51,14 @@ export const SECTIONS: { status: BookStatus; title: string; empty: string }[] = 
 ];
 
 /**
- * 열린 시트 — 「펼쳐보기」(격자)와 「관리」(액션) 둘뿐이고 **동시에 열리지 않는다**.
+ * 열린 시트 — 「펼쳐보기」(격자 — 어느 선반의 것인가를 든다)와 「관리」(액션) 둘뿐이고 **동시에 열리지 않는다**.
  *
  * <p>삭제 확인을 시트 밖 독립 state로 두면 열림과 수명이 어긋난다: 확인을 띄운 채 시트를 닫아도
  * 그 확인이 살아남아, 다시 열었을 때 「정말 삭제」가 곧바로 노출됐다(오삭제가 한 탭 거리).
  * 같은 객체에 묶어 두면 시트를 여는 순간 확인이 언제나 `false`로 새로 만들어진다.
  */
 export type LibrarySheet =
-  | { kind: 'grid' }
+  | { kind: 'grid'; status: BookStatus }
   | { kind: 'actions'; confirmDelete: boolean; confirmPublish: boolean }
   | null;
 
@@ -83,7 +84,7 @@ export function metaLine(book: MyBookSummary): string {
  * <p>시간은 「2시간」이 아니라 「2시간 읽음」이다 — 칩 하나만 떼어 놓고 보면 무엇의 2시간인지 알 수 없다.
  * 0이면 칩 자체를 안 만든다(「0분 읽음」은 정보가 아니다).
  *
- * <p>공개는 세이지로 켜지고 비공개는 외곽선으로 눌린다 — <b>색이 곧 「누구에게 보이는가」</b>다.
+ * <p>공개는 옅은 면 + 잉크 글자로 켜지고 비공개는 외곽선으로 눌린다 — <b>색이 곧 「누구에게 보이는가」</b>다.
  *
  * <p>저자를 줄바꿈으로 분리하던 옛 수법(`pre-line`)이 사라진 것도 이득이다 — 긴 알라딘 저자 문자열이
  * 되접혀도 칩은 <b>다른 요소</b>라 그 사이에 끼어 들 수가 없다(전에는 문자열 한 덩어리라 가능했다).
@@ -95,7 +96,7 @@ export function bookStats(book: MyBookSummary): BookChip[] {
     const read = formatDuration(book.seconds);
     chips.push({ label: `${read} 읽음`, value: read, tone: 'neutral' });
   }
-  chips.push(book.isPublic ? { label: '공개', tone: 'sage' } : { label: '비공개', tone: 'outline' });
+  chips.push(book.isPublic ? { label: '공개', tone: 'ink' } : { label: '비공개', tone: 'outline' });
   return chips;
 }
 
@@ -106,22 +107,25 @@ export interface BookChip {
   value?: string;
 }
 
-type BookChipTone = 'neutral' | 'sage' | 'outline';
+type BookChipTone = 'neutral' | 'ink' | 'outline';
 
-/** 칩 세 톤 — 소식 배지와 같은 값이다(새 색을 만들지 않는다). */
+/**
+ * 칩 세 톤 — 누르지 못하는 <span>이라 못 누르는 태그 옷(paper-2 면 r2, 책BTI 태그와 같다)이다.
+ * 공개·시간은 면, 비공개만 면 없이 테로 눌린다 — 공개 여부가 글자색만이 아니라 형태로도 갈린다(둘 다 지운다면 구분이 사라진다).
+ */
 function bookChipStyle(tone: BookChipTone): CSSProperties {
-  const base: CSSProperties = { display: 'inline-block', padding: '2px 9px', borderRadius: 20, fontSize: 14, lineHeight: 1.6 };
-  if (tone === 'sage') {
-    return { ...base, background: 'var(--adaptiveBlue50, #E7EEE2)', color: 'var(--adaptiveBlue700, #4F6B4C)' };
+  const base: CSSProperties = { display: 'inline-block', padding: '2px 9px', borderRadius: 2, fontSize: 14, lineHeight: 1.6 };
+  if (tone === 'ink') {
+    return { ...base, background: 'var(--softDent, #ECE5D8)', color: 'var(--adaptiveBlue700, #1D1B18)' };
   }
   if (tone === 'neutral') {
-    return { ...base, background: 'var(--adaptiveGrey200, #E4DDD0)', color: 'var(--adaptiveGrey700, #57534A)' };
+    return { ...base, background: 'var(--softDent, #ECE5D8)', color: 'var(--adaptiveGrey700, #4A453E)' };
   }
   return {
     ...base,
     background: 'transparent',
-    color: 'var(--adaptiveGrey600, #6F6A5E)',
-    border: '1px solid var(--adaptiveGrey200, #E4DDD0)',
+    color: 'var(--adaptiveGrey600, #645E54)',
+    border: '1px solid var(--adaptiveGrey200, #D9D1C3)',
   };
 }
 
@@ -259,17 +263,17 @@ export function MarginBoxView({
   return (
     <div
       data-margin-box=""
-      // 부푼 면(Soft PR-3) — 옛 크림 상자 + 연필선 자리. 캔버스 위에 떠 캐러셀 아래 한 덩어리로 읽힌다.
-      style={{ ...PUFF, marginTop: 16, padding: 16 }}
+      // 에디토리얼(PR-1) — 면 없음. 덩어리의 경계는 머리 줄 아래 잉크 선(SECTION_RULE)과 위 여백이다.
+      style={{ marginTop: 24 }}
     >
       {/* 선은 제목이 아니라 이 줄에 건다 — 오른쪽 「전체 보기 ›」까지 지나야 머리 한 줄로 읽힌다(시안 2c). */}
       <div style={{ display: 'flex', alignItems: 'baseline', paddingBottom: 9, borderBottom: empty ? undefined : SECTION_RULE }}>
-        {/* 시안 2c — 라벨 16에 카운트만 세리프. 색은 토큰으로 준다(옛 `#4E6B4A`는 세이지 700과
-            한 글자 다른 사본이라 다크모드에서 갈라졌다). */}
-        <SectionTitle style={{ flex: 1, fontSize: 16 }}>
+        {/* 에디토리얼 PR-3(계획 §4 L3) — 머리 H1 20/28 명조(SectionTitle 기본값), 카운트는 같은 크기 muted(안 1 §7.2).
+            사양서 원값 D2 32는 이 머리만 유난히 커서 걷었다. */}
+        <SectionTitle style={{ flex: 1 }}>
           여백
           {entries.length > 0 && (
-            <b style={{ ...SERIF_VALUE, fontSize: 16, color: 'var(--adaptiveBlue700, #4F6B4C)' }}>
+            <b style={{ ...SERIF_VALUE, fontSize: 20, color: 'var(--adaptiveGrey600, #645E54)' }}>
               {' '}
               {entries.length}
             </b>
@@ -279,11 +283,14 @@ export function MarginBoxView({
           <button
             type="button"
             onClick={onOpenAll}
+            // 글자 링크 — 보이는 20, 누름 44(음수 여백으로 머리 줄 높이는 그대로).
             style={{
+              minHeight: 44,
+              margin: '-12px 0',
               padding: 0,
               border: 'none',
               background: 'transparent',
-              color: 'var(--adaptiveGrey600, #6F6A5E)',
+              color: 'var(--adaptiveGrey600, #645E54)',
               fontSize: 14,
               cursor: 'pointer',
             }}
@@ -321,7 +328,7 @@ export function MarginBoxView({
  * 서재 탭 — 내 책장 조회·관리와 검색 추가.
  *
  * <p>화면 전환은 `mode` 하나로 한다(라우터 없음, 설계 §2). 뮤테이션 뒤에는 서버 응답으로 그 책만
- * 갈아끼우지 않고 책장을 다시 받는다 — 상태 변경은 섹션 이동이라 목록 전체가 흔들리기 때문.
+ * 갈아끼우지 않고 책장을 다시 받는다 — 상태 변경은 선반 이동이라 목록 전체가 흔들리기 때문.
  */
 export function Library({
   myLoginId,
@@ -357,15 +364,13 @@ export function Library({
   const [books, setBooks] = useState<MyBookSummary[] | null>(cachedShelf?.books ?? null);
   const [searchEnabled, setSearchEnabled] = useState(cachedShelf?.searchEnabled ?? false);
   const [mode, setMode] = useState<'shelf' | 'search'>('shelf');
-  const [tab, setTab] = useState<BookStatus>('READING');
   /**
-   * 캐러셀에서 가운데 온 것 — 그 탭에 없어지면 `resolveSelected`가 첫 책으로 되돌린다.
+   * 고른 책 — 책 id 또는 `undefined`(아직 안 고름 = 기본 선택, {@link shelfSelection}). 세 선반을 하나의 값이 가로지른다.
    *
-   * <p><b>세 값이다</b>: 책 id · `null`(「책 추가」 칸을 고름) · `undefined`(아직 안 고름).
-   * 뒤의 둘을 하나로 합치면 서재를 열 때마다 「책 추가」가 가운데인 채로 시작한다 — 홈이 먼저
-   * 밟은 구분이다(`App.tsx`의 `timerStartBookId`).
+   * <p>캐러셀 시절의 셋째 값 `null`(「책 추가」 칸을 고름)은 사라졌다 — 선반에선 칸을 누르면 곧장 검색이라 그 칸이 「고른 것」이
+   * 되는 순간이 없다. 지워진 id·다른 선반으로 옮긴 책은 `shelfSelection`이 푼다(같은 id면 ✓가 새 선반으로 따라간다).
    */
-  const [selectedId, setSelectedId] = useState<number | null | undefined>(undefined);
+  const [selectedId, setSelectedId] = useState<number | undefined>(undefined);
   const [sheet, setSheet] = useState<LibrarySheet>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -412,8 +417,11 @@ export function Library({
   };
 
   const act = (action: BookAction) => {
-    if (action.kind === 'status') run(changeBookStatus(action.book.id, action.status));
-    else if (action.kind === 'visibility')
+    if (action.kind === 'status') {
+      // 고른 값을 그 책으로 못 박는다 — 기본 선택(`undefined`)인 채로 옮기면 기본이 다음 책으로 넘어가 ✓가 따라가지 않는다(목 모드 실측).
+      setSelectedId(action.book.id);
+      run(changeBookStatus(action.book.id, action.status));
+    } else if (action.kind === 'visibility')
       run(setBookVisibility(action.book.id, action.book.isPublic ? 'PRIVATE' : 'PUBLIC'));
     else run(deleteBook(action.book.id));
   };
@@ -422,9 +430,10 @@ export function Library({
     setBusy(true);
     setError(null);
     addBook(row, status)
-      .then(() => {
+      .then((added) => {
         setMode('shelf');
-        setTab(status); // 방금 넣은 책이 있는 탭으로 — 다른 탭에 서 있으면 추가가 아무 일도 안 한 것처럼 보인다
+        // 방금 넣은 책을 고른다 — 그 책이 든 선반이 그 표지로 밀리고(`Shelf`의 reveal) 펼친 책·여백이 그 책이 된다.
+        setSelectedId(added.id);
         load();
         onShelfChanged();
       })
@@ -444,87 +453,348 @@ export function Library({
     );
   }
 
-  const rows = books?.filter((b) => b.status === tab) ?? [];
-
-  // 로딩 중에도 제목은 남긴다 — 탭을 옮길 때 화면이 통째로 비었다 다시 차는 깜빡임을 줄인다.
+  // 로딩 중에도 아치는 남긴다 — 탭을 옮길 때 화면이 통째로 비었다 다시 차는 깜빡임을 줄인다.
   return (
-    <Screen
-      title="내 서재"
-      right={
-        // 캐러셀은 한 번에 한 권이라 권수가 늘면 훑기 답답하다 — 격자로 한 번에 보는 길을 제목 줄에 둔다.
-        rows.length > 1 ? (
-          <button type="button" onClick={() => setSheet({ kind: 'grid' })} style={handleStyle}>
-            펼쳐보기
-          </button>
-        ) : undefined
-      }
-    >
+    <Screen>
+      <LibraryArch />
       {/* 책장을 아예 못 받았을 때만 재시도 — 액션 실패(삭제 거절 등)는 다시 받을 게 아니라 문구만 남긴다. */}
       <ErrorMessage message={error} onRetry={books === null ? load : undefined} />
       {books === null ? (
         error === null && <Loading />
       ) : (
-        <>
-          <Shelf
-            books={books}
-            tab={tab}
-            selectedId={selectedId}
-            sheet={sheet}
-            busy={busy}
-            myLoginId={myLoginId}
-            searchEnabled={searchEnabled}
-            onTab={(status) => {
-              setTab(status);
-              // 「책 추가」 칸을 고른 채 탭을 옮기면 새 탭도 그 칸이 가운데다 — 탭을 바꾼 사람이
-              // 보려는 건 그 탭의 책이므로 「아직 안 고름」으로 되돌려 첫 책이 서게 한다.
-              setSelectedId(undefined);
-            }}
-            onSelect={setSelectedId}
-            onSheet={setSheet}
-            onAction={act}
-            onOpenMargin={onOpenMargin}
-            onComposeMargin={onComposeMargin}
-            onError={onError}
-            onAddBook={() => setMode('search')}
-          />
-        </>
+        <Shelf
+          books={books}
+          selectedId={selectedId}
+          sheet={sheet}
+          busy={busy}
+          myLoginId={myLoginId}
+          searchEnabled={searchEnabled}
+          onSelect={setSelectedId}
+          onSheet={setSheet}
+          onAction={act}
+          onOpenMargin={onOpenMargin}
+          onComposeMargin={onComposeMargin}
+          onError={onError}
+          onAddBook={() => setMode('search')}
+        />
       )}
     </Screen>
   );
 }
 
 /**
- * 서재 캐러셀의 0번 칸 — 화면 맨 아래 전폭 「책 추가하기」 버튼이던 것이 여기로 들어왔다(2026-08-21).
+ * 서재 머리 — 폭 260 「작은 창」 아치 안에 판화 한 점과 「내 서재」(안 1 §7.2 + 계획 §4 L1 · D6 추천).
  *
- * <p>홈의 「책 없이」 칸과 <b>같은 부품·같은 규약</b>이다(0번은 언제나 특수 칸). 버튼 갈래로 두면
- * 「가운데 온 것이 곧 대상」이라는 단일 문법이 화면마다 갈리고, 그 버튼은 실제로 여백 박스 아래
- * <b>스크롤 끝</b>에 있어 책을 훑다가 닿기까지 멀었다.
- *
- * <p>홈과 뜻이 하나 다르다: 홈의 0번은 <b>측정 대상의 한 갈래</b>(그 자체가 값)인데 여기 0번은
- * <b>검색 화면으로 가는 문</b>이다. 그래서 이 칸이 가운데 오면 아래 손잡이·여백 박스가 통째로 갈린다.
+ * <p>사양서 원값(폭 350 · 판화 80 · 제목 44)이면 머리가 첫 화면 위 1/4을 먹어 실기기(토스 내비 바 때문에 약 740)에서 셋째 선반이
+ * 첫 화면 밖으로 걸린다. 폭 260 · 판화 64 · 제목 D2 32/40으로 줄여 높이 약 161 — 아치 + 선반 3단이 첫 화면 안에 든다.
+ * 반원 그대로라 판화 윗끝(d=24)에서 아치 반폭 75 vs 판화 반폭 32로 옆선에 닿지 않는다(계산).
  */
-export const ADD_BOOK_CARD: LeadCard = {
-  label: '책 추가',
-  title: '책 추가',
-  subtitle: () => '제목으로 검색해 서재에 담아요',
-};
+function LibraryArch() {
+  return (
+    <div
+      data-arch=""
+      style={{
+        ...ARCH,
+        boxSizing: 'border-box',
+        width: 260,
+        margin: '0 auto 28px',
+        padding: '24px 24px',
+        display: 'flex',
+        flexDirection: 'column',
+        alignItems: 'center',
+        gap: 8,
+      }}
+    >
+      <Woodcut size={64} />
+      <h1 style={{ margin: 0, ...SERIF_VALUE, fontSize: 32, lineHeight: '40px', color: 'var(--adaptiveGrey800, #1D1B18)' }}>
+        내 서재
+      </h1>
+    </div>
+  );
+}
+
+/** 선반 한 단 — 상태 + 이름·빈 문구({@link SECTIONS}) + 그 상태의 책(서버가 준 순서 그대로). */
+export interface ShelfSection {
+  status: BookStatus;
+  title: string;
+  empty: string;
+  books: MyBookSummary[];
+}
+
+/** 선반 세 단 — <b>언제나 셋</b>이고 {@link SECTIONS} 순서다. 빈 단도 빠지지 않는다(나타났다 사라지면 아래가 들썩인다). */
+export function shelfSections(books: MyBookSummary[]): ShelfSection[] {
+  return SECTIONS.map((section) => ({ ...section, books: books.filter((b) => b.status === section.status) }));
+}
 
 /**
- * 책장 — 상태 탭 + 표지 캐러셀 + 「관리」. 순수 표시라 정적 렌더로 분류·시트를 계측할 수 있다.
+ * 실제로 고른 책 — 유효한 id면 그 책, 아니면(아직 안 고름 · 지워진 id) 선반 순서로 첫 책(읽는 중 → 다 읽음 → 읽고 싶어요), 0권이면 `null`.
  *
- * <p>세로로 3섹션을 전부 나열하던 목록을 대체한다: 세 상태를 **탭으로 접어** 한 판에 담고, 고르기는
- * 홈과 같은 캐러셀 문법(가운데 온 것이 대상)을 그대로 쓴다. 액션 넷은 상시 노출하지 않고 시트 뒤로 접었다 —
- * 늘 보이던 「삭제」가 손가락 한 탭 거리에 있던 것도 이 참에 사라진다.
+ * <p>탭 시절의 {@link resolveSelected}는 「그 탭 안에서」 풀었다. 여기선 세 선반 <b>전체</b>에서 푼다 — 관리 시트로 상태를 옮긴 책은
+ * 같은 id라 그대로 고른 채 새 선반으로 따라간다(그 선반이 그 표지로 밀린다).
+ */
+export function shelfSelection(books: MyBookSummary[], selectedId: number | undefined): MyBookSummary | null {
+  return books.find((b) => b.id === selectedId) ?? shelfSections(books).find((s) => s.books.length > 0)?.books[0] ?? null;
+}
+
+/**
+ * 선반을 고른 표지로 밀 자리 — 표지가 이미 다 보이면 `null`(옮기지 않는다), 아니면 그 표지를 가운데로 데려오는 `scrollLeft`.
+ *
+ * <p>「이미 보이면 그대로」가 홈 `recenterIndex`와 같은 관례다 — 보이는 표지를 눌렀을 때나 손가락으로 민 뒤에 스크롤을 걸면 트랙을
+ * 손가락에서 빼앗는다. 밖에서 고른 경우(추가 직후 · 격자 · 관리 시트로 옮긴 뒤)만 실제로 움직인다.
+ */
+export function revealScrollLeft(scrollLeft: number, viewport: number, cellLeft: number, cellWidth: number): number | null {
+  if (cellLeft >= scrollLeft && cellLeft + cellWidth <= scrollLeft + viewport) return null;
+  return Math.max(0, cellLeft - (viewport - cellWidth) / 2);
+}
+
+/** 선반 표지 — 80×112(안 1 `r5/cover-shelf`). 높이는 `BookCover`의 식(폭 × 1.4) 그대로다. */
+const SHELF_COVER = 80;
+const SHELF_COVER_HEIGHT = Math.round(SHELF_COVER * 1.4);
+/** 표지 사이 — 걸친 알약(112)이 표지(80)보다 16씩 넘쳐도 이웃 표지와 4가 남는다(안 1 §7.3). */
+const SHELF_GAP = 20;
+/** 걸친 검정 알약 — 보이는 112×44 = 누름 영역(계획 §4 L5: 사양서 38 → 44). 세로 가운데가 판 높이라 절반(22)이 판 아래로 내려온다. */
+const PILL_WIDTH = 112;
+const PILL_HEIGHT = 44;
+const PILL_SPILL = PILL_HEIGHT / 2;
+/**
+ * 선반 줄 높이 = 표지 + 알약 넘침 — <b>세 단 모두</b> 같은 값으로 잡는다. 고른 단에만 두면 고르기가 바뀔 때 아래 선반이 들썩이고,
+ * 줄 밖으로 내려간 알약은 `overflow-x: auto`가 y도 auto로 만들어 잘리거나 줄이 세로로 스크롤된다.
+ */
+const SHELF_ROW_HEIGHT = SHELF_COVER_HEIGHT + PILL_SPILL;
+
+/**
+ * {@link revealScrollLeft}가 「다 보이는가」를 잴 범위 `[left, width]` — 알약이 있으면 <b>알약</b>이다. 알약은 표지보다 양옆 16씩 넓어,
+ * 표지만 재면 끝까지 민 줄의 마지막 칸에서 표지는 다 보이는데 알약 글자가 잘린 채 멈춘다(리뷰 실측). 첫 칸은 렌더처럼 왼쪽 끝에 붙인다.
+ */
+export function revealSpan(cellLeft: number, withPill: boolean): [number, number] {
+  if (!withPill) return [cellLeft, SHELF_COVER];
+  return [cellLeft === 0 ? 0 : cellLeft - (PILL_WIDTH - SHELF_COVER) / 2, PILL_WIDTH];
+}
+
+/**
+ * 줄을 고른 표지 칸으로 민다 — {@link Shelf}의 effect 본문. 정적 렌더에선 effect가 안 돌아 테스트가 이 함수를 직접 부른다
+ * (줄은 `scrollLeft`·`clientWidth`만 있으면 된다). 이미 다 보이면 줄을 건드리지 않는다.
+ */
+export function revealCell(row: { scrollLeft: number; readonly clientWidth: number }, cellLeft: number, withPill: boolean): void {
+  const left = revealScrollLeft(row.scrollLeft, row.clientWidth, ...revealSpan(cellLeft, withPill));
+  if (left !== null) row.scrollLeft = left;
+}
+
+const INK = 'var(--adaptiveGrey800, #1D1B18)';
+const MUTED = 'var(--adaptiveGrey600, #645E54)';
+
+/**
+ * 선반 한 단 — 머리(이름 · 권수 · 「펼쳐보기 ›」) + 판 위 표지 가로 줄. 훅이 없다 — 테스트가 함수로 불러 `onClick`을 트리에서 잰다.
+ *
+ * <p>⚠️ 줄에는 `overflowX: 'auto'`만 건다. `overflow-y`는 웹뷰가 그 값을 만나면 가로 터치까지 죽이고(T-159), `touch-action: pan-x`는
+ * 선반 위에서 시작한 세로 스와이프로 페이지가 안 내려가게 만든다(선반 셋이 화면 절반을 덮는다). 세로로 넘칠 것이 애초에 없게
+ * 넘침 자리를 줄 안에 잡았다({@link SHELF_ROW_HEIGHT}). 스냅도 없다 — 선반은 고르는 무대가 아니라 늘어놓은 책이다(고르기는 탭).
+ */
+export function ShelfRow({
+  section,
+  selectedId,
+  lead,
+  eager,
+  busy,
+  canWrite,
+  rowRef,
+  onSelect,
+  onAddBook,
+  onCompose,
+  onOpenGrid,
+}: {
+  section: ShelfSection;
+  /** 고른 책 — 이 단에 없으면 이 단엔 ✓도 알약도 없다. */
+  selectedId: number | null;
+  /** 맨 앞 「책 추가」 칸 — 읽는 중 단 + 서버가 검색을 켰을 때만(게이트와 안내가 한 몸). */
+  lead: boolean;
+  /** 첫 선반만 표지를 바로 싣는다 — 셋째 단까지 한꺼번에 받으면 첫 화면 이미지 요청이 몰린다. */
+  eager: boolean;
+  busy: boolean;
+  /** 핸들이 없으면 알약을 안 그린다 — 눌러도 서버가 여백 대상을 못 찾는다(설계 결정 A). 자리(넘침)는 그대로다. */
+  canWrite: boolean;
+  rowRef?: (el: HTMLDivElement | null) => void;
+  onSelect: (bookId: number) => void;
+  onAddBook: () => void;
+  onCompose: (book: MyBookSummary) => void;
+  onOpenGrid: () => void;
+}) {
+  const { status, title, empty, books } = section;
+
+  const row = (
+    <div style={{ position: 'relative' }}>
+      {/* 판 — 표지 바닥이 서는 잉크 선(안 1 `r5/board`). 줄보다 먼저 그려 표지·알약이 그 위에 얹힌다. 줄 밖에 두어 스크롤과 무관하게 내용 폭 전체다. */}
+      <div
+        data-board=""
+        aria-hidden="true"
+        style={{ position: 'absolute', left: 0, right: 0, top: SHELF_COVER_HEIGHT, borderTop: `1px solid ${INK}` }}
+      />
+      <div
+        ref={rowRef}
+        data-shelf-row=""
+        style={{
+          // 칸 위치(offsetLeft)를 줄 기준으로 재려고 positioned로 둔다(reveal).
+          position: 'relative',
+          display: 'flex',
+          alignItems: 'flex-start',
+          gap: SHELF_GAP,
+          height: SHELF_ROW_HEIGHT,
+          overflowX: 'auto',
+          scrollbarWidth: 'none',
+        }}
+      >
+        {lead && (
+          // 누르면 곧장 검색 — 캐러셀 시절의 「칸 고르기 → 검색해서 담기」 2단계가 사라졌다(가운데 온 것이 없다).
+          <button
+            type="button"
+            data-lead-card=""
+            aria-label="책 추가"
+            disabled={busy}
+            onClick={onAddBook}
+            // 종이 면 — 안내가 이 줄을 딤 위로 들어 올려도 투명한 칸엔 딤이 비쳐 가리키는 칸만 어두웠다(투어 실측). 평소엔 바탕과 같은 색이다.
+            style={{ display: 'flex', flex: '0 0 auto', padding: 0, border: 'none', background: 'var(--adaptiveGrey100, #F5F0E6)', cursor: 'pointer' }}
+          >
+            <NoBookCard width={SHELF_COVER} label="책 추가" />
+          </button>
+        )}
+        {books.length === 0 ? (
+          // 빈 단 = 판 위에 그 상태의 빈 문구(판이 남아 단이 사라지지 않는다).
+          <span
+            style={{
+              display: 'flex',
+              alignItems: 'flex-end',
+              height: SHELF_COVER_HEIGHT,
+              paddingBottom: 12,
+              boxSizing: 'border-box',
+              fontSize: 14,
+              lineHeight: '20px',
+              color: MUTED,
+              whiteSpace: 'nowrap',
+            }}
+          >
+            {empty}
+          </span>
+        ) : (
+          books.map((book, index) => {
+            const current = book.id === selectedId;
+            // 줄의 첫 칸이면 알약을 왼쪽 끝에 붙인다 — 가운데면 넘친 16을 스크롤 컨테이너가 잘라 낸다(사양서 §7.3 clamp).
+            const firstCell = index === 0 && !lead;
+            return (
+              <div key={book.id} data-shelf-item={book.id} style={{ position: 'relative', flex: '0 0 auto', width: SHELF_COVER }}>
+                <button
+                  type="button"
+                  aria-label={book.title}
+                  aria-current={current ? 'true' : undefined}
+                  data-cover-title={book.title}
+                  onClick={() => onSelect(book.id)}
+                  style={{ position: 'relative', display: 'flex', padding: 0, border: 'none', background: 'transparent', cursor: 'pointer' }}
+                >
+                  <BookCover url={book.coverUrl} title={book.title} width={SHELF_COVER} eager={eager} />
+                  {current && <CheckBadge />}
+                </button>
+                {current && canWrite && (
+                  // 고른 표지에 반 걸친 검정 알약(안 1 §6.2 #15) — 이 화면의 주 동작 하나. 표지 칸 안에 두어 가로 스크롤 때 표지를 따라간다.
+                  // 맨 <button>인 이유: TDS Button은 `--button-min-height: 56px`를 박아 솟는다. z 1 — 첫 칸이면 이웃 표지에 12 걸치는데, 이웃 칸도
+                  // positioned라 z가 없으면 DOM 순서상 이웃 표지가 알약 글자를 덮는다(목 모드 실측). 알약 안엔 안내 딤이 없어 가둘 것도 없다.
+                  <button
+                    type="button"
+                    data-margin-pill=""
+                    disabled={busy}
+                    onClick={() => onCompose(book)}
+                    style={{
+                      position: 'absolute',
+                      top: SHELF_COVER_HEIGHT - PILL_SPILL,
+                      left: firstCell ? 0 : (SHELF_COVER - PILL_WIDTH) / 2,
+                      zIndex: 1,
+                      width: PILL_WIDTH,
+                      height: PILL_HEIGHT,
+                      padding: 0,
+                      border: 'none',
+                      borderRadius: 999,
+                      background: 'var(--adaptiveBlue700, #1D1B18)',
+                      color: 'var(--filledInk, #F5F0E6)',
+                      fontSize: 15,
+                      fontWeight: 500,
+                      lineHeight: '20px',
+                      whiteSpace: 'nowrap',
+                      cursor: 'pointer',
+                    }}
+                  >
+                    여백에 글쓰기
+                  </button>
+                )}
+              </div>
+            );
+          })
+        )}
+      </div>
+    </div>
+  );
+
+  return (
+    <section data-shelf={status}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', height: 26, marginBottom: 10 }}>
+        {/* 이름 + 권수 — H3 18/26 명조, 권수만 muted(안 1 `titleGroup`). 0은 박제하지 않는다(빈 문구가 이미 말한다). */}
+        <h2 style={{ margin: 0, display: 'flex', alignItems: 'baseline', gap: 6, ...SERIF_VALUE, fontSize: 18, lineHeight: '26px' }}>
+          <span style={{ color: INK }}>{title}</span>
+          {books.length > 0 && <span style={{ color: MUTED }}>{books.length}</span>}
+        </h2>
+        {books.length > 1 && (
+          // 글자 링크 — 보이는 20, 누름 44(음수 여백으로 머리 높이는 그대로).
+          <button
+            type="button"
+            onClick={onOpenGrid}
+            style={{
+              minHeight: 44,
+              margin: '-9px 0',
+              padding: 0,
+              border: 'none',
+              background: 'transparent',
+              color: MUTED,
+              fontSize: 14,
+              lineHeight: '20px',
+              cursor: 'pointer',
+            }}
+          >
+            펼쳐보기 ›
+          </button>
+        )}
+      </div>
+      {lead ? (
+        // 안내는 「책 추가」 칸이 든 줄을 감싼다 — 칸만 감싸면 말풍선이 가로 스크롤 줄 안의 flex 칸이 되어 잘린다.
+        // 게이트(`lead`)가 없는 날엔 감싸지도 않아 없는 칸을 가리키는 안내가 원리상 생기지 않는다.
+        <Coachmark
+          name="add-book"
+          after="library" // 바로 앞 걸음(서재 설명)을 본 뒤에 — 흐름이 이 화면으로 데려온 직후가 제 차례다
+          title="읽을 책은 여기서 찾아 담아요"
+          detail="맨 앞 점선 칸에서 검색해 담아요"
+          enabled={lead}
+          // 줄 전체를 감싸 기본(50%)이면 꼬리가 고른 표지의 알약을 가리킨다 — 맨 앞 「책 추가」 칸 가운데로.
+          tailLeft={`${SHELF_COVER / 2}px`}
+        >
+          {row}
+        </Coachmark>
+      ) : (
+        row
+      )}
+    </section>
+  );
+}
+
+/**
+ * 책장 — 선반 세 단 → 펼친 책 → 여백 박스(안 1 §7.2 순서 그대로 · D6 추천). 탭 세 칸 + 한 권씩 캐러셀을 대신한다(에디토리얼 PR-3).
+ *
+ * <p>세 상태가 늘 함께 서서 모든 책이 한눈에 들고, 선반은 가로로 넘쳐 권수가 늘어도 높이가 고정이다. 고르기는 표지를 눌러서 —
+ * 고른 표지엔 ✓와 검정 알약이 걸리고, 그 책의 제목·칩·관리와 여백 글은 아래 「펼친 책」·「여백」에 이어진다. 선반 높이가 고정이라
+ * 고르기가 바뀌어도 아래가 들썩이지 않는다. 액션 넷은 「관리」 시트 뒤로 접혀 있다.
  */
 export function Shelf({
   books,
-  tab,
   selectedId,
   sheet,
   busy,
   myLoginId,
   searchEnabled,
-  onTab,
   onSelect,
   onSheet,
   onAction,
@@ -534,17 +804,15 @@ export function Shelf({
   onAddBook,
 }: {
   books: MyBookSummary[];
-  tab: BookStatus;
-  /** 책 id · `null`(「책 추가」 칸을 고름) · `undefined`(아직 안 고름) — 뒤의 둘은 다른 값이다. */
-  selectedId: number | null | undefined;
+  /** 책 id 또는 `undefined`(아직 안 고름 → 기본 선택). */
+  selectedId: number | undefined;
   sheet: LibrarySheet;
   busy: boolean;
   /** 없으면 여백 손잡이·박스를 그리지 않는다 — 눌러도 서버가 대상을 못 찾는다(설계 결정 A). */
   myLoginId: string | null;
   /** 서버가 검색을 껐으면 「책 추가」 칸도 안내도 세우지 않는다 — 눌러도 못 가는 칸을 남기지 않는다. */
   searchEnabled: boolean;
-  onTab: (status: BookStatus) => void;
-  onSelect: (bookId: number | null) => void;
+  onSelect: (bookId: number) => void;
   onSheet: (sheet: LibrarySheet) => void;
   onAction: (action: BookAction) => void;
   onOpenMargin: (loginId: string, bookId: number) => void;
@@ -552,199 +820,75 @@ export function Shelf({
   onError: (error: Error) => void;
   onAddBook: () => void;
 }) {
-  /** 게이트와 안내가 한 몸이다 — 이 값 하나가 0번 칸과 코치마크를 함께 켜고 끈다. */
-  const leadCard = searchEnabled ? ADD_BOOK_CARD : null;
+  const sections = shelfSections(books);
+  const selected = shelfSelection(books, selectedId);
+  const rows = useRef<Partial<Record<BookStatus, HTMLDivElement | null>>>({});
 
-  // 검색이 꺼진 날의 마지막 폴백 — 캐러셀에 세울 것이 하나도 없으면 옛 문장이 화면을 지킨다.
-  if (books.length === 0 && leadCard === null) {
-    return (
-      <Text typography="st11" color="grey600" style={{ display: 'block' }}>
-        아직 책이 없어요. 읽고 있는 책을 추가하면 측정할 때 고를 수 있어요.
-      </Text>
-    );
-  }
+  // 고른 책이 선반 밖에 있으면 그 표지로 민다 — 추가 직후 · 격자에서 고름 · 관리 시트로 다른 선반에 옮긴 뒤. 이미 보이면 그대로다.
+  useEffect(() => {
+    if (selected === null) return;
+    const row = rows.current[selected.status];
+    const cell = row?.querySelector<HTMLElement>(`[data-shelf-item="${selected.id}"]`);
+    if (row == null || cell == null) return;
+    // 알약은 고른 표지에 붙는다 — 렌더 조건(`current && canWrite`)과 같은 `myLoginId !== null`로 범위를 고른다.
+    revealCell(row, cell.offsetLeft, myLoginId !== null);
+    // 위치를 정하는 건 고른 책과 그 책의 선반이다.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selected?.id, selected?.status]);
 
-  const section = SECTIONS.find((s) => s.status === tab) ?? SECTIONS[0];
-  const rows = books.filter((b) => b.status === tab);
-  const selected = resolveSelected(rows, selectedId ?? null);
-  /**
-   * 「책 추가」 칸이 가운데인가 — 고른 값이 `null`이거나(칸을 골랐다), 이 탭에 세울 책이 아예 없을 때다.
-   * `resolveSelected`는 `null`을 「첫 책으로 떨어져라」로 읽으므로 그 값을 여기서 따로 본다.
-   */
-  const onLeadCard = leadCard !== null && (selectedId === null || selected === null);
+  const gridSection = sheet?.kind === 'grid' ? (sections.find((s) => s.status === sheet.status) ?? null) : null;
 
   return (
     <>
-      {/* 세 탭은 늘 서 있다(권수 0이어도) — 나타났다 사라지면 누르려던 자리가 옮겨 다닌다. */}
-      <div style={{ display: 'flex', gap: 6, padding: 3, borderRadius: 10, background: 'var(--adaptiveGrey200, #E4DDD0)' }}>
-        {SECTIONS.map(({ status, title }) => {
-          const current = status === tab;
-          return (
-            <button
-              key={status}
-              type="button"
-              aria-current={current ? 'true' : undefined}
-              onClick={() => onTab(status)}
-              style={{
-                flex: 1,
-                padding: '9px 0',
-                border: 'none',
-                borderRadius: 10,
-                fontSize: 13,
-                // 시안 2c — 고른 칸은 색만으로 말하지 않는다. 굵기와 그림자가 「떠 있음」을 만든다.
-                fontWeight: current ? 700 : 400,
-                boxShadow: current ? '0 1px 3px rgba(0, 0, 0, 0.08)' : undefined,
-                cursor: 'pointer',
-                // 카드 면·잉크 토큰 — 옛 크림 `#FCFAF5` 리터럴은 Soft 카드 면(#FBF9F4)과 한 톤 어긋났다.
-                background: current ? 'var(--adaptiveGrey100, #FBF9F4)' : 'transparent',
-                color: current ? 'var(--adaptiveGrey800, #2A2921)' : 'var(--adaptiveGrey700, #43423A)',
-              }}
-            >
-              {/* 이름만 적는다 — 권수는 「펼쳐보기」 시트 제목(`읽는 중 N권`)이 이미 말한다. 세 칸에
-                  숫자가 늘 떠 있으면 고르는 자리가 세는 자리로 읽힌다. */}
-              {title}
-            </button>
-          );
-        })}
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+        {sections.map((section, index) => (
+          <ShelfRow
+            key={section.status}
+            section={section}
+            selectedId={selected?.id ?? null}
+            lead={section.status === 'READING' && searchEnabled}
+            eager={index === 0}
+            busy={busy}
+            canWrite={myLoginId !== null}
+            rowRef={(el) => {
+              rows.current[section.status] = el;
+            }}
+            onSelect={onSelect}
+            onAddBook={onAddBook}
+            onCompose={onComposeMargin}
+            onOpenGrid={() => onSheet({ kind: 'grid', status: section.status })}
+          />
+        ))}
       </div>
 
-      {/* 가운데 정렬은 **바깥 div**가 한다 — TDS `Text`는 넘긴 style에서 `textAlign`을 걸러낸다(T-216). */}
-      {selected === null && leadCard === null ? (
-        <div style={{ marginTop: 28, textAlign: 'center' }}>
-          <Text typography="st11" color="grey600">
-            {section.empty}
-          </Text>
-        </div>
+      {selected === null ? (
+        // 0권 — 펼칠 책이 없다. 선반 셋은 그대로 서 있고(빈 문구), 여기는 다음 한 걸음을 말한다.
+        <Text typography="st11" color="grey600" style={{ display: 'block', marginTop: 28, wordBreak: 'keep-all' }}>
+          아직 책이 없어요. 읽고 있는 책을 추가하면 측정할 때 고를 수 있어요.
+        </Text>
       ) : (
-        <div style={{ marginTop: 20 }}>
-          {/* 「이 탭이 비었다」와 「책 추가 칸이 섰다」는 다른 말이다 — 칸의 부제가 탭 사정까지 대신하지 못한다. */}
-          {selected === null && (
-            // 가운데 정렬은 바깥 div가 한다(T-216) — Text에 준 `textAlign`은 TDS가 걸러낸다.
-            <div style={{ textAlign: 'center' }}>
-              <Text typography="st11" color="grey600">
-                {section.empty}
-              </Text>
-            </div>
-          )}
-          {/*
-            탭이 바뀌면 목록이 통째로 갈리므로 다시 마운트한다 — 안 그러면 트랙이 옛 탭의 스크롤 자리에 머문다.
-            안내는 캐러셀을 감싼다: 「책 추가하기」 버튼이 서 있던 자리를 이 칸이 물려받았고, 게이트(`leadCard`)가
-            없는 날엔 감싸지도 않아 없는 칸을 가리키는 안내가 원리상 생기지 않는다.
-          */}
-          <Coachmark
-            name="add-book"
-            after="library" // 바로 앞 걸음(서재 설명)을 본 뒤에 — 흐름이 이 화면으로 데려온 직후가 제 차례다
-            title="읽을 책은 여기서 찾아 담아요"
-            detail="맨 앞 점선 칸에서 검색해 담아요"
-            enabled={leadCard !== null}
-          >
-            <BookCarousel
-              key={tab}
-              books={rows}
-              selectedId={onLeadCard ? null : (selected?.id ?? null)}
-              onSelect={onSelect}
-              leadCard={leadCard}
-              metaOf={metaLine}
-              chipsOf={(b) =>
-                bookStats(b).map(({ label, tone, value }) => ({ label, value, style: bookChipStyle(tone) }))
-              }
+        <>
+          <OpenBook
+            book={selected}
+            busy={busy}
+            onManage={() => onSheet({ kind: 'actions', confirmDelete: false, confirmPublish: false })}
+          />
+          {myLoginId !== null && (
+            <MarginBox
+              loginId={myLoginId}
+              bookId={selected.id}
+              onError={onError}
+              onOpenAll={() => onOpenMargin(myLoginId, selected.id)}
             />
-          </Coachmark>
-          {onLeadCard ? (
-            // 칸이 가운데면 할 수 있는 일은 하나뿐이다 — 손잡이도 하나로 갈린다(합폭은 아래 줄과 같다).
-            <div style={{ display: 'flex', marginTop: 16 }}>
-              <button
-                type="button"
-                disabled={busy}
-                onClick={onAddBook}
-                // 옅은 세이지 채움 = TDS primary와 같은 옷(Soft 버튼 3단의 가운데). 옛 `rgba(110,138,106,.14)`
-                // 리터럴은 PR-1 팔레트 교체를 못 따라왔다.
-                style={{
-                  flex: 1,
-                  height: HANDLE_ROW_HEIGHT,
-                  border: 'none',
-                  borderRadius: 18,
-                  background: 'var(--adaptiveBlue50, #E1E8D4)',
-                  color: 'var(--adaptiveBlue700, #3F5A3C)',
-                  fontSize: 16,
-                  fontWeight: 700,
-                  cursor: 'pointer',
-                }}
-              >
-                검색해서 담기
-              </button>
-            </div>
-          ) : (
-            selected !== null && (
-              <>
-                {/* 전폭 손잡이 줄 — 비율은 2:1(쓰기가 주, 관리가 보조). */}
-                <div style={{ display: 'flex', gap: 8, marginTop: 16 }}>
-                  {/* 들춰보기는 아래 박스가 맡으므로 손잡이는 작성 직행이다 — 홈 여백 문과 같은 경로. */}
-                  {myLoginId !== null && (
-                    <button
-                      type="button"
-                      disabled={busy}
-                      onClick={() => onComposeMargin(selected)}
-                      style={{
-                        flex: 2,
-                        height: HANDLE_ROW_HEIGHT,
-                        // 시안 2c — 이 화면의 주 동작 하나라 **채움**이다. Soft(PR-3): 연필 프레임 대신
-                        // 부푼 그림자 — TDS 채움 버튼 규칙(global.css `--btn-filled`)과 같은 옷이다. 톤 조율 A:
-                        // 진한 채움 → 옅은 세이지 타일 + 진한 글자(진한 덩어리는 탭바 원 하나). 옆 「관리」와는
-                        // 면(부푼 타일)과 선(1.5px 실선)으로 갈린다.
-                        // ⚠️ 설계 D5의 `FilledButton` 교체는 **안 따랐다**: TDS Button이
-                        // `--button-min-height: 56px`를 박아 이 38px 손잡이 줄에서 혼자 56px로 솟는다(실측).
-                        // 채움 개수 계측은 `typography.test`가 **두 형태를 함께 세는** 방식으로 받는다 —
-                        // 그 가드가 세는 키 `boxShadow: 'var(--puffShadow)'`를 그대로 쓴다(톤 조율 A에서 배경 키 대신).
-                        border: 'none',
-                        borderRadius: 18,
-                        background: 'var(--adaptiveBlue50, #E1E8D4)',
-                        color: 'var(--adaptiveBlue700, #3F5A3C)',
-                        boxShadow: 'var(--puffShadow)',
-                        fontSize: 15,
-                        fontWeight: 700,
-                        cursor: 'pointer',
-                      }}
-                    >
-                      여백에 글쓰기
-                    </button>
-                  )}
-                  <button
-                    type="button"
-                    disabled={busy}
-                    onClick={() => onSheet({ kind: 'actions', confirmDelete: false, confirmPublish: false })}
-                    // 보조 손잡이 — 1.5px 세이지 실선(규칙 1). 옆 채움과 면/선으로 위계가 갈린다.
-                    style={{
-                      ...SOFT_OUTLINE,
-                      flex: 1,
-                      height: HANDLE_ROW_HEIGHT,
-                      fontSize: 15,
-                      fontWeight: 700,
-                      cursor: 'pointer',
-                    }}
-                  >
-                    관리
-                  </button>
-                </div>
-                {myLoginId !== null && (
-                  <MarginBox
-                    loginId={myLoginId}
-                    bookId={selected.id}
-                    onError={onError}
-                    onOpenAll={() => onOpenMargin(myLoginId, selected.id)}
-                  />
-                )}
-              </>
-            )
           )}
-        </div>
+        </>
       )}
 
-      {sheet?.kind === 'grid' && (
+      {gridSection !== null && (
         <GridSheet
-          title={`${section.title} ${rows.length}권`}
-          rows={rows}
-          selectedId={onLeadCard ? null : (selected?.id ?? null)}
+          title={`${gridSection.title} ${gridSection.books.length}권`}
+          rows={gridSection.books}
+          selectedId={selected?.id ?? null}
           onPick={(id) => {
             onSelect(id);
             onSheet(null);
@@ -769,7 +913,80 @@ export function Shelf({
 }
 
 /**
- * 펼쳐보기 — 목록의 책을 3열 격자로 한 번에. 고르면 캐러셀이 그 책으로 옮겨가고 시트는 닫힌다.
+ * 펼친 책 — 고른 책의 작은 표지(56×78) + ✓ · 제목 · 저자 · [칩 ↔ 「관리」](안 1 §7.2 `open-book`). 선반 바로 아래에 선다.
+ *
+ * <p>작은 표지의 ✓는 선반의 고른 표지와 <b>같은 배지</b>다 — 고른 책이 1단이고 펼친 책이 3단 아래여도 「어느 책 이야기인가」가
+ * 이어진다(계획 §4 L2). 제목은 맨 요소에 line-clamp 2 — TDS `Text`는 `display`를 덮어 line-clamp가 죽는다(BookGrid 주석과 같다).
+ */
+function OpenBook({ book, busy, onManage }: { book: MyBookSummary; busy: boolean; onManage: () => void }) {
+  return (
+    <div data-open-book="" style={{ display: 'flex', alignItems: 'flex-start', gap: 14, marginTop: 28 }}>
+      <span style={{ position: 'relative', display: 'inline-flex', flex: '0 0 auto' }}>
+        <BookCover url={book.coverUrl} title={book.title} width={56} />
+        <CheckBadge />
+      </span>
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div
+          style={{
+            ...SERIF_VALUE,
+            fontSize: 22,
+            lineHeight: '30px',
+            color: INK,
+            display: '-webkit-box',
+            WebkitLineClamp: 2,
+            WebkitBoxOrient: 'vertical',
+            overflow: 'hidden',
+            wordBreak: 'keep-all',
+          }}
+        >
+          {book.title}
+        </div>
+        <div style={{ marginTop: 2, fontSize: 14, lineHeight: '20px', color: MUTED }}>{metaLine(book)}</div>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, paddingTop: 8 }}>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5, minWidth: 0 }}>
+            {bookStats(book).map(({ label, tone, value }) => (
+              <span key={label} data-book-chip="" style={bookChipStyle(tone)}>
+                {value === undefined ? (
+                  label
+                ) : (
+                  <>
+                    <span style={SERIF_VALUE}>{value}</span>
+                    {label.slice(value.length)}
+                  </>
+                )}
+              </span>
+            ))}
+          </div>
+          {/* 공개 칩(바꾸는 대상) 바로 옆 — 외곽선 알약은 보이는 38, 누름은 바깥 버튼이 44로 받는다. */}
+          <button
+            type="button"
+            disabled={busy}
+            onClick={onManage}
+            style={{ flex: '0 0 auto', height: 44, padding: 0, border: 'none', background: 'transparent', cursor: 'pointer' }}
+          >
+            <span
+              style={{
+                ...OUTLINE_PILL,
+                display: 'inline-flex',
+                alignItems: 'center',
+                boxSizing: 'border-box',
+                height: HANDLE_ROW_HEIGHT,
+                padding: '0 20px',
+                fontSize: 15,
+                fontWeight: 500,
+              }}
+            >
+              관리
+            </span>
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/**
+ * 펼쳐보기 — 목록의 책을 3열 격자로 한 번에. 고르면 그 책이 골라지고(선반이 그 표지로 밀린다) 시트는 닫힌다.
  * 서재(내 책장)와 책방(남의 공개 책)이 같은 시트를 쓴다 — 표지·제목만 필요해 타입도 그만큼만 받는다.
  */
 export function GridSheet({
@@ -825,7 +1042,7 @@ export function BookGrid({
                 display: 'flex',
                 justifyContent: 'center',
                 // 지금 고른 책만 테두리로 — 격자에서 "내가 보던 그 책"을 잃지 않게.
-                outline: book.id === selectedId ? '2px solid var(--adaptiveBlue500, #5B7F55)' : undefined,
+                outline: book.id === selectedId ? '2px solid var(--adaptiveBlue500, #1D1B18)' : undefined,
                 outlineOffset: 2,
                 borderRadius: 4,
               }}
@@ -845,8 +1062,8 @@ export function BookGrid({
                       width: 10,
                       height: 10,
                       borderRadius: '50%',
-                      background: 'var(--adaptiveBlue500, #5B7F55)',
-                      border: '2px solid var(--adaptiveGrey100, #FBF9F4)',
+                      background: 'var(--adaptiveBlue500, #1D1B18)',
+                      border: '2px solid var(--adaptiveGrey100, #F5F0E6)',
                     }}
                   />
                 )}
@@ -999,13 +1216,12 @@ function SheetRow({
       disabled={busy}
       onClick={onClick}
       style={{
-        // 시트 바닥과 같은 색이라 배경만으론 경계가 안 보인다 — 1.5px 옅은 실선이 줄을 버튼으로 읽히게 한다.
-        ...SOFT_ROW,
+        // 시트 행 = 아래 가는 선(RULE_ROW) — 면 없이 줄이 버튼으로 읽힌다(에디토리얼).
+        ...RULE_ROW,
         display: 'block',
         width: '100%',
-        marginBottom: 8,
-        padding: '15px 14px',
-        color: danger ? '#A32D2D' : 'var(--adaptiveGrey800, #2A2921)',
+        padding: '15px 0',
+        color: danger ? 'var(--adaptiveRed500, #A8322A)' : 'var(--adaptiveGrey800, #1D1B18)',
         fontSize: 15,
         textAlign: 'left',
         cursor: 'pointer',
@@ -1017,16 +1233,15 @@ function SheetRow({
 }
 
 /**
- * 손잡이 줄 높이 — 원래 아래 「책 추가하기」(TDS `Button size="medium" display="block"`)의 <b>실측</b>
- * 높이였다(목 모드 390px 뷰포트에서 38px). 그 버튼은 2026-08-21에 캐러셀 0번 칸으로 들어가며 사라졌지만
- * 값은 그대로 둔다 — 이제 기준은 <b>「여백에 글쓰기·관리」와 「검색해서 담기」가 같은 높이</b>라는 것이다.
- * 두 줄이 어긋나면 칸을 오갈 때 손잡이가 위아래로 튄다.
+ * 손잡이 높이 38 — 원래 「책 추가하기」(TDS `Button size="medium" display="block"`)의 <b>실측</b> 높이였다(목 모드 390px).
+ * 서재는 에디토리얼 PR-3에서 손잡이 줄이 사라지고 펼친 책의 「관리」 외곽선 알약(보이는 높이)만 이 값을 쓴다.
+ * **공부 서재(`StudyLibrary`)가 가져다 쓰는 export라 지우지 않는다** — 그쪽 손잡이 줄은 그대로다(D9).
  */
 export const HANDLE_ROW_HEIGHT = 38;
 
-/** 테두리만 있는 작은 손잡이 — 제목 줄 「펼쳐보기」가 쓴다(캐러셀 아래 줄은 전폭 손잡이로 갈렸다). 1.5px 실선(규칙 1). */
+/** 테두리만 있는 작은 손잡이(외곽선 알약) — 공부 서재의 제목 줄 「펼쳐보기」가 쓴다(서재는 PR-3에서 선반 머리 글자 링크로 갔다). */
 export const handleStyle = {
-  ...SOFT_OUTLINE,
+  ...OUTLINE_PILL,
   flex: '0 0 auto',
   padding: '8px 14px',
   fontSize: 14,
@@ -1186,14 +1401,14 @@ export function SearchResultRow({
       onClick={onPick}
       style={{
         ...rowStyle,
+        ...RULE_ROW, // 에디토리얼 PR-4 — 아래 가는 선 · 모서리 0 · 면 없음(담긴 행만 아래에서 paper-2)
         position: 'relative', // 접힌 모서리(`.book-owned::after`)가 이 박스를 기준으로 앉는다
         flex: 1,
         minWidth: 0,
         marginTop: badge === null ? 8 : 0,
-        borderRadius: 12,
-        // 담긴 책은 한 톤 가라앉힌다 — 면(`--adaptiveGrey100`)보다 어두워야 「지나간 칸」으로 읽힌다. Soft에서 그
-        // 「가라앉은 바탕」은 눌린 면 색(`--softDent`)이다(옛 베이지 #EFE9DC 자리 — 공부 모드·밤도 토큰이 데려간다).
-        background: row.owned ? 'var(--softDent, #EAE5D9)' : 'var(--adaptiveGrey100, #FBF9F4)',
+        // 담긴 책은 한 톤 가라앉힌다 — 종이보다 어두운 paper-2(`--softDent`)여야 「지나간 칸」으로 읽힌다
+        // (옛 베이지 #EFE9DC 자리 — 공부 모드·밤도 토큰이 데려간다). 안 담긴 행은 면이 없다(RULE_ROW).
+        ...(row.owned ? { background: 'var(--softDent, #ECE5D8)' } : {}),
       }}
     >
       {/* 표지만 흐리고 도장은 또렷해야 하므로 흐림을 안쪽 겹에 건다(바깥에 걸면 도장까지 바랜다). */}
@@ -1203,7 +1418,7 @@ export function SearchResultRow({
         </span>
         {row.owned && (
           <span style={ownedStampStyle}>
-            <OwnedCheck color="var(--adaptiveGrey100, #FBF9F4)" />
+            <OwnedCheck color="var(--adaptiveGrey100, #F5F0E6)" />
           </span>
         )}
       </span>
@@ -1220,7 +1435,7 @@ export function SearchResultRow({
         </div>
         {row.owned && (
           <span style={ownedChipStyle}>
-            <OwnedCheck color="var(--adaptiveBlue700, #3F5A3C)" />
+            <OwnedCheck color="var(--adaptiveBlue700, #1D1B18)" />
             서재에 있어요
           </span>
         )}
@@ -1239,16 +1454,13 @@ export function SearchResultRow({
   );
 }
 
-/** 「여백 N」 배지 — 행과 같은 카드지 위에 서지만 테두리로 「누를 수 있는 다른 것」임을 말한다. */
+/** 「여백 N」 배지 — 보조 손잡이라 외곽선 알약이다(에디토리얼 PR-4 · 버튼 2단의 아래 단). */
 const marginBadgeStyle = {
+  ...OUTLINE_PILL,
   flex: '0 0 auto',
-  padding: '8px 10px',
-  borderRadius: 10,
-  border: '1px solid var(--adaptiveGrey200, #E4DDD0)',
-  background: 'var(--adaptiveGrey100, #FCFAF5)',
-  color: 'var(--adaptiveBlue700, #4F6B4C)',
+  padding: '8px 12px',
   fontSize: 13,
-  fontWeight: 700,
+  fontWeight: 500,
   cursor: 'pointer',
 } as const;
 
@@ -1259,7 +1471,7 @@ const marginBadgeStyle = {
  * <p>제목·근거 문장은 <b>서버가</b> 만든다 — 화면은 어느 전략(내 저자 / 베스트셀러)으로 뽑혔는지 모른 채
  * 라벨을 그대로 그린다. 그래서 서버가 전략을 늘려도 여기는 안 바뀐다.
  *
- * <p>⚠️ <b>안쪽 행은 카드를 쓰지 않는다.</b> 카드지(`#FCFAF5`)가 이미 명도 위쪽 끝이라 안쪽 행을 채우면
+ * <p>⚠️ <b>안쪽 행은 카드를 쓰지 않는다.</b> 옛 카드 면색이 명도 위쪽 끝이라 안쪽 행을 채우면
  * 어두워지는 방향밖에 없는데, 그 방향엔 <b>이미 「서재에 있어요」 톤(`#EFE9DC`)이 자리를 잡고 있다</b> —
  * 채운 행은 「지나간 칸」으로 읽힌다. 그래서 배경 없이 실선으로만 나눈다.
  *
@@ -1400,8 +1612,8 @@ const ownedStampStyle = {
   width: 20,
   height: 20,
   borderRadius: '50%',
-  background: 'var(--adaptiveBlue500, #5B7F55)', // 모드 강조색(공부 모드면 파랑)
-  border: '1.5px solid var(--softDent, #EAE5D9)', // 담긴 행 바탕과 같은 토큰
+  background: 'var(--adaptiveBlue500, #1D1B18)', // 모드 강조색(공부 모드면 파랑)
+  border: '1.5px solid var(--softDent, #ECE5D8)', // 담긴 행 바탕과 같은 토큰
   display: 'flex',
   alignItems: 'center',
   justifyContent: 'center',
@@ -1415,9 +1627,9 @@ const ownedChipStyle = {
   marginTop: 6,
   padding: '1px 8px 2px',
   borderRadius: 8,
-  border: '1px solid var(--adaptiveBlue300, #A9BD99)',
-  background: 'var(--accentPill, rgba(91, 127, 85, 0.16))',
-  color: 'var(--adaptiveBlue700, #3F5A3C)', // 옅은 채움 위에서 읽히는 진한 잉크
+  border: '1px solid var(--adaptiveBlue300, #9C9182)',
+  background: 'var(--accentPill, rgba(29, 27, 24, .06))',
+  color: 'var(--adaptiveBlue700, #1D1B18)', // 옅은 채움 위에서 읽히는 진한 잉크
   fontSize: 13,
   lineHeight: 1.5,
 } as const;

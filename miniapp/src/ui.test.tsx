@@ -7,6 +7,7 @@ import { describe, expect, it } from 'vitest';
 
 import type { DashboardResponse } from './api';
 import { IDLE_STUDY } from './api';
+import { FONT_CSS_URL } from './fonts';
 import { History } from './screens/History';
 import { Home } from './screens/Home';
 import {
@@ -163,7 +164,7 @@ describe('잔디 렌더', () => {
     // 웹 app.css --grass-0..4 와 같은 값(잔디 색의 단일 출처는 웹 브랜드 팔레트다).
     // 토큰 경유 — 공부 모드가 `body.study-mode`에서 이 토큰을 파랑 사다리로 갈아 끼운다.
     // 리터럴은 fallback으로 남아 독서 렌더의 색은 한 픽셀도 안 바뀐다.
-    const colors = ['#E7E2D5', '#CFD9C0', '#A9BD99', '#6E9565', '#3F5A3C']; // Soft 범례 5칸(톤 조율 A)
+    const colors = ['#E6DFD2', '#CDC3B2', '#A29785', '#625A4F', '#1D1B18']; // 에디토리얼 잉크 농담 5단(D4=A)
     colors.forEach((color, i) => {
       expect(markup).toContain(`background:var(--grass${i}, ${color})`);
     });
@@ -261,7 +262,7 @@ describe('잔디 오늘 칸 링 (GrassGrid today)', () => {
 
   it('링은 blur 0 두 겹이다 — 흐린 그림자는 칸마다 재래스터를 부른다(§6 · 안드로이드 72%)', () => {
     expect(render('2026-09-23')).toContain(
-      'box-shadow:0 0 0 2px var(--adaptiveGrey100, #FBF9F4), 0 0 0 4.5px var(--adaptiveBlue700, #3F5A3C)',
+      'box-shadow:0 0 0 2px var(--adaptiveGrey100, #F5F0E6), 0 0 0 4.5px var(--adaptiveBlue700, #1D1B18)',
     );
   });
 
@@ -325,7 +326,6 @@ function home(overrides: Partial<DashboardResponse>) {
         onTimerChange={() => {}}
         celebrate={false}
         onGoGoal={() => {}}
-        goalAdPending={false}
         onGoSettings={() => {}}
         onError={() => {}}
         onOpenMargin={() => {}}
@@ -363,7 +363,8 @@ describe('홈 오늘 진행률', () => {
     const markup = home({ remainingSeconds: 900 });
     const between = markup.slice(markup.indexOf('오늘 읽은 시간') + 8, markup.indexOf('45:00'));
 
-    expect(between).toContain('</div>');
+    // 에디토리얼 PR-2 — 눈썹(span, display:block)이 닫히고 시계가 제 블록(div)으로 선다.
+    expect(between).toContain('</span><div');
   });
 });
 
@@ -372,12 +373,9 @@ describe('섹션 카드·화면 제목', () => {
   // 섹션은 "읽는 중인 책"이 있을 때만 그려진다 — 빈 서재로는 카드 자체가 안 나온다.
   const markup = home({ readingBooks: [{ id: 1, title: '데미안', coverUrl: null, author: null }] });
 
-  it('섹션은 바탕 위 부푼 면으로 뜬다 — 배경만으로는 옅은 톤끼리 경계가 안 보인다', () => {
-    // 리터럴이 아니라 토큰이라야 독서등(밤)이 이 카드도 함께 데려간다.
-    expect(markup).toContain('background:var(--adaptiveGrey100, #FBF9F4)');
-    // 경계를 긋는 주체가 연필선(border-image)에서 부푼 그림자로 바뀌었다(Soft 재테마). 그림자가 통째로
-    // 빠지면 옅은 카드가 옅은 바탕에 녹아 사라지므로, 그리는 수단이 실재하는지를 못 박는다.
-    expect(markup).toContain('box-shadow:var(--puffShadow');
+  it('섹션은 면 없이 종이 위에 선다 — 경계는 머리 아래 잉크 선이다(에디토리얼 REQ-05)', () => {
+    expect(markup).toContain('border-bottom:1px solid var(--adaptiveGrey800'); // 그리는 수단(잉크 선)이 실재한다
+    expect(markup).not.toContain('box-shadow:var(--puffShadow');
   });
 
   /**
@@ -429,7 +427,7 @@ describe('섹션 카드·화면 제목', () => {
     expect(offenders).toEqual([]);
   });
 
-  it('화면 제목은 웹 브랜드와 같은 세리프(고운바탕)로 쓴다', () => {
+  it('화면 제목은 명조(Noto Serif KR) 500이다', () => {
     // 홈은 제목 행이 없으므로(첫 카드가 곧 히어로) 제목을 다는 화면으로 본다.
     const titled = renderToStaticMarkup(
       <TDSMobileProvider userAgent={userAgent}>
@@ -437,7 +435,8 @@ describe('섹션 카드·화면 제목', () => {
       </TDSMobileProvider>,
     );
 
-    expect(titled).toMatch(/font-family:[^"]*Gowun Batang/);
+    expect(titled).toMatch(/font-family:[^"]*Noto Serif KR/);
+    expect(titled).toMatch(/font-weight:500/);
   });
 
   // 「홈 잔디 미리보기는 카드 폭을 채운다」는 홈에서 잔디 카드가 빠지며 함께 사라졌다(그 자리는 피드 박스다).
@@ -455,9 +454,9 @@ describe('배경·color-scheme', () => {
     expect(read('../index.html')).toContain('name="color-scheme" content="light"');
   });
 
-  it('body에 Soft 바탕을 칠한다 — 투명이면 기기 다크 캔버스가 그대로 비친다', () => {
+  it('body에 종이 바탕을 칠한다 — 투명이면 기기 다크 캔버스가 그대로 비친다', () => {
     // `html body`(0-0-2)여야 한다 — TDS가 나중에 주입하는 `body`(0-0-1) 규칙과 동률이면 순서로 진다.
-    expect(read('./global.css')).toMatch(/html\s+body\s*\{[^}]*background:\s*#F3EFE5/); // 따뜻한 오트(톤 조율 A)
+    expect(read('./global.css')).toMatch(/html\s+body\s*\{[^}]*background:\s*#F5F0E6/); // 미색 종이(에디토리얼)
   });
 
   // 「목표 휠 페이드 = 캔버스색」 단언은 Soft PR-3에서 goal.test.tsx 「안개 색 = 카드 면 색」으로 옮겼다 —
@@ -493,23 +492,23 @@ describe('웹 브랜드 재테마 (global.css)', () => {
     expect(override).not.toBe('');
   });
 
-  it('블루 계열을 Soft 세이지로 갈아끼운다 — 버튼·선택 탭이 여기서 결정된다', () => {
-    expect(override).toMatch(/--adaptiveBlue500:\s*#5B7F55/); // 시안 측정 점·막대 끝
-    expect(override).toMatch(/--adaptiveBlue700:\s*#3F5A3C/); // 시안 주 버튼
+  it('블루 계열을 잉크로 갈아끼운다 — 버튼·선택 탭이 여기서 결정된다(강조 = 잉크 하나)', () => {
+    expect(override).toMatch(/--adaptiveBlue500:\s*#1D1B18/);
+    expect(override).toMatch(/--adaptiveBlue700:\s*#1D1B18/);
   });
 
-  it('표면·잉크를 Soft 톤으로 갈아끼운다', () => {
-    expect(override).toMatch(/--adaptiveBackground:\s*#FBF9F4/); // 따뜻한 부푼 면(톤 조율 A)
-    expect(override).toMatch(/--adaptiveGrey100:\s*#FBF9F4/);
-    expect(override).toMatch(/--adaptiveGrey600:\s*#5B5A4D/); // 흐린 글자 — 카드 위 6.62:1
+  it('표면·잉크를 에디토리얼 값으로 갈아끼운다 — 면 = 종이', () => {
+    expect(override).toMatch(/--adaptiveBackground:\s*#F5F0E6/);
+    expect(override).toMatch(/--adaptiveGrey100:\s*#F5F0E6/);
+    expect(override).toMatch(/--adaptiveGrey600:\s*#645E54/); // muted — 종이 위 5.65:1
   });
 
-  it('본문 폰트를 고운돋움으로 잡고 실제로 받아온다 — 스택만 바꾸면 폰트가 없어 시스템 폰트로 떨어진다', () => {
+  it('본문 폰트를 Noto Sans KR로 잡고 실제로 받아온다 — 스택만 바꾸면 폰트가 없어 시스템 폰트로 떨어진다', () => {
     // TDS도 `body`에 폰트 스택을 주입하므로 여기도 `html body`(0-0-2)로 눌러야 한다.
-    // 글꼴은 두 벌이다 — 고운돋움(본문) + 고운바탕(값·제목). 손글씨는 톤 조율 A에서 걷었다(warm-palette.test).
-    expect(css).toMatch(/html\s+body\s*\{[^}]*font-family:\s*'Gowun Dodum'/);
-    expect(css).toContain('family=Gowun+Dodum');
-    expect(css).toContain('family=Gowun+Batang');
+    // 글꼴은 두 벌이다 — Noto Sans KR(본문) + Noto Serif KR(값·제목). 부재 가드는 editorial-palette.test.
+    expect(css).toMatch(/html\s+body\s*\{[^}]*font-family:\s*'Noto Sans KR'/);
+    expect(FONT_CSS_URL).toContain('family=Noto+Sans+KR'); // 받아오는 자리는 fonts.ts(load 뒤 주입)
+    expect(FONT_CSS_URL).toContain('family=Noto+Serif+KR');
   });
 });
 
@@ -547,11 +546,11 @@ describe('종이 결 (global.css)', () => {
 describe('TDS Button 재색칠 (global.css)', () => {
   const css = readFileSync(new URL('./global.css', import.meta.url), 'utf8');
 
-  it('primary 버튼의 토스 블루 채움을 눕히고 연한 세이지로 바꾼다 — 인라인 프로퍼티라 !important가 필요하다', () => {
+  it('primary 버튼의 토스 블루 채움을 눕히고 잉크(검정 알약)로 바꾼다 — 인라인 프로퍼티라 !important가 필요하다', () => {
     expect(css).toMatch(/--button-background-color:\s*#3182f6/); // 선택자 키(토스 블루 인라인 값)
     // 채움을 투명으로 눕히지 않으면 TDS 내부 레이어가 테두리를 통째로 덮는다(실측).
     expect(css).toMatch(/--button-background-color:\s*transparent\s*!important/);
-    expect(css).toMatch(/background-color:\s*var\(--adaptiveBlue50,\s*#E1E8D4\)\s*!important/); // 옅은 세이지 타일
+    expect(css).toMatch(/background-color:\s*var\(--adaptiveBlue700,\s*#1D1B18\)\s*!important/); // 검정 알약
   });
 
   /**
@@ -588,21 +587,21 @@ describe('TDS Button 재색칠 (global.css)', () => {
    * 변수를 한 겹 끼웠다. **폴백이 곧 낮의 값**이라 `--brandButtonInk`를 아무도 정의하지 않는
    * 평소에도 결과가 같다. 그 폴백이 사라지면 밤이 아닌 화면의 버튼 글자가 통째로 죽으므로 함께 잠근다.
    */
-  it('primary 글자를 잉크색으로 되돌린다 — 연한 채움 위에서 흰 글자는 읽히지 않는다', () => {
-    expect(css).toMatch(/--button-color:\s*var\(--brandButtonInk,\s*#3F5A3C\)\s*!important/);
+  it('외곽선 알약 글자는 --brandButtonInk를 탄다 — 밤(독서등)이 이 색만 갈아 끼운다', () => {
+    expect(css).toMatch(/--button-color:\s*var\(--brandButtonInk,\s*#1D1B18\)\s*!important/);
   });
 
-  it('weak 버튼은 채움 없이 1.5px 세이지 실선만 — 이게 primary(옅은 채움)와의 위계를 만든다', () => {
+  it('weak 버튼은 채움 없이 1px 강조선만(외곽선 알약) — 이게 검정 알약과의 위계를 만든다', () => {
     expect(css).toMatch(/--button-background-color:\s*rgba\(100,\s*168,\s*255,\s*0\.15\)/); // 선택자 키
     const live = css.replace(/\/\*[\s\S]*?\*\//g, '');
     const start = live.indexOf(".tds-mobile-button[style*='--button-background-color:rgba(100, 168, 255, 0.15)']");
     const block = start < 0 ? '' : live.slice(start, live.indexOf('}', start));
-    expect(block).toMatch(/border:\s*1\.5px solid var\(--adaptiveBlue700/);
+    expect(block).toMatch(/border:\s*1px solid var\(--adaptiveBlue700/);
   });
 
   it('연필 프레임 변수는 하나도 정의돼 있지 않다 — Soft PR-5 철거(쓰는 곳이 0이면 정의도 0)', () => {
     const live = css.replace(/\/\*[\s\S]*?\*\//g, '');
-    expect(live.match(/--puffShadow\s*:/g)?.length ?? 0).toBeGreaterThan(0); // 변수 정의를 세는 식이 실제로 잡는다
+    expect(live.match(/--adaptiveGrey100\s*:/g)?.length ?? 0).toBeGreaterThan(0); // 변수 정의를 세는 식이 실제로 잡는다
     expect(live.match(/--pencil-frame[\w-]*\s*:/g)).toBeNull();
   });
 
@@ -611,12 +610,16 @@ describe('TDS Button 재색칠 (global.css)', () => {
     expect(css).toMatch(/--button-loader-color:[^;]*!important/);
   });
 
-  it('danger 버튼은 건드리지 않는다 — 세이지로 물들면 "빨강=위험" 신호가 죽는다', () => {
-    // TDS danger 팔레트(solid #f04452 / weak fill rgba(251,136,144,.15) · 글자 #e42939)를
-    // 선택자로도 값으로도 언급하지 않아야 한다 — 언급하는 순간 위험 버튼이 사정권에 든다.
-    for (const dangerHex of ['#f04452', '#e42939', '251, 136, 144']) {
-      expect(css).not.toContain(dangerHex);
-    }
+  it('TDS danger 빨강은 선택자 키로만 나온다 — 값으로 적히면 위험 빨강이 css와 토큰 두 곳에 갈라진다', () => {
+    // TDS danger 팔레트(solid #f04452 / weak fill rgba(251,136,144,.15) · 글자 #e42939)는 종이 위 AA 미달이라
+    // 재색칠 규칙이 그 인라인 값을 선택자 키로 잡는다(PR #1267 3회차). 값은 전부 `var(--adaptiveRed500)` 등 토큰이고,
+    // 키를 지운 나머지에 TDS 빨강이 한 글자라도 남으면 값이 토큰과 따로 논다.
+    const live = css.replace(/\/\*[\s\S]*?\*\//g, '');
+    const keys = /\[style\*='--button-background-color:\s?(#f04452|rgba\(251,\s*136,\s*144,\s*0\.15\))'\]/gi;
+    expect(live.match(keys)?.length ?? 0).toBeGreaterThanOrEqual(4); // 채움·weak × 공백 두 벌 — 키가 실제로 있다
+    const rest = live.replace(keys, '');
+    // 공백·대소문자 변형까지 — `rgb(240,68,82)`처럼 공백 없는 꼴도 잡는다.
+    expect(rest).not.toMatch(/#f04452|#e42939|251,\s*136,\s*144|240,\s*68,\s*82/i);
   });
 });
 

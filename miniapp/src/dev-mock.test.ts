@@ -22,7 +22,6 @@ import type {
   StudyHistoryResponse,
   StudyState,
   TimerState,
-  WebLoginCodeResponse,
 } from './api';
 import { ApiError } from './api';
 // 소스 자체를 읽는다 — "목 코드가 프로드 번들에 안 들어간다"는 배선(dynamic import + DEV 게이트)이
@@ -581,19 +580,6 @@ describe('dev-mock 아이디 바꾸기', () => {
 });
 
 /**
- * 웹 로그인 코드 — 목이 서버 알파벳(0·O·1·I·L 제외 31자)과 TTL을 그대로 흉내내야 설정 화면의
- * 「발급 후」 상태를 브라우저로 볼 수 있다. 자리표시 문자열을 주면 4자 끊기 표기가 거짓으로 초록이 된다.
- */
-describe('dev-mock 웹 로그인 코드', () => {
-  it('서버 형식의 8자 코드와 300초 TTL을 준다', async () => {
-    const data = await mockRequest<WebLoginCodeResponse>('/api/miniapp/web-login-code', { method: 'POST' });
-
-    expect(data.code).toMatch(/^[23456789ABCDEFGHJKMNPQRSTUVWXYZ]{8}$/);
-    expect(data.expiresInSeconds).toBe(300);
-  });
-});
-
-/**
  * 맞팔 DM 목 — 브라우저로 대화함·방·잠김·「메시지」 버튼 세 갈래를 다 밟을 수 있어야 한다.
  */
 describe('dev-mock 맞팔 DM', () => {
@@ -680,5 +666,25 @@ describe('dev-mock 사람축 전체 여백', () => {
     const entries = await mockRequest<ProfileMarginEntry[]>(`/api/stories/of/${myLoginId}/all`, {});
 
     expect(entries.map((e) => e.id)).toContain(921);
+  });
+});
+
+describe('dev-mock 잔디 월 라벨', () => {
+  afterEach(() => vi.useRealTimers());
+
+  it('REQ-04 · 목 잔디도 이번 달 3주 미만이면 맨 앞 라벨을 뺀다', async () => {
+    vi.useFakeTimers();
+    // KST 정오 — 목 열은 오늘부터 7일씩이라 10-13엔 10월이 2열(10-13 · 10-06), 9월은 2열(09-29)부터
+    vi.setSystemTime(new Date('2026-10-13T03:00:00Z'));
+    const narrow = await mockRequest<DashboardResponse>('/api/dashboard', {});
+    expect(narrow.graph.monthLabels[0]).toEqual({ weekIndex: 2, label: '9월' });
+
+    // 10-15엔 10월이 3열(10-15 · 10-08 · 10-01) — 이번 달 라벨이 선다(경계)
+    vi.setSystemTime(new Date('2026-10-15T03:00:00Z'));
+    const wide = await mockRequest<DashboardResponse>('/api/dashboard', {});
+    expect(wide.graph.monthLabels.slice(0, 2)).toEqual([
+      { weekIndex: 0, label: '10월' },
+      { weekIndex: 3, label: '9월' },
+    ]);
   });
 });

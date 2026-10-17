@@ -40,8 +40,8 @@ import {
   toggleSafety,
 } from './screens/Profile';
 import { bigShadow, tagWith } from './soft-guard';
-import { userAgent } from './test-fixtures';
-import { watchRewardAd } from './toss';
+import { clickHandlerFor, userAgent } from './test-fixtures';
+import { preloadAd, useAdSlot, watchRewardAd } from './toss';
 
 /**
  * 소셜 화면의 분기를 정적 렌더로 계측한다 — 뮤테이션(팔로우·차단·신고) 자체는 api 계층에서 이미 계측했고,
@@ -64,6 +64,8 @@ vi.mock('./toss', () => ({
   REWARD_AD_GROUP_ID: '',
   PERSONALITY_AD_GROUP_ID: 'test-ad-group',
   watchRewardAd: vi.fn(),
+  useAdSlot: vi.fn(),
+  preloadAd: vi.fn(),
   GOAL_MET_TEMPLATE_CODE: 'test-template',
   notificationAgreementSupported: vi.fn(),
   requestNotificationAgreement: vi.fn(),
@@ -75,9 +77,12 @@ vi.mock('./toss', () => ({
 const adRefreshMock = vi.mocked(adRefreshPersonality);
 const selectMock = vi.mocked(selectPersonality);
 const watchRewardAdMock = vi.mocked(watchRewardAd);
+const useAdSlotMock = vi.mocked(useAdSlot);
+const preloadAdMock = vi.mocked(preloadAd);
 
 beforeEach(() => {
   vi.clearAllMocks();
+  useAdSlotMock.mockReturnValue('ready'); // 광고가 준비된 평상시 — 성향 버튼 문구 단언들이 뜻을 유지한다
 });
 
 function render(node: React.ReactNode) {
@@ -113,7 +118,7 @@ function book(id: number, title: string, lastStoryAt: string | null = null): Pro
   return { id, title, author: '저자', coverUrl: null, status: '다 읽음', seconds: 600, purchaseLink: null, lastStoryAt };
 }
 
-function card(
+function cardProps(
   p: ProfileResponse,
   books: ProfileBook[] = [],
   activeTag: string | null = null,
@@ -135,41 +140,43 @@ function card(
     margins?: ProfileMarginEntry[] | null;
     marginsError?: string | null;
   } = {},
-) {
-  return render(
-    <ProfileCard
-      profile={p}
-      books={books}
-      activeTag={activeTag}
-      now={NOW}
-      onOpenMargin={view.openMargin === false ? undefined : () => {}}
-      busy={false}
-      personalityStatus={view.personalityStatus ?? null}
-      adBusy={false}
-      earnedRetry={view.earnedRetry ?? false}
-      personalityNotice={view.personalityNotice ?? null}
-      archiveOpen={view.archiveOpen ?? false}
-      onArchive={() => {}}
-      onSelectPersonality={() => {}}
-      onClaimPersonality={() => {}}
-      onRetryPersonality={() => {}}
-      onFollowToggle={() => {}}
-      onSelectTag={() => {}}
-      statusFilter={view.statusFilter ?? null}
-      onSelectStatus={() => {}}
-      onMore={() => {}}
-      safety={null}
-      header={view.header}
-      onOpenFollowList={view.openFollowList === true ? () => {} : undefined}
-      tab={view.tab ?? 'books'}
-      onSelectTab={() => {}}
-      margins={view.margins ?? null}
-      marginsError={view.marginsError ?? null}
-      onRetryMargins={() => {}}
-      expanded={new Set()}
-      onToggleExpand={() => {}}
-    />,
-  );
+): Parameters<typeof ProfileCard>[0] {
+  return {
+    profile: p,
+    books,
+    activeTag,
+    now: NOW,
+    onOpenMargin: view.openMargin === false ? undefined : () => {},
+    busy: false,
+    personalityStatus: view.personalityStatus ?? null,
+    adBusy: false,
+    earnedRetry: view.earnedRetry ?? false,
+    personalityNotice: view.personalityNotice ?? null,
+    archiveOpen: view.archiveOpen ?? false,
+    onArchive: () => {},
+    onSelectPersonality: () => {},
+    onClaimPersonality: () => {},
+    onRetryPersonality: () => {},
+    onFollowToggle: () => {},
+    onSelectTag: () => {},
+    statusFilter: view.statusFilter ?? null,
+    onSelectStatus: () => {},
+    onMore: () => {},
+    safety: null,
+    header: view.header,
+    onOpenFollowList: view.openFollowList === true ? () => {} : undefined,
+    tab: view.tab ?? 'books',
+    onSelectTab: () => {},
+    margins: view.margins ?? null,
+    marginsError: view.marginsError ?? null,
+    onRetryMargins: () => {},
+    expanded: new Set(),
+    onToggleExpand: () => {},
+  };
+}
+
+function card(...args: Parameters<typeof cardProps>) {
+  return render(<ProfileCard {...cardProps(...args)} />);
 }
 
 /**
@@ -1169,6 +1176,52 @@ describe('내 책방의 성향 관문 렌더', () => {
     expect(card(profile({ self: false }), [], null, { personalityStatus: status() })).not.toContain('광고 보고');
   });
 
+  // --- 광고는 버튼이 설 때 미리 불러 둔다(비게임 체크리스트 「광고 재생 시점에 실시간으로 로딩하지 않아요」) ---
+
+  it('REQ-09 · 내 책방에 광고 버튼이 서면 성향 그룹을 불러 두라고 한다', () => {
+    card(me(), [], null, { personalityStatus: status() });
+
+    expect(useAdSlotMock).toHaveBeenCalledWith('test-ad-group', true);
+  });
+
+  it('REQ-09 · 버튼이 안 서는 네 경우엔 불러 두지 않는다', () => {
+    const cases = [
+      card(me({ personality: null }), [], null, { personalityStatus: status({ coldStart: true }) }),
+      card(me(), [], null, { personalityStatus: status({ adRefreshRemaining: 0 }) }),
+      card(me(), [], null, { personalityStatus: null }),
+      card(profile({ self: false }), [], null, { personalityStatus: status() }),
+    ];
+
+    expect(cases).toHaveLength(4);
+    expect(useAdSlotMock).toHaveBeenCalledTimes(4);
+    expect(useAdSlotMock.mock.calls.every(([group, wanted]) => group === 'test-ad-group' && wanted === false)).toBe(true);
+    expect(useAdSlotMock).not.toHaveBeenCalledWith('test-ad-group', true);
+  });
+
+  it('REQ-07 · 성향 광고가 불러오는 중이면 「광고 불러오는 중…」이고 비활성이다', () => {
+    useAdSlotMock.mockReturnValue('loading');
+    const markup = card(me(), [], null, { personalityStatus: status() });
+
+    const at = markup.indexOf('광고 불러오는 중…');
+    expect(at).toBeGreaterThan(-1); // 라벨을 못 찾으면 아래 단언이 빈 문자열을 검사하게 된다
+    expect(markup.slice(markup.lastIndexOf('<button', at), at)).toContain('disabled=""');
+  });
+
+  it('REQ-07 · 성향 광고를 못 불러왔으면 「광고 다시 불러오기」— 누르면 다시 불러온다', () => {
+    useAdSlotMock.mockReturnValue('failed');
+    let retry: (() => void) | undefined;
+    const Probe = () => {
+      retry = clickHandlerFor(ProfileCard(cardProps(me(), [], null, { personalityStatus: status() })), '광고 다시 불러오기');
+      return null;
+    };
+    render(<Probe />);
+
+    expect(retry).toBeTypeOf('function');
+    retry?.();
+    expect(preloadAdMock).toHaveBeenCalledWith('test-ad-group');
+    expect(watchRewardAdMock).not.toHaveBeenCalled();
+  });
+
   it('광고를 이미 본 뒤 실패했으면 광고 없는 재시도 손잡이를 준다 — 광고를 두 번 보게 하지 않는다', () => {
     const markup = card(me(), [], null, { personalityStatus: status(), earnedRetry: true });
 
@@ -1392,62 +1445,80 @@ describe('책방 「책 | 여백」 탭', () => {
  * `border-image` 부재는 직전 main에서 실제로 연필선이 있던 태그에만 건다(헤더 손잡이 2 · 정사각 버튼 2 ·
  * 성향 카드 · 신고 select).
  */
-describe('Soft 표면 — 책방·프로필 (PR-4)', () => {
-  const SOFT_LINE = '1.5px solid var(--adaptiveBlue700';
+describe('에디토리얼 표면 — 책방·프로필 (PR-1)', () => {
+  const PILL = '1px solid var(--adaptiveBlue700'; // 외곽선 알약(OUTLINE_PILL)
+  const FIELD_LINE = '1px solid var(--adaptiveGrey600'; // 입력칸·선택 상자(FIELD)
 
-  it('헤더 손잡이(친구 찾기·대화함)는 1.5px 세이지 실선이다 — 연필선이 아니다', () => {
+  it('헤더 — 친구 찾기는 검색바라 입력칸 경계(FIELD), 대화함은 외곽선 알약이다', () => {
     const html = render(<BookshopHeader onSearch={() => {}} inbox={{ unread: 2, onOpen: () => {} }} />);
-    for (const marker of ['aria-label="아이디로 친구 찾기"', 'aria-label="대화함"']) {
-      const tag = tagWith(html, marker);
-      expect(tag).not.toBe('');
-      expect(tag).toContain(SOFT_LINE);
-      expect(tag).not.toContain('border-image');
-    }
+    const search = tagWith(html, 'aria-label="아이디로 친구 찾기"');
+    const inbox = tagWith(html, 'aria-label="대화함"');
+    expect(search).toContain(FIELD_LINE);
+    expect(inbox).toContain(PILL);
+    expect(inbox).toContain('border-radius:999px');
   });
 
-  it('팔로우 옆 정사각 버튼(종이비행기·신고·차단)은 1.5px 세이지 실선이다', () => {
+  it('팔로우 옆 정사각 버튼(종이비행기·신고·차단)은 외곽선 알약이다', () => {
     const html = card(profile({ following: true, followsMe: true, dmAvailable: true }), [], null, {});
     const more = tagWith(html, 'aria-label="신고·차단"');
     expect(more).not.toBe('');
-    expect(more).toContain(SOFT_LINE);
-    expect(more).not.toContain('border-image');
+    expect(more).toContain(PILL);
   });
 
-  it('성향 카드는 부푼 면이다 — 한 장뿐인 카드라 큰 그림자 예산 안이다', () => {
+  it('「나를 팔로우함」 태그는 paper-2 면 r2다 — 옛 grey200 면·r9 알약이 아니다', () => {
+    const html = card(profile({ following: true, followsMe: true }), [], null, {});
+    const at = html.indexOf('>나를 팔로우함<');
+    expect(at).toBeGreaterThan(-1);
+    const tag = html.slice(html.lastIndexOf('<span', at), at);
+    expect(tag).toContain('background:var(--softDent');
+    expect(tag).toContain('border-radius:2px');
+  });
+
+  it('책BTI 태그 — 누르는 태그는 외곽선 알약, 못 누르는 태그는 paper-2 면 r2다(종이 위 종이 면이 아니다)', () => {
+    const html = card(profile());
+    const pressable = html.match(/<button[^>]*>한우물형/)?.[0] ?? '';
+    const plain = html.match(/<span[^>]*>완독률 80%/)?.[0] ?? '';
+    expect(pressable).toContain(PILL);
+    expect(pressable).toContain('border-radius:999px');
+    expect(plain).toContain('background:var(--softDent');
+    expect(plain).toContain('border-radius:2px');
+  });
+
+  it('성향 카드는 면 없이 가는 선 테 상자다 — 그림자 없음', () => {
     const tag = tagWith(card(profile({ personality: '밑줄을 아끼지 않는 완독형이에요.' })), 'data-bio-card=""');
-    expect(tag).not.toBe('');
-    expect(tag).toContain('box-shadow:var(--puffShadow');
-    expect(tag).not.toContain('border-image');
+    expect(tag).toContain('border:1px solid var(--adaptiveGrey200');
+    expect(tag).not.toContain('box-shadow');
   });
 
-  it('신고 사유 select는 1.5px 세이지 실선이다', () => {
+  it('신고 사유 select는 입력칸 경계(muted 1px)다', () => {
     const html = render(
       <SafetyPanel busy={false} confirmBlock={false} onConfirmBlock={() => {}} onBlock={() => {}} onReport={() => {}} />,
     );
     const select = tagWith(html, '<select');
     expect(select).not.toBe('');
-    expect(select).toContain(SOFT_LINE);
-    expect(select).not.toContain('border-image');
+    expect(select).toContain(FIELD_LINE);
   });
 
-  it('신고·차단 패널은 부푼 면이다 — 한 장뿐인 패널이라 큰 그림자 예산 안이다', () => {
+  it('신고·차단 패널은 면 없이 가는 선 테 상자다', () => {
     const html = render(
       <SafetyPanel busy={false} confirmBlock={false} onConfirmBlock={() => {}} onBlock={() => {}} onReport={() => {}} />,
     );
-    expect(tagWith(html, 'data-safety-panel=""')).toContain('box-shadow:var(--puffShadow');
+    const panel = tagWith(html, 'data-safety-panel=""');
+    expect(panel).toContain('border:1px solid var(--adaptiveGrey200');
+    expect(panel).not.toContain('box-shadow');
   });
 
-  it('사용자 목록 행은 옅은 실선 행(SOFT_ROW)이고 큰 그림자가 없다 — 반복 행이다', () => {
+  it('사용자 목록 행은 아래 가는 선 행(RULE_ROW)이고 그림자가 없다 — 반복 행이다', () => {
     const html = render(<UserList users={[user('a'), user('b')]} emptyMessage="없어요" onSelect={() => {}} />);
     const rows = html.match(/<button[^>]*>/g) ?? [];
     expect(rows).toHaveLength(2);
     for (const row of rows) {
-      expect(row).toContain('1.5px solid var(--adaptiveGrey200');
+      expect(row).toContain('border-bottom:1px solid var(--adaptiveGrey200');
       expect(bigShadow(row)).toBe(false);
     }
   });
 
-  it('보관함 카드는 옅은 실선 행이고, 대표 카드만 세이지 테두리다', () => {
+  it('보관함 카드는 가는 선 테 상자이고, 대표 카드만 강조 테두리다', () => {
     const html = render(
       <ArchiveSheet
         entries={[entry(9, '2026-08-15T10:00:00Z', true), entry(4, '2026-08-01T10:00:00Z', false)]}
@@ -1458,8 +1529,8 @@ describe('Soft 표면 — 책방·프로필 (PR-4)', () => {
     );
     const cards = html.match(/<div[^>]*data-archive-entry[^>]*>/g) ?? [];
     expect(cards).toHaveLength(2);
-    expect(cards.filter((c) => c.includes('1.5px solid var(--adaptiveBlue500'))).toHaveLength(1);
-    expect(cards.filter((c) => c.includes('1.5px solid var(--adaptiveGrey200'))).toHaveLength(1);
+    expect(cards.filter((c) => c.includes('1px solid var(--adaptiveBlue700'))).toHaveLength(1);
+    expect(cards.filter((c) => c.includes('1px solid var(--adaptiveGrey200'))).toHaveLength(1);
     expect(cards.every((c) => !bigShadow(c))).toBe(true);
   });
 });

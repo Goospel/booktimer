@@ -28,26 +28,25 @@ import {
   writeTrial,
 } from '../trial';
 import {
-  DENT,
+  ARCH,
+  FLOAT,
   GoalMedal,
-  PUFF,
-  SECTION_RULE,
+  OUTLINE_PILL,
+  RULE_ROW,
   SERIF_VALUE,
-  SOFT_OUTLINE,
   Screen,
   SectionTitle,
   Text,
-  coverColor,
+  Woodcut,
   sectionStyle,
 } from '../ui';
 import {
   ACTIVE_SESSION_RELIEF,
   COVER_GAP,
-  COVER_HEIGHT,
   COVER_WIDTH,
   DOT_OFF,
   DOT_ON,
-  HERO_CARD_BG_VAR,
+  HeroClock,
   NoBookCard,
   heroOverline,
 } from './Home';
@@ -82,7 +81,7 @@ export type LoginSource =
   | 'locked_library'
   | 'locked_bookshop'
   | 'locked_history'
-  /** 「이미 booktimer.app 계정이 있나요?」 — 조회만 하고 미등록이면 연결 화면으로 간다(계정을 만들지 않는다). */
+  /** 「기존 계정 연결」 — 조회만 하고 미등록이면 연결 화면으로 간다(계정을 만들지 않는다). */
   | 'web_link';
 
 /** 인트로 소개문 — "무엇을 하는 앱인지"를 로그인 전에 읽힌다(심사 필수 항목). */
@@ -91,7 +90,7 @@ const PITCH = '책 읽는 시간을 타이머로 기록하고, 매일의 독서�
 /** 로그인을 청하는 자리에서만 하는 말 — 「왜 계정이 필요한가」의 답이다. */
 const WHY_LOGIN = [
   '하루 목표를 정하면 달성 순간 토스 알림으로 알려드려요.',
-  'PC 웹(booktimer.app)과 같은 계정으로 이어서 쓸 수 있어요.',
+  '기기를 바꿔도 토스 계정으로 기록이 그대로 이어져요.',
 ];
 
 /** 끝난 체험에서 ▶를 눌렀을 때의 안내 — 체험은 한 건이라 새로 재지 않는다(조용한 유실 금지). */
@@ -173,7 +172,7 @@ function SkeletonLine({ width }: { width: string }) {
         width,
         marginTop: 10,
         borderRadius: 6,
-        background: 'var(--adaptiveGrey200, #E4DDD0)',
+        background: 'var(--adaptiveGrey200, #D9D1C3)',
         opacity: 0.5,
       }}
     />
@@ -199,13 +198,13 @@ export function LockedScreen({ tab, onLogin }: { tab: LockedTab; onLogin: (sourc
         </Text>
       }
     >
-      <div style={{ ...PUFF, padding: '24px 20px', textAlign: 'center' }}>
+      <div style={{ padding: '24px 20px', textAlign: 'center' }}>
         <svg
           width="28"
           height="28"
           viewBox="0 0 24 24"
           fill="none"
-          stroke="var(--adaptiveGrey600, #6F6A5E)"
+          stroke="var(--adaptiveGrey600, #645E54)"
           strokeWidth="1.8"
           strokeLinecap="round"
           strokeLinejoin="round"
@@ -213,7 +212,7 @@ export function LockedScreen({ tab, onLogin }: { tab: LockedTab; onLogin: (sourc
         >
           <path d={LOCK_ICON} />
         </svg>
-        <Text typography="st10" fontWeight="bold" style={{ display: 'block', marginTop: 10, wordBreak: 'keep-all' }}>
+        <Text typography="st10" fontWeight="medium" style={{ display: 'block', marginTop: 10, wordBreak: 'keep-all' }}>
           {copy.title}
         </Text>
         <Text typography="st11" color="grey600" style={{ display: 'block', marginTop: 6, wordBreak: 'keep-all' }}>
@@ -241,16 +240,17 @@ export function LockedScreen({ tab, onLogin }: { tab: LockedTab; onLogin: (sourc
  * 게스트에게 실데이터 미리보기를 주지 않는다는 결정 때문이기도 하지만, 없는 책을 있는 것처럼
  * 그리면 로그인하고 나서 「내 서재가 비어 있다」가 배신이 되기 때문이다.
  */
-function LockedSlot() {
+function LockedSlot({ width }: { width: number }) {
   return (
     <div
       style={{
-        width: COVER_WIDTH,
-        height: COVER_HEIGHT,
+        width,
+        height: Math.round(width * 1.4),
         flex: '0 0 auto',
         boxSizing: 'border-box',
-        border: '2px dashed #B6C3B2', // 「책 없이」 점선(#7C8A78)보다 한 톤 옅게 — 잠긴 칸은 고를 수 없는 칸이다
-        borderRadius: 4,
+        // 「책 없이」 점선(muted 1px)보다 한 톤 옅게 — 잠긴 칸은 고를 수 없는 칸이다. 굵기·모서리는 「책 없이」와 같다(PR-2).
+        border: '1px dashed var(--adaptiveBlue200, #B9AF9F)',
+        borderRadius: 2,
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
@@ -261,7 +261,7 @@ function LockedSlot() {
         height="20"
         viewBox="0 0 24 24"
         fill="none"
-        stroke="var(--adaptiveGrey600, #6F6A5E)"
+        stroke="var(--adaptiveGrey600, #645E54)"
         strokeWidth="1.8"
         strokeLinecap="round"
         strokeLinejoin="round"
@@ -271,6 +271,17 @@ function LockedSlot() {
       </svg>
     </div>
   );
+}
+
+/**
+ * 고르기 줄의 칸 폭 — 내용 폭 `contentWidth`(화면 − Screen 좌우 패딩 40)에서 정한다.
+ *
+ * <p>「책 없이」는 104/88로 커져 양옆으로 칸 폭의 8/88(= 1/11)씩 삐져나오므로 보이는 틈 = gap − 칸/11 이다.
+ * 줄은 gap이 남은 폭을 채우니(gap = (W − 3칸)/2) 틈 ≥ 12 ⇔ 칸 ≤ (W − 24)·11/35. 내용 304(화면 344) 이상이면
+ * 그대로 88 — 375·390 폰의 배치는 안 바뀐다. 320 화면(내용 280)이면 80(사용자 결정 2026-10-13 「좁은 폰만 간격 띄우기」).
+ */
+export function guestRowCover(contentWidth: number): number {
+  return Math.min(COVER_WIDTH, Math.floor(((contentWidth - 24) * 11) / 35));
 }
 
 /**
@@ -285,23 +296,37 @@ function LockedSlot() {
  * 카드 높이가 달라져 화면이 세로로 들썩인다.
  */
 function GuestBookCard({ onLogin }: { onLogin: (source: LoginSource) => void }) {
+  // 정적 렌더(테스트)엔 화면이 없고, WebView가 폭을 아직 모르면 0을 준다 — 둘 다 「모름」으로 보고 88.
+  // ponytail: 다시 그릴 때 읽는 화면 폭 — resize는 듣지 않는다. 가로 회전을 지원하면 resize를 듣는다.
+  const cover = guestRowCover((globalThis.innerWidth || Infinity) - 40);
   return (
     <section style={sectionStyle}>
-      <SectionTitle style={{ marginBottom: 10, paddingBottom: 9, borderBottom: SECTION_RULE }}>
-        무엇으로 측정할까요?
-      </SectionTitle>
+      {/* 머리 아래 선은 없다 — 판이 그 일을 맡는다(로그인 홈 고르기 선반과 같은 문법, 안 1 §7.1). */}
+      <SectionTitle style={{ marginBottom: 14 }}>무엇으로 측정할까요?</SectionTitle>
 
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: COVER_GAP }}>
-        {/* 고를 수 있는 칸 — 로그인 홈에서 가운데 온 칸과 같은 배율(1.1)로 서서 「이것이 대상」을 말한다. */}
-        <span data-book-slot="free" style={{ transform: 'scale(1.1)' }}>
-          <NoBookCard />
+      <div
+        style={{
+          display: 'flex',
+          alignItems: 'flex-end',
+          justifyContent: 'center',
+          // 스크롤 트랙이 아닌 고정 줄이라 88×3 + 32×2 = 328이 320 화면(내용 280)을 넘는다 — 좁은 폭에서만 간격을 줄인다.
+          // 그래도 칸 88이면 320 폭에서 gap 8이라 104로 키운 「책 없이」가 잠긴 칸에 닿는다 — 칸 폭은 guestRowCover가 줄인다.
+          gap: `min(${COVER_GAP}px, calc((100% - ${3 * cover}px) / 2))`,
+          paddingTop: Math.ceil(Math.round(cover * 1.4) * (104 / 88 - 1)),
+          // 표지 바닥 = 판(로그인 홈 `data-board`와 같은 잉크 1px).
+          borderBottom: '1px solid var(--adaptiveGrey800, #1D1B18)',
+        }}
+      >
+        {/* 고를 수 있는 칸 — 로그인 홈에서 가운데 온 칸과 같은 배율(104/88)·바닥 기준으로 서서 「이것이 대상」을 말한다. */}
+        <span data-book-slot="free" style={{ display: 'block', transform: `scale(${104 / 88})`, transformOrigin: 'bottom center' }}>
+          <NoBookCard width={cover} />
         </span>
         {/* 잠긴 두 칸 — 로그인 홈 캐러셀에서 가운데가 아닌 표지와 같은 흐림(0.7)이다. */}
         <span data-book-slot="locked" style={{ opacity: 0.7 }}>
-          <LockedSlot />
+          <LockedSlot width={cover} />
         </span>
         <span data-book-slot="locked" style={{ opacity: 0.7 }}>
-          <LockedSlot />
+          <LockedSlot width={cover} />
         </span>
       </div>
 
@@ -356,7 +381,7 @@ export function LockedFeedBody({ newsOpen }: { newsOpen: boolean }) {
         height="28"
         viewBox="0 0 24 24"
         fill="none"
-        stroke="var(--adaptiveGrey600, #6F6A5E)"
+        stroke="var(--adaptiveGrey600, #645E54)"
         strokeWidth="1.8"
         strokeLinecap="round"
         strokeLinejoin="round"
@@ -364,7 +389,7 @@ export function LockedFeedBody({ newsOpen }: { newsOpen: boolean }) {
       >
         <path d={LOCK_ICON} />
       </svg>
-      <Text typography="st10" fontWeight="bold" style={{ display: 'block', marginTop: 10, wordBreak: 'keep-all' }}>
+      <Text typography="st10" fontWeight="medium" style={{ display: 'block', marginTop: 10, wordBreak: 'keep-all' }}>
         {newsOpen ? '소식·여백은 계정이 있어야 보여요' : '소식·여백·책 뉴스는 계정이 있어야 보여요'}
       </Text>
       <Text typography="st11" color="grey600" style={{ display: 'block', marginTop: 6, wordBreak: 'keep-all' }}>
@@ -382,52 +407,16 @@ export function LockedFeedBody({ newsOpen }: { newsOpen: boolean }) {
 function TrialStat({ label, value }: { label: string; value: string }) {
   return (
     <div style={{ flex: 1, minWidth: 0 }}>
-      <div style={{ fontSize: 14, color: 'var(--adaptiveGrey600, #5B5A4D)' }}>{label}</div>
+      <div style={{ fontSize: 14, color: 'var(--adaptiveGrey600, #645E54)' }}>{label}</div>
       <div style={{ ...SERIF_VALUE, fontSize: 21, marginTop: 2 }}>{value}</div>
     </div>
-  );
-}
-
-/**
- * 체험 전·중 히어로의 책 더미(시안 Soft-Intro) — 이 화면의 「부푼 입체 오브젝트」 하나다. 끝난 뒤엔 메달이
- * 그 자리를 이어받으므로 둘이 같이 서지 않는다. 정적 그림이라 움직이지 않는다.
- */
-function BookStack() {
-  const book = (id: string, top: string, bottom: string) => (
-    <linearGradient id={id} x1="0" y1="0" x2="0" y2="1">
-      <stop offset="0" stopColor={top} />
-      <stop offset="1" stopColor={bottom} />
-    </linearGradient>
-  );
-  return (
-    <svg data-book-stack="" width="104" height="94" viewBox="0 0 120 108" aria-hidden="true" style={{ display: 'block', margin: '0 auto' }}>
-      <defs>
-        {book('stack-sand', '#F3EBDD', '#D8C6A6')}
-        {book('stack-butter', '#F7EFCF', '#E2CE8B')}
-        {book('stack-mint', '#E3EFDF', '#B5C6A5')}
-      </defs>
-      <ellipse cx="60" cy="100" rx="48" ry="6" fill="rgba(112,96,64,0.2)" />
-      <rect x="10" y="68" width="100" height="28" rx="13" fill="url(#stack-sand)" />
-      <rect x="90" y="73" width="14" height="18" rx="5" fill="#FFFFFF" opacity="0.75" />
-      <ellipse cx="34" cy="74" rx="16" ry="3.5" fill="#FFFFFF" opacity="0.65" />
-      <g transform="rotate(-4 60 58)">
-        <rect x="18" y="44" width="86" height="28" rx="13" fill="url(#stack-butter)" />
-        <rect x="84" y="49" width="14" height="18" rx="5" fill="#FFFFFF" opacity="0.75" />
-        <ellipse cx="40" cy="50" rx="14" ry="3.5" fill="#FFFFFF" opacity="0.65" />
-      </g>
-      <g transform="rotate(3 60 34)">
-        <rect x="28" y="20" width="70" height="28" rx="13" fill="url(#stack-mint)" />
-        <rect x="78" y="25" width="14" height="18" rx="5" fill="#FFFFFF" opacity="0.75" />
-        <ellipse cx="48" cy="26" rx="12" ry="3.5" fill="#FFFFFF" opacity="0.65" />
-      </g>
-    </svg>
   );
 }
 
 /** 체크 줄 머리의 획 체크 — 이모지 대신(`no-emoji.test`). */
 function CheckMark() {
   return (
-    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" style={{ flex: 'none', marginTop: 2, stroke: 'var(--adaptiveBlue700, #3F5A3C)' }}>
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" style={{ flex: 'none', marginTop: 2, stroke: 'var(--adaptiveBlue700, #1D1B18)' }}>
       <path d="M5 12.5l4.5 4.5L19 7.5" />
     </svg>
   );
@@ -474,12 +463,13 @@ export function GuestHome({
     <Screen>
       {/* 헤더 — 로그인 홈의 `AccountSection`과 같은 자리·같은 조판이다. 이름 자리에 앱 이름이 서고,
           아바타 자리에 사람 아이콘이 서서 <b>그 아이콘이 곧 로그인 문</b>이 된다(로그아웃한 기존 사용자의 길). */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12, padding: '2px 2px 0' }}>
+      {/* 머리띠(안 1 §7.1) — 이름 H2 22/30 · 아래 줄 L1 14/20, 아래 간격 16(로그인 홈 `AccountSection`과 같은 숫자). */}
+      <div data-masthead="" style={{ display: 'flex', alignItems: 'center', gap: 10, minHeight: 52, marginBottom: 16 }}>
         <span style={{ flex: 1, minWidth: 0 }}>
-          <span style={{ display: 'block', ...SERIF_VALUE, fontSize: 28, color: 'var(--adaptiveGrey900, #1E1E18)' }}>
+          <span style={{ display: 'block', ...SERIF_VALUE, fontSize: 22, lineHeight: '30px', color: 'var(--adaptiveGrey900, #1D1B18)' }}>
             북타이머
           </span>
-          <span style={{ display: 'block', marginTop: 2, fontSize: 15, color: 'var(--adaptiveGrey600, #5B5A4D)' }}>
+          <span style={{ display: 'block', marginTop: 2, fontSize: 14, lineHeight: '20px', color: 'var(--adaptiveGrey600, #645E54)' }}>
             둘러보는 중
           </span>
         </span>
@@ -495,9 +485,12 @@ export function GuestHome({
             width: 38,
             height: 38,
             padding: 0,
-            border: 'none',
+            boxSizing: 'border-box',
+            // 로그인 홈 `Avatar`와 같은 문법 — 채움 없음 + 잉크 1px 테 + 잉크 획(§6-4).
+            border: '1px solid var(--adaptiveGrey800, #1D1B18)',
             borderRadius: '50%',
-            background: coverColor('북타이머'),
+            background: 'transparent',
+            color: 'var(--adaptiveGrey800, #1D1B18)',
             cursor: 'pointer',
           }}
         >
@@ -506,7 +499,7 @@ export function GuestHome({
             height="22"
             viewBox="0 0 24 24"
             fill="none"
-            stroke="rgba(44,42,36,0.5)"
+            stroke="currentColor"
             strokeWidth="1.8"
             strokeLinecap="round"
             strokeLinejoin="round"
@@ -517,34 +510,51 @@ export function GuestHome({
         </button>
       </div>
 
-      <div
-        data-guest-hero=""
-        style={{ ...PUFF, borderRadius: 30, padding: '24px 20px', background: `var(${HERO_CARD_BG_VAR}, #FBF9F4)`, textAlign: 'center' }}
-      >
-        {phase !== 'done' && (
-          <>
-            {/* 책 더미 — 이 화면의 입체 오브젝트 하나(시안 Soft-Intro). 끝나면 메달이 그 자리를 잇는다. */}
-            <BookStack />
-            {/* 오버라인 — 로그인 홈과 <b>같은 글자</b>다(`heroOverline`). 로그인하면 이 줄만 그대로 남는다. */}
-            <div style={{ marginTop: 14 }}>
-              <span style={{ fontSize: 15, letterSpacing: 3, color: 'var(--adaptiveBlue700, #3F5A3C)' }}>
+      {/* 히어로 — 로그인 홈과 같은 아치(에디토리얼 PR-2 · REQ-09). 아치 속은 판화 한 점 → 눈썹 → 시계, 끝난 뒤엔 도장이 잇는다.
+          그릇 자신은 칠하지 않는다(면 없음) — 아치가 종이 토큰으로 선다. */}
+      <div data-guest-hero="" style={{ textAlign: 'center' }}>
+        <div
+          data-arch=""
+          style={{
+            ...ARCH,
+            boxSizing: 'border-box',
+            padding: '28px 24px 32px',
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+          }}
+        >
+          {phase !== 'done' ? (
+            <>
+              {/* 판화 한 점(D5 추천) — 옛 책 더미(입체 그라데이션)가 서던 자리. 처음 온 사람·심사관이 보는 첫 화면의 인상이다. */}
+              <Woodcut size={80} />
+              {/* 눈썹 — 로그인 홈과 <b>같은 글자</b>다(`heroOverline`). 로그인하면 이 줄만 그대로 남는다. */}
+              <span style={{ display: 'block', marginTop: 12, fontSize: 14, lineHeight: '20px', color: 'var(--adaptiveGrey600, #645E54)' }}>
                 {heroOverline('reading', false)}
               </span>
-            </div>
-            <div style={{ marginTop: 6 }}>
-              <Text typography="t2" fontWeight="bold" style={{ ...SERIF_VALUE }}>
-                {formatClock(seconds)}
-              </Text>
-            </div>
-          </>
-        )}
+              <HeroClock text={formatClock(seconds)} color="var(--adaptiveGrey800, #1D1B18)" />
+            </>
+          ) : (
+            <>
+              {/* 로그인 홈의 목표 달성과 <b>같은 도장</b>이 아치 안에서 한 번 튄다. */}
+              <GoalMedal size={76} />
+              <span style={{ display: 'block', marginTop: 14, ...SERIF_VALUE, fontSize: 24, lineHeight: '30px' }}>
+                {formatDuration(duration)} 읽었어요
+              </span>
+              <span style={{ display: 'block', marginTop: 4, fontSize: 16, color: 'var(--adaptiveGrey700, #4A453E)' }}>
+                기록을 남기려면 계정이 필요해요.
+              </span>
+            </>
+          )}
+        </div>
 
         {phase === 'none' && (
           <>
-            <Text typography="st11" color="grey600" style={{ display: 'block', marginTop: 16, wordBreak: 'keep-all' }}>
+            <Text typography="st11" color="grey600" style={{ display: 'block', marginTop: 20, wordBreak: 'keep-all' }}>
               {PITCH}
             </Text>
-            <Button display="block" style={{ marginTop: 24 }} onClick={onStart}>
+            {/* 이 상태의 주 동작 — 검정 알약(TDS primary) 하나. */}
+            <Button display="block" style={{ marginTop: 20 }} onClick={onStart}>
               읽기 시작
             </Button>
           </>
@@ -552,10 +562,10 @@ export function GuestHome({
 
         {phase === 'running' && (
           <>
-            <Text typography="st11" color="grey600" style={{ display: 'block', marginTop: 16, wordBreak: 'keep-all' }}>
+            <Text typography="st11" color="grey600" style={{ display: 'block', marginTop: 20, wordBreak: 'keep-all' }}>
               {ACTIVE_SESSION_RELIEF}
             </Text>
-            <Button display="block" style={{ marginTop: 24 }} onClick={onStop}>
+            <Button display="block" style={{ marginTop: 20 }} onClick={onStop}>
               그만 읽기
             </Button>
           </>
@@ -563,29 +573,19 @@ export function GuestHome({
 
         {phase === 'done' && (
           <>
-            {/* 로그인 홈의 목표 달성과 <b>같은 메달</b>이 카드 안에서 한 번 튄다(시안 Soft-Intro-Done). */}
-            <div style={{ display: 'flex', justifyContent: 'center' }}>
-              <GoalMedal size={76} />
-            </div>
-            <span style={{ display: 'block', marginTop: 14, ...SERIF_VALUE, fontSize: 24 }}>
-              {formatDuration(duration)} 읽었어요
-            </span>
-            <span style={{ display: 'block', marginTop: 4, fontSize: 16, color: 'var(--adaptiveGrey700, #43423A)' }}>
-              기록을 남기려면 계정이 필요해요.
-            </span>
-
             {/* 계정을 만들면 무엇이 되는가 — 방금 잰 값으로 보여 준다. 「연속 1일」은 <b>투영</b>이라
-                아래 한 줄이 「시작하면 …이 돼요」로 그 사실을 말한다(없는 기록을 있다고 하지 않는다). */}
-            <div style={{ ...DENT, display: 'flex', marginTop: 16, padding: '12px 6px' }}>
+                아래 한 줄이 「시작하면 …이 돼요」로 그 사실을 말한다(없는 기록을 있다고 하지 않는다).
+                표 줄 — 아치 밑선이 위 테두리이고 아래는 가는 선(로그인 홈 오늘 표와 같은 문법). */}
+            <div style={{ ...RULE_ROW, display: 'flex', padding: '12px 0' }}>
               <TrialStat label="오늘" value={formatDuration(duration)} />
-              <div style={{ width: 1, background: 'var(--adaptiveGrey200, #DED8CA)' }} />
+              <div style={{ width: 1, background: 'var(--adaptiveGrey200, #D9D1C3)' }} />
               <TrialStat label="연속" value="1일" />
-              <div style={{ width: 1, background: 'var(--adaptiveGrey200, #DED8CA)' }} />
+              <div style={{ width: 1, background: 'var(--adaptiveGrey200, #D9D1C3)' }} />
               <TrialStat label="목표" value="—" />
             </div>
 
-            {/* 잔디 한 주 — 첫 칸만 채워져 링을 두른다. 방금 잰 시간이 「어디에」 남는지를 그림으로 말한다.
-                링은 blur 0 한 겹이라 싸다(잔디 칸엔 흐린 그림자를 두르지 않는다, 설계 §6). */}
+            {/* 잔디 한 주 — 첫 칸만 잉크로 채워져 링을 두른다(잉크 사다리 0단 = 빈 칸). 방금 잰 시간이 「어디에」 남는지를 그림으로
+                말한다. 링은 blur 0 한 겹이라 싸다(잔디 칸엔 흐린 그림자를 두르지 않는다). */}
             <div aria-hidden="true" style={{ display: 'flex', justifyContent: 'center', gap: 6, marginTop: 16 }}>
               {Array.from({ length: 7 }, (_, i) => (
                 <span
@@ -594,16 +594,16 @@ export function GuestHome({
                   style={{
                     width: 26,
                     height: 26,
-                    borderRadius: 8,
-                    background: i === 0 ? 'var(--adaptiveBlue500, #5B7F55)' : 'var(--grass0, #E7E2D5)',
+                    borderRadius: 2,
+                    background: i === 0 ? 'var(--adaptiveBlue500, #1D1B18)' : 'var(--grass0, #E6DFD2)',
                     boxShadow:
-                      i === 0 ? '0 0 0 2px var(--adaptiveGrey100, #FBF9F4), 0 0 0 4.5px var(--adaptiveBlue700, #3F5A3C)' : undefined,
+                      i === 0 ? '0 0 0 2px var(--adaptiveGrey100, #F5F0E6), 0 0 0 4.5px var(--adaptiveBlue700, #1D1B18)' : undefined,
                   }}
                 />
               ))}
             </div>
             <span
-              style={{ display: 'block', marginTop: 8, fontSize: 16, fontWeight: 700, color: 'var(--adaptiveBlue700, #3F5A3C)', wordBreak: 'keep-all' }}
+              style={{ display: 'block', marginTop: 8, fontSize: 16, fontWeight: 500, color: 'var(--adaptiveBlue700, #1D1B18)', wordBreak: 'keep-all' }}
             >
               {/* 길이가 사용자 데이터라 조사를 고정할 수 없다 — 「7분이」/「12초가」/「2시간이」가 다 지나간다. */}
               시작하면 방금 {formatDuration(duration)}
@@ -614,21 +614,21 @@ export function GuestHome({
               {WHY_LOGIN.map((line) => (
                 <span
                   key={line}
-                  style={{ display: 'flex', alignItems: 'flex-start', gap: 8, fontSize: 15, lineHeight: 1.5, color: 'var(--adaptiveGrey700, #43423A)', wordBreak: 'keep-all' }}
+                  style={{ display: 'flex', alignItems: 'flex-start', gap: 8, fontSize: 15, lineHeight: 1.5, color: 'var(--adaptiveGrey700, #4A453E)', wordBreak: 'keep-all' }}
                 >
                   <CheckMark />
                   {line}
                 </span>
               ))}
             </div>
-            {/* 「토스로 시작하기」는 TDS primary(옅은 세이지) 그대로다 — 이 화면의 채움은 탭바 원이다(설계 D5). */}
+            {/* 「토스로 시작하기」는 TDS primary(검정 알약) — 이 상태의 주 동작 하나다. */}
             <Button display="block" style={{ marginTop: 20 }} onClick={() => onLogin('trial')}>
               토스로 시작하기
             </Button>
             <button
               type="button"
               onClick={onDiscard}
-              style={{ ...SOFT_OUTLINE, width: '100%', height: 52, marginTop: 10, fontFamily: 'inherit', fontSize: 17, fontWeight: 700, cursor: 'pointer' }}
+              style={{ ...OUTLINE_PILL, width: '100%', height: 52, marginTop: 10, fontFamily: 'inherit', fontSize: 17, fontWeight: 500, cursor: 'pointer' }}
             >
               기록 없이 둘게요
             </button>
@@ -654,10 +654,11 @@ export function GuestHome({
       />
 
       {/* 웹 계정 보유자의 문 — 다른 손잡이는 누르는 즉시 토스 계정을 만들어(once-set) 웹 계정에 다시 못
-          붙는다. 그래서 인가 <b>전</b>에 따로 둔다. 첫 화면이 계정 얘기로 시작하지 않게 맨 아래 조용히 선다. */}
+          붙는다. 그래서 인가 <b>전</b>에 따로 둔다. 첫 화면이 계정 얘기로 시작하지 않게 맨 아래 조용히 선다.
+          자사 주소·웹 안내는 적지 않는다(서비스 오픈 정책 §2-2) — 어디서 코드를 받는지는 웹 설정 카드가 이 버튼 이름으로 알려 준다. */}
       <div style={{ marginTop: 32, textAlign: 'center' }}>
         <Text typography="st12" color="grey600" style={{ display: 'block', wordBreak: 'keep-all' }}>
-          이미 booktimer.app 계정이 있나요?
+          연결 코드를 받으셨나요?
         </Text>
         <Button size="small" variant="weak" style={{ marginTop: 8 }} onClick={() => onLogin('web_link')}>
           기존 계정 연결
@@ -821,9 +822,8 @@ export function GuestShell({
             bottom: `calc(12px + env(safe-area-inset-bottom) + ${TAB_BAR_HEIGHT}px + 8px)`,
             zIndex: TAB_BAR_Z_INDEX,
             padding: '8px 14px',
-            ...PUFF,
-            borderRadius: 20,
-            color: 'var(--adaptiveGrey600, #5B5A4D)',
+            ...FLOAT,
+            color: 'var(--adaptiveGrey600, #645E54)',
             fontSize: 14,
             textAlign: 'center',
           }}

@@ -40,9 +40,9 @@ import { StudyCalendar } from './screens/StudyCalendar';
 import { StudyHistory } from './screens/StudyHistory';
 import { StudyLibrary } from './screens/StudyLibrary';
 import { BookMargin, BookMarginAll, StoryComposer } from './screens/Story';
-import { notificationAgreementSupported, showInterstitialAd, subscribeNativeBack, trackEvent, trackScreen } from './toss';
+import { notificationAgreementSupported, subscribeNativeBack, trackEvent, trackScreen } from './toss';
 import { flushTrial } from './trial';
-import { CoverInitial, ErrorMessage, Loading, PUFF, SERIF_VALUE, Screen, Sheet } from './ui';
+import { CoverInitial, ErrorMessage, FLOAT, Loading, OUTLINE_PILL, RULE_ROW, SERIF_VALUE, Screen, Sheet } from './ui';
 
 /**
  * 메인 탭 — 이 순서가 곧 탭바 순서다(index↔화면 대응의 단일 출처).
@@ -173,7 +173,7 @@ const PLAY_ICON = 'M9.5 6.8v10.4l8.5-5.2z';
 const STOP_ICON = 'M8 8h8v8H8z';
 
 /**
- * 액션 버튼의 두 얼굴 — 시작은 브랜드 세이지 ▶, 측정 중은 토스 danger 빨강 ■.
+ * 액션 버튼의 두 얼굴 — 시작은 강조 잉크 ▶, 측정 중은 토스 danger 빨강 ■.
  *
  * <p>빨강은 옛 홈 「측정 끝내기」가 쓰던 TDS `color="danger"`와 같은 값이라 색 연속성이 유지된다.
  * 전환에 애니메이션을 두지 않는다 — 표지를 재래스터화하는 발광·펄스는 실기기에서 실측된 사고 클래스다(T-176).
@@ -230,7 +230,7 @@ export function effectiveMode(readingActive: boolean, studyActive: boolean, stor
  *
  * <p><b>공부 모드에선 켜지 않는다</b>(1차 결정): 독서등은 「독서」 브랜드 장치고, 공부용 밤 팔레트는
  * 1차 가치 대비 비용이 크다. 덕분에 `body.study-mode`와 `body.reading-lamp`가 <b>동시에 붙을 수 없어</b>
- * (밤 세이지 vs 파랑) 명시도 싸움이 통째로 사라진다.
+ * (밤 잉크 vs 파랑) 명시도 싸움이 통째로 사라진다.
  */
 export function lampOn(tab: TabKey, hasActiveSession: boolean, mode: TimerMode): boolean {
   return tab === 'home' && hasActiveSession && mode === 'reading';
@@ -305,29 +305,20 @@ export function tabLocked(key: TabKey, hasActiveSession: boolean): boolean {
 export function timerActionView(active: boolean, mode: TimerMode = 'reading'): {
   label: string;
   background: string;
-  ring: string;
   icon: string;
 } {
-  // ⚠️ **링은 배경과 한 쌍으로 여기 산다** — 설계 D7이 값과 함께 그 이유까지 적어 뒀다:
-  // 「색 쌍이 흩어지면 다음 손질 때 한쪽만 바뀐다」. 실제로 링을 `TimerActionButton`에 무조건으로
-  // 박았더니 **빨간 정지 버튼에 초록 후광**이 남았다(독립 리뷰 적발). 쌍으로 두면 못 어긋난다.
+  // 에디토리얼(PR-1, 시안 M-HOME-06 #15) — 두 상태 모두 **잉크 원**이고 ▶/■ 모양이 상태를 말한다. 옛 측정 중 빨강·눌린
+  // 그림자, 대기 중 큰 그림자는 걷었다(이펙트 0). 위험 빨강은 삭제·차단처럼 되돌릴 수 없는 동작에만 남는다.
+  // 강조 토큰이라 공부 모드에선 두 상태 모두 파란 잉크다.
+  // 한 자리에 둔다 — typography.test의 검정 알약 개수 가드가 이 잉크 바탕 키를 「홈의 주 동작」 하나로 센다.
+  const ink = { background: 'var(--adaptiveBlue700, #1D1B18)' };
   return active
-    ? {
-        label: '측정 끝내기',
-        background: 'var(--adaptiveRed500, #F04452)',
-        // Soft — 색은 빨강 그대로(위험 = 빨강 규약), 형태만 **눌린 원**이다(「지금 눌려 있다 = 재는 중」).
-        // 안쪽 그림자는 검정 알파라 모드색이 끼어들 자리가 없다.
-        ring: 'inset 3px 3px 7px rgba(0,0,0,.18), 0 0 0 3px rgba(240,68,82,.2)',
-        icon: STOP_ICON,
-      }
+    ? { label: '측정 끝내기', ...ink, icon: STOP_ICON }
     : {
         // 시안의 「독서 시작하기 / 공부 시작하기」가 실물에서 서는 자리 — 이 앱엔 시작 버튼 글자가 없고
         // 원 하나뿐이라, 무엇을 재기 시작하는지는 이 라벨과 시작 토스트가 말한다.
         label: mode === 'study' ? '공부 측정 시작' : '독서 측정 시작',
-        background: 'var(--adaptiveBlue700, #3F5A3C)',
-        // Soft 부푼 원 — 떨어지는 그림자 + 흰 반대쪽 빛 + 윗면 하이라이트(정적). 떨어지는 그림자 색은 시안
-        // 리터럴(세이지) 대신 `--accentRing`이라 공부 모드에서 파랑 원 밑에 세이지가 남지 않는다.
-        ring: '4px 4px 10px var(--accentRing, rgba(91,127,85,.22)), -3px -3px 8px rgba(255,255,255,.9), inset 0 2px 0 rgba(255,255,255,.22)',
+        ...ink,
         icon: PLAY_ICON,
       };
 }
@@ -757,8 +748,6 @@ export function App() {
   );
   const [firstRun, setFirstRun] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  /** 목표 바꾸기 전면광고를 기다리는 중 — 버튼을 "준비 중"으로 바꾸고 중복 진입을 막는다. */
-  const [goalAdPending, setGoalAdPending] = useState(false);
   /** 열린 여백 — 탭 위에 전체 화면으로 선다(홈 문·서재 문·홈 소식이 모두 이 한 자리로 온다). */
   const [margin, setMargin] = useState<MarginState | null>(null);
   /**
@@ -1047,26 +1036,13 @@ export function App() {
   const stoppingForMargin = useRef(false);
 
   /**
-   * 목표 바꾸기 진입 — 홈 손잡이와 설정 화면이 **같은 경로**를 탄다(둘이 갈라지면 광고 규칙도 갈라진다).
+   * 목표 바꾸기 진입 — 홈 손잡이와 설정 화면이 같은 경로를 탄다. 광고 없이 곧장 간다.
    *
-   * <p>전면 광고는 이 경로에만 붙는다 — 신규 계정의 첫 목표 설정은 로그인 브릿지에서 곧장 `load('goal')`로
-   * 들어와 여기를 거치지 않으므로, 첫 인상이 광고가 되는 일은 없다.
-   *
-   * <p><b>광고가 끝난 뒤에 전환한다</b>(2026-08-14 수정). 예전엔 기다리지 않고 바로 전환해서, 1~2초 뒤
-   * 로드가 끝난 광고가 목표 화면이 아니라 **그때 떠 있는 아무 화면 위에** 덮였다(실기기 실측: 목표 화면을
-   * 지나 메인으로 돌아온 뒤 노출). `showInterstitialAd`는 못 뜨거나 무응답이어도 반드시 resolve하므로
-   * 여기서 진입이 막힐 일은 없다.
-   *
-   * <p>기다리는 1~2초 동안 `goalAdPending`으로 버튼을 "준비 중"으로 바꾼다 — 겉보기 무반응이면 사용자가
-   * 다시 누른다. 중복 호출 자체는 이 플래그가 먼저 막아 광고가 두 장 쌓이지 않는다.
+   * <p>전면 광고(2026-08-14~)는 걷었다: 비게임 출시 체크리스트의 사전 로딩 · 「광고를 예상할 수 없는 상태의 전면
+   * 광고」 · 「인터랙션 2초」가 모두 이 한 자리에서 나왔고, 2개월 노출 6회·수익 22원이었다.
+   * 신규 계정의 첫 목표 설정은 원래 이 경로를 안 거친다(로그인 브릿지 → `load('goal')`).
    */
-  const goToGoal = useCallback(async () => {
-    if (goalAdPending) return;
-    setGoalAdPending(true);
-    await showInterstitialAd();
-    setGoalAdPending(false);
-    setView('goal');
-  }, [goalAdPending]);
+  const goToGoal = useCallback(() => setView('goal'), []);
 
   switch (view) {
     case 'auth':
@@ -1129,7 +1105,6 @@ export function App() {
         // 닉네임·핸들이 바뀌면 대시보드가 옛 값을 들고 있다 — 홈 인사말·소셜이 같은 값을 봐야 한다.
         onProfileChanged={() => silentRefresh(true)}
         onGoGoal={goToGoal}
-        goalAdPending={goalAdPending}
         onLogout={toLogin}
         onError={handleError}
         onReminderChange={applyReminder}
@@ -1429,7 +1404,6 @@ export function App() {
       onGraphChange={applyGraph}
       // 홈 목표 손잡이(캡션 줄 「바꾸기 ›」·GoalHandle)는 독서 히어로에만 선다 — 공부 하루 목표는 회당 시간으로 대체됐다.
       onGoGoal={goToGoal}
-      goalAdPending={goalAdPending}
       onGoSettings={() => setView('settings')}
       onError={handleError}
       onShelfChanged={() => silentRefresh(true)}
@@ -1502,7 +1476,6 @@ export function MainTabs({
   onStartTimer,
   onGraphChange,
   onGoGoal,
-  goalAdPending,
   onGoSettings,
   onError,
   onShelfChanged,
@@ -1544,8 +1517,6 @@ export function MainTabs({
   onStartTimer: () => Promise<TimerState>;
   onGraphChange: (graph: DashboardResponse['graph']) => void;
   onGoGoal: () => void;
-  /** 전면광고를 기다리는 중 — 목표 손잡이를 "준비 중"으로 바꿔 탭이 먹통으로 보이지 않게 한다. */
-  goalAdPending: boolean;
   /** 홈 맨 위의 계정 진입 — 프로필·설정 화면(닉네임·@아이디·목표·로그아웃)으로 나간다. */
   onGoSettings: () => void;
   onError: (error: Error) => void;
@@ -2046,7 +2017,6 @@ export function MainTabs({
             onTimerChange={onTimerChange}
             celebrate={celebrate}
             onGoGoal={onGoGoal}
-            goalAdPending={goalAdPending}
             onGoSettings={onGoSettings}
             onError={onError}
             onOpenMargin={onOpenMargin}
@@ -2132,8 +2102,7 @@ export function MainTabs({
             bottom: `calc(12px + env(safe-area-inset-bottom) + ${TAB_BAR_HEIGHT}px + 8px)`,
             zIndex: TAB_BAR_Z_INDEX,
             padding: '4px 14px',
-            ...PUFF,
-            borderRadius: 20,
+            ...FLOAT,
           }}
         >
           <ErrorMessage message={actionError} />
@@ -2152,9 +2121,8 @@ export function MainTabs({
             bottom: `calc(12px + env(safe-area-inset-bottom) + ${TAB_BAR_HEIGHT}px + 8px)`,
             zIndex: TAB_BAR_Z_INDEX,
             padding: '8px 14px',
-            ...PUFF,
-            borderRadius: 20,
-            color: 'var(--adaptiveGrey600, #5B5A4D)',
+            ...FLOAT,
+            color: 'var(--adaptiveGrey600, #645E54)',
             fontSize: 14,
             textAlign: 'center',
           }}
@@ -2265,10 +2233,10 @@ export function MainTabs({
  * (서재·홈에서 그 대상 옆에 뜨는 안내는 시트로 읽힐 자리가 아니고, 그때가 제 차례다).
  */
 export function GuideHero({ onStart, onDismiss }: { onStart: () => void; onDismiss: () => void }) {
-  const sage = 'var(--adaptiveBlue700, #4F6B4C)';
-
   return (
-    <div style={{ position: 'relative' }}>
+    // 에디토리얼 PR-2 — 아치 속을 통째로 쓴다. 아치 머리가 반원이라 오른쪽 위 모서리에 ✕를 띄우면 곡선 밖으로 삐져나간다 —
+    // 그래서 닫기는 글 아래 가운데에 같은 무게의 글자 손잡이로 선다(「들이대지 않는다」가 여전히 눈에 보인다).
+    <div style={{ alignSelf: 'stretch', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
       <button
         type="button"
         onClick={onStart}
@@ -2277,18 +2245,16 @@ export function GuideHero({ onStart, onDismiss }: { onStart: () => void; onDismi
           width: '100%',
           border: 'none',
           background: 'transparent',
-          padding: 0,
+          padding: '8px 0 0',
           textAlign: 'center',
           cursor: 'pointer',
         }}
       >
-        {/* 오버라인 — 카드가 평소 「오늘 읽은 시간」을 놓는 자리다. 자간을 벌려 머리말로 읽히게 한다. */}
-        <span style={{ display: 'block', fontSize: 14, letterSpacing: 3, color: sage }}>처음이신가요?</span>
-        {/* 카드의 주인공 자리 — 세리프로 히어로의 수(오늘 읽은 시간)와 같은 무게를 받는다. */}
-        <span style={{ display: 'block', marginTop: 6, fontSize: 26, ...SERIF_VALUE }}>앱 사용법 보기 ›</span>
-        <span
-          style={{ display: 'block', marginTop: 10, fontSize: 14, color: 'var(--adaptiveGrey600, #6F6A5E)' }}
-        >
+        {/* 눈썹 — 아치가 평소 「오늘 읽은 시간」을 놓는 자리다(L1 14/20 muted). */}
+        <span style={{ display: 'block', fontSize: 14, lineHeight: '20px', color: 'var(--adaptiveGrey600, #645E54)' }}>처음이신가요?</span>
+        {/* 아치의 주인공 자리 — 세리프로 시계와 같은 축을 받는다. */}
+        <span style={{ display: 'block', marginTop: 8, fontSize: 26, color: 'var(--adaptiveGrey800, #1D1B18)', ...SERIF_VALUE }}>앱 사용법 보기 ›</span>
+        <span style={{ display: 'block', marginTop: 10, fontSize: 14, color: 'var(--adaptiveGrey600, #645E54)' }}>
           서재·책방·여백까지 차례로 짚어드려요
         </span>
       </button>
@@ -2298,18 +2264,18 @@ export function GuideHero({ onStart, onDismiss }: { onStart: () => void; onDismi
         aria-label="안내 카드 닫기"
         onClick={onDismiss}
         style={{
-          position: 'absolute',
-          top: -12,
-          right: -8,
+          minHeight: 44,
+          marginTop: 4,
+          padding: '0 12px',
           border: 'none',
           background: 'transparent',
-          padding: 8,
-          color: 'var(--adaptiveGrey600, #6F6A5E)',
+          color: 'var(--adaptiveGrey600, #645E54)',
+          fontFamily: 'inherit',
           fontSize: 14,
           cursor: 'pointer',
         }}
       >
-        ✕
+        ✕ 닫기
       </button>
     </div>
   );
@@ -2379,7 +2345,7 @@ function MiniCover({ book, width }: { book: BookOption | null; width: number }) 
           width,
           height: Math.round(width * 1.4),
           borderRadius: 4,
-          border: '1.5px dashed #7C8A78', // 홈 「책 없이」 카드(Home NoBookCard)와 같은 Soft 점선색
+          border: '1.5px dashed var(--adaptiveGrey600, #645E54)', // 홈 「책 없이」 카드(Home NoBookCard)와 같은 점선색(muted 토큰)
           boxSizing: 'border-box',
         }}
       />
@@ -2425,30 +2391,26 @@ export function StartToast({ toast, onChange }: { toast: StartToastState; onChan
         alignItems: 'center',
         gap: 10,
         padding: '10px 12px',
-        ...PUFF,
-        borderRadius: 20,
+        ...FLOAT,
       }}
     >
       {/* 표지 자리와 [바꾸기]는 이제 두 모드의 장치다 — 공부에도 고를 책과 바꿀 문이 생겼다.
           모드를 가르던 게이트(`toastHasBookControls`)는 항상 참이 되어 지웠다. */}
       <MiniCover book={toast.book} width={26} />
       <span style={{ flex: 1, minWidth: 0, fontSize: 14, lineHeight: 1.5, wordBreak: 'keep-all' }}>
-        {quoted !== null && <span style={{ ...SERIF_VALUE, fontWeight: 700 }}>{quoted}</span>}
+        {quoted !== null && <span style={SERIF_VALUE}>{quoted}</span>}
         {rest}
       </span>
       <button
         type="button"
         onClick={onChange}
+        // 보조 동작 = 외곽선 알약(에디토리얼 2단). 강조 토큰이라 공부 모드에서 파란 잉크로 따라온다.
         style={{
+          ...OUTLINE_PILL,
           flex: 'none',
           padding: '6px 12px',
-          border: 0,
-          borderRadius: 8,
-          // 모드 토큰을 탄다 — 리터럴로 두면 공부 모드에 독서 세이지가 샌다(독서는 알파 .16→.18, 육안 무차이).
-          background: 'var(--accentPill, rgba(91, 127, 85, 0.16))',
-          color: 'var(--adaptiveBlue700, #3F5A3C)',
           fontSize: 13,
-          fontWeight: 700,
+          fontWeight: 500,
           cursor: 'pointer',
         }}
       >
@@ -2502,17 +2464,14 @@ export function ChangeBookSheet({
         aria-current={current ? 'true' : undefined}
         disabled={disabled}
         onClick={() => onPick(book)}
+        // 시트 행 = 아래 가는 선(RULE_ROW). 지금 대상은 면이 아니라 ✓·글자 500이 말한다(에디토리얼 — 면 없음).
         style={{
+          ...RULE_ROW,
           display: 'flex',
           alignItems: 'center',
           gap: 12,
           width: '100%',
-          marginBottom: 8,
-          padding: '10px 12px',
-          border: 'none',
-          borderRadius: 10,
-          // 모드 토큰(위 [바꾸기]와 같은 사정) — 독서는 알파 .14→.18로 2% 진해진다(의도된 예외).
-          background: current ? 'var(--accentPill, rgba(91, 127, 85, 0.16))' : 'transparent',
+          padding: '12px 0',
           cursor: 'pointer',
         }}
       >
@@ -2523,18 +2482,18 @@ export function ChangeBookSheet({
             minWidth: 0,
             textAlign: 'left',
             fontSize: 15,
-            fontWeight: current ? 700 : undefined,
-            color: book === null ? 'var(--adaptiveGrey600, #6F6A5E)' : undefined,
+            fontWeight: current ? 500 : undefined,
+            color: book === null ? 'var(--adaptiveGrey600, #645E54)' : undefined,
             wordBreak: 'keep-all',
           }}
         >
           {book === null ? '책 없이' : book.title}
         </span>
         {book?.statusLabel !== undefined && (
-          <span style={{ flex: 'none', fontSize: 13, color: 'var(--adaptiveGrey600, #6F6A5E)' }}>{book.statusLabel}</span>
+          <span style={{ flex: 'none', fontSize: 13, color: 'var(--adaptiveGrey600, #645E54)' }}>{book.statusLabel}</span>
         )}
         {current && (
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" style={{ flex: 'none', stroke: 'var(--adaptiveBlue700, #4F6B4C)' }} strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" style={{ flex: 'none', stroke: 'var(--adaptiveBlue700, #1D1B18)' }} strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round">
             <path d="M5 12.5 10 17.5 19 7" />
           </svg>
         )}
@@ -2544,7 +2503,7 @@ export function ChangeBookSheet({
 
   return (
     <Sheet title={title} onClose={onClose}>
-      <div style={{ marginTop: -4, marginBottom: 10, fontSize: 13, color: 'var(--adaptiveGrey600, #6F6A5E)', wordBreak: 'keep-all' }}>
+      <div style={{ marginTop: -4, marginBottom: 10, fontSize: 13, color: 'var(--adaptiveGrey600, #645E54)', wordBreak: 'keep-all' }}>
         {subtitle}
       </div>
       {books.map((b) => row(b))}
@@ -2611,16 +2570,14 @@ export function BottomTabBar({
           padding: 0,
           border: 'none',
           background: 'transparent',
-          // 고른 칸은 세이지 700, 나머지는 흐린 글자색 — 잠긴 칸도 **흐리게 지우지 않는다**(Soft 규칙 1).
+          // 고른 칸은 강조 잉크, 나머지는 muted — 잠긴 칸도 **흐리게 지우지 않는다**(Soft 규칙 1).
           // 옛 `opacity .35`는 40대 이상에게 「없는 칸」으로 읽혔다. 잠김은 아래 자물쇠 배지가 말한다.
-          color: selected ? 'var(--adaptiveBlue700, #3F5A3C)' : 'var(--adaptiveGrey600, #5B5A4D)',
+          color: selected ? 'var(--adaptiveBlue700, #1D1B18)' : 'var(--adaptiveGrey600, #645E54)',
           cursor: 'pointer',
         }}
       >
-        {/* 고른 칸의 아이콘만 알약을 입는다(Soft 시안 40×28 완전한 알약). 색약에게도 「여기」가 형태로 보이게.
-            안 고른 칸도 <b>같은 40×28 span</b>을 쓰고 배경만 비운다 — 알약이 있다가 없으면 칸마다
-            아이콘 위치가 달라져 탭을 옮길 때 레이아웃이 튄다. 반투명 세이지를 쓰는 것은 의도다
-            (불투명 토큰보다 밤 테마에서 잘 적응한다). 자물쇠 배지의 기준 상자이기도 하다(relative). */}
+        {/* 에디토리얼 — 고른 칸도 알약 배경이 없다(옷 시안). 「여기」는 잉크 색·굵은 획·글자 500이 함께 말한다.
+            40×28 상자는 그대로 둔다 — 자물쇠 배지의 기준 상자(relative)이고, 칸마다 아이콘 위치가 같아야 한다. */}
         <span
           style={{
             position: 'relative',
@@ -2630,8 +2587,7 @@ export function BottomTabBar({
             width: 40,
             height: 28,
             borderRadius: 999,
-            // 토큰 경유 — 공부 모드에서 이 알약도 저절로 파랑이 된다(리터럴이면 세이지로 남는다).
-            background: selected ? 'var(--accentPill, rgba(91,127,85,.16))' : 'transparent',
+            background: 'transparent',
           }}
         >
           <svg
@@ -2660,7 +2616,7 @@ export function BottomTabBar({
                 width: 16,
                 height: 16,
                 borderRadius: '50%',
-                background: 'var(--adaptiveGrey100, #FBF9F4)',
+                background: 'var(--adaptiveGrey100, #F5F0E6)',
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
@@ -2672,8 +2628,8 @@ export function BottomTabBar({
             </span>
           )}
         </span>
-        {/* 전부 700이면 굵기가 아무 말도 안 한다 — 고른 칸만 굵다(비선택 400은 body 상속과 같다). */}
-        <span style={{ fontSize: 13, fontWeight: selected ? 700 : 400, lineHeight: 1.2 }}>{label}</span>
+        {/* 전부 500이면 굵기가 아무 말도 안 한다 — 고른 칸만 500(비선택 400은 body 상속과 같다). */}
+        <span style={{ fontSize: 13, fontWeight: selected ? 500 : 400, lineHeight: 1.2 }}>{label}</span>
       </button>
     );
   });
@@ -2692,9 +2648,9 @@ export function BottomTabBar({
         zIndex: TAB_BAR_Z_INDEX,
         display: 'flex',
         overflow: 'hidden', // 모서리 밖으로 새는 탭 눌림 효과를 알약 안에 가둔다(자기 그림자는 안 잘린다)
-        // Soft — 탭바 자체가 부푼 알약이다. `<main>` 밖이라 독서등의 토큰 스왑이 안 닿으므로, 밤 캔버스 위
-        // 그림자는 `body.reading-lamp`가 따로 준다(global.css — 낮 흰 빛이 밤에 흰 테로 뜨지 않게).
-        ...PUFF,
+        // 에디토리얼 — 미색 + 잉크 1px 알약, 그림자 0. `<main>` 밖이라 독서등 밤에도 낮 그대로 선다(끄는 원이 어둠에 안 잠긴다).
+        // 잉크 외곽선은 책상(#1C1A17) 위에선 원래 안 보여 시안의 「밤엔 외곽선 없음」과 같은 그림이 된다.
+        ...FLOAT,
         borderRadius: 999,
       }}
     >
@@ -2708,7 +2664,7 @@ export function BottomTabBar({
  *
  * <p>라벨 글자는 없다(원과 라벨은 한 칸 높이에 함께 못 선다) — 상태는 `aria-label`이 말한다.
  * 원이 셀(≈69×64) 안에 들어가므로 알약의 `overflow: hidden`에 잘리지 않는다(돌출형 아님) —
- * Soft 54px + 측정 중 링 3px 양쪽 = 60px ≤ {@link TAB_BAR_HEIGHT}(app.test가 잰다).
+ * 54px ≤ {@link TAB_BAR_HEIGHT}(app.test가 잰다) — 에디토리얼에서 측정 중 링은 걷었다.
  */
 function TimerActionButton({
   active,
@@ -2746,17 +2702,15 @@ function TimerActionButton({
           height: TIMER_CIRCLE_SIZE,
           borderRadius: '50%',
           background: view.background,
-          // 원의 그림자 — **고정값**이다. 애니메이션을 걸지 않는다: T-176이 발광
-          // `box-shadow` 무한 애니메이션으로 표지를 초당 60번 재래스터화한 자리와 같은 종류이고,
-          // 데스크톱·목 모드는 그 클래스를 원리상 못 잡는다. 값은 상태 전환 때만 바뀐다.
-          boxShadow: view.ring,
+          // ▶/■ 획 = 미색(잉크 원 위 15.13). SVG 표현 속성은 CSS 변수를 못 풀어 color → currentColor로 잇는다.
+          color: 'var(--filledInk, #F5F0E6)',
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
           opacity: busy ? 0.6 : 1,
         }}
       >
-        <svg width="22" height="22" viewBox="0 0 24 24" fill="#FFFFFF" aria-hidden="true">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
           <path d={view.icon} />
         </svg>
       </span>

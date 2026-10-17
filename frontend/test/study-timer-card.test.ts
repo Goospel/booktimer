@@ -534,4 +534,38 @@ describe('StudyTimerCard — 자리 비움 선택', () => {
         expect(byId(box.getAttribute('aria-labelledby'))).toBe(w.find('.dash-away-pref-title').element);
         expect(byId(box.getAttribute('aria-describedby'))).toBe(w.find('.dash-away-pref-desc').element);
     });
+
+    test('에디토리얼 · 진짜 체크박스 바로 뒤 형제가 그림 상자(.set-check-box, 체크 획 svg)다', () => {
+        // `input:checked ~ .set-check-box`가 닿으려면 형제여야 한다. CSS 짝(설정 문법 공유)은 src/editorialTheme.test.ts.
+        const w = mountCard({ awayAvailable: true });
+        const box = w.find('.dash-away-pref input[type="checkbox"]').element.nextElementSibling as HTMLElement | null;
+        expect(box?.classList.contains('set-check-box')).toBe(true);
+        expect(box?.getAttribute('aria-hidden')).toBe('true');
+        expect(box?.querySelector('svg path')).not.toBeNull();
+    });
+});
+
+describe('REQ-16 · StudyTimerCard 아치 시계 길이', () => {
+    test('5자면 is-long 없음, 1시간 넘은 8자면 is-long', () => {
+        vi.useFakeTimers();
+        const short = mountCard({ todaySeconds: 42 * 60 });
+        expect(short.find('.dash-timer-left .dash-timer-num').text()).toBe('42:00');
+        expect(short.find('.dash-timer-left .dash-timer-num').classes()).not.toContain('is-long');
+        short.unmount();
+        const long = mountCard({ todaySeconds: 3700 });
+        expect(long.find('.dash-timer-left .dash-timer-num').text()).toBe('01:01:40');
+        expect(long.find('.dash-timer-left .dash-timer-num').classes()).toContain('is-long');
+    });
+});
+
+describe('StudyTimerCard — 에디토리얼 검정 알약(PR-2)', () => {
+    test('REQ-22 · 대기에서 회당 시간 폼을 열어도 검정 알약은 「공부 측정 시작」 하나다', async () => {
+        vi.useFakeTimers();
+        const w = mountCard({ books: [STUDY_BOOK(5, '헌법', 3000)], recentBookId: 5 });
+        await w.find('.dash-goal-change').trigger('click');
+        // 양성 대조 — 폼이 실제로 열렸고 그 안에 「저장」이 있다.
+        expect(w.find('form.dash-goal-edit').exists()).toBe(true);
+        expect(w.findAll('form.dash-goal-edit button').some((b) => b.text().includes('저장'))).toBe(true);
+        expect(w.findAll('.btn-primary, .dash-btn-fill, .auth-btn-primary').map((b) => b.text())).toEqual(['공부 측정 시작']);
+    });
 });

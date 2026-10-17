@@ -107,7 +107,6 @@ function renderTab(
         onStartTimer={() => Promise.resolve(dashboard)}
         onGraphChange={() => {}}
         onGoGoal={() => {}}
-        goalAdPending={false}
         onShelfChanged={() => {}}
         onHandleCreated={() => {}}
         onGoSettings={() => {}}
@@ -252,35 +251,37 @@ describe('하단 탭바', () => {
 
     expect(cell).toContain(`width:${TIMER_CIRCLE_SIZE}px;height:${TIMER_CIRCLE_SIZE}px`); // Soft 시안 54
     expect(cell).toContain('border-radius:50%');
-    expect(cell).toContain('#3F5A3C'); // 시작 = 브랜드 세이지 700(Soft 값)
+    expect(cell).toContain('var(--adaptiveBlue700, #1D1B18)'); // 시작 = 잉크(에디토리얼 — 강조 하나)
   });
 
-  it('측정 중이면 빨간 ■로 바뀐다 — 시작과 끝내기가 한 자리에서 갈린다', () => {
+  it('측정 중이면 ■로 바뀐다 — 시작과 끝내기가 한 자리에서 갈린다(색은 같은 잉크, 모양이 말한다)', () => {
     const markup = bar('home', { active: true });
 
     expect(markup).toContain('aria-label="측정 끝내기"');
     expect(markup).not.toContain('aria-label="독서 측정 시작"');
-    expect(actionCell(markup, '측정 끝내기')).toContain('#F04452');
+    expect(actionCell(markup, '측정 끝내기')).toContain('M8 8h8v8H8z'); // ■
+    expect(actionCell(markup, '측정 끝내기')).not.toContain('240,68,82');
   });
 
   it('처리 중이면 원이 흐려진다 — 연타로 세션이 두 번 시작되지 않게', () => {
     expect(actionCell(bar('home', { busy: true }), '독서 측정 시작')).toContain('opacity:0.6');
   });
 
-  it('선택 탭 색 폴백이 웹 세이지다 — 변수가 안 잡히는 순간 토스 블루로 되돌아가는 걸 막는다', () => {
+  it('선택 탭 색 폴백이 잉크다 — 변수가 안 잡히는 순간 토스 블루로 되돌아가는 걸 막는다', () => {
     // 시안 4c에서 한 단 진해졌다(500 -> 700). 이 단언이 지키는 것은 「어느 칸인가」가 아니라
     // **폴백이 세이지인가**이므로 램프의 칸이 바뀌어도 의도는 그대로다.
-    expect(bar('home')).toContain('var(--adaptiveBlue700, #3F5A3C)');
+    expect(bar('home')).toContain('var(--adaptiveBlue700, #1D1B18)');
     expect(bar('home')).not.toContain('#3182f6');
   });
 
   it('바닥에 붙지 않고 떠 있다 — 토스 브랜딩 가이드가 요구하는 플로팅 형태(심사 반려 2)', () => {
     // T-144: 단일 속성 한 조각은 TDS 주입 CSS와 겹쳐 공허해진다 — 인접 속성을 이어 붙인 조합을 키로 쓴다.
     expect(bar('home')).toContain(`left:${TAB_BAR_MARGIN}px;right:${TAB_BAR_MARGIN}px;bottom:calc(12px + env(safe-area-inset-bottom))`);
-    // Soft — 알약 자체가 부푼 면이다. 그림자는 변수 경유라 밤·공부가 값만 갈아 끼운다(리터럴이면 밤에 흰 테).
+    // REQ-05 · 탭바는 미색 + 잉크 1px 알약이고 그림자가 없다(에디토리얼 — 떠 있는 면은 선이 말한다).
     const nav = tagWith(bar('home'), '<nav');
     expect(nav).toContain('border-radius:999px');
-    expect(nav).toContain('box-shadow:var(--puffShadow');
+    expect(nav).toContain('border:1px solid var(--adaptiveGrey800');
+    expect(nav).not.toContain('box-shadow');
     expect(bar('home')).not.toContain('border-top'); // 전폭 부착 형태의 서명
   });
 
@@ -332,22 +333,22 @@ describe('액션이 시작할 책 (timerStartBookId)', () => {
 
 /** 액션 버튼의 두 얼굴 — 상태에 따라 라벨·색·아이콘이 통째로 갈린다. */
 describe('액션 버튼 시각 (timerActionView)', () => {
-  it('대기 중이면 세이지 ▶ 「독서 측정 시작」', () => {
+  it('대기 중이면 잉크 ▶ 「독서 측정 시작」', () => {
     const view = timerActionView(false);
 
     expect(view.label).toBe('독서 측정 시작');
-    expect(view.background).toContain('#3F5A3C'); // 세이지 700 폴백(Soft 값)
+    expect(view.background).toContain('var(--adaptiveBlue700, #1D1B18)'); // 잉크(공부 모드에선 파란 잉크)
   });
 
-  it('측정 중이면 빨강 ■ 「측정 끝내기」 — 옛 홈 danger 버튼의 색 연속성', () => {
+  it('측정 중이면 잉크 ■ 「측정 끝내기」 — 시안 M-HOME-06(빨강 → 잉크)', () => {
     const view = timerActionView(true);
 
     expect(view.label).toBe('측정 끝내기');
-    expect(view.background).toContain('#F04452');
+    expect(view.background).toContain('var(--adaptiveBlue700');
+    expect(view.background).not.toMatch(/Red|F04452/);
   });
 
-  it('두 상태의 색과 아이콘이 서로 다르다 — 전환이 눈에 보여야 한다', () => {
-    expect(timerActionView(true).background).not.toBe(timerActionView(false).background);
+  it('두 상태의 아이콘이 서로 다르다 — 전환이 눈에 보여야 한다(색은 같은 잉크)', () => {
     expect(timerActionView(true).icon).not.toBe(timerActionView(false).icon);
   });
 });
@@ -1545,13 +1546,13 @@ describe('탭바 위계 (시안 4c)', () => {
     return markup.slice(markup.lastIndexOf('<button', at), markup.indexOf('</button>', at));
   };
 
-  it('고른 칸의 아이콘만 알약을 입는다 — 색약에게도 「여기」가 형태로 보인다', () => {
+  it('REQ-05 · 고른 칸도 알약 배경이 없다 — 잉크 선·글자 500이 「여기」를 말한다', () => {
     const on = tabCell(tabBar('home'), '홈');
 
-    // Soft 시안 — 40×28 완전한 알약(r999). 폴백은 Soft 알약 값(반투명 유지 — 밤 적응).
+    // 에디토리얼 — 고른 칸도 알약 배경이 없다(아이콘 선·글자 잉크 500이 「여기」를 말한다). 40×28 상자는 그대로.
     expect(on).toContain('width:40px;height:28px');
-    expect(on).toContain('border-radius:999px');
-    expect(on).toContain('rgba(91,127,85,.16)'); // 톤 조율 A의 --accentPill 낮 값
+    expect(on).not.toContain('accentPill');
+    expect(on).toContain('background:transparent');
   });
 
   it('안 고른 칸도 같은 40×28 span을 쓴다 — 배경만 없다(있다가 없으면 레이아웃이 튄다)', () => {
@@ -1561,18 +1562,18 @@ describe('탭바 위계 (시안 4c)', () => {
     expect(off).not.toContain('rgba(91,127,85,.2)');
   });
 
-  it('고른 칸 색은 세이지 700이다 — 500은 라벨 회색과 대비가 약했다(시안값)', () => {
+  it('고른 칸 색은 잉크(강조 토큰)다 — 안 고른 칸은 muted', () => {
     const markup = tabBar('home');
 
     expect(tabCell(markup, '홈')).toContain('--adaptiveBlue700');
     expect(tabCell(markup, '서재')).toContain('--adaptiveGrey600');
   });
 
-  it('라벨은 13px이고 굵기는 고른 칸만 700이다 — 전부 700이면 굵기가 아무 말도 안 한다', () => {
+  it('라벨은 13px이고 굵기는 고른 칸만 500이다 — 굵기 축은 400·500뿐이다', () => {
     const markup = tabBar('home');
 
     expect(tabCell(markup, '홈')).toContain('font-size:13px');
-    expect(tabCell(markup, '홈')).toContain('font-weight:700');
+    expect(tabCell(markup, '홈')).toContain('font-weight:500');
     expect(tabCell(markup, '서재')).toContain('font-size:13px');
     expect(tabCell(markup, '서재')).toContain('font-weight:400');
   });
@@ -1590,20 +1591,19 @@ describe('탭바 위계 (시안 4c)', () => {
    * 애니메이션으로 표지를 초당 60번 재래스터화한 자리와 같은 종류이고, 데스크톱·목 모드는
    * 그 클래스를 원리상 못 잡는다.
    */
-  it('가운데 원은 54px 부푼 원이다 — 스트로크 아이콘들 사이에서 동작으로 떠 보인다', () => {
+  it('가운데 원은 54px 잉크 원이고 그림자가 없다 — 스트로크 아이콘들 사이에서 채움이 동작을 말한다', () => {
     const cell = centerCell(tabBar('home'));
 
     expect(TIMER_CIRCLE_SIZE).toBe(54); // Soft 시안 값
     expect(cell).toContain(`width:${TIMER_CIRCLE_SIZE}px`);
     expect(cell).toContain(`height:${TIMER_CIRCLE_SIZE}px`);
-    // 떨어지는 그림자는 토큰 경유다(`--accentRing`) — 공부 모드가 css 한 벌로 이 그림자까지 파랑으로 바꾼다.
-    // 시안 리터럴(rgba(63,90,60,.35))을 쓰면 공부 모드 파랑 원 밑에 세이지 그림자가 남는다.
-    expect(cell).toContain('box-shadow:4px 4px 10px var(--accentRing');
-    expect(cell).toContain('inset 0 2px 0'); // 윗면 하이라이트 — 부풂의 나머지 반
+    expect(cell).toContain('var(--adaptiveBlue700');
+    expect(cell).not.toContain('box-shadow');
+    expect(cell).toContain('var(--filledInk'); // ▶ = 미색(잉크 원 위 15.13)
   });
 
   it('원은 탭바 높이 안에 들어간다 — 알약이 overflow:hidden이라 넘치면 잘린다', () => {
-    expect(TIMER_CIRCLE_SIZE + 3 * 2).toBeLessThanOrEqual(TAB_BAR_HEIGHT); // 원 + 측정 중 링 3px 양쪽
+    expect(TIMER_CIRCLE_SIZE).toBeLessThanOrEqual(TAB_BAR_HEIGHT);
   });
 
   /**
@@ -1630,42 +1630,16 @@ describe('탭바 위계 (시안 4c)', () => {
     expect(toast).toContain(`bottom:calc(12px + env(safe-area-inset-bottom) + ${TAB_BAR_HEIGHT}px + 8px)`);
   });
 
-  it('가운데 원 배경도 세이지 700이다 — 고른 칸과 같은 잉크라야 한 팔레트로 읽힌다', () => {
+  it('가운데 원 배경은 두 상태 모두 강조 잉크다 — 고른 칸과 같은 잉크라야 한 팔레트로 읽힌다', () => {
     expect(timerActionView(false).background).toContain('--adaptiveBlue700');
-    expect(timerActionView(true).background).toContain('Red'); // 끝내기는 빨강 그대로
+    expect(timerActionView(true).background).toContain('--adaptiveBlue700');
   });
 
   /**
-   * ⚠️ 링은 배경과 <b>한 쌍</b>으로 `timerActionView`에 산다 — 설계 D7이 값과 함께 그 이유까지 적어
-   * 뒀다: 「색 쌍이 흩어지면 다음 손질 때 한쪽만 바뀐다」. 실제로 링을 `TimerActionButton`에 무조건으로
-   * 박았더니 <b>빨간 정지 버튼에 초록 후광</b>이 남았다(독립 리뷰 적발). 쌍으로 두면 구조적으로 못 어긋난다.
+   * 측정 중 원 — 시안 M-HOME-06대로 잉크 ■다(빨강 → 잉크). 위험 빨강은 삭제·차단처럼 되돌릴 수 없는 동작에만 남는다.
+   * 그림자·링은 없다(REQ-05 이펙트 0). 진짜 실패: 옛 빨강·후광이 렌더에 남는 것.
    */
-  it('링도 상태를 따라간다 — 측정 중엔 빨강 계열이라야 정지 버튼에 초록 후광이 안 남는다', () => {
-    expect(timerActionView(false).ring).toContain('--accentRing'); // 대기 = 모드색(독서 세이지 · 공부 파랑)
-    expect(timerActionView(true).ring).toContain('240,68,82'); // 측정 중 = 빨강
-  });
-
-  /**
-   * 측정 중 원 — 색은 빨강 그대로(위험 = 빨강 규약), <b>형태만</b> 눌린 원(inset)으로 바뀐다(Soft 설계 결정).
-   * 진짜 실패: 세이지·모드색이 빨강 자리를 삼켜 「끝내기」가 「시작」처럼 보이는 것.
-   */
-  it('측정 중 원은 빨간 채로 눌린다 — 모드색이 빨강을 삼키지 않는다', () => {
-    const view = timerActionView(true);
-
-    expect(view.background).toContain('#F04452');
-    expect(view.ring).toMatch(/^inset /);
-    expect(view.ring).toContain('rgba(240,68,82,.2)');
-    for (const mode of ['reading', 'study'] as const) {
-      const active = timerActionView(true, mode);
-      expect(active.background).not.toMatch(/adaptiveBlue|accent/);
-      expect(active.ring).not.toMatch(/adaptiveBlue|accent|255,\s*255,\s*255/);
-    }
-    // 측정 중 원은 **모드와 무관하게 한 벌**이다 — 위 금지 목록은 토큰 이름만 봐서, 공부 모드에서만 파랑
-    // 리터럴(`#47657C`·`rgba(95,126,150,.25)`)을 끼우면 못 잡았다(리뷰 돌연변이 2종 생존). 통째 비교로 닫는다.
-    expect(timerActionView(true, 'study')).toEqual(timerActionView(true, 'reading'));
-  });
-
-  it('측정 중 원은 빨간 링을 두른다 — 렌더까지 실제로 닿는지 본다(단위값만 맞고 안 쓰이면 소용없다)', () => {
+  it('REQ-05 · 측정 중 원은 잉크 ■이고 빨강·링이 렌더에 없다', () => {
     const markup = renderToStaticMarkup(
       <TDSMobileProvider userAgent={userAgent}>
         <BottomTabBar tab="home" onTabChange={() => {}} action={{ active: true, busy: false, onPress: () => {} }} />
@@ -1675,9 +1649,10 @@ describe('탭바 위계 (시안 4c)', () => {
 
     expect(at).toBeGreaterThan(-1);
     const cell = markup.slice(at, markup.indexOf('</button>', at));
-    expect(cell).toContain('box-shadow:inset 3px 3px 7px rgba(0,0,0,.18), 0 0 0 3px rgba(240,68,82,.2)');
-    expect(cell).toContain('#F04452');
-    expect(cell).not.toContain('--accentRing'); // 위 대기 원엔 있다 — 빨간 원에 모드색 후광이 안 남는다
+    expect(cell).toContain('var(--adaptiveBlue700');
+    expect(cell).not.toMatch(/240,\s*68,\s*82|F04452|box-shadow/);
+    // 측정 중 원은 모드와 무관하게 한 벌이다(색은 토큰이 모드를 따라간다)
+    expect(timerActionView(true, 'study')).toEqual(timerActionView(true, 'reading'));
   });
 });
 

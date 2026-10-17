@@ -234,3 +234,17 @@ describe('홈 여백 카드 — 기본 책은 읽는 중만 (R2)', () => {
         expect(storyCalls()).toHaveLength(0);
     });
 });
+
+describe('홈 여백 카드 — 에디토리얼 검정 알약(PR-2)', () => {
+    test('REQ-22 · 책이 있든 없든 여백 카드엔 검정 알약이 없다(홈의 검정은 「측정 시작」 하나)', async () => {
+        const withBook = await mountCard(BOOK, marginResponse([]));
+        // 양성 대조 — 여백 남기기 버튼이 실제로 그려졌다.
+        expect(withBook.findAll('button').some((b) => b.text().includes('여백 남기기'))).toBe(true);
+        expect(withBook.findAll('.btn-primary, .dash-btn-fill, .auth-btn-primary').length).toBe(0);
+        withBook.unmount();
+
+        const noBook = await mountCard(null);
+        expect(noBook.findAll('button').some((b) => b.text().includes('책 고르기'))).toBe(true);
+        expect(noBook.findAll('.btn-primary, .dash-btn-fill, .auth-btn-primary').length).toBe(0);
+    });
+});

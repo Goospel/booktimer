@@ -616,6 +616,37 @@ class UserTest {
         assertThat(user.getTossUserKey()).isNull();
     }
 
+    // ── 토스 연결 끊기 (비게임 체크리스트 82·83) ─────────────────────────────
+
+    @Test
+    @DisplayName("REQ-03 · 토스로 가입하고 이메일을 인증하지 않은 계정만 토스 없이 로그인할 수단이 없다")
+    void canSignInWithoutToss_onlyUnverifiedTossAccountHasNoOtherWay() {
+        User tossOnly = User.ofOAuth(EMAIL, NICK, TZ, Role.USER, AuthProvider.TOSS);
+        assertThat(tossOnly.canSignInWithoutToss()).as("토스 가입·이메일 미인증").isFalse();
+
+        User tossVerified = User.ofOAuth(EMAIL, NICK, TZ, Role.USER, AuthProvider.TOSS);
+        tossVerified.verifyEmail();
+        assertThat(tossVerified.canSignInWithoutToss()).as("토스 가입·이메일 인증").isTrue();
+
+        assertThat(User.of(EMAIL, HASH, NICK, TZ, Role.USER).canSignInWithoutToss()).as("LOCAL").isTrue();
+        assertThat(User.ofOAuth(EMAIL, NICK, TZ, Role.USER, AuthProvider.GOOGLE).canSignInWithoutToss())
+                .as("GOOGLE").isTrue();
+    }
+
+    @Test
+    @DisplayName("REQ-13 · 연결을 끊으면 토스 신원이 비고, 다른 신원으로 다시 연결할 수 있다")
+    void unlinkTossUserKey_clearsIdentityAndAllowsRelink() {
+        User user = User.of(EMAIL, HASH, NICK, TZ, Role.USER);
+        user.linkTossUserKey("uk-a");
+
+        user.unlinkTossUserKey();
+        assertThat(user.getTossUserKey()).isNull();
+
+        // once-set은 「붙어 있는 동안」의 불변식이다 — 떼어 낸 뒤에는 다시 붙일 수 있다.
+        user.linkTossUserKey("uk-b");
+        assertThat(user.getTossUserKey()).isEqualTo("uk-b");
+    }
+
     // --- changeLoginId: 아이디 평생 1회 변경 (옛 아이디는 previous_login_id로 영구 잠금) ---
 
     private User userWithHandle(String loginId) {

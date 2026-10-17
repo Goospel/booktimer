@@ -178,7 +178,7 @@ const bk = (title: string, seconds: number, coverUrl: string | null = null) => (
  * 단언이 막대를 안 그려도 늘 초록이 된다(실제로 돌연변이가 살아남아 잡혔다). 높이 12px이 막대 채움의 표식이다
  * (Soft PR-3 — 트랙 16px 안에 2px씩 띄워 앉는다. 트랙 자신은 폭이 없어 이 정규식에 안 걸린다).
  */
-const dayBarWidth = (markup: string): string | null => markup.match(/width:(\d+%);height:12px/)?.[1] ?? null;
+const dayBarWidth = (markup: string): string | null => markup.match(/width:(\d+%);height:100%/)?.[1] ?? null;
 
 const day = (over: Partial<DailyRecord> = {}): DailyRecord => ({
   date: '2026-08-14',
@@ -508,7 +508,7 @@ describe('월별 기록 목록', () => {
     );
 
     // 그 달 최대(10_800) 기준이었다면 목표를 채운 날은 3600/10800 = 33%로 납작했다.
-    expect(withLongDay.match(/width:\d+%;height:12px/g)).toEqual(['width:100%;height:12px', 'width:100%;height:12px']);
+    expect(withLongDay.match(/width:\d+%;height:100%/g)).toEqual(['width:100%;height:100%', 'width:100%;height:100%']);
   });
 
   it('기록이 없으면 안내를 대신 둔다 — 가입 직후 잔디 아래가 통째로 비어 고장처럼 보였다', () => {
@@ -585,16 +585,33 @@ describe('기록 위계 (시안 2d)', () => {
       </TDSMobileProvider>,
     );
 
-  it('월 머리글은 세리프 20, 월 합계는 16 굵게 세이지다(시안 Soft-History)', () => {
+  // 에디토리얼 PR-4 — 날짜 묶음은 면 없는 종이라 더미 표지의 테(링)도 종이색이다. 옛 눌린 면(--softDent) 링은 종이 위에 베이지 테로 뜬다.
+  it('표지 더미의 테는 종이색 링이다(눌린 면 색이 아니다)', () => {
+    const two: MonthlySection = {
+      month: '2026-08',
+      totalSeconds: 7_200,
+      days: [{ ...day('2026-08-21', 1_800), books: [{ title: '사피엔스', coverUrl: null, seconds: 900 }, { title: '총균쇠', coverUrl: null, seconds: 900 }] }],
+    };
+    const markup = renderToStaticMarkup(
+      <TDSMobileProvider userAgent={userAgent}>
+        <MonthlyRecords months={[two]} />
+      </TDSMobileProvider>,
+    );
+
+    expect(markup).toContain('box-shadow:0 0 0 1.5px var(--adaptiveGrey100');
+    expect(markup).not.toContain('--softDent');
+  });
+
+  it('월 머리글은 세리프 20, 월 합계는 16 굵게(500) 강조 잉크다', () => {
     const markup = records();
     const head = tagBefore(markup, '2026년 8월');
     const total = tagBefore(markup, '2시간');
 
-    expect(head).toContain('Gowun Batang');
+    expect(head).toContain('Noto Serif KR');
     expect(head).toContain('font-size:20px');
-    expect(total).toContain('Gowun Batang');
+    expect(total).toContain('Noto Serif KR');
     expect(total).toContain('font-size:16px');
-    expect(total).toContain('--tds-paragraph-font-weight:700');
+    expect(total).toContain('--tds-paragraph-font-weight:500');
     expect(total).toContain('var(--adaptiveBlue700');
   });
 
@@ -602,7 +619,7 @@ describe('기록 위계 (시안 2d)', () => {
     const markup = records();
 
     expect(tagBefore(markup, '08-21')).toContain('font-size:17px');
-    expect(tagBefore(markup, '08-21')).toContain('Gowun Batang');
+    expect(tagBefore(markup, '08-21')).toContain('Noto Serif KR');
     expect(tagBefore(markup, '30분')).toContain('font-size:17px');
   });
 
@@ -610,7 +627,7 @@ describe('기록 위계 (시안 2d)', () => {
     const tag = tagBefore(records(), '금요일');
 
     expect(tag).not.toBe('');
-    expect(tag).not.toContain('Gowun Batang');
+    expect(tag).not.toContain('Noto Serif KR');
   });
 
   /**
@@ -634,7 +651,7 @@ describe('기록 위계 (시안 2d)', () => {
     const range = tagBefore(markup, '07:40–08:00');
     const length = tagBefore(markup, '20분');
     expect(range).toContain('font-size:14px');
-    expect(range).not.toContain('Gowun Batang');
+    expect(range).not.toContain('Noto Serif KR');
     expect(length).toContain('font-size:13px');
     expect(length).toContain('--tds-paragraph-color:var(--adaptiveGrey600');
     expect(tagBefore(markup, '30분')).toContain('font-size:17px'); // 하루 합계는 그대로 17
@@ -667,26 +684,26 @@ describe('잔디의 오늘 (latestDate)', () => {
 describe('기록 Soft (시안 Soft-History)', () => {
   const render = (node: React.ReactNode) =>
     renderToStaticMarkup(<TDSMobileProvider userAgent={userAgent}>{node}</TDSMobileProvider>);
-  const tiles = (markup: string) => markup.match(/<div data-stat-tile=""[^>]*>/g) ?? [];
+  const rows = (markup: string) => markup.match(/<div data-stat-row=""[^>]*>/g) ?? [];
 
-  it('스탯 세 칸이 타일이다 — 세로선 칸막이 대신 면으로 갈린다', () => {
-    expect(tiles(render(<StatStrip graph={graph} />))).toHaveLength(3);
-  });
-
-  it('「연속」 타일은 버터다 — 정보색(모드 무관), 라벨도 버터 잉크', () => {
+  // 에디토리얼 PR-4 — 타일 셋 → 줄 표(라벨 ↔ 값 세리프). 면·그림자·버터 없이 아래 가는 선이 줄을 가른다.
+  it('스탯 세 칸이 줄 표다 — 줄마다 아래 가는 선, 면·그림자 0', () => {
     const markup = render(<StatStrip graph={graph} />);
 
-    expect(tiles(markup)[0]).toContain('var(--butterBg');
-    expect(tagBefore(markup, '연속')).toContain('var(--butterInk');
+    expect(rows(markup)).toHaveLength(3);
+    for (const row of rows(markup)) {
+      expect(row).toContain('border-bottom:1px solid var(--adaptiveGrey200');
+      expect(row).not.toMatch(/box-shadow|background/);
+    }
+    expect(markup).not.toContain('data-stat-tile');
   });
 
-  it('「읽은 날」「총 시간」 타일은 부푼 면의 축소판이다 — 카드 바탕 + 시안의 5px 그림자', () => {
-    const [, days, total] = tiles(render(<StatStrip graph={graph} />));
+  it('「연속」도 버터가 아니다 — 정보색은 폐지됐고 강조는 잉크 하나다', () => {
+    const markup = render(<StatStrip graph={graph} />);
 
-    for (const tile of [days, total]) {
-      expect(tile).toContain('var(--adaptiveGrey100');
-      expect(tile).toContain('var(--tileShadow)'); // 시안의 5px 그림자 — 틴트가 토큰으로 모였다(톤 조율 A)
-    }
+    expect(markup).not.toMatch(/--butter(Bg|Ink)/);
+    // 양성 대조 — 「연속」 라벨은 실제로 그려진다(부재 단언이 빈 마크업에 공허하지 않게)
+    expect(tagBefore(markup, '연속')).not.toBe('');
   });
 
   it('라벨 15 · 값 세리프 24 — 연령 규칙(보조 14 이상)과 시안 값', () => {
@@ -695,7 +712,7 @@ describe('기록 Soft (시안 Soft-History)', () => {
     expect(tagBefore(markup, '읽은 날')).toContain('font-size:15px');
     const value = tagBefore(markup, `${graph.activeDays}일<`);
     expect(value).toContain('font-size:24px');
-    expect(value).toContain('Gowun Batang');
+    expect(value).toContain('Noto Serif KR');
   });
 
   it('잔디는 카드에 담기고 오늘 칸 링이 정확히 하나 선다 — 기록 화면이 오늘을 판에서 찾아 넘긴다', () => {
@@ -708,13 +725,13 @@ describe('기록 Soft (시안 Soft-History)', () => {
     };
     const markup = render(<History graph={dated} />);
 
-    expect(markup).toContain('var(--puffShadow'); // 잔디 카드(sectionStyle)
+    expect(markup).not.toContain('var(--puffShadow'); // 잔디 「카드」는 면이 없다(sectionStyle — 에디토리얼)
     // 칸(`title=` 날짜를 단 div)만 센다 — 범례 「오늘」 스와치도 같은 링을 두르므로 문자열 전체 개수는 2다.
     expect(markup.match(/<div title="[^"]*" style="[^"]*0 0 0 4\.5px var\(--adaptiveBlue700/g)).toHaveLength(1);
     expect(markup).toContain('>오늘<'); // 범례가 링을 설명한다
   });
 
-  it('달마다 눌린 날짜 묶음이 하나씩 — 날짜 줄이 없는 달엔 빈 쟁반을 두지 않는다', () => {
+  it('달마다 날짜 묶음(아래 가는 선)이 하나씩 — 날짜 줄이 없는 달엔 빈 묶음을 두지 않는다', () => {
     const d = (date: string) => ({ date, totalSeconds: 1_800, books: [], manuallyFilled: false, goalSeconds: 3_600 });
     const markup = render(
       <MonthlyRecords
@@ -727,16 +744,14 @@ describe('기록 Soft (시안 Soft-History)', () => {
     );
 
     expect(markup).toContain('2026년 7월'); // 빈 달도 머리는 선다 — 아래 개수가 빈 달을 빠뜨려서 맞은 게 아니다
-    expect(markup.split('var(--dentShadow').length - 1).toBe(2);
+    expect(markup.split('gap:12px;padding:14px 0;border-bottom:1px solid var(--adaptiveGrey200').length - 1).toBe(2);
   });
 
-  it('하루 막대는 16px 트랙 위 세이지 단색이다 — 색은 토큰이라 공부 모드에서 파랑이 된다', () => {
+  it('하루 막대는 가는 선 색 트랙(높이 6 · 모서리 2) 위 강조 잉크 단색이다 — 토큰이라 공부 모드에서 파란 잉크가 된다', () => {
     const markup = render(<DayRow day={day({ totalSeconds: 1_800, goalSeconds: 3_600 })} expanded={false} onToggle={() => {}} />);
 
-    expect(markup).toContain('height:16px;border-radius:999px;background:var(--adaptiveGrey100');
-    expect(markup).toContain(
-      'width:50%;height:12px;border-radius:999px;background:var(--adaptiveBlue500, #5B7F55)"',
-    );
+    expect(markup).toContain('background:var(--adaptiveGrey200, #D9D1C3);border-radius:2px;height:6px');
+    expect(markup).toContain('width:50%;height:100%;border-radius:2px;background:var(--adaptiveBlue500, #1D1B18)"');
   });
 
 });
@@ -816,8 +831,8 @@ describe('그림자 예산 — 반복 요소엔 큰 흐림이 없다', () => {
   it('반복 요소엔 부푼 그림자 변수도 없다 — 변수로 들인 큰 흐림은 위 계측기가 못 본다', () => {
     const markup = repeated();
 
-    expect(markup).toContain('box-shadow:var(--dentShadow'); // 변수 그림자가 이 마크업에 실리는 경로 자체는 살아 있다
-    expect(markup).not.toContain('var(--puffShadow');
+    expect(markup).toContain('padding:14px 0;border-bottom:1px solid var(--adaptiveGrey200'); // 묶음이 이 마크업에 실제로 렌더됐다
+    expect(markup).not.toMatch(/var\(--(puff|dent|tile)Shadow/);
   });
 });
 

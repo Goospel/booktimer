@@ -167,16 +167,15 @@ function _showChip(mode, deferred) {
         'gap:6px',
         'padding:8px 10px 8px 14px',
         // 인라인 스타일은 CSS의 어떤 테마 규칙보다 세다 — 여기에 hex를 두면 다크에서 이 칩만
-        // 라이트 세이지로 떠 있는다(실측으로 잡힌 자리다). 라이트 값은 옮기기 전과 같다.
-        'background:color-mix(in srgb, var(--accent) 93%, transparent)',
-        'color:var(--on-accent)',
+        // 라이트 값으로 떠 있는다(실측으로 잡힌 자리다). 그래서 전부 토큰이다.
+        // 에디토리얼: 떠 있는 것 = 종이 + 잉크 1px(그림자·흐림 0). 홈의 검정 알약과 겹치지 않게 채우지 않는다.
+        'background:var(--card-bg)',
+        'color:var(--text)',
+        'border:1px solid var(--text)',
         'border-radius:9999px',
         'font-size:13px',
         'font-weight:500',
-        'box-shadow:0 2px 10px rgba(0,0,0,.28)',
         'user-select:none',
-        'backdrop-filter:blur(4px)',
-        '-webkit-backdrop-filter:blur(4px)',
         'transition:opacity .2s',
         'cursor:default',
     ].join(';');
@@ -204,7 +203,7 @@ function _showChip(mode, deferred) {
     closeBtn.style.cssText = [
         'background:none',
         'border:none',
-        'color:color-mix(in srgb, var(--on-accent) 80%, transparent)',
+        'color:var(--muted)',
         'font-size:20px',
         'line-height:1',
         'cursor:pointer',

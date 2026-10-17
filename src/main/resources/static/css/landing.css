@@ -7,9 +7,9 @@ body.landing-page {
     scroll-behavior: smooth; /* 상단 네비 #together 앵커 점프를 부드럽게 */
 }
 
-/* 세리프 헬퍼 — 헤드라인·섹션 타이틀에만 Gowun Batang 적용 */
+/* 세리프 헬퍼 — 헤드라인·섹션 타이틀에만 명조(var(--font-serif)) 적용 */
 .lp-serif {
-    font-family: "Gowun Batang", "Batang", serif;
+    font-family: var(--font-serif);
 }
 
 /* ================================================================
@@ -41,7 +41,7 @@ body.landing-page {
     text-decoration: none;
     color: var(--accent-hover);
     font-size: 1.25rem;
-    font-weight: 700;
+    font-weight: 500;
     letter-spacing: -.02em;
     white-space: nowrap;
 }
@@ -60,7 +60,8 @@ body.landing-page {
 }
 
 .lp-nav-links a {
-    text-decoration: none;
+    text-decoration: underline;   /* 맨 글자 링크 — 밑줄이 「누를 것」 신호(U-15) */
+    text-underline-offset: 3px;
     color: var(--muted);
     font-size: 0.9rem;
     transition: color .15s;
@@ -70,17 +71,19 @@ body.landing-page {
 
 .lp-nav-cta {
     text-decoration: none;
-    background: var(--accent);
-    color: var(--on-accent);
+    background: transparent;
+    color: var(--text);
+    border: 1px solid var(--text);
     padding: 9px 20px;
-    border-radius: var(--radius-sm);
+    border-radius: 999px;
     font-size: 0.875rem;
-    font-weight: 600;
+    font-weight: 500;
     transition: background .15s;
     white-space: nowrap;
 }
 
-.lp-nav-cta:hover { background: var(--accent-hover); }
+/* 고정 내비라 히어로 주 버튼과 늘 함께 보인다 — 외곽선(검정 알약은 한 층에 하나 · REQ-22). */
+.lp-nav-cta:hover { background: var(--sage-hover); }
 
 /* ================================================================
    1080px 메인 셸
@@ -109,7 +112,7 @@ body.landing-page {
 .lp-hero-eyebrow {
     display: inline-block;
     font-size: 0.78rem;
-    font-weight: 700;
+    font-weight: 500;
     letter-spacing: .1em;
     color: var(--accent);
     text-transform: uppercase;
@@ -129,7 +132,7 @@ body.landing-page {
     font-size: 1.1rem;
     color: var(--accent-hover);
     margin: 0 0 20px;
-    font-weight: 600;
+    font-weight: 500;
     word-break: keep-all;
     line-height: 1.5;
 }
@@ -153,45 +156,24 @@ body.landing-page {
 .lp-cta-stack .btn {
     text-decoration: none;
     text-align: center;
-    border-radius: var(--radius-sm); /* nav-cta·bottom-cta와 라운드 통일(8px) */
+    border-radius: 999px; /* nav-cta·bottom-cta와 같은 알약 */
 }
 
 /* ================================================================
-   플레이스홀더 — 비주얼 자리(실제 캡처로 교체 예정)
+   히어로 그림 — 아치 창 + 판화 한 점(.woodcut은 app.css). 면 없이 잉크 1px 선만.
+   폭은 고정(넓게 늘이면 돔이 거대해진다), 높이 단계 380/280/220은 반응형 절이 맡는다.
    ================================================================ */
 .lp-placeholder {
-    background: linear-gradient(140deg, var(--sage-soft) 0%, var(--sage-5) 100%);
-    border-radius: 20px;
+    width: min(360px, 100%);
+    box-sizing: border-box;
+    margin-inline: auto;
     min-height: 380px;
     display: flex;
-    flex-direction: column;
     align-items: center;
     justify-content: center;
-    gap: 10px;
     padding: 40px 32px;
-    border: 1px solid var(--border);
-}
-
-/* 일러스트 자리의 새싹(`🌱🌿`은 이 서비스의 핵심 은유라 이모지 규칙의 예외다 — noEmoji 가드 ALLOWED). */
-.lp-placeholder-icon {
-    font-size: 3.5rem;
-    opacity: .55;
-}
-
-.lp-placeholder-label {
-    font-weight: 600;
-    font-size: 0.9rem;
-    color: var(--accent-hover);
-    text-align: center;
-    word-break: keep-all;
-}
-
-.lp-placeholder-sub {
-    font-size: 0.8rem;
-    color: var(--muted);
-    max-width: 200px;
-    line-height: 1.5;
-    text-align: center;
+    border: 1px solid var(--text);
+    border-radius: 999px 999px 0 0;
 }
 
 /* ================================================================
@@ -208,9 +190,9 @@ body.landing-page {
     background: var(--sage-soft);
     color: var(--accent-hover);
     padding: 4px 14px;
-    border-radius: 20px;
+    border-radius: 2px;
     font-size: 0.78rem;
-    font-weight: 700;
+    font-weight: 500;
     margin-bottom: 16px;
     letter-spacing: .06em;
     text-transform: uppercase;
@@ -240,7 +222,7 @@ body.landing-page {
     gap: 6px;
     color: var(--accent);
     text-decoration: none;
-    font-weight: 600;
+    font-weight: 500;
     font-size: 0.9rem;
     transition: color .15s;
 }
@@ -270,7 +252,6 @@ body.landing-page {
     border: 1px solid var(--border);
     border-radius: var(--radius); /* 앱 .card(14px)와 통일 */
     padding: 24px;
-    box-shadow: var(--shadow);
 }
 
 .lp-grass-header {
@@ -284,7 +265,7 @@ body.landing-page {
 
 .lp-grass-title {
     font-size: 0.9rem;
-    font-weight: 700;
+    font-weight: 500;
     color: var(--text);
 }
 
@@ -293,8 +274,8 @@ body.landing-page {
     color: var(--accent-hover);
     background: var(--sage-soft);
     padding: 3px 10px;
-    border-radius: 20px;
-    font-weight: 600;
+    border-radius: 2px;
+    font-weight: 500;
 }
 
 .lp-grass-grid {
@@ -306,7 +287,7 @@ body.landing-page {
 
 .lp-grass-cell {
     aspect-ratio: 1;
-    border-radius: 3px;
+    border-radius: 2px;
     background: var(--border);
 }
 
@@ -334,7 +315,6 @@ body.landing-page {
     border: 1px solid var(--border);
     border-radius: var(--radius);
     padding: 24px;
-    box-shadow: var(--shadow);
 }
 
 .lp-social-head {
@@ -348,7 +328,7 @@ body.landing-page {
 
 .lp-social-title {
     font-size: 0.9rem;
-    font-weight: 700;
+    font-weight: 500;
     color: var(--text);
 }
 
@@ -394,7 +374,7 @@ body.landing-page {
 
 .lp-social-name {
     font-size: 0.9rem;
-    font-weight: 600;
+    font-weight: 500;
     color: var(--text);
     word-break: keep-all;
 }
@@ -432,7 +412,6 @@ body.landing-page {
     border: 1px solid var(--border);
     border-radius: var(--radius);
     padding: 24px; /* 앱 .card와 패딩 통일 */
-    box-shadow: var(--shadow);
 }
 
 .lp-feature-icon {
@@ -449,7 +428,7 @@ body.landing-page {
 
 .lp-feature-name {
     font-size: 1rem;
-    font-weight: 700;
+    font-weight: 500;
     color: var(--text);
     margin: 0 0 8px;
     word-break: keep-all;
@@ -507,20 +486,22 @@ body.landing-page {
     width: 48px;
     height: 48px;
     border-radius: 50%;
-    background: var(--accent);
-    color: var(--on-accent);
+    background: var(--card-bg);   /* 외곽선 원 — 랜딩의 검정 덩어리는 히어로 주 버튼 하나다(연결선 위에 종이로 선다) */
+    border: 1px solid var(--text);
+    color: var(--text);
     display: flex;
     align-items: center;
     justify-content: center;
+    font-family: var(--font-serif);
     font-size: 1.2rem;
-    font-weight: 700;
+    font-weight: 500;
     margin: 0 auto 20px;
     position: relative;
 }
 
 .lp-step-name {
     font-size: 1.05rem;
-    font-weight: 700;
+    font-weight: 500;
     color: var(--text);
     margin: 0 0 10px;
     word-break: keep-all;
@@ -547,9 +528,9 @@ body.landing-page {
     background: var(--sage-soft);
     color: var(--accent-hover);
     padding: 4px 16px;
-    border-radius: 20px;
+    border-radius: 2px;
     font-size: 0.78rem;
-    font-weight: 700;
+    font-weight: 500;
     margin-bottom: 24px;
     letter-spacing: .06em;
     text-transform: uppercase;
@@ -576,17 +557,18 @@ body.landing-page {
 .lp-bottom-cta-btn {
     display: inline-block;
     text-decoration: none;
-    background: var(--accent);
-    color: var(--on-accent);
+    background: transparent;
+    color: var(--text);
+    border: 1px solid var(--text);
     padding: 16px 44px;
-    border-radius: var(--radius-sm);
+    border-radius: 999px;
     font-size: 1.05rem;
-    font-weight: 700;
+    font-weight: 500;
     transition: background .15s;
     letter-spacing: -.01em;
 }
 
-.lp-bottom-cta-btn:hover { background: var(--accent-hover); }
+.lp-bottom-cta-btn:hover { background: var(--sage-hover); }
 
 /* ================================================================
    푸터
@@ -603,7 +585,8 @@ body.landing-page {
 }
 
 .lp-footer a {
-    text-decoration: none;
+    text-decoration: underline;   /* 맨 글자 링크 — 밑줄이 「누를 것」 신호(U-15) */
+    text-underline-offset: 3px;
     color: var(--muted);
     font-size: 0.85rem;
     transition: color .15s;

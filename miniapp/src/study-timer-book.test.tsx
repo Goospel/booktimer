@@ -22,6 +22,8 @@ import { graph, stubLocalStorage, userAgent } from './test-fixtures';
 vi.mock('./toss', () => ({
   REWARD_AD_GROUP_ID: '',
   watchRewardAd: vi.fn(),
+  useAdSlot: () => 'idle',
+  preloadAd: vi.fn(),
   GOAL_MET_TEMPLATE_CODE: 'test-template',
   notificationAgreementSupported: () => false,
   requestNotificationAgreement: vi.fn(),
@@ -158,7 +160,6 @@ function renderHome(mode: 'reading' | 'study', study: StudyState, selectedStudyB
         onTimerChange={() => {}}
         celebrate={false}
         onGoGoal={() => {}}
-        goalAdPending={false}
         onGoSettings={() => {}}
         onError={() => {}}
         onOpenMargin={() => {}}
@@ -391,18 +392,19 @@ describe('교체 장치 — 공부에도 [바꾸기]가 서고, 색은 토큰을
     expect(markup).toContain('dashed'); // 책 없음 점선 표지 자리
   });
 
-  it('[바꾸기] 배경이 --accentPill을 탄다 — 세이지 리터럴이면 공부 모드에 독서 색이 샌다', () => {
+  it('[바꾸기]는 강조 토큰의 외곽선 알약이다 — 리터럴이면 공부 모드에 독서 잉크가 샌다', () => {
     const markup = render(<StartToast toast={{ book: null, changed: false, mode: 'study' }} onChange={() => {}} />);
 
-    expect(markup).toContain('var(--accentPill');
+    expect(markup).toContain('border:1px solid var(--adaptiveBlue700');
   });
 
-  it('교체 시트의 현재 행 배경도 같은 토큰이다 — 두 장치가 한 색을 본다', () => {
+  it('교체 시트의 현재 행은 면 없이 ✓·글자 500이 말한다 — 행은 아래 가는 선(RULE_ROW)', () => {
     const markup = render(
       <ChangeBookSheet books={[option(1, '데미안')]} currentBookId={1} disabled={false} onPick={() => {}} onClose={() => {}} />,
     );
 
-    expect(rowTag(markup, '데미안')).toContain('var(--accentPill');
+    expect(rowTag(markup, '데미안')).toContain('border-bottom:1px solid var(--adaptiveGrey200');
+    expect(rowTag(markup, '데미안')).not.toContain('accentPill');
   });
 });
 

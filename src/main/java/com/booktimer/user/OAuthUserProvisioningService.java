@@ -89,8 +89,7 @@ public class OAuthUserProvisioningService {
                 // ⚠️ 수용한 트레이드오프: 재배정된 LOCAL 사용자는 **실제 이메일로 비밀번호 재설정을 못 받는다**.
                 // PasswordResetService는 isLocalAccount()만 보고 emailVerified를 안 봐서 미검증 LOCAL도 재설정
                 // 메일을 받아 왔는데, 재배정 후에는 findByEmail이 새 구글 계정을 집어 조용히 무발송이 된다.
-                // 그래도 계정 접근은 loginId+비밀번호 웹 로그인과 미니앱 토스 로그인→웹 로그인 코드
-                // (TossCodeLoginController)로 살아 있고, 기록이 통째로 사라지는 폐기보다 낫다.
+                // 그래도 계정 접근은 loginId+비밀번호 웹 로그인으로 살아 있고, 기록이 통째로 사라지는 폐기보다 낫다.
                 //
                 // TOSS인데 emailVerified=true면 그 사용자가 웹에서 소유를 증명한 것이라 **흡수를 유지**한다(같은 사람).
                 // 이 동작은 OAuthUserProvisioningServiceTest#provision_existingUnverifiedTossAccount_reassignedNotAbsorbed

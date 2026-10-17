@@ -4,6 +4,7 @@ import ReportModal from '../ReportModal.vue'
 import UserRow from '../UserRow.vue'
 import StoryComposer from './StoryComposer.vue'
 import { coverInitial, hasCover } from '../../profile/format'
+import { coverStyle } from '../../books/pure'
 import type { UserRowData } from '../follow'
 import { excerptForReport, formatStoryAge, type MarginEntry, type MarginResponse } from './storyFeed'
 import { deleteStory, fetchMargin, fetchStoryLikers, toggleStoryLike } from './storyApi'
@@ -112,7 +113,7 @@ onUnmounted(() => document.removeEventListener('keydown', onKeydown))
                 <template v-if="margin">
                     <img v-if="hasCover(margin.book.coverUrl)" class="shop-cover margin-book-cover"
                          :src="margin.book.coverUrl!" alt="" referrerpolicy="no-referrer">
-                    <div v-else class="shop-cover shop-cover-ph margin-book-cover" aria-hidden="true">
+                    <div v-else class="shop-cover shop-cover-ph margin-book-cover" :style="coverStyle(margin.book.title)" aria-hidden="true">
                         {{ coverInitial(margin.book.title) }}
                     </div>
                     <div class="margin-book-meta">
@@ -135,7 +136,9 @@ onUnmounted(() => document.removeEventListener('keydown', onKeydown))
 
                 <!-- 남의 여백이 비면 그냥 비었다고 말한다 — 옛 「팔로우하면 볼 수 있어요」는 2026-08-22에
                      걷었다(팔로우가 열람 권한에서 빠져 거짓말이 됐다). 미니앱 Story.tsx와 같은 문구다. -->
-                <p v-if="margin.entries.length === 0" class="margin-empty">
+                <p v-if="margin.entries.length === 0" class="margin-empty is-blank">
+                    <!-- 판화 한 점은 빈 여백에만 — 실패·불러오는 중 분기(아래)엔 없다. 모달은 자기 층이라 책장 머리 판화와 따로 센다. -->
+                    <span class="woodcut woodcut-148" aria-hidden="true"></span>
                     <template v-if="margin.self">아직 남긴 글이 없어요. 읽다가 마음에 걸린 문장을 남겨 보세요.</template>
                     <template v-else>아직 남긴 글이 없어요.</template>
                 </p>

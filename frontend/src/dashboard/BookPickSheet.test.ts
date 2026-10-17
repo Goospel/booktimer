@@ -61,3 +61,18 @@ describe('책 시트 검색 결과 — 이미 책장에 있는 책', () => {
         expect(rows[1].find('.book-sheet-add-btn').exists()).toBe(true);
     });
 });
+
+describe('책 시트 상태 배지 — 에디토리얼 3톤(PR-2)', () => {
+    test('REQ-08 · 읽는 중 책의 배지가 인라인 가는 선을 받는다', async () => {
+        vi.mocked(fetch).mockResolvedValueOnce(okJson({
+            books: [{ id: 3, title: '데미안', author: null, coverUrl: null, isbn13: null, status: 'READING', statusLabel: '읽는 중' }],
+            searchEnabled: false,
+        }));
+        const wrapper = mount(BookPickSheet, {
+            attachTo: document.body,
+            props: { mode: 'start', readingBooks: [], finishedBooks: [], wantToReadBooks: [] },
+        });
+        await vi.waitFor(() => expect(wrapper.find('.book-sheet-badge').exists()).toBe(true));
+        expect(wrapper.find('.book-sheet-badge').attributes('style')).toContain('border: 1px solid var(--border)');
+    });
+});

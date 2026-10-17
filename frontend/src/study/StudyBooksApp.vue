@@ -11,7 +11,7 @@
 // 인강 링크가 제휴 구매로 둔갑한다.
 import { computed, onMounted, ref } from 'vue';
 
-import { byline, coverColor, initialOf } from '../books/pure';
+import { byline, coverStyle, initialOf } from '../books/pure';
 import {
     addStudyBook,
     deleteStudyBook,
@@ -133,12 +133,6 @@ function remove(b: StudyBookRow) {
     run(deleteStudyBook(b.id));
 }
 
-/** 무표지 책의 표지 플레이스홀더 색 — seed는 isbn13 우선, 없으면 제목(독서 서재와 같은 결정적 매핑). */
-function coverStyle(b: { isbn13: string | null; title: string }): Record<string, string> {
-    const c = coverColor(b.isbn13 || b.title);
-    return { background: c.bg, color: c.fg };
-}
-
 function formatTime(secs: number): string {
     return `${Math.floor(secs / 3600)}시간 ${Math.floor((secs % 3600) / 60)}분`;
 }
@@ -174,7 +168,7 @@ onMounted(load);
             <ul v-if="rows.length" class="book-list search-scroll">
                 <li v-for="r in rows" :key="(r.isbn13 ?? '') + r.title" class="book-row">
                     <img v-if="r.coverUrl" class="book-cover" :src="r.coverUrl" alt="" loading="lazy" referrerpolicy="no-referrer">
-                    <span v-else class="book-cover book-cover-ph" :style="coverStyle(r)" aria-hidden="true">{{ initialOf(r.title) }}</span>
+                    <span v-else class="book-cover book-cover-ph" :style="coverStyle(r.title)" aria-hidden="true">{{ initialOf(r.title) }}</span>
                     <div class="book-meta">
                         <span class="book-title">{{ r.title }}</span>
                         <span v-if="byline(r.author, r.publisher)" class="book-byline">{{ byline(r.author, r.publisher) }}</span>
@@ -182,7 +176,7 @@ onMounted(load);
                     <div class="book-actions">
                         <!-- 응답의 owned는 독서 책장 기준 — 내 공부 서재 isbn 집합으로 다시 센다. -->
                         <span v-if="studyOwned(myIsbns, r.isbn13)" class="shelf-owned-badge">서재에 있어요</span>
-                        <button v-else type="button" class="btn-primary" :disabled="busy" @click="addRow(r)">담기</button>
+                        <button v-else type="button" class="btn-ghost" :disabled="busy" @click="addRow(r)">담기</button>
                     </div>
                 </li>
             </ul>
@@ -195,7 +189,7 @@ onMounted(load);
                     <input type="text" v-model="manualAuthor" placeholder="저자·강사 (선택)">
                     <!-- type=url은 오타를 걸러 줄 뿐이다 — javascript: 는 통과시키므로 서버 검사가 유일한 벨트다. -->
                     <input type="url" v-model="manualLink" placeholder="강의 링크 (선택, https://…)" maxlength="1000">
-                    <button type="submit" class="btn-primary" :disabled="busy">추가</button>
+                    <button type="submit" class="btn-ghost" :disabled="busy">추가</button>
                 </form>
             </details>
         </section>
@@ -207,7 +201,7 @@ onMounted(load);
             <ul v-else-if="books" class="book-list shelf-list">
                 <li v-for="b in books" :key="b.id" class="book-row">
                     <img v-if="b.coverUrl" class="book-cover" :src="b.coverUrl" alt="" loading="lazy" referrerpolicy="no-referrer">
-                    <span v-else class="book-cover book-cover-ph" :style="coverStyle(b)" aria-hidden="true">{{ initialOf(b.title) }}</span>
+                    <span v-else class="book-cover book-cover-ph" :style="coverStyle(b.title)" aria-hidden="true">{{ initialOf(b.title) }}</span>
                     <div class="book-meta">
                         <span class="book-title">{{ b.title }}</span>
                         <span v-if="b.author" class="book-author">{{ b.author }}</span>

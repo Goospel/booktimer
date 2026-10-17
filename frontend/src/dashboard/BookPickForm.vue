@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import type { BookOption } from './types'
-import { initialOf, coverColor, hasCover } from '../books/pure'
+import { initialOf, coverStyle, hasCover } from '../books/pure'
 import { defaultBookOf } from './defaultBook'
 
 // 측정 시작 진입(발견 1, §6.5) — 드롭다운을 걷어내고 기본 책을 표지 칩으로 보여준다.
@@ -30,11 +30,6 @@ const emit = defineEmits<{
 const defaultBook = computed<BookOption | null>(() =>
     props.pickedBook ?? defaultBookOf(props.readingBooks, props.recentBookId))
 
-// 칩 표지색 — BookOption엔 isbn이 없어 제목을 seed로 결정적 매핑(무표지 플레이스홀더).
-function coverStyle(b: BookOption) {
-    const c = coverColor(b.title)
-    return { background: c.bg, color: c.fg }
-}
 function startDefault() { if (!props.pending && defaultBook.value) emit('start', defaultBook.value.id) }
 function startBookless() { if (!props.pending) emit('start', null) }
 </script>
@@ -48,7 +43,7 @@ function startBookless() { if (!props.pending) emit('start', null) }
                  실제로 있어서다(직접 추가·알라딘 이미지 없음). referrerpolicy는 책장·책방과 같은 관례. -->
             <img v-if="hasCover(defaultBook.coverUrl ?? null)" class="dash-book-chip-cover"
                  :src="defaultBook.coverUrl!" alt="" loading="lazy" referrerpolicy="no-referrer">
-            <span v-else class="dash-book-chip-cover" :style="coverStyle(defaultBook)" aria-hidden="true">{{ initialOf(defaultBook.title) }}</span>
+            <span v-else class="dash-book-chip-cover" :style="coverStyle(defaultBook.title)" aria-hidden="true">{{ initialOf(defaultBook.title) }}</span>
             <span class="dash-book-chip-title" :title="defaultBook.title">{{ defaultBook.title }}</span>
             <button type="button" class="dash-book-chip-change" :disabled="pending" @click="emit('openSheet')">바꾸기</button>
         </div>

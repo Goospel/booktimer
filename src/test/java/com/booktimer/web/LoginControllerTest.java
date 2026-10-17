@@ -10,7 +10,6 @@ import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.security.web.csrf.CsrfToken;
 
 import static org.hamcrest.Matchers.containsString;
-import static org.hamcrest.Matchers.matchesPattern;
 import static org.hamcrest.Matchers.not;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
@@ -93,36 +92,14 @@ class LoginControllerTest {
     }
 
     @Test
-    @DisplayName("GET /login: 토스 코드 로그인 폼을 포함한다 — 토스로 시작한 계정의 유일한 웹 진입로라 화면에 없으면 기능이 없는 것과 같다")
-    void getLogin_hasTossCodeForm() throws Exception {
+    @DisplayName("REQ-08 · 로그인 화면에 토스 코드 로그인 칸이 없다 — 아이디·구글 로그인은 그대로다")
+    void getLogin_hasNoTossCodeForm() throws Exception {
         mockMvc.perform(get("/login"))
                 .andExpect(status().isOk())
-                .andExpect(content().string(containsString("/login/toss-code")));
-    }
-
-    @Test
-    @DisplayName("GET /login?codeError: 코드 전용 안내가 뜨고 접힘 섹션이 펼쳐진다 — 접힌 채면 사용자가 방금 실패한 입력칸을 못 찾는다")
-    void getLogin_codeError_rendersBannerAndOpensDetails() throws Exception {
-        mockMvc.perform(get("/login").param("codeError", ""))
-                .andExpect(status().isOk())
-                // 비밀번호 안내(?error)와 분리한다 — 코드 실패에 "아이디 또는 비밀번호" 안내는 오안내다.
-                .andExpect(content().string(containsString("코드가 올바르지 않거나")))
-                .andExpect(content().string(matchesPattern("(?s).*<details[^>]*\\sopen.*")));
-    }
-
-    @Test
-    @DisplayName("GET /login?codeLimited: 시도 초과 안내가 뜬다 (코드 오류와 다른 문구 — 원인이 다르다)")
-    void getLogin_codeLimited_rendersBanner() throws Exception {
-        mockMvc.perform(get("/login").param("codeLimited", ""))
-                .andExpect(status().isOk())
-                .andExpect(content().string(containsString("시도가 너무 많아요")));
-    }
-
-    @Test
-    @DisplayName("GET /login: 파라미터가 없으면 코드 섹션은 접혀 있다 — 기본 동선(아이디·구글)을 밀어내지 않는다")
-    void getLogin_noParam_detailsCollapsed() throws Exception {
-        mockMvc.perform(get("/login"))
-                .andExpect(status().isOk())
-                .andExpect(content().string(not(matchesPattern("(?s).*<details[^>]*\\sopen.*"))));
+                .andExpect(content().string(containsString("/oauth2/authorization/google"))) // 양성 짝
+                .andExpect(content().string(not(containsString("/login/toss-code"))))
+                .andExpect(content().string(not(containsString("코드로 로그인"))))
+                // D-4 (가): 웹으로 다시 온 토스 출신 사용자가 어디로 가야 하는지 안다.
+                .andExpect(content().string(containsString("토스 앱에서 시작한 계정은 토스 앱에서 이어서 써 주세요.")));
     }
 }

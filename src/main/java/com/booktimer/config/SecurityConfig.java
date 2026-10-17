@@ -60,7 +60,9 @@ public class SecurityConfig {
      * <p>매처에 두 가지를 더 얹는다:
      * <ul>
      *   <li>{@code /api/toss/**} — 로그인·가입·연결 요청은 <b>아직 토큰이 없어서</b> Bearer 헤더를 달 수 없다.
-     *       헤더 조건만 두면 이 경로가 기존 체인으로 흘러 {@code /login} 302가 되어 미니앱이 시작조차 못 한다.</li>
+     *       헤더 조건만 두면 이 경로가 기존 체인으로 흘러 {@code /login} 302가 되어 미니앱이 시작조차 못 한다.
+     *       토스 서버가 부르는 연결 끊기 콜백({@code /api/toss/unlink-callback})도 이 접두 아래라 이 체인에 걸린다
+     *       — 인증은 컨트롤러의 Basic 값 대조가 맡는다.</li>
      *   <li>{@code /api/public/**} — <b>익명 공개 계약</b>: 로그인 전 게스트가 토큰 없이 부르는 읽기 경로.
      *       기존 체인으로 흐르면 302 + CORS 헤더 없음이라 WebView가 못 읽는다. 이 접두 아래엔 <b>사용자 입력과
      *       무관하게</b> 인증 없이 보여도 되는 것만 둔다(끝 슬래시까지가 접두 — {@code /api/publicX}는 해당 없음).</li>
@@ -86,6 +88,8 @@ public class SecurityConfig {
                         // 토큰을 받기 전 단계라 인증을 요구할 수 없다. 대신 매 요청이 일회성 토스 인가코드로
                         // 신원을 다시 증명하고(서버에 pending 상태 없음), 레이트리밋이 남용을 막는다.
                         .requestMatchers("/api/toss/login", "/api/toss/register", "/api/toss/link").permitAll()
+                        // 토스 서버가 부르는 연결 끊기 콜백 — 우리 토큰이 없다. 콘솔에 등록한 Basic 값을 컨트롤러가 대조한다.
+                        .requestMatchers("/api/toss/unlink-callback").permitAll()
                         // 익명 공개 계약 — 로그인 전 게스트도 읽는다(사용자 입력과 무관한 것만 둔다).
                         .requestMatchers("/api/public/**").permitAll()
                         .anyRequest().authenticated())
@@ -111,16 +115,25 @@ public class SecurityConfig {
     }
 
     /**
-     * 미니앱 교차 출처 설정. 허용 오리진이 <b>비어 있으면 설정을 하나도 등록하지 않은 빈 소스</b>를 준다 —
-     * 어느 경로에도 매칭되지 않으므로 CORS 헤더가 붙지 않는다. 실제 WebView 오리진은 PR-0 실측으로 확정되므로,
+     * 미니앱 교차 출처 설정. 허용 오리진이 <b>비어 있으면 연결 끊기 콜백 외엔 설정을 등록하지 않는다</b> —
+     * 나머지 경로엔 매칭되지 않으므로 CORS 헤더가 붙지 않는다. 실제 WebView 오리진은 PR-0 실측으로 확정되므로,
      * 그전까지는 교차 출처를 열지 않는 것이 안전 기본값이다.
      *
      * <p>{@code allowCredentials}는 false다 — 미니앱은 쿠키를 쓰지 않고 Bearer 헤더로만 인증한다(설계 §2.1).
      */
-    private static CorsConfigurationSource miniappCorsSource(MiniappProperties properties) {
+    static CorsConfigurationSource miniappCorsSource(MiniappProperties properties) {
         UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
+        // 연결 끊기 콜백은 허용 목록과 무관하게 어느 출처든 받는다 — 앱인토스 콘솔 「테스트하기」가 브라우저에서
+        // 직접 fetch한다(2026-10-14 실측: 프리플라이트 403 → 「Failed to fetch」). 보안은 컨트롤러의 Basic 대조가 맡는다.
+        // ⚠️ /api/** 보다 먼저 등록한다 — 이 소스는 등록 순서(LinkedHashMap)대로 첫 매치를 쓴다.
+        CorsConfiguration unlinkCallback = new CorsConfiguration();
+        unlinkCallback.addAllowedOrigin("*");
+        unlinkCallback.setAllowedMethods(List.of("POST"));
+        unlinkCallback.setAllowedHeaders(List.of("Authorization", "Content-Type"));
+        unlinkCallback.setAllowCredentials(false);
+        source.registerCorsConfiguration("/api/toss/unlink-callback", unlinkCallback);
         if (properties.getAllowedOrigins().isEmpty()) {
-            return source; // 등록된 설정 없음 = CORS 헤더 없음(동일 출처 웹 호출에는 아무 영향 없음)
+            return source; // 콜백 외 등록 없음 = 다른 경로엔 CORS 헤더 없음(동일 출처 웹 호출에는 아무 영향 없음)
         }
         CorsConfiguration config = new CorsConfiguration();
         config.setAllowedOrigins(properties.getAllowedOrigins());
@@ -159,12 +172,6 @@ public class SecurityConfig {
                         // ads.txt(AdSense 소유권·수익 보호) + robots.txt(크롤 지시): 크롤러가 비인증으로 읽어야 하는
                         // 공개 정적 파일. default-deny라 명시 안 하면 로그인으로 302 튕겨 크롤러에게 모호한 신호가 된다.
                         .requestMatchers("/ads.txt", "/robots.txt").permitAll()
-                        // /login/toss-code: 토스 미니앱이 발급한 일회용 코드로 세션을 여는 경로. 로그인
-                        // '전'이라 당연히 공개여야 하고(막으면 코드를 넣을 방법 자체가 없다), /login은 정확
-                        // 매칭이라 하위 경로가 자동으로 딸려오지 않는다. 코드 자체가 자격이라 공개여도
-                        // 안전하다(추측 불가·일회용·TTL 5분 + IP 상한). ⚠️ CSRF 예외로는 두지 않는다 —
-                        // 예외로 두면 다른 사이트가 사용자의 브라우저로 코드를 대신 제출할 수 있다.
-                        .requestMatchers("/login/toss-code").permitAll()
                         // OAuth2 인가요청·콜백 엔드포인트는 미인증 상태에서 접근 가능해야 한다.
                         .requestMatchers("/oauth2/**", "/login/oauth2/**").permitAll()
                         // SES 반송·불만 SNS 웹훅 — 외부(AWS SNS)가 POST하는 공개 엔드포인트. 로그인 대신

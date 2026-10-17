@@ -22,10 +22,6 @@ describe('.env.production', () => {
     expect(envProduction).toMatch(/^VITE_REWARD_AD_GROUP_ID=ait\.v2\.live\.b6bbeff2c57e4777\s*$/m);
   });
 
-  it('전면 광고 그룹 ID를 굽는다 — 리워드와 다른 그룹이라 섞이면 정산·성과가 어긋난다', () => {
-    expect(envProduction).toMatch(/^VITE_INTERSTITIAL_AD_GROUP_ID=ait\.v2\.live\.32f30171507d4dd1\s*$/m);
-  });
-
   it('성향 분석 광고 그룹 ID를 굽는다 — 비면 책방의 성향 광고 버튼이 통째로 사라진다', () => {
     expect(envProduction).toMatch(/^VITE_PERSONALITY_AD_GROUP_ID=ait\.v2\.live\.75558b51a0444cc7\s*$/m);
   });
