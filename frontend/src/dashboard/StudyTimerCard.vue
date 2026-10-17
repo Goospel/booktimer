@@ -3,11 +3,12 @@ import { ref, watch, computed, nextTick, onUnmounted, useId } from 'vue'
 import { useReadingTimer } from './useReadingTimer'
 import { fmtMSS, goalLabel } from './timerProgress'
 import { sessionGoalView, minutesToSessionGoal } from './sessionGoal'
-import { initialOf, coverColor, hasCover } from '../books/pure'
+import { initialOf, coverStyle, hasCover } from '../books/pure'
 import { defaultStudyBookOf } from './defaultBook'
 import type { StudyBookRow } from '../study/api'
 import type { AwayInterval } from './studyAway'
 import { AWAY_GRACE_MS } from './studyAway'
+import ClockDigits from '../shared/ClockDigits.vue'
 
 const props = withDefaults(defineProps<{
     /** 오늘 공부한 초(완료 세션 합) — 측정 중 몫은 elapsed로 얹는다(독서와 같은 분업). */
@@ -51,11 +52,6 @@ const emit = defineEmits<{
 const defaultBook = computed<StudyBookRow | null>(() =>
     defaultStudyBookOf(props.books, props.recentBookId, props.pickedBook))
 
-// 칩 표지색 — 표지 없는 책의 결정적 플레이스홀더(독서 칩과 같은 seed 규칙).
-function coverStyle(b: StudyBookRow) {
-    const c = coverColor(b.isbn13 || b.title)
-    return { background: c.bg, color: c.fg }
-}
 
 // props를 ref로 래핑해 composable에 전달(TimerCard와 같은 3줄). 공부엔 부채가 없어 base는 0 —
 // remainingNow는 안 쓰고 elapsed(벽시계 경과)만 쓴다.
@@ -123,19 +119,19 @@ defineExpose({ closeEdit })
         <div v-if="hasActiveSession" class="focus-bar" data-testid="focus-bar">
             <span class="dash-pill dash-pill-pulse"><span class="dash-pulse-dot"></span>측정 중</span>
             <!-- .vt-clock은 두 상태에 **하나씩만** — 둘 다 그리면 전환 이름이 겹쳐 브라우저가 전환을 통째로 건너뛴다. -->
-            <span class="dash-timer-num vt-clock" data-testid="focus-today">{{ fmtMSS(todaySeconds + counted) }}</span>
+            <span class="dash-timer-num vt-clock" data-testid="focus-today"><ClockDigits :text="fmtMSS(todaySeconds + counted)" /></span>
             <div class="focus-kv" data-testid="focus-session">
                 <span class="dash-kv-k">이번 측정</span>
-                <span class="dash-kv-v dash-kv-v-num">{{ fmtMSS(counted) }}</span>
+                <span class="dash-kv-v dash-kv-v-num"><ClockDigits :text="fmtMSS(counted)" /></span>
             </div>
             <!-- 회당 시간이 없는 책·책 없이 = 스톱워치라 이 칸이 없다. 닿아도 측정은 계속된다(색·문구만 바뀐다). -->
             <div v-if="view.kind === 'countdown'" class="focus-kv dash-session-line">
                 <span class="dash-kv-k">남은 시간 · 회당 {{ goalLabel(view.goal) }}</span>
-                <span class="dash-kv-v dash-kv-v-num">{{ fmtMSS(view.remaining) }}</span>
+                <span class="dash-kv-v dash-kv-v-num"><ClockDigits :text="fmtMSS(view.remaining)" /></span>
             </div>
             <div v-else-if="view.kind === 'reached'" class="focus-kv dash-session-line is-reached">
                 <span class="dash-kv-k">회당 {{ goalLabel(view.goal) }} 달성</span>
-                <span class="dash-kv-v dash-kv-v-num">+{{ fmtMSS(view.overflow) }}</span>
+                <span class="dash-kv-v dash-kv-v-num"><ClockDigits :text="`+${fmtMSS(view.overflow)}`" /></span>
             </div>
             <div class="focus-kv is-book" data-testid="focus-book">
                 <span class="dash-kv-k">지금 공부하는 책</span>
@@ -161,7 +157,7 @@ defineExpose({ closeEdit })
                 <input ref="goalInput" type="number" min="10" max="360" step="1" v-model.number="goalMinutes"
                        aria-label="이 책 회당 시간(분)"> 분
             </label>
-            <button type="submit" class="dash-btn-fill" :disabled="savingSessionGoal">
+            <button type="submit" class="dash-btn-outline" :disabled="savingSessionGoal">
                 {{ savingSessionGoal ? '저장하는 중…' : '저장' }}
             </button>
             <button type="button" class="dash-btn-link dash-bookless" @click="editing = false">취소</button>
@@ -183,7 +179,7 @@ defineExpose({ closeEdit })
         <template v-if="!hasActiveSession">
         <div class="dash-timer-left">
             <span class="dash-pill">오늘 공부한 시간</span>
-            <div class="dash-timer-num vt-clock">{{ fmtMSS(todaySeconds + counted) }}</div>
+            <div class="dash-timer-num vt-clock" :class="{ 'is-long': fmtMSS(todaySeconds + counted).length > 5 }"><ClockDigits :text="fmtMSS(todaySeconds + counted)" /></div>
         </div>
 
         <div class="dash-timer-right">
@@ -197,7 +193,7 @@ defineExpose({ closeEdit })
                     <div class="dash-book-chip">
                         <img v-if="hasCover(defaultBook.coverUrl)" class="dash-book-chip-cover"
                              :src="defaultBook.coverUrl!" alt="" loading="lazy" referrerpolicy="no-referrer">
-                        <span v-else class="dash-book-chip-cover" :style="coverStyle(defaultBook)" aria-hidden="true">{{ initialOf(defaultBook.title) }}</span>
+                        <span v-else class="dash-book-chip-cover" :style="coverStyle(defaultBook.title)" aria-hidden="true">{{ initialOf(defaultBook.title) }}</span>
                         <span class="dash-book-chip-title" :title="defaultBook.title">{{ defaultBook.title }}</span>
                         <button type="button" class="dash-book-chip-change" :disabled="starting" @click="emit('openSheet')">바꾸기</button>
                     </div>
@@ -228,7 +224,7 @@ defineExpose({ closeEdit })
                         <input ref="goalInput" type="number" min="10" max="360" step="1" v-model.number="goalMinutes"
                                aria-label="이 책 회당 시간(분)"> 분
                     </label>
-                    <button type="submit" class="dash-btn-fill" :disabled="savingSessionGoal">
+                    <button type="submit" class="dash-btn-outline" :disabled="savingSessionGoal">
                         {{ savingSessionGoal ? '저장하는 중…' : '저장' }}
                     </button>
                     <!-- 보조 둘은 「책 없이 시작」과 같은 조용한 링크 관용구(.dash-bookless). -->
@@ -251,6 +247,8 @@ defineExpose({ closeEdit })
                     <!-- 이름은 제목만, 설명은 따로 — label 통째가 이름이면 긴 문장이 체크박스 이름이 된다. -->
                     <input type="checkbox" :checked="awayOn" :aria-labelledby="`${prefId}-t`" :aria-describedby="`${prefId}-d`"
                            @change="emit('setAwayOn', ($event.target as HTMLInputElement).checked)">
+                    <!-- 그림 상자 — 설정 체크박스와 같은 문법(진짜 input은 숨긴다). input 바로 뒤 형제여야 :checked ~ 가 닿는다. -->
+                    <span class="set-check-box" aria-hidden="true"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg></span>
                     <span>
                         <span :id="`${prefId}-t`" class="dash-away-pref-title">자리 비우면 멈추기</span>
                         <span :id="`${prefId}-d`" class="dash-away-pref-desc">다른 탭이나 앱에 {{ AWAY_GRACE_MS / 1000 }}초 넘게 가 있으면 그동안은 재지 않아요. 측정 중엔 화면을 켜 둬요.</span>

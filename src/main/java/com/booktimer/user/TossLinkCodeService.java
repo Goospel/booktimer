@@ -65,25 +65,9 @@ public class TossLinkCodeService {
     }
 
     /**
-     * <b>토스 → 웹</b> 로그인 코드를 발급한다 — 미니앱(Bearer 인증)에서 발급해 PC 웹 로그인 화면에 입력하면
-     * 그 계정의 세션이 열린다. 토스에서 시작한 계정은 비밀번호가 없어 폼 로그인이 원리상 불가라 이 경로가
-     * 유일한 웹 진입로다.
-     *
-     * <p>발급 조건은 {@link #issue}의 <b>거울</b>이다 — 토스 신원이 붙어 있어야 한다. Bearer 토큰은
-     * {@code /api/toss/login·register·link}에서만 나오므로 실질적으로 항상 참이지만, 두 발급 조건이
-     * 상호 배타임을 코드가 보증하게 해 둔다(그래서 한 사용자가 두 목적의 코드를 동시에 가질 수 없고,
-     * 아래 "기존 미사용 코드 전부 무효화"가 목적을 가리지 않아도 된다).
-     *
-     * @throws TossLinkConflictException 토스에 연결되지 않은 계정인 경우
+     * 무효화 + 생성. 발급은 LINK_TOSS 하나다 — 토스 → 웹 로그인 코드({@code WEB_LOGIN}) 발급은 2026-10에
+     * 폐지했다(서비스 오픈 정책 §2-2). 무효화는 목적을 가리지 않아, 옛 {@code WEB_LOGIN} 미사용 행도 함께 닫는다.
      */
-    public String issueWebLogin(User user) {
-        if (user.getTossUserKey() == null) {
-            throw new TossLinkConflictException("토스 앱에 연결되지 않은 계정입니다");
-        }
-        return issue(user, TossLinkCode.Purpose.WEB_LOGIN);
-    }
-
-    /** 무효화 + 생성 공통 — 두 발급 경로가 목적만 달리해 같은 규칙(항상 하나만 유효)을 쓴다. */
     private String issue(User user, TossLinkCode.Purpose purpose) {
         Instant now = clock.instant();
         List<TossLinkCode> previous = repository.findByUserAndUsedAtIsNull(user);

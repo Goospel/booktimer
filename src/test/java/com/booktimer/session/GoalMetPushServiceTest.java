@@ -12,7 +12,11 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.TransactionDefinition;
+import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionTemplate;
 
 import java.time.Instant;
 import java.time.LocalDate;
@@ -22,6 +26,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
@@ -60,6 +65,7 @@ class GoalMetPushServiceTest {
     @Autowired MutableClock clock;
 
     @Autowired TossMessengerClient messengerClient;
+    @Autowired PlatformTransactionManager txManager;
 
     private MutableClock clock() {
         return clock;
@@ -249,5 +255,42 @@ class GoalMetPushServiceTest {
 
         verify(messengerClient, never()).sendMessage(anyString(), anyString(), any());
         assertThat(pushedOn(u)).isNull();
+    }
+
+    @Test
+    @Transactional(propagation = Propagation.NOT_SUPPORTED) // 클래스의 롤백 트랜잭션을 끈다 — 두 트랜잭션이 실제로 커밋해야 경합이 재현된다
+    @DisplayName("REQ-04 · 발송 도중 다른 트랜잭션이 커밋한 DM 제재를 배치의 마커 저장이 되돌리지 않는다")
+    void concurrentChatBan_survivesGoalMetMarkerSave() {
+        User u = tossUser("g-dyn@booktimer.com");             // NOT_SUPPORTED라 바로 커밋된다
+        Instant banAt = NOW.minusSeconds(60);
+        try {
+            completed(u, NOW.minusSeconds(7200), 3000);
+            active(u, NOW.minusSeconds(700));                  // 합 3700 ≥ 목표 3600
+            TransactionTemplate other = new TransactionTemplate(txManager);
+            other.setPropagationBehavior(TransactionDefinition.PROPAGATION_REQUIRES_NEW);
+            doAnswer(inv -> {                                  // 토스 HTTP 도중 = 운영자가 정지를 커밋
+                other.executeWithoutResult(s -> {
+                    User fresh = userRepository.findById(u.getId()).orElseThrow();
+                    fresh.banChat(banAt);
+                    userRepository.save(fresh);
+                });
+                return true;
+            }).when(messengerClient).sendMessage(eq("uk-g-dyn@booktimer.com"), eq("DAILY_GOAL_MET"), any());
+
+            pushService.detectAndPush();
+
+            verify(messengerClient, times(1)).sendMessage(eq("uk-g-dyn@booktimer.com"), eq("DAILY_GOAL_MET"), any());
+            User after = userRepository.findById(u.getId()).orElseThrow();
+            assertThat(after.getGoalMetPushedOn())
+                    .as("마커 저장이 실제로 일어나야 한다 — 아니면 이 테스트는 빈 통과다").isEqualTo(today());
+            assertThat(after.getChatBannedAt())
+                    .as("배치의 옛 스냅샷이 제재를 지우면 안 된다").isEqualTo(banAt);
+        } finally {
+            new TransactionTemplate(txManager).executeWithoutResult(s -> { // 공유 세계에 커밋된 행을 남기지 않는다
+                sessionRepository.deleteByUser(u);
+                timerRepository.deleteByUser(u);
+                userRepository.deleteById(u.getId());
+            });
+        }
     }
 }

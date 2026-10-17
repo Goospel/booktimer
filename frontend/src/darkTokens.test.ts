@@ -48,7 +48,12 @@ interface Rule { selector: string; body: string; at: number; group: string[] }
  * 괄호 안 콤마(`:is(a, b)`)는 쪼개지 않는다. (Java `SideRailsTemplateTest.declarationsOf`와 같은 꼴.)
  */
 function rules(file = APP_CSS): Rule[] {
-    const css = readFileSync(file, 'utf8').replace(/\/\*[\s\S]*?\*\//g, '');
+    return parse(readFileSync(file, 'utf8'));
+}
+
+/** `rules()`의 몸통 — 파일 대신 문자열을 받는다(음성 대조에 일부러 틀린 CSS를 넣으려고). */
+function parse(text: string): Rule[] {
+    const css = text.replace(/\/\*[\s\S]*?\*\//g, '');
     const out: Rule[] = [];
     const re = /([^{}]+)\{([^{}]*)\}/g;
     let m: RegExpExecArray | null;
@@ -107,8 +112,10 @@ function declaration(selector: string, property: string): string | null {
  * 그대로 두려고</b> 갈라 둔 것이다 — 「닮았으니 합치자」로 이 숫자를 내리는 순간 라이트가
  * 조용히 다른 화면이 된다.
  */
-const LIGHT_FLOOR = 119;
-const STUDY_FLOOR = 15;
+// 에디토리얼(2026-10 PR-2): 119 → 114 — 질감·그림자 토큰 5개(`--shadow`·`--pencil-frame`·`--pencil-frame-soft`·`--grain`·`--fiber`)를
+// 지웠다. 공부 블록 15 → 10 — 면·선 5개(`--sage-soft` 등)는 공부에서도 낮 값을 상속하고 강조 6 + 잔디 4만 갈아 끼운다(설계 §5-4).
+const LIGHT_FLOOR = 114;
+const STUDY_FLOOR = 10;
 
 describe('다크 토큰 짝 맞춤', () => {
     const light = colorTokens(LIGHT_SELECTOR);
@@ -205,19 +212,6 @@ describe('독서등 — 토큰 복제 0', () => {
         expect(light.filter((t) => !names(DARK_SELECTOR, false).includes(t))).toEqual([]);
     });
 
-    // 다크 섹션의 `.is-study` 리터럴 규칙(0,4,0)은 독서등 밑 카드에도 닿는다 — 라이트 짝 목록에 `.lamp-page` 범위(0,4,1)가
-    // 없으면 합쳐진 카드의 그 자리만 다크 리터럴(숫자 #AFC4D2 등)로 칠해진다(리뷰 Minor-3).
-    it('다크 `.is-study` 리터럴 규칙마다 라이트 짝 목록에 `.lamp-page` 범위가 있다', () => {
-        const { start, end } = darkSection();
-        const prefix = `${DARK_SELECTOR} .is-study `;
-        const tails = rules()
-            .filter((r) => r.at > start && r.at < end && r.selector.startsWith(prefix))
-            .map((r) => r.selector.slice(prefix.length));
-        expect(tails.length).toBeGreaterThanOrEqual(5);   // 양성 대조 — pill·grass-streak·track·outline hover·숫자·btn-primary hover
-        const missing = tails.filter((t) => !groupOf(`.is-study ${t}`).includes(`body.study-lamp .lamp-page .is-study ${t}`));
-        expect(missing).toEqual([]);
-    });
-
     // 합쳐진 카드 투명화는 다크 `:root[data-theme="dark"] .dash-timer-hero.is-study`(0,4,0, 파일 끝)를 이겨야 한다 —
     // `body`가 빠지면 특이도가 같아 파일 순서로 다크가 이겨 다크 테마 막대만 #222A30으로 남는다(실 브라우저 실측).
     it('합쳐진 카드 투명화 규칙은 body로 시작한다(특이도 0,4,1)', () => {
@@ -262,8 +256,8 @@ describe('color-scheme 선언 — 브라우저 강제 다크 차단', () => {
  * 명시한다(숫자만 올리면 무엇이 늘었는지 알 수 없다).
  */
 const ALLOWED = [
-    // 그림자는 어느 테마에서도 검정·흑갈색이다. 다크 위의 검은 그림자는 무해하다.
-    { why: 'box-shadow', match: (sel: string, prop: string) => prop === 'box-shadow' },
+    // (옛 `box-shadow` 허용은 에디토리얼 PR-2에서 걷었다 — 그림자는 흐림 0 링만 남고 링은 토큰만 쓴다.
+    //  그림자에 색 리터럴이 다시 들어오면 이제 새는 것으로 잡힌다.)
     // 공부 잉크(파랑)의 라이트 원본. 다크판은 `:root[data-theme="dark"] .is-study` 블록이
     // 따로 그리고, 그 짝은 위 「공부 모드 토큰 짝 맞춤」이 지킨다.
     // 세로 바의 공부 모드(#side-rails[data-mode="study"])는 `.is-study`와 같은 토큰 블록의 셀렉터 목록에 끼어 있다
@@ -371,7 +365,6 @@ describe('raw 색 래칫 — 토큰을 안 거친 색 리터럴', () => {
 
     it('허용목록이 실제로 색을 잡고 있다 — 빈 허용목록이면 래칫이 무엇을 봐준 건지 알 수 없다 (양성 대조군)', () => {
         const byWhy = (why: string) => all.filter((d) => d.allowed === why).length;
-        expect(byWhy('box-shadow')).toBeGreaterThanOrEqual(25);
         expect(byWhy('.is-study 스코프')).toBeGreaterThanOrEqual(10);
         expect(byWhy('.story-bg-* 콘텐츠 프리셋')).toBeGreaterThanOrEqual(10);
     });
@@ -449,7 +442,8 @@ describe('--on-accent 대비 (accent 채움 위 글자)', () => {
     });
 
     it('accent 채움 규칙이 그 토큰을 실제로 쓴다 — 토큰만 만들고 안 쓰면 화면은 그대로다', () => {
-        const users = ['.search-chip.active', '.hist-tab.active', '.settings-page .set-btn-save'];
+        // 에디토리얼(PR-2): 고른 칩·탭은 채우지 않고 설정 저장은 외곽선이 됐다 — 채움 위 글자를 쓰는 건 검정 알약 3규칙이다.
+        const users = ['.btn-primary', '.dash-btn-fill', '.auth-page .auth-btn-primary'];
         const map = new Map(rules().map((r) => [r.selector, r.body]));
         for (const sel of users) {
             expect(map.get(sel), `${sel} 규칙이 사라졌다 — 셀렉터가 바뀌면 이 가드는 조용히 죽는다`).toBeDefined();
@@ -469,5 +463,219 @@ describe('인쇄는 항상 라이트', () => {
         // 가드와 다크 블록 사이에 닫는 `}`만 있고 다른 `@media`가 끼지 않았는지 — 여는 중괄호 이후 구간에
         // 다른 at-rule이 없어야 한다.
         expect(css.slice(guard, at)).not.toMatch(/@media(?! not print)/);
+    });
+});
+
+/**
+ * 에디토리얼 팔레트(2026-10 PR-2) — 토큰 <b>이름은 그대로, 값만</b> 역할 군으로 모은다(설계 §5-2 낮 · §5-3 밤 · §5-4 공부).
+ *
+ * <p>군 표를 테스트 상수로 박는다. 단언이 둘이다 — ① 군 안 <b>모든 이름</b>이 그 군의 값이다(변종 하나만 옛 값으로
+ * 남는 것을 잡는다) ② 군 표의 이름 합집합이 블록의 색 토큰 전체와 <b>정확히 같다</b>(어느 군에도 안 든 토큰이 새로 생기거나
+ * 표에서 빠지면 운다). 값은 대소문자·공백만 정규화해 비교한다.
+ */
+const norm = (v: string) => v.replace(/\s+/g, '').toUpperCase();
+type Groups = Record<string, [string, string[]]>;
+const range = (base: string, from: number, to: number) => Array.from({ length: to - from + 1 }, (_, i) => `${base}-${from + i}`);
+
+const SHARED_NAMES = {
+    S: ['--bg', '--card-bg', '--surface', '--paper-1', '--paper-1-2', '--paper-1-3', '--paper-4', '--paper-4-2'],
+    F: ['--sage-soft', '--sage-soft-2', '--paper-2', '--paper-3', '--paper-2-2', '--paper-2-3', '--info-soft', ...range('--info-soft', 2, 4),
+        '--ok-soft', ...range('--ok-soft', 2, 5), '--warn-bg', ...range('--warn-bg', 2, 4)],
+    H: ['--sage-hover', '--sage-hover-2'],
+    L: ['--border', ...range('--border', 2, 4), '--line-1', ...range('--line-1', 2, 7), '--line-2', '--line-2-2', '--sage-line', '--sage-line-2',
+        '--ok-line', '--ok-line-2', '--ok-line-3', '--warn-border', ...range('--warn-border', 2, 4), '--nav-hover-border', '--nav-hover-border-2'],
+    I: ['--text', '--accent', '--accent-hover', '--accent-fill', '--accent-hover-2', '--ok', '--ok-fill', '--ok-ink', '--ok-ink-2', '--info-ink',
+        '--warn-fg', ...range('--warn-fg', 2, 5)],
+    T: ['--ink-2'],
+    M: ['--muted', '--muted-2', '--muted-3', '--neutral-3-2', '--neutral-3-3'],
+    N1: ['--neutral-1', '--sage-1', '--sage-2', '--sage-3', '--sage-4'],
+    N2: ['--neutral-2', '--sage-5', '--sage-6'],
+    N3: ['--neutral-3', '--sage-7', '--sage-8', '--graphite'],
+    O: ['--on-accent'],
+    R1: ['--danger', '--danger-ink', '--danger-ink-2'],
+    R2: ['--danger-hover', '--danger-ink-deep', ...range('--danger-ink-deep', 2, 4)],
+    R3: ['--danger-soft', ...range('--danger-soft', 2, 5)],
+    R4: ['--danger-line', ...range('--danger-line', 2, 4)],
+    G0: ['--grass-0'], G1: ['--grass-1'], G2: ['--grass-2'], G3: ['--grass-3'], G4: ['--grass-4'],
+    XF: ['--focus-ring'],
+};
+const DAY: Groups = {
+    S: ['#F5F0E6', SHARED_NAMES.S], F: ['#ECE5D8', SHARED_NAMES.F], H: ['rgba(29, 27, 24, .06)', SHARED_NAMES.H],
+    L: ['#D9D1C3', SHARED_NAMES.L], I: ['#1D1B18', SHARED_NAMES.I], T: ['#4A453E', SHARED_NAMES.T], M: ['#645E54', SHARED_NAMES.M],
+    N1: ['#B9AF9F', SHARED_NAMES.N1], N2: ['#9C9182', SHARED_NAMES.N2], N3: ['#6F675B', SHARED_NAMES.N3], O: ['#F5F0E6', SHARED_NAMES.O],
+    R1: ['#A8322A', SHARED_NAMES.R1], R2: ['#8C2A23', SHARED_NAMES.R2], R3: ['#F6E7E4', SHARED_NAMES.R3], R4: ['#E4C6C2', SHARED_NAMES.R4],
+    G0: ['#E6DFD2', SHARED_NAMES.G0], G1: ['#CDC3B2', SHARED_NAMES.G1], G2: ['#A29785', SHARED_NAMES.G2], G3: ['#625A4F', SHARED_NAMES.G3], G4: ['#1D1B18', SHARED_NAMES.G4],
+    XF: ['rgba(29, 27, 24, .5)', SHARED_NAMES.XF],
+    XS: ['rgba(29, 27, 24, .45)', ['--scrim', '--scrim-soft', '--scrim-2', '--scrim-3']],
+};
+const NIGHT: Groups = {
+    S: ['#1C1A17', SHARED_NAMES.S], F: ['#2C2925', SHARED_NAMES.F], H: ['rgba(242, 237, 227, .08)', SHARED_NAMES.H],
+    L: ['#3A3630', SHARED_NAMES.L], I: ['#F2EDE3', SHARED_NAMES.I], T: ['#D6CFC2', SHARED_NAMES.T], M: ['#A39B8E', SHARED_NAMES.M],
+    N1: ['#4F4A42', SHARED_NAMES.N1], N2: ['#7A7367', SHARED_NAMES.N2], N3: ['#A39B8E', SHARED_NAMES.N3], O: ['#1C1A17', SHARED_NAMES.O],
+    R1: ['#E5766B', SHARED_NAMES.R1], R2: ['#F0918A', SHARED_NAMES.R2], R3: ['#33201D', SHARED_NAMES.R3], R4: ['#5A3A34', SHARED_NAMES.R4],
+    G0: ['#2C2925', SHARED_NAMES.G0], G1: ['#4F4A42', SHARED_NAMES.G1], G2: ['#7A7367', SHARED_NAMES.G2], G3: ['#A39B8E', SHARED_NAMES.G3], G4: ['#F2EDE3', SHARED_NAMES.G4],
+    XF: ['rgba(242, 237, 227, .5)', SHARED_NAMES.XF],
+    XS: ['rgba(0, 0, 0, .62)', ['--scrim', '--scrim-2', '--scrim-3']],
+    XS2: ['rgba(0, 0, 0, .5)', ['--scrim-soft']],
+};
+const STUDY_ACCENT = ['--accent', '--accent-hover', '--ok', '--accent-fill', '--accent-hover-2', '--ok-fill'];
+const STUDY_DAY: Groups = {
+    A: ['#2B4A6F', STUDY_ACCENT],
+    G1: ['#B8C3D1', ['--grass-1']], G2: ['#8598B0', ['--grass-2']], G3: ['#4F6A8B', ['--grass-3']], G4: ['#2B4A6F', ['--grass-4']],
+};
+const STUDY_NIGHT: Groups = {
+    A: ['#8FA9BE', STUDY_ACCENT],
+    G1: ['#34495A', ['--grass-1']], G2: ['#4A6A80', ['--grass-2']], G3: ['#6F92AA', ['--grass-3']], G4: ['#A0BED0', ['--grass-4']],
+};
+
+function groupMismatches(selector: string, groups: Groups): string[] {
+    const out: string[] = [];
+    for (const [g, [value, names]] of Object.entries(groups)) {
+        for (const n of names) {
+            let v: string;
+            try { v = tokenValue(selector, n); } catch { out.push(`${g} ${n}: 없음`); continue; }
+            if (norm(v) !== norm(value)) out.push(`${g} ${n}: ${v} ≠ ${value}`);
+        }
+    }
+    return out;
+}
+const groupNames = (groups: Groups) => Object.values(groups).flatMap(([, names]) => names).sort();
+
+describe('에디토리얼 팔레트 — 이름 유지 · 값만 (PR-2)', () => {
+    it('REQ-01 · 낮 토큰이 에디토리얼 값이다(군 안 모든 이름 · 군 밖 토큰 0)', () => {
+        expect(groupMismatches(LIGHT_SELECTOR, DAY)).toEqual([]);
+        expect(colorTokens(LIGHT_SELECTOR)).toEqual(groupNames(DAY));
+        // 별칭 호버 면 — 낮·밤 둘 다 같은 이름을 가리킨다(독서등은 body에서 다시 깔아야 따라온다 — 위 별칭 단언).
+        expect(tokenValue(LIGHT_SELECTOR, '--nav-hover-bg')).toBe('var(--sage-hover)');
+        expect(tokenValue(LIGHT_SELECTOR, '--font-serif')).toMatch(/^'Noto Serif KR'/);
+    });
+
+    it('REQ-11 · 다크는 밤 책상 값이다', () => {
+        expect(groupMismatches(DARK_SELECTOR, NIGHT)).toEqual([]);
+        expect(colorTokens(DARK_SELECTOR)).toEqual(groupNames(NIGHT));
+        expect(tokenValue(DARK_SELECTOR, '--nav-hover-bg')).toBe('var(--sage-hover)');
+    });
+});
+
+/** 합성색(알파 칠을 바탕 위에 얹은 결과) — 포커스 링·호버 면처럼 반투명 토큰의 실제 대비를 재려고. */
+function over(rgba: string, bgHex: string): string {
+    const m = /rgba\(\s*(\d+),\s*(\d+),\s*(\d+),\s*([\d.]+)\s*\)/.exec(rgba);
+    if (!m) throw new Error(`rgba 아님: ${rgba}`);
+    const a = Number(m[4]);
+    const bg = hexToRgb(bgHex);
+    const mix = [1, 2, 3].map((i, k) => Math.round(Number(m[i]) * a + bg[k] * (1 - a)));
+    return '#' + mix.map((v) => v.toString(16).padStart(2, '0')).join('');
+}
+
+describe('에디토리얼 대비 — 토큰 값으로 계산 (PR-2)', () => {
+    it('계측기 자기검증 — 검정/흰색 = 21.00', () => {
+        expect(contrast('#000000', '#FFFFFF')).toBeCloseTo(21, 2);
+    });
+
+    it('REQ-02 · 글자·바탕 쌍이 4.5 이상(낮·밤·공부·위험)', () => {
+        const pairs: Array<[string, string, string]> = [];
+        for (const sel of [LIGHT_SELECTOR, DARK_SELECTOR]) {
+            const t = (n: string) => tokenValue(sel, n);
+            pairs.push(
+                [`${sel} text/bg`, t('--text'), t('--bg')], [`${sel} ink-2/bg`, t('--ink-2'), t('--bg')],
+                [`${sel} muted/bg`, t('--muted'), t('--bg')], [`${sel} muted/sage-soft`, t('--muted'), t('--sage-soft')],
+                [`${sel} on-accent/accent-fill`, t('--on-accent'), t('--accent-fill')],
+                [`${sel} danger/bg`, t('--danger'), t('--bg')], [`${sel} danger-ink-deep/bg`, t('--danger-ink-deep'), t('--bg')],
+                [`${sel} danger/danger-soft`, t('--danger'), t('--danger-soft')],
+            );
+        }
+        pairs.push(
+            ['공부 낮 accent/bg', tokenValue('.is-study', '--accent'), tokenValue(LIGHT_SELECTOR, '--bg')],
+            ['공부 낮 on-accent/accent-fill', tokenValue(LIGHT_SELECTOR, '--on-accent'), tokenValue('.is-study', '--accent-fill')],
+            ['공부 밤 accent/bg', tokenValue(`${DARK_SELECTOR} .is-study`, '--accent'), tokenValue(DARK_SELECTOR, '--bg')],
+            ['공부 밤 on-accent/accent-fill', tokenValue(DARK_SELECTOR, '--on-accent'), tokenValue(`${DARK_SELECTOR} .is-study`, '--accent-fill')],
+        );
+        expect(pairs.length).toBe(20);
+        expect(pairs.filter(([, a, b]) => contrast(a, b) < 4.5).map(([n, a, b]) => `${n} ${contrast(a, b).toFixed(2)}`)).toEqual([]);
+    });
+
+    it('REQ-02 · 비글자 경계(입력칸·고른 칩)·포커스 링이 3:1 이상', () => {
+        const resolve = (v: string, sel: string) => {
+            const m = /^var\((--[\w-]+)\)$/.exec(v.trim());
+            return m ? tokenValue(sel, m[1]) : v.trim();
+        };
+        // 입력칸 규칙에서 실제 테 색을 뽑는다 — 누가 가는 선(--border)으로 「정리」하면 여기서 운다.
+        const INPUTS = ['.auth-page .auth-input', '.settings-page .set-input', '.book-search-form input[type=text]', '.field input', '.study-editor'];
+        const map = new Map(rules().map((r) => [r.selector, r.body]));
+        const borders = INPUTS.map((s) => {
+            const body = map.get(s);
+            if (!body) throw new Error(`${s} 규칙이 사라졌다`);
+            const m = /(^|;)\s*border\s*:\s*1px\s+solid\s+([^;]+)/.exec(body);
+            if (!m) throw new Error(`${s}에 1px solid 테가 없다`);
+            return [s, m[2].trim()] as const;
+        });
+        const low: string[] = [];
+        for (const sel of [LIGHT_SELECTOR, DARK_SELECTOR]) {
+            const bg = tokenValue(sel, '--bg');
+            for (const [s, c] of borders) {
+                const r = contrast(resolve(c, sel), bg);
+                if (r < 3) low.push(`${sel} ${s} ${r.toFixed(2)}`);
+            }
+            const chip = contrast(tokenValue(sel, '--text'), bg);
+            if (chip < 3) low.push(`${sel} 고른 칩 ${chip.toFixed(2)}`);
+            const ring = contrast(over(tokenValue(sel, '--focus-ring'), bg), bg);
+            if (ring < 3) low.push(`${sel} 포커스 링 ${ring.toFixed(2)}`);
+        }
+        expect(low).toEqual([]);
+        // 음성 대조 — 장식 선은 경계로 못 쓴다(이 값이 3을 넘으면 계산기가 고장이다).
+        expect(contrast(tokenValue(LIGHT_SELECTOR, '--border'), tokenValue(LIGHT_SELECTOR, '--bg'))).toBeLessThan(3);
+    });
+});
+
+/**
+ * 공부 범위 — 토큰 블록 밖에서 `.is-study`·`[data-mode="study"]`를 셀렉터에 품은 규칙은 <b>정확 일치 허용목록 셋</b>뿐이다.
+ *
+ * <p>옛 공부 전용 값 규칙(푸른 히어로 면 · 칩 면 · 숫자 · `.is-study .btn-primary { background-color: var(--sage-soft) }`)은
+ * 토큰이 파란 잉크를 주게 되면서 걷었다. 특히 마지막 것은 <b>토큰을 쓰는 규칙</b>이라 리터럴 래칫에 안 걸리는데, 남기면
+ * 공부 주 버튼이 옅은 면 위 미색 글자(대비 ≈ 1)로 사라진다 — 그래서 값이 리터럴이든 토큰이든 목록 밖이면 운다.
+ */
+const STUDY_SCOPED_ALLOWED = [
+    'body .focus-stack.is-merged > .dash-card.is-study',
+    '#side-rails[data-mode="study"] .dash-mode-toggle [data-pick="study"]',
+    '#side-rails[data-mode="study"] .rail-nav-reading',
+];
+function studyScopedLeaks(rs: Rule[]): string[] {
+    const tokenOnly = (body: string) => body.split(';').map((d) => d.trim()).filter(Boolean).every((d) => d.startsWith('--'));
+    return rs
+        .filter((r) => /\.is-study\b|\[data-mode="study"\]/.test(r.selector.replace(/:not\([^)]*\)/g, '')))
+        .filter((r) => !tokenOnly(r.body) && !STUDY_SCOPED_ALLOWED.includes(r.selector))
+        .map((r) => r.selector);
+}
+
+describe('공부 — 강조 자리만 파란 잉크 (PR-2)', () => {
+    it('REQ-12 · 공부 토큰은 강조 6 + 잔디 4뿐이고 값이 파란 잉크다(낮·밤)', () => {
+        expect(groupMismatches('.is-study', STUDY_DAY)).toEqual([]);
+        expect(colorTokens('.is-study')).toEqual(groupNames(STUDY_DAY));
+        expect(groupMismatches(`${DARK_SELECTOR} .is-study`, STUDY_NIGHT)).toEqual([]);
+        expect(colorTokens(`${DARK_SELECTOR} .is-study`)).toEqual(groupNames(STUDY_NIGHT));
+    });
+
+    it('REQ-12 · 공부 범위 규칙은 허용목록 셋뿐이다(토큰 규칙도 목록 밖이면 운다)', () => {
+        // 음성 대조 — 3067 꼴(토큰으로 칠하는 공부 규칙)을 넣으면 잡힌다.
+        expect(studyScopedLeaks(parse('.is-study .btn-primary { background-color: var(--sage-soft) }'))).toEqual(['.is-study .btn-primary']);
+        const rs = rules();
+        // 양성 대조 — 허용목록 셋이 실재한다.
+        const present = new Set(rs.map((r) => r.selector));
+        expect(STUDY_SCOPED_ALLOWED.filter((s) => !present.has(s))).toEqual([]);
+        expect(studyScopedLeaks(rs)).toEqual([]);
+    });
+});
+
+describe('독서등 — 밤 책상 + 종이 한 장, 불빛 0 (PR-2)', () => {
+    it('REQ-13 · 불빛·글로우·밤 덮기가 없고 합쳐진 카드는 종이로 칠한다', () => {
+        const rs = rules();
+        expect(rs.filter((r) => r.selector === 'body.study-lamp::after').map((r) => r.selector)).toEqual([]);
+        // 독서등 밤 = 다크 팔레트 그대로 — body.study-lamp가 따로 --bg·--card-bg를 덮지 않는다(토큰 블록 목록 소속만).
+        const lampOwn = rs.filter((r) => r.selector === 'body.study-lamp' && r.group.length === 1);
+        expect(lampOwn.filter((r) => /--(bg|card-bg)\s*:/.test(r.body)).map((r) => r.body.trim())).toEqual([]);
+        expect(rs.filter((r) => r.selector.includes('.lamp-page') && /(^|;)\s*box-shadow\s*:/.test(r.body)).map((r) => r.selector)).toEqual([]);
+        // 함정 — 합쳐진 카드를 투명으로 두면 밤 위에 잉크 글자가 떠 안 읽힌다. 낮 토큰 목록이 .lamp-page에 종이를 다시 깐다.
+        const merged = rs.filter((r) => r.selector === '.focus-stack.is-merged').map((r) => r.body).join(';');
+        expect(merged).toMatch(/(^|;)\s*background\s*:\s*var\(--card-bg\)/);
     });
 });

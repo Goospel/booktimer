@@ -11,14 +11,14 @@ import { join } from 'node:path';
  */
 
 /** 테스트·목·픽스처는 제품 마크업이 아니다. */
-const SKIP_FILES = /\.test\.(ts|tsx)$|^dev-mock\.ts$|^test-fixtures\.ts$/;
+const SKIP_FILES = /\.test\.(ts|tsx)$|\.d\.ts$|^dev-mock\.ts$|^test-fixtures\.ts$/;
 
-/** 제품 `.tsx` 전부 — 화면 문구는 여기 산다. */
-export function sourceFiles(dir: string): string[] {
+/** 제품 `.tsx` 전부 — 화면 문구는 여기 산다. `ext`를 넘기면 다른 확장자도(예: `.ts`까지). */
+export function sourceFiles(dir: string, ext: RegExp = /\.tsx$/): string[] {
   return readdirSync(dir, { withFileTypes: true }).flatMap((entry) => {
     const full = join(dir, entry.name);
-    if (entry.isDirectory()) return sourceFiles(full);
-    if (!/\.tsx$/.test(entry.name) || SKIP_FILES.test(entry.name)) return [];
+    if (entry.isDirectory()) return sourceFiles(full, ext);
+    if (!ext.test(entry.name) || SKIP_FILES.test(entry.name)) return [];
     return [full];
   });
 }

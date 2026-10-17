@@ -145,13 +145,14 @@ describe('목표 화면 렌더', () => {
    * 캔버스가 아니라 <b>카드 면</b>(`--adaptiveGrey100`)과 같아야 한다 — 어긋나면 카드 안에 옅은 띠 두 줄이 진다.
    * 회당 시간 시트도 같은 휠이 시트 패널(= 같은 `--adaptiveGrey100`) 위에 서므로 한 규칙이 둘 다 맞춘다.
    */
-  it('휠은 부푼 카드 안에 선다', () => {
+  it('휠은 면·그림자 없이 종이 위에 선다(에디토리얼) — 안개 = 종이색이라 띠가 안 진다', () => {
     const markup = render(false, 3600);
     const at = markup.indexOf('class="goal-wheels"');
     const card = markup.slice(markup.lastIndexOf('<div', markup.lastIndexOf('<', at) - 1), at);
 
     expect(at).toBeGreaterThan(-1);
-    expect(card).toContain('var(--puffShadow');
+    expect(card).toContain('padding:12px 0'); // 그 그릇을 잡았다
+    expect(card).not.toContain('box-shadow');
   });
 
   /**
@@ -340,7 +341,8 @@ describe('목표 위계 (시안 2e)', () => {
       </TDSMobileProvider>,
     );
 
-  it('휠 뒤에 선택 밴드를 깐다 — 어느 칸이 골라졌는지 색으로 말한다', () => {
+  // 에디토리얼 PR-4 — 휠 카드 면 없음: 밴드는 옅은 면(r10)이 아니라 위아래 muted 1px 선 두 줄이다(종이 위 면 0).
+  it('휠 뒤에 선택 밴드를 깐다 — 어느 칸이 골라졌는지 위아래 선으로 말한다', () => {
     const markup = goalScreen(1_800);
     const at = markup.indexOf('data-wheel-band');
 
@@ -349,8 +351,12 @@ describe('목표 위계 (시안 2e)', () => {
     // 44->30 · 세이지->회갈색 · r10->r0이 <b>전부 생존</b>했다. 「어떤 밴드인가」까지 잠근다.
     const tag = markup.slice(markup.lastIndexOf('<', at), markup.indexOf('>', at));
     expect(tag).toContain('height:44px');
-    expect(tag).toContain('var(--adaptiveBlue50,'); // 경계 `,` — `--adaptiveBlue500`에도 맞지 않게
-    expect(tag).toContain('border-radius:10px');
+    expect(tag).toContain('border-top:1px solid var(--adaptiveGrey600');
+    expect(tag).toContain('border-bottom:1px solid var(--adaptiveGrey600');
+    expect(tag).not.toMatch(/background|border-radius/);
+    // 선은 휠 안개(종이색 마스크) 위에 그려야 끊기지 않는다(목 모드 390 실측: 안개가 윗선을 칸마다 지웠다) — 누름은 휠로 통과
+    expect(tag).toContain('z-index:1');
+    expect(tag).toContain('pointer-events:none');
   });
 
   it('저장은 채움 주 버튼이다 — 이 화면의 주 동작 하나', () => {

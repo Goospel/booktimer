@@ -69,8 +69,8 @@ describe('공부 기록 화면', () => {
 
   it('하루 막대 3줄이 전부 토큰을 탄다 — 픽스처의 날 수만큼', () => {
     // 톤 조율 A: 막대가 단색이 됐다. 색이 토큰이라야 공부 모드에서 파랑이 된다
-    // (시안 값 `#5B7F55`를 리터럴로 적으면 이 자리만 세이지로 남는다).
-    const bars = markup.match(/height:12px;border-radius:999px;background:var\(--adaptiveBlue500, #5B7F55\)"/g);
+    // (옛 세이지 리터럴을 적으면 이 자리만 공부 모드에서 검정으로 남는다).
+    const bars = markup.match(/height:100%;border-radius:2px;background:var\(--adaptiveBlue500, #1D1B18\)"/g);
     expect(bars).toHaveLength(3);
   });
 
@@ -84,7 +84,7 @@ describe('공부 기록 화면', () => {
     };
     const view = render(<StudyHistoryView data={dated} />);
 
-    expect(view.split('var(--dentShadow').length - 1).toBe(2); // 픽스처 두 달
+    expect(view.split('gap:12px;padding:14px 0;border-bottom:1px solid var(--adaptiveGrey200').length - 1).toBe(2); // 픽스처 두 달
     // 칸(`title=` 날짜를 단 div)만 센다 — 범례 「오늘」 스와치도 같은 링을 두른다.
     expect(view.match(/<div title="[^"]*" style="[^"]*0 0 0 4\.5px var\(--adaptiveBlue700/g)).toHaveLength(1);
   });

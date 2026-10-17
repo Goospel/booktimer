@@ -61,6 +61,9 @@ declare -A SECRET_MAP=(
   [TOSS_READING_REMINDER_ENABLED]=BOOKTIMER_TOSS_READING_REMINDER_ENABLED
   [TOSS_READING_REMINDER_DAILY_TEMPLATE_CODE]=BOOKTIMER_TOSS_READING_REMINDER_DAILY_TEMPLATE_CODE
   [TOSS_READING_REMINDER_REST_TEMPLATE_CODE]=BOOKTIMER_TOSS_READING_REMINDER_REST_TEMPLATE_CODE
+  # 토스 로그인 연결 끊기 콜백의 Basic Auth 값(SecureString). 토스 콘솔 「연결 끊기 콜백 정보」와 같은 값이다.
+  # 바꿀 땐 SSM과 콘솔을 함께 바꾸고 재배포한다 — 어긋나면 콜백이 전부 401(앱 로그 `toss-unlink auth-failed`).
+  [TOSS_UNLINK_BASIC_AUTH]=BOOKTIMER_TOSS_UNLINK_BASIC_AUTH
 )
 
 # ── 평문 설정 (구 task-definition의 environment 블록) ──

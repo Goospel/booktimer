@@ -7,7 +7,7 @@ import { useBackClose } from '../back';
 import { CACHE_STUDY_SHELF, cacheGet, cachePut } from '../cache';
 import { formatDuration } from '../format';
 import { openExternal } from '../toss';
-import { ErrorMessage, Loading, SOFT_OUTLINE, SOFT_ROW, Screen, SearchField, Sheet, Text } from '../ui';
+import { ErrorMessage, Loading, OUTLINE_PILL, RULE_ROW, Screen, SearchField, Sheet, Text } from '../ui';
 import { BookCarousel, type LeadCard } from './Home';
 import { GridSheet, HANDLE_ROW_HEIGHT, SearchResultRow, handleStyle, resolveSelected } from './Library';
 
@@ -62,33 +62,34 @@ export const ADD_STUDY_BOOK_CARD: LeadCard = {
 };
 
 /**
- * 회독 칩 — 파랑 토큰을 쓴다. 공부 모드에서 `body.study-mode`가 이 토큰들을 파랑으로 갈아끼우므로
- * 화면은 색을 한 줄도 몰라도 된다(독서등·모드 스왑과 같은 수법).
+ * 회독 칩 — 글자는 파랑 토큰을 쓴다. 공부 모드에서 `body.study-mode`가 이 토큰을 파랑으로 갈아끼우므로
+ * 화면은 색을 한 줄도 몰라도 된다(독서등·모드 스왑과 같은 수법). 누르지 못하는 <span>이라 면은 못 누르는
+ * 태그 옷(paper-2 면 r2)이다.
  */
 const readCountChipStyle: CSSProperties = {
   display: 'inline-block',
   padding: '2px 9px',
-  borderRadius: 20,
+  borderRadius: 2,
   fontSize: 14,
   lineHeight: 1.6,
-  background: 'var(--adaptiveBlue50, #E7EEE2)',
-  color: 'var(--adaptiveBlue700, #4F6B4C)',
+  background: 'var(--softDent, #ECE5D8)',
+  color: 'var(--adaptiveBlue700, #1D1B18)',
 };
 
 /**
  * 누적 공부 시간 칩 — 회독 칩과 <b>같은 박스, 다른 색</b>이다(회독은 파랑 토큰, 시간은 중립).
  *
- * <p>색값은 독서 서재 `bookChipStyle('neutral')`에서 <b>복사</b>했다: 그 함수는 export돼 있지 않고
- * `Library.tsx`는 이 작업에서 수정 금지라(독서 경로 diff 0), 값 복사가 가장 싼 길이다.
+ * <p>값은 독서 서재 `bookChipStyle('neutral')`과 같다(그 함수는 export돼 있지 않아 값을 복사한다) —
+ * 한쪽을 바꾸면 다른 쪽도 맞춘다.
  */
 const studyTimeChipStyle: CSSProperties = {
   display: 'inline-block',
   padding: '2px 9px',
-  borderRadius: 20,
+  borderRadius: 2,
   fontSize: 14,
   lineHeight: 1.6,
-  background: 'var(--adaptiveGrey200, #E4DDD0)',
-  color: 'var(--adaptiveGrey700, #57534A)',
+  background: 'var(--softDent, #ECE5D8)',
+  color: 'var(--adaptiveGrey700, #4A453E)',
 };
 
 /**
@@ -111,7 +112,7 @@ export function studyBookChips(book: StudyBookRow): { label: string; value: stri
 }
 
 /**
- * 채움이 아닌 손잡이 — 「관리」(카드지)와 「검색해서 담기」(틴트)가 쓴다.
+ * 채움이 아닌 손잡이 — 「관리」(외곽선 알약)와 「검색해서 담기」(옅은 면)가 쓴다.
  *
  * <p>주 손잡이(「회독 +1」)는 여기 없다: 채움 레시피를 <b>호출부에 리터럴로</b> 편다. 헬퍼 삼항에
  * 숨기면 「채움 주 버튼은 화면당 하나」 불변식의 계측기(설계 D5 · `typography.test`의 소스 스캔)가
@@ -119,18 +120,18 @@ export function studyBookChips(book: StudyBookRow): { label: string; value: stri
  * 이 스타일만 인라인인 것은 중복이 아니라 계약이다.
  */
 function handleRowStyle(tone: 'tint' | 'card'): CSSProperties {
-  // Soft — 틴트는 옅은 모드색 **면**(테두리 없음), 카드는 1.5px 세이지 실선 보조 손잡이(규칙 1).
-  // 독서 서재(PR-3)의 「관리」와 같은 옷이다. 모드색은 토큰 경유라 공부 모드에선 저절로 파랑이다.
+  // 에디토리얼 — 틴트는 옅은 면(paper-2, 테두리 없음), 카드는 외곽선 알약(강조 1px — 독서 서재 「관리」와 같은 옷).
+  // 모드색은 토큰 경유라 공부 모드에선 저절로 파란 잉크다.
   const surface: CSSProperties =
     tone === 'tint'
-      ? { border: 'none', borderRadius: 18, background: 'var(--adaptiveBlue50, #E1E8D4)', color: 'var(--adaptiveBlue700, #3F5A3C)' }
-      : SOFT_OUTLINE;
+      ? { border: 'none', borderRadius: 999, background: 'var(--adaptiveBlue50, #ECE5D8)', color: 'var(--adaptiveBlue700, #1D1B18)' }
+      : OUTLINE_PILL;
   return {
     ...surface,
     flex: 1,
     height: HANDLE_ROW_HEIGHT,
     fontSize: 15,
-    fontWeight: 700,
+    fontWeight: 500,
     cursor: 'pointer',
   };
 }
@@ -347,7 +348,7 @@ export function StudyShelf({
             {/*
               * 한 회독을 끝냈을 때 누르는 자리 — 이 화면의 유일한 핵심 동작이라 <b>채움</b>이다.
               * 독서 서재의 구조적 대응물은 「검색해서 담기」(0번 칸 전용 틴트)가 아니라 같은 2:1 줄의
-              * 「여백에 글쓰기」이고, 그쪽 레시피(채움 + 부푼 그림자 + 채움 잉크)를 그대로 쓴다.
+              * 「여백에 글쓰기」이고, 그쪽 레시피(검정 알약 — 채움 + 종이 글자)를 그대로 쓴다.
               * TDS `Button`이 아니라 맨 `<button>`인 것도 그쪽과 같은 이유다 — `--button-min-height: 56px`가
               * 박혀 있어 38px 손잡이 줄에서 혼자 솟는다.
               */}
@@ -355,18 +356,17 @@ export function StudyShelf({
               type="button"
               disabled={busy}
               onClick={() => onReadCount(selected, selected.readCount + 1)}
-              // Soft(PR-4): 독서 서재 「여백에 글쓰기」(PR-3)와 같은 채움 — 옅은 모드색 타일 + 부푼 그림자 + 진한
-              // 모드색 글자(톤 조율 A). 채움 개수 가드(typography.test D5)가 세는 키(부푼 그림자)를 그대로 쓴다.
+              // 이 화면의 주 동작 = 검정 알약(독서 서재 「여백에 글쓰기」와 같은 옷 — 공부 모드라 파란 잉크).
+              // 검정 알약 개수 가드(typography.test D5)가 세는 키(잉크 바탕)를 쓴다.
               style={{
                 flex: 2,
                 height: HANDLE_ROW_HEIGHT,
                 border: 'none',
-                borderRadius: 18,
-                background: 'var(--adaptiveBlue50, #E1E8D4)',
-                color: 'var(--adaptiveBlue700, #3F5A3C)',
-                boxShadow: 'var(--puffShadow)',
+                borderRadius: 999,
+                background: 'var(--adaptiveBlue700, #1D1B18)',
+                color: 'var(--filledInk, #F5F0E6)',
                 fontSize: 15,
-                fontWeight: 700,
+                fontWeight: 500,
                 cursor: 'pointer',
               }}
             >
@@ -485,13 +485,12 @@ function StudySheetRow({
       disabled={busy}
       onClick={onClick}
       style={{
-        // 시트 바닥과 같은 색이라 배경만으론 경계가 안 보인다 — 1.5px 옅은 실선이 줄을 버튼으로 읽히게 한다.
-        ...SOFT_ROW,
+        // 시트 행 = 아래 가는 선(RULE_ROW) — 면 없이 줄이 버튼으로 읽힌다(에디토리얼).
+        ...RULE_ROW,
         display: 'block',
         width: '100%',
-        marginBottom: 8,
-        padding: '15px 14px',
-        color: danger ? '#A32D2D' : 'var(--adaptiveGrey800, #2A2921)',
+        padding: '15px 0',
+        color: danger ? 'var(--adaptiveRed500, #A8322A)' : 'var(--adaptiveGrey800, #1D1B18)',
         fontSize: 15,
         textAlign: 'left',
         cursor: 'pointer',

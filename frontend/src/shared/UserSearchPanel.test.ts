@@ -4,6 +4,9 @@
 import { describe, test, expect, vi, beforeEach, afterEach } from 'vitest';
 import { mount } from '@vue/test-utils';
 import UserSearchPanel from './UserSearchPanel.vue';
+import { readFileSync } from 'node:fs';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 const INIT_RECS = [
     { loginId: 'recuser1', nickname: '추천1', publicBookCount: 3, following: false, self: false, reasons: ['나를 팔로우함'] },
@@ -56,5 +59,26 @@ describe('UserSearchPanel', () => {
 
         // 추천이 빈 배열로 덮어써지지 않아야 함
         expect(wrapper.text()).toContain('추천1');
+    });
+});
+
+describe('UserSearchPanel 에디토리얼 옷(PR-2)', () => {
+    test('REQ-22 · 팔로우 안 한 행이 둘이어도 검정 알약은 「검색」 하나다', async () => {
+        const rows = [
+            { loginId: 'a1', nickname: '하나', publicBookCount: 1, following: false, self: false, reasons: [] },
+            { loginId: 'a2', nickname: '둘', publicBookCount: 2, following: false, self: false, reasons: [] },
+        ];
+        vi.mocked(fetch).mockResolvedValue(makeResp({ recommendations: rows }));
+        const wrapper = mount(UserSearchPanel, { attachTo: document.body });
+        await vi.waitFor(() => expect(wrapper.text()).toContain('둘'));
+        // 양성 대조 — 행마다 팔로우 버튼이 실제로 그려졌다.
+        expect(wrapper.findAll('button').filter((b) => b.text().includes('팔로우')).length).toBeGreaterThanOrEqual(2);
+        expect(wrapper.findAll('.btn-primary, .dash-btn-fill, .auth-btn-primary').map((b) => b.text())).toEqual(['검색']);
+    });
+
+    test('REQ-22 · 행마다 쓰이는 FollowAction은 검정 알약 클래스를 쓰지 않는다', () => {
+        const src = readFileSync(join(dirname(fileURLToPath(import.meta.url)), 'FollowAction.vue'), 'utf8');
+        expect(src).toContain('btn-ghost');   // 양성 대조 — 버튼 클래스를 실제로 읽는다
+        expect(src).not.toMatch(/btn-primary|dash-btn-fill/);
     });
 });

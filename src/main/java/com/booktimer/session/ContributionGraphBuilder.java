@@ -23,6 +23,12 @@ public final class ContributionGraphBuilder {
     static final int WEEKS = 53;
 
     /**
+     * 맨 왼쪽(이번 달) 라벨이 남으려면 다음 라벨까지 이만큼의 열(주)이 있어야 한다. 미니앱 라벨 「10월」(14px)이 28.4px라
+     * 2열(28px)이면 「10월9월」로 맞닿고 3열(42px)부터 떨어진다. 웹(10px, 열 16px)도 같은 값을 쓴다 — 규칙은 하나다.
+     */
+    static final int MIN_LABEL_WEEKS = 3;
+
+    /**
      * @param secondsByDate 날짜→총 독서 초 (없는 날은 0으로 간주)
      * @param today         유저 타임존 기준 오늘
      * @param goalSeconds   하루 목표 초(유저의 평면 증가값) — 색 농도를 이 목표 대비 달성 비율로 정한다.
@@ -135,7 +141,13 @@ public final class ContributionGraphBuilder {
         return 4;                           // 100% 이상(목표 달성/초과). goalSeconds=0도 여기로.
     }
 
-    /** 월이 바뀌는 첫 열 위에 "M월" 라벨을 둔다(첫 열 포함). 행 0(일요일)은 항상 실제 날짜다. */
+    /**
+     * 월이 바뀌는 첫 열 위에 "M월" 라벨을 둔다(첫 열 포함). 행 0(일요일)은 항상 실제 날짜다.
+     *
+     * <p>단 맨 왼쪽(이번 달)이 {@value #MIN_LABEL_WEEKS}열 미만이면 그 라벨은 뺀다 — 바로 옆 지난달 라벨과 맞닿는다.
+     * 지난달 쪽을 빼지 않는 이유: 그러면 지난달 4~5열이 이번 달 라벨 아래로 붙어 이번 달로 읽힌다. 가운데 달은
+     * 늘 4~5열이라 좁아지는 것은 맨 왼쪽뿐이다(맨 오른쪽 끝 달은 오른쪽 이웃이 없어 겹치지 않는다).
+     */
     private static List<ContributionGraph.MonthLabel> monthLabels(List<List<ContributionDay>> weeks) {
         List<ContributionGraph.MonthLabel> labels = new ArrayList<>();
         int prevMonth = -1;
@@ -146,6 +158,9 @@ public final class ContributionGraphBuilder {
                 labels.add(new ContributionGraph.MonthLabel(w, month + "월"));
                 prevMonth = month;
             }
+        }
+        if (labels.size() > 1 && labels.get(1).weekIndex() - labels.get(0).weekIndex() < MIN_LABEL_WEEKS) {
+            labels.remove(0);
         }
         return labels;
     }

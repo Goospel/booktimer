@@ -49,7 +49,8 @@ case "\$*" in
                  CHAT_MESSAGE_KEY CHAT_ENABLED \\
                  TOSS_DM_MESSAGE_ENABLED TOSS_DM_MESSAGE_TEMPLATE_CODE \\
                  TOSS_READING_REMINDER_ENABLED TOSS_READING_REMINDER_DAILY_TEMPLATE_CODE \\
-                 TOSS_READING_REMINDER_REST_TEMPLATE_CODE; do
+                 TOSS_READING_REMINDER_REST_TEMPLATE_CODE \\
+                 TOSS_UNLINK_BASIC_AUTH; do
             printf '/booktimer/%s\tvalue-of-%s\n' "\$n" "\$n"
         done
         # 여러 줄 SecureString(PEM)도 같은 /booktimer 경로에 살아 이 목록에 함께 나온다.
@@ -143,6 +144,8 @@ assert_has "  .env 에 대화 푸시 템플릿 코드" "$env_out" "BOOKTIMER_TOS
 assert_has "  .env 에 독서 알림 게이트" "$env_out" "BOOKTIMER_TOSS_READING_REMINDER_ENABLED=value-of-TOSS_READING_REMINDER_ENABLED"
 assert_has "  .env 에 독서 알림 매일 템플릿 코드" "$env_out" "BOOKTIMER_TOSS_READING_REMINDER_DAILY_TEMPLATE_CODE=value-of-TOSS_READING_REMINDER_DAILY_TEMPLATE_CODE"
 assert_has "  .env 에 독서 알림 3일 템플릿 코드" "$env_out" "BOOKTIMER_TOSS_READING_REMINDER_REST_TEMPLATE_CODE=value-of-TOSS_READING_REMINDER_REST_TEMPLATE_CODE"
+# 토스 로그인 연결 끊기 콜백 Basic 값 — 빠지면 앱 값이 비어 콜백이 전부 401(fail-closed)이 되고 82·83이 다시 열린다.
+assert_has "  .env 에 토스 연결 끊기 콜백 시크릿" "$env_out" "BOOKTIMER_TOSS_UNLINK_BASIC_AUTH=value-of-TOSS_UNLINK_BASIC_AUTH"
 
 # ── Case 2: 인증서 누락 → 배포 실패, 파일도 안 남는다 ──
 r="$(run TOSS_MTLS_CERT)"; rc="${r%%$'\n'*}"; out="${r#*$'\n'}"

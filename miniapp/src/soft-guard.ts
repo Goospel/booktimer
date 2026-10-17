@@ -37,24 +37,45 @@ export function tagWith(markup: string, marker: string): string {
  * <b>둘 다</b> 본다 — PR-3 가드는 리터럴만 봐서 `var()` 경유가 사각이었다.
  */
 export function bigShadow(tag: string): boolean {
-  const value = (tag.match(/box-shadow:([^;"]*)/i)?.[1] ?? '').toLowerCase();
+  const value = shadowValue(tag);
   if (value.includes('calc(')) return true;
   const shadowVars = [...value.matchAll(/var\(\s*(--[\w-]*shadow[\w-]*)/g)].map((m) => m[1]);
   if (shadowVars.some((name) => name !== '--dentshadow')) return true;
-  // 그림자 하나씩 — 색 함수 속 쉼표(`rgba(0, 0, 0, .2)`)를 먼저 걷고, `var(--x,` 머리와 닫는 괄호를 지워 폴백을
-  // 드러낸 뒤 쉼표로 가른다. 길이는 `0`처럼 단위 없는 것도 있어(`0 8px 24px`) 순서로 센다: x · y · blur · spread.
+  return blursPx(value).some((blur) => blur >= 8);
+}
+
+/**
+ * 이 태그의 `box-shadow`에 <b>작은 흐림</b>(0 &lt; blur &lt; 8px)이 있는가 — 에디토리얼은 그림자가 0이라(REQ-05 이펙트 0)
+ * 큰 흐림만 막으면 「살짝 뜬 말풍선 `0 2px 4px`」·「시트 위 그림자 `0 -2px 6px`」가 초록으로 샌다(리뷰 돌연변이 M31·M32).
+ * 링(`0 0 0 Npx` — blur 0)과 `inset … 0` 하이라이트는 흐림이 아니라 선이라 제외한다. 그림자 변수·`calc()`는
+ * `bigShadow`가 「크다」로 잡으므로 여기선 보지 않는다(두 판정이 같은 값을 두 번 세지 않게).
+ */
+export function smallShadow(tag: string): boolean {
+  return blursPx(shadowValue(tag)).some((blur) => blur > 0 && blur < 8);
+}
+
+function shadowValue(tag: string): string {
+  return (tag.match(/box-shadow:([^;"]*)/i)?.[1] ?? '').toLowerCase();
+}
+
+/**
+ * 그림자 하나씩의 흐림(px) — 색 함수 속 쉼표(`rgba(0, 0, 0, .2)`)를 먼저 걷고, `var(--x,` 머리와 닫는 괄호를 지워
+ * 폴백을 드러낸 뒤 쉼표로 가른다. 길이는 `0`처럼 단위 없는 것도 있어(`0 8px 24px`) 순서로 센다: x · y · blur · spread.
+ * blur가 없는 그림자(`0 0` 두 길이)는 빠진다. rem·em은 16px로 환산.
+ */
+function blursPx(value: string): number[] {
   const flat = value
     .replace(/(rgba?|hsla?)\([^)]*\)/g, '')
     .replace(/var\(\s*--[\w-]+\s*,?/g, '')
     .replace(/\)/g, '');
-  return flat.split(',').some((shadow) => {
+  return flat.split(',').flatMap((shadow) => {
     const lengths = shadow
       .trim()
       .split(/\s+/)
       .map((t) => t.match(/^(-?\d*\.?\d+)(px|rem|em)?$/))
       .filter((m): m is RegExpMatchArray => m !== null);
     const blur = lengths[2];
-    if (blur === undefined) return false;
-    return parseFloat(blur[1]) * (blur[2] === 'rem' || blur[2] === 'em' ? 16 : 1) >= 8;
+    if (blur === undefined) return [];
+    return [parseFloat(blur[1]) * (blur[2] === 'rem' || blur[2] === 'em' ? 16 : 1)];
   });
 }

@@ -212,6 +212,38 @@ class ContributionGraphBuilderTest {
                 .allSatisfy(m -> assertThat(m.label()).matches("\\d{1,2}월"));
     }
 
+    @Test
+    @DisplayName("REQ-01 · 1년 365일 내내 이웃 월 라벨은 3열 이상 떨어진다")
+    void monthLabels_neverCloserThanThreeWeeks() {
+        for (LocalDate day = LocalDate.of(2026, 1, 1); !day.isAfter(LocalDate.of(2026, 12, 31)); day = day.plusDays(1)) {
+            List<ContributionGraph.MonthLabel> labels = ContributionGraphBuilder.build(Map.of(), day, GOAL).monthLabels();
+            for (int i = 1; i < labels.size(); i++) {
+                assertThat(labels.get(i).weekIndex() - labels.get(i - 1).weekIndex())
+                        .as("%s: %s → %s", day, labels.get(i - 1), labels.get(i))
+                        .isGreaterThanOrEqualTo(3);
+            }
+        }
+    }
+
+    @Test
+    @DisplayName("REQ-02 · 이번 달이 1·2주면 이번 달 라벨을 빼고 9월은 제 열에 남는다")
+    void monthLabels_dropCurrentMonth_keepPreviousInPlace() {
+        // 2026-10-06(화): 이번 주 일요일 10-04 → 10월 1열, 9월은 1열부터
+        assertThat(ContributionGraphBuilder.build(Map.of(), LocalDate.of(2026, 10, 6), GOAL).monthLabels().get(0))
+                .isEqualTo(new ContributionGraph.MonthLabel(1, "9월"));
+        // 2026-10-13(화, 스토어 스크린샷 날): 10월 2열 → 9월은 2열부터
+        assertThat(ContributionGraphBuilder.build(Map.of(), LocalDate.of(2026, 10, 13), GOAL).monthLabels().get(0))
+                .isEqualTo(new ContributionGraph.MonthLabel(2, "9월"));
+    }
+
+    @Test
+    @DisplayName("REQ-03 · 이번 달이 3주가 되는 날 10월이 0열에 다시 선다")
+    void monthLabels_keepCurrentMonth_atThreeWeeks() {
+        // 2026-10-18(일): 10-18 · 10-11 · 10-04 → 10월 3열, 9월은 3열부터
+        assertThat(ContributionGraphBuilder.build(Map.of(), LocalDate.of(2026, 10, 18), GOAL).monthLabels().subList(0, 2))
+                .containsExactly(new ContributionGraph.MonthLabel(0, "10월"), new ContributionGraph.MonthLabel(3, "9월"));
+    }
+
     // ───────────────────────────── 연속 일수(streak) ─────────────────────────────
     // "잔디 심은 날" = 읽은 날(seconds>0). 오늘부터 거꾸로 끊기지 않고 이어진 일수.
     // 오늘 유예: 오늘 아직 안 읽었으면 어제부터 센다(자정마다 0으로 리셋 방지). 끊기면 0.

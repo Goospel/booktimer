@@ -467,3 +467,13 @@ describe('백지복습 — 채점 기준으로 들어가는 필기', () => {
         expect(wrapper.find('[data-testid="recall-analyze"]').attributes('disabled')).toBeUndefined();
     });
 });
+
+describe('백지복습 에디토리얼 검정 알약(PR-2)', () => {
+    test('REQ-22 · 사진 탭에서 「읽어 오기」가 떠도 검정 알약은 「저장하고 분석」 하나다', async () => {
+        const wrapper = await mountPanel();
+        await wrapper.find('[data-testid="recall-tab-photo"]').trigger('click');
+        // 양성 대조 — 「읽어 오기」가 실제로 그려졌다.
+        expect(wrapper.find('[data-testid="recall-transcribe"]').exists()).toBe(true);
+        expect(wrapper.findAll('.btn-primary, .dash-btn-fill, .auth-btn-primary').map((b) => b.attributes('data-testid'))).toEqual(['recall-analyze']);
+    });
+});

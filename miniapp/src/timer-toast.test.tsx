@@ -121,11 +121,12 @@ describe('토스트 렌더 (StartToast)', () => {
     expect(markup).not.toContain('transition');
   });
 
-  it('부푼 면(r20)으로 뜬다 — 연필선이 아니라 변수 경유 그림자가 탭바 위 층을 가른다(Soft PR-5)', () => {
+  it('떠 있는 면(FLOAT — 미색 + 잉크 1px, 반경 2)으로 뜬다 — 그림자 없이 선이 탭바 위 층을 가른다', () => {
     const card = tagWith(toast(book(1, '데미안')), 'role="status"');
 
-    expect(card).toContain('box-shadow:var(--puffShadow'); // 그림자가 실재한다(아래 부재 단언이 공허하지 않음)
-    expect(card).toContain('border-radius:20px');
+    expect(card).toContain('border:1px solid var(--adaptiveGrey800');
+    expect(card).toContain('border-radius:2px');
+    expect(card).not.toContain('box-shadow');
     expect(card).not.toMatch(/border-image/i);
   });
 

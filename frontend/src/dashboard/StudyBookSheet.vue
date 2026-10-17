@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
-import { initialOf, coverColor } from '../books/pure'
+import { initialOf, coverStyle } from '../books/pure'
 import type { StudyBookRow } from '../study/api'
 
 // 공부 책 시트 — 하나의 컴포넌트가 세 자리를 겸한다(미니앱 BookSheet·ChangeBookSheet의 웹판):
@@ -37,11 +37,6 @@ const T = {
 const text = computed(() => T[props.mode])
 const title = computed(() => props.mode === 'assign' && props.currentBookId != null ? T.change[0] : text.value[0])
 
-function coverStyle(b: StudyBookRow) {
-    const c = coverColor(b.isbn13 || b.title)
-    return { background: c.bg, color: c.fg }
-}
-
 const overlayEl = ref<HTMLElement | null>(null)
 onMounted(() => overlayEl.value?.focus())
 </script>
@@ -64,7 +59,7 @@ onMounted(() => overlayEl.value?.focus())
                             :aria-current="b.id === currentBookId ? 'true' : undefined"
                             @click="emit('pick', b)">
                         <img v-if="b.coverUrl" class="book-sheet-cover" :src="b.coverUrl" alt="" loading="lazy" referrerpolicy="no-referrer">
-                        <span v-else class="book-sheet-cover" :style="coverStyle(b)" aria-hidden="true">{{ initialOf(b.title) }}</span>
+                        <span v-else class="book-sheet-cover" :style="coverStyle(b.title)" aria-hidden="true">{{ initialOf(b.title) }}</span>
                         <span class="book-sheet-meta">
                             <span class="book-sheet-book-title">{{ b.title }}</span>
                             <span v-if="b.author" class="book-sheet-byline">{{ b.author }}</span>

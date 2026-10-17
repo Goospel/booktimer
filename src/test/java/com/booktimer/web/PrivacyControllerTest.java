@@ -81,6 +81,25 @@ class PrivacyControllerTest {
                 .andExpect(content().string(containsString("데이터베이스·백업과 분리해")));
     }
 
+    /** 처리방침은 사실을 주장한다 — 문구가 분류 규칙(User#canSignInWithoutToss)의 술어를 그대로 옮겨야 한다. */
+    @Test
+    @DisplayName("REQ-10 · GET /privacy: 토스 연결 끊기 때 미인증 토스 가입 계정 파기·그 밖의 계정 연결 해제를 고지한다")
+    void getPrivacy_disclosesTossUnlinkHandling() throws Exception {
+        mockMvc.perform(get("/privacy"))
+                .andExpect(content().string(containsString("토스 로그인 연결을 끊은 경우")))
+                .andExpect(content().string(containsString("토스 미니앱에서 가입하고 이메일 인증을 하지 않은 계정은")))
+                .andExpect(content().string(containsString("회원 탈퇴와 같이 계정과 모든 기록을 파기")))
+                .andExpect(content().string(containsString("토스 사용자 식별자와 미니앱 로그인 정보를 삭제")))
+                .andExpect(content().string(containsString("웹에 로그인할 수 있는 계정은 웹 설정에서 다시 연결할 수 있습니다")));
+    }
+
+    @Test
+    @DisplayName("REQ-10 · GET /terms: 제3조가 토스 연결 끊기의 결과를 알린다")
+    void getTerms_disclosesTossUnlinkResult() throws Exception {
+        mockMvc.perform(get("/terms"))
+                .andExpect(content().string(containsString("토스 미니앱에서 가입하고 이메일 인증을 하지 않은 계정은 삭제되고")));
+    }
+
     @Test
     @DisplayName("REQ-15 · GET /privacy: 독서 알림 설정 항목과 이용 목적을 고지한다")
     void getPrivacy_disclosesReadingReminder() throws Exception {

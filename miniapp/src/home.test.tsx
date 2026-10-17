@@ -1,6 +1,6 @@
 import { TDSMobileProvider } from '@toss/tds-mobile';
 import { readFileSync } from 'node:fs';
-import type { ReactNode } from 'react';
+import { isValidElement, type ReactNode } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -34,11 +34,13 @@ import {
   claimDebtWaiver,
   defaultBookId,
   goalHandleLabel,
+  heroClockSize,
   homePickAfterShelf,
   marginDoorBook,
   noBookSubtitle,
   notificationAgreementTarget,
   recenterIndex,
+  rewardAdButton,
   selectionAt,
   shouldShowNotificationCard,
   showWaiverButton,
@@ -48,9 +50,16 @@ import {
   waiverErrorMessage,
 } from './screens/Home';
 import { stripComments } from './source-scan';
-import { clickHandlerFor, graph, stubLocalStorage, userAgent } from './test-fixtures';
+import { clickHandlerFor, graph, stubLocalStorage, textOf, userAgent } from './test-fixtures';
 import { coverColor } from './ui';
-import { REWARD_AD_GROUP_ID, notificationAgreementSupported, requestNotificationAgreement, watchRewardAd } from './toss';
+import {
+  REWARD_AD_GROUP_ID,
+  notificationAgreementSupported,
+  preloadAd,
+  requestNotificationAgreement,
+  useAdSlot,
+  watchRewardAd,
+} from './toss';
 
 /**
  * 리워드 광고 진입점 — 노출 조건과 지급 흐름.
@@ -68,6 +77,9 @@ vi.mock('./api', async (importOriginal) => ({
 vi.mock('./toss', () => ({
   REWARD_AD_GROUP_ID: 'test-ad-group',
   watchRewardAd: vi.fn(),
+  // 광고 슬롯 — 기본은 준비됨(ready)이라 「광고 버튼을 누르면 광고가 열린다」 등이 뜻을 유지한다.
+  useAdSlot: vi.fn(() => 'ready'),
+  preloadAd: vi.fn(),
   GOAL_MET_TEMPLATE_CODE: 'test-template',
   STUDY_GOAL_TEMPLATE_CODE: 'test-study-template',
   notificationAgreementSupported: vi.fn(),
@@ -78,6 +90,8 @@ vi.mock('./toss', () => ({
 
 const waiveDebtMock = vi.mocked(waiveDebt);
 const watchRewardAdMock = vi.mocked(watchRewardAd);
+const useAdSlotMock = vi.mocked(useAdSlot);
+const preloadAdMock = vi.mocked(preloadAd);
 const supportedMock = vi.mocked(notificationAgreementSupported);
 const requestAgreementMock = vi.mocked(requestNotificationAgreement);
 
@@ -152,7 +166,6 @@ function book(id: number, title: string, extra: Partial<BookOption> = {}): BookO
 function renderHome(
   overrides: Partial<DashboardResponse> = {},
   props: {
-    goalAdPending?: boolean;
     selectedBookId?: number | null;
     celebrate?: boolean;
     guide?: ReactNode;
@@ -176,7 +189,6 @@ function renderHome(
         onTimerChange={() => {}}
         celebrate={props.celebrate ?? false}
         onGoGoal={() => {}}
-        goalAdPending={props.goalAdPending ?? false}
         onGoSettings={() => {}}
         onError={() => {}}
         onOpenMargin={() => {}}
@@ -195,11 +207,43 @@ function renderHome(
 beforeEach(() => {
   waiveDebtMock.mockReset();
   watchRewardAdMock.mockReset();
+  useAdSlotMock.mockReset();
+  useAdSlotMock.mockReturnValue('ready');
+  preloadAdMock.mockReset();
   supportedMock.mockReset();
   requestAgreementMock.mockReset();
   supportedMock.mockReturnValue(true);
   stubLocalStorage(); // 홈이 렌더 중에 동의 캐시를 읽는다
   setCoachmarkWalking(true); // 여백 인라인 안내는 걷는 중에만 뜬다(잠금 계측은 coachmark.test)
+});
+
+/**
+ * 리워드 광고 버튼 = 광고 슬롯 상태(비게임 체크리스트 「광고 재생 시점에 실시간으로 로딩하지 않아요」) —
+ * 준비된 광고만 띄우고, 준비 전엔 누를 수 없고, 실패하면 불러오기만 다시 한다. 홈 지우개와 책방 성향이 같은 함수를 쓴다.
+ */
+describe('리워드 광고 버튼 (rewardAdButton)', () => {
+  it('REQ-07 · rewardAdButton — 준비됐으면 원래 문구로 재생한다', () => {
+    expect(rewardAdButton('ready', BUTTON_LABEL)).toEqual({ label: BUTTON_LABEL, action: 'show' });
+  });
+
+  it('REQ-07 · rewardAdButton — 부르기 전·불러오는 중엔 「광고 불러오는 중…」이고 누를 수 없다', () => {
+    expect(rewardAdButton('idle', BUTTON_LABEL)).toEqual({ label: '광고 불러오는 중…', action: null });
+    expect(rewardAdButton('loading', BUTTON_LABEL)).toEqual({ label: '광고 불러오는 중…', action: null });
+  });
+
+  it('REQ-07 · rewardAdButton — 실패면 「광고 다시 불러오기」이고 누르면 불러오기만 한다', () => {
+    expect(rewardAdButton('failed', BUTTON_LABEL)).toEqual({ label: '광고 다시 불러오기', action: 'retry' });
+  });
+
+  it('REQ-07 · rewardAdButton — 재생 중엔 누를 수 없다', () => {
+    expect(rewardAdButton('showing', BUTTON_LABEL)).toEqual({ label: BUTTON_LABEL, action: null });
+  });
+
+  it('REQ-07 · 세 문구 모두 「광고」를 말한다 — 광고 위장 금지', () => {
+    for (const status of ['idle', 'loading', 'ready', 'showing', 'failed'] as const) {
+      expect(rewardAdButton(status, BUTTON_LABEL).label).toContain('광고');
+    }
+  });
 });
 
 describe('버튼 노출 조건 (showWaiverButton)', () => {
@@ -225,9 +269,9 @@ describe('홈 렌더 배선', () => {
     expect(renderHome()).not.toContain(BUTTON_LABEL);
   });
 
-  it('진행률 게이지가 세이지 단색으로 찬다 — 그라데이션은 재료를 하나 더 얹는다(톤 조율 A)', () => {
+  it('진행률 게이지가 강조 잉크 단색으로 찬다 — 그라데이션은 재료를 하나 더 얹는다', () => {
     // 게이지 막대만 집는다 — 같은 토큰을 캐러셀 점(DOT_ON)도 쓰므로 토큰 문자열만으로는 게이지를 못 가린다.
-    expect(renderHome()).toMatch(/width:calc\(\(100% - 6px\)[^"]*background:var\(--adaptiveBlue500, #5B7F55\)"/);
+    expect(renderHome()).toMatch(/width:calc\(100% \* [^"]*background:var\(--adaptiveBlue500, #1D1B18\)"/);
     expect(renderHome()).not.toContain('linear-gradient(90deg');
     expect(renderHome()).not.toContain('#2F8F6B');
   });
@@ -505,14 +549,6 @@ describe('목표 손잡이 (바꾸기 ›)', () => {
     expect(markup.indexOf('하루 목표')).toBeLessThan(markup.indexOf(GOAL_PILL));
   });
 
-  // 전면광고 로드에 1~2초가 걸린다 — 라벨이 그대로면 눌러도 아무 일 없는 것처럼 보여 다시 누른다.
-  it('전면광고를 기다리는 동안엔 「준비 중…」— 누른 게 먹혔다고 말한다', () => {
-    const markup = renderHome({ todayGoalSeconds: 3600 }, { goalAdPending: true });
-
-    expect(markup).toContain('준비 중…');
-    expect(markup).not.toContain(GOAL_PILL);
-  });
-
   it('목표가 0이면 통계 행이 없고 카드 안 손잡이가 그 길을 맡는다 — 게이지 줄이 통째로 안 그려진다', () => {
     const markup = renderHome({ todayGoalSeconds: 0, carriedDebtSeconds: 0 });
 
@@ -536,21 +572,17 @@ describe('목표 손잡이 (바꾸기 ›)', () => {
 
   /**
    * 스크린리더엔 무엇을 바꾸는지까지 말한다 — 보이는 글자 「바꾸기」는 옆 캡션에 기대는 한 단어라, 버튼만
-   * 훑는 탐색에선 뜻이 없다. 대기 중엔 이름을 덮지 않아 「준비 중…」이 그대로 이름이 된다.
+   * 훑는 탐색에선 뜻이 없다.
    */
-  it('손잡이 이름은 「하루 목표 바꾸기/정하기」, 대기 중엔 「준비 중…」 그대로다', () => {
+  it('손잡이 이름은 「하루 목표 바꾸기/정하기」다', () => {
     const handleTag = (markup: string) => {
       const at = markup.indexOf('<button', markup.indexOf('data-goal-caption'));
       return markup.slice(at, markup.indexOf('>', at) + 1);
     };
-    const pending = handleTag(renderHome({ todayGoalSeconds: 3600 }, { goalAdPending: true }));
-
     expect(handleTag(renderHome({ todayGoalSeconds: 3600 }))).toContain('aria-label="하루 목표 바꾸기"');
     expect(handleTag(renderHome({ todayGoalSeconds: 0, carriedDebtSeconds: 1800, carryover: true }))).toContain(
       'aria-label="하루 목표 정하기"',
     );
-    expect(pending).toContain('disabled=""'); // 같은 손잡이를 잡았다는 양성 확인
-    expect(pending).not.toContain('aria-label');
   });
 });
 
@@ -562,6 +594,7 @@ describe('목표 손잡이 (바꾸기 ›)', () => {
  * <p>왜 렌더가 아니라 소스 판독인가: 이 버튼은 ⓘ 툴팁 <b>안</b>에 있고 툴팁은 `showNote` 초기 false로
  * 시작한다 — 하니스가 정적 렌더라 펼 수가 없어 <b>렌더로는 관측 자체가 불가능</b>하다(T-149).
  * `?raw`로 소스를 읽는 건 `env-production.test.ts`가 지면↔광고 그룹 배선에 이미 쓰는 방식 그대로다.
+ * 단 버튼의 `onClick`만은 렌더 <b>도중</b> ⓘ를 눌러 펼친 엘리먼트 트리로 잰다(아래 `homeTreeWithNoteOpen` — 리뷰 X5).
  *
  * <p>주석을 먼저 걷는 이유는 T-205다 — 걷지 않으면 블록을 <b>주석 처리해도</b> 문자열이 남아 통과한다.
  */
@@ -575,8 +608,8 @@ describe('광고 손잡이 배선 (수익 경로)', () => {
     expect(homeCode).toMatch(/\{\s*showWaiverButton\([\s\S]{0,200}?\)\s*&&\s*\(\s*<Button/);
   });
 
-  // 캡션 손잡이는 렌더로는 클릭·비활성 배선을 못 잰다(T-149) — 소스로 잠근다. 비활성이 빠지면 전면광고 로드 중
-  // 연타로 광고가 두 장 쌓이고, onClick이 빠지면 목표로 가는 평상시의 문이 조용히 죽는다(리뷰 M1·M4).
+  // 캡션 손잡이는 렌더로는 클릭 배선을 못 잰다(T-149) — 소스로 잠근다. onClick이 빠지면 목표로 가는
+  // 평상시의 문이 조용히 죽는다(리뷰 M4).
   it('캡션 손잡이가 목표 이동을 부른다', () => {
     const cap = homeCode.indexOf('data-goal-caption');
     const at = homeCode.indexOf('<button', cap);
@@ -584,7 +617,6 @@ describe('광고 손잡이 배선 (수익 경로)', () => {
 
     expect(cap).toBeGreaterThan(-1);
     expect(btn).toMatch(/onClick=\{onGoGoal\}/);
-    expect(btn).toMatch(/disabled=\{goalAdPending\}/);
   });
 
   it('그 버튼이 ⓘ 툴팁 안에 산다 — 밖으로 나오면 죄책감 없는 화면에 광고가 상주한다', () => {
@@ -595,6 +627,108 @@ describe('광고 손잡이 배선 (수익 경로)', () => {
     expect(open).toBeGreaterThan(-1);
     expect(gate).toBeGreaterThan(open);
     expect(gate).toBeLessThan(close);
+  });
+
+  /**
+   * ⓘ를 「눌러」 연 홈의 엘리먼트 트리 — 훅이 있는 홈을 탐침 컴포넌트의 렌더 안에서 함수로 부르고, 첫 패스에서
+   * ⓘ의 onClick을 그 렌더 도중에 부른다. 렌더 중 갱신이라 서버 렌더러가 탐침을 한 번 더 그리고(showNote = true),
+   * 그 둘째 트리에 광고 버튼이 선다. 마크업이 아니라 트리라 버튼의 `onClick`을 꺼내 부를 수 있다(리뷰 돌연변이 X5).
+   */
+  const homeTreeWithNoteOpen = (overrides: Partial<DashboardResponse> = {}): ReactNode => {
+    let tree: ReactNode = null;
+    let opened = false;
+    const Probe = () => {
+      tree = Home({
+        dashboard: dashboard(overrides),
+        mode: 'reading',
+        study: IDLE_STUDY,
+        onChangeMode: () => {},
+        onBlockedModeChange: () => {},
+        selectedBookId: undefined,
+        onSelectBook: () => {},
+        onTimerChange: () => {},
+        celebrate: false,
+        onGoGoal: () => {},
+        onGoSettings: () => {},
+        onError: () => {},
+        onOpenMargin: () => {},
+        onComposeMargin: () => {},
+        onOpenChat: () => {},
+        onContinueReading: () => {},
+        onGoHistory: () => {},
+      });
+      if (!opened) {
+        opened = true;
+        clickHandlerFor(tree, '남은 시간')?.();
+      }
+      return null;
+    };
+    renderToStaticMarkup(
+      <TDSMobileProvider userAgent={userAgent}>
+        <Probe />
+      </TDSMobileProvider>,
+    );
+    return tree;
+  };
+
+  it('광고 버튼을 누르면 광고가 열린다 — onClick이 빠지면 버튼만 서고 수익 경로가 죽는다', () => {
+    watchRewardAdMock.mockResolvedValue(false);
+    const claim = clickHandlerFor(homeTreeWithNoteOpen(), BUTTON_LABEL);
+
+    expect(claim).toBeTypeOf('function');
+    claim?.();
+    expect(watchRewardAdMock).toHaveBeenCalledTimes(1);
+    expect(watchRewardAdMock).toHaveBeenCalledWith(REWARD_AD_GROUP_ID);
+  });
+
+  /**
+   * 라벨이 든 버튼 엘리먼트의 프롭 — `clickHandlerFor`와 같은 재귀로 찾되 핸들러가 아니라 프롭을 돌려준다.
+   * 마크업 전체에서 `disabled`를 찾으면 TDS 전역 CSS의 `:disabled` 때문에 늘 참이 된다(아래 `goalHandleTag` 주석).
+   */
+  const buttonPropsFor = (node: ReactNode, label: string): Record<string, unknown> | undefined => {
+    if (Array.isArray(node)) {
+      for (const child of node) {
+        const hit = buttonPropsFor(child, label);
+        if (hit) return hit;
+      }
+      return undefined;
+    }
+    if (!isValidElement(node)) return undefined;
+    const props = node.props as { children?: ReactNode; onClick?: unknown };
+    if (typeof props.onClick === 'function' && textOf(props.children).includes(label)) return props;
+    return buttonPropsFor(props.children, label);
+  };
+
+  it('REQ-07 · 지우개가 불러오는 중이면 버튼이 「광고 불러오는 중…」이고 비활성이다', () => {
+    useAdSlotMock.mockReturnValue('loading');
+
+    const props = buttonPropsFor(homeTreeWithNoteOpen(), '광고 불러오는 중…');
+
+    expect(props).toBeDefined();
+    expect(props?.disabled).toBe(true);
+  });
+
+  it('REQ-07 · 지우개를 못 불러왔으면 「광고 다시 불러오기」를 눌러 다시 불러온다 — 광고는 열지 않는다', () => {
+    useAdSlotMock.mockReturnValue('failed');
+    const retry = clickHandlerFor(homeTreeWithNoteOpen(), '광고 다시 불러오기');
+
+    expect(retry).toBeTypeOf('function');
+    retry?.();
+    expect(preloadAdMock).toHaveBeenCalledWith('test-ad-group');
+    expect(watchRewardAdMock).not.toHaveBeenCalled();
+  });
+
+  it('REQ-08 · ⓘ 상자를 펴야 지우개 광고를 불러 둔다 — 접혀 있으면 안 부른다', () => {
+    homeTreeWithNoteOpen();
+
+    expect(useAdSlotMock.mock.calls[0]).toEqual(['test-ad-group', false]); // 첫 패스 — 상자가 접혀 있다
+    expect(useAdSlotMock.mock.calls.at(-1)).toEqual(['test-ad-group', true]); // 둘째 패스 — 상자를 폈다
+  });
+
+  it('REQ-08 · 지울 날이 없으면 상자를 펴도 불러 두지 않는다', () => {
+    homeTreeWithNoteOpen({ debtWaiverAvailable: false });
+
+    expect(useAdSlotMock.mock.calls.at(-1)).toEqual(['test-ad-group', false]);
   });
 
   it('문구에 「광고」를 명시한다 — 광고 위장 금지 조항이다', () => {
@@ -735,17 +869,6 @@ describe('목표 손잡이 (goalHandleLabel · 렌더)', () => {
     expect(goalHandleLabel(0)).toBe('목표 정하기');
   });
 
-  // 전면광고 로드에 1~2초가 걸린다(2026-08-14: 광고를 먼저 띄우고 전환하도록 바꾼 뒤 생긴 대기).
-  // 그동안 라벨이 그대로면 눌러도 아무 일 없는 것처럼 보여 사용자가 다시 누른다.
-  it('광고를 기다리는 동안엔 「준비 중」— 목표값과 무관하게 대기 상태를 말한다', () => {
-    expect(goalHandleLabel(1800, true)).toBe('준비 중…');
-    expect(goalHandleLabel(0, true)).toBe('준비 중…');
-  });
-
-  it('기다리지 않을 때는 평소 라벨 그대로 — 대기 표시가 평상시를 건드리지 않는다', () => {
-    expect(goalHandleLabel(1800, false)).toBe('하루 목표 바꾸기');
-  });
-
   // ⚠️ 전체 마크업에 'disabled'가 있나로 재면 안 된다 — TDS 전역 CSS에 `:disabled` 셀렉터가 실려
   // 있어 그 단언은 항상 참이고, 반대 단언은 항상 거짓이다(공허한 테스트). 손잡이 버튼만 겨눈다.
   const goalHandleTag = (markup: string, label: string) => {
@@ -757,11 +880,7 @@ describe('목표 손잡이 (goalHandleLabel · 렌더)', () => {
   // 목표 0일 때만 손잡이가 카드에 남으므로(그 외엔 접힌 상자 안) 비활성 검사도 그 상태에서 한다.
   const noGoal = { todayGoalSeconds: 0, remainingSeconds: 0 };
 
-  it('대기 중이면 손잡이가 비활성이다 — 연타로 광고가 두 장 쌓이지 않게', () => {
-    expect(goalHandleTag(renderHome(noGoal, { goalAdPending: true }), '준비 중')).toContain('disabled=""');
-  });
-
-  it('평상시 손잡이는 눌린다 — 대기 표시가 평상시를 잠그지 않는다', () => {
+  it('손잡이는 눌린다 — 비활성 속성이 없다', () => {
     expect(goalHandleTag(renderHome(noGoal), '목표 정하기')).not.toContain('disabled=""');
   });
 
@@ -1464,7 +1583,7 @@ describe('「책 없이」 카드 (캐러셀 0번 칸)', () => {
 
     expect(card).toContain(`width:${COVER_WIDTH}px`);
     expect(card).toContain(`height:${COVER_HEIGHT}px`);
-    expect(card).toContain('border:2px dashed');
+    expect(card).toContain('border:1px dashed'); // 에디토리얼 PR-2 — 점선 1px muted(spec §5.1)
     // 테두리가 크기를 불리면 스냅 위치(i × stride)가 카드부터 어긋난다.
     expect(card).toContain('box-sizing:border-box');
   });
@@ -1487,6 +1606,15 @@ describe('「책 없이」 카드 (캐러셀 0번 칸)', () => {
     expect(noBookCardOf(markup)).not.toContain('aria-current');
     expect(markup).toContain('data-selected-book="데미안"');
     expect(markup).not.toContain(noBookSubtitle(books.length));
+  });
+
+  it('가운데가 아니어도 「책 없이」 칸은 흐리지 않는다 — muted 글자가 .7이면 대비 3.03(spec §5.1 ⚠️)', () => {
+    const markup = renderCarousel(1);
+    const otherCover = markup.split('<button').find((chunk) => chunk.includes('data-cover-title="노인과 바다"')) ?? '';
+
+    expect(noBookCardOf(markup)).toContain('opacity:1');
+    expect(noBookCardOf(markup)).not.toContain('opacity:0.7');
+    expect(otherCover).toContain('opacity:0.7'); // 가운데 아닌 표지는 그대로 흐리다 — 흐림 자체를 걷은 게 아니다
   });
 
   it('책이 0권이어도 카드 한 장으로 캐러셀이 선다 — 「첫 책 추가하기」 빈 상태를 대신한다', () => {
@@ -1636,12 +1764,12 @@ describe('계정 진입점', () => {
     // 개구 26px(t2)일 때는 화면 제목(22px)보다 4px 큰 게 전부라 히어로로 안 읽혔다. 손글씨 옆의
     // 세리프는 「적어 둔 값」으로 읽혀, 크기와 서체 두 축으로 주변에서 떨어져 나온다.
     const clock = renderHome();
-    const shown = /<[^<>]*>(\d+:\d{2})</.exec(clock);
-    expect(shown).not.toBeNull();
-    const at = clock.indexOf('>' + shown![1] + '<');
-    const tag = clock.slice(clock.lastIndexOf('<', at), at);
-    expect(tag).toContain('Gowun Batang');
-    expect(tag).toContain('--tds-t-t2-text-fontSize');
+    const at = clock.indexOf('data-hero-clock');
+    expect(at).toBeGreaterThan(-1);
+    const tag = clock.slice(clock.lastIndexOf('<', at), clock.indexOf('>', at));
+    expect(tag).toContain('aria-label="45:00"');
+    expect(tag).toContain('Noto Serif KR');
+    expect(tag).toContain('font-size:84px'); // 에디토리얼 PR-2 — D1 84/88(아치 속 표제)
   });
 
   it('설정 화면으로 가는 손잡이를 그린다 — 이름은 접근성 이름으로 남는다(글자는 아바타로 바뀌었다)', () => {
@@ -1662,10 +1790,11 @@ describe('계정 진입점', () => {
     expect(section({ loginId: null })).toContain('구스펠님'); // 이름은 그대로 — 행이 통째로 사라지지 않는다
   });
 
-  it('아바타는 책방과 같은 이니셜 원이다 — 같은 사람이 화면마다 다른 색이면 다른 사람으로 읽힌다', () => {
+  it('아바타는 책방과 같은 잉크 1px 이니셜 원이다 — 색은 표지 몫이라 사람은 선으로 선다(에디토리얼)', () => {
     const markup = section({ nickname: '나비독서' });
 
-    expect(markup).toContain(coverColor('나비독서')); // 닉네임에서 결정적으로 고른 그 색
+    expect(markup).not.toContain(coverColor('나비독서')); // 천 장정 색은 표지만 쓴다
+    expect(markup).toContain('border:1px solid var(--adaptiveGrey800');
     expect(markup).toContain('>나<');
   });
 
@@ -1949,28 +2078,30 @@ describe('홈 히어로 위계 (시안 2a)', () => {
     return at < 0 ? '' : markup.slice(markup.lastIndexOf('<', at), at);
   };
 
-  it('인사말은 세리프 28이다(시안 Soft-Home) — 「누구의 화면인가」에 답하는 값이라 이름이 아니라 값으로 조판한다', () => {
+  it('인사말은 세리프 H2 22/30이다(안 1 머리띠) — 홈의 표제는 아치 속 시계라 이름은 한 단 내려선다', () => {
     const tag = tagBefore(renderHome(), '구스펠님');
 
     expect(tag).not.toBe('');
-    expect(tag).toContain('Gowun Batang');
-    expect(tag).toContain('font-size:28px');
+    expect(tag).toContain('Noto Serif KR');
+    expect(tag).toContain('font-size:22px');
+    expect(tag).toContain('line-height:30px');
   });
 
-  it('오버라인은 흐린 잉크 16이고 자간이 없다(시안 Soft-Home) — 머리 줄 왼쪽에 토글과 나란히 선다', () => {
+  it('눈썹은 흐린 잉크 L1 14이고 자간이 없다(안 1) — 시계 바로 위 가운데', () => {
     const tag = tagBefore(renderHome(), '오늘 읽은 시간');
 
     expect(tag).not.toBe('');
-    expect(tag).toContain('font-size:16px');
+    expect(tag).toContain('font-size:14px');
     expect(tag).not.toContain('letter-spacing');
     expect(tag).toContain('--adaptiveGrey600');
   });
 
-  it('남은 시간 라벨은 15, 목표 캡션은 14다 — 캡션은 라벨보다도 한 단 낮은 보조 정보다', () => {
+  it('오늘 표의 「남은 시간」·「하루 목표」는 둘 다 L1 14 흐린 잉크다 — 값(15:00)만 세리프 24로 선다', () => {
     const markup = renderHome();
 
-    expect(tagBefore(markup, '남은 시간')).toContain('font-size:15px');
-    expect(tagBefore(markup, '하루 목표')).toContain('font-size:14px');
+    expect(tagBefore(markup, '남은 시간')).toContain('font-size:14px');
+    expect(tagBefore(markup, '하루 목표')).toContain('white-space:nowrap');
+    expect(tagBefore(markup, '>15:00<'.slice(1))).toContain('font-size:24px');
   });
 });
 
@@ -1987,16 +2118,20 @@ describe('Soft 히어로 (PR-2)', () => {
   };
   const hero = (markup: string) => tagWith(markup, LAMP_PAGE_CLASS);
 
-  it('히어로는 반경 30의 부푼 면이다 — 연필선이 되살아나지 않는다', () => {
-    const tag = hero(renderHome());
+  it('히어로는 아치다(안 1) — 반원 머리 + 잉크 1px, 그림자 없음', () => {
+    const tag = tagWith(renderHome(), 'data-arch');
 
-    expect(tag).toContain('var(--puffShadow');
-    expect(tag).toContain('border-radius:30px');
-    expect(tag).not.toContain('border-image');
+    expect(tag).toContain('border-radius:999px 999px 0 0'); // 그 그릇을 잡았다(아래 부재 단언이 공허하지 않음)
+    expect(tag).toContain('border:1px solid var(--adaptiveGrey800');
+    expect(tag).not.toContain('box-shadow');
+    expect(hero(renderHome())).toBe('<div class="lamp-page">'); // 밤 페이지 표식 그릇은 칠하지 않는다
   });
 
-  it('게이지 트랙은 눌린 면이다', () => {
-    expect(tagWith(renderHome(), 'data-gauge-track')).toContain('var(--dentShadow');
+  it('게이지 트랙은 가는 선 색 막대(TRACK, 높이 4)다', () => {
+    const track = tagWith(renderHome(), 'data-gauge-track');
+    expect(track).toContain('background:var(--adaptiveGrey200');
+    expect(track).toContain('height:4px');
+    expect(track).not.toContain('box-shadow');
   });
 
   /**
@@ -2030,64 +2165,63 @@ describe('Soft 히어로 (PR-2)', () => {
     expect(tag).toContain('margin:-10px 0');
   });
 
-  it('남은 시간 타일은 버터다 — 정보색', () => {
+  it('남은 시간은 면 없는 표 줄이다 — 옛 버터 타일(정보색)은 걷었다(에디토리얼 PR-2)', () => {
     const markup = renderHome();
+    const row = tagWith(markup, 'data-today-row="remaining"');
 
-    expect(markup).toContain('background:var(--butterBg');
-    expect(markup).toContain('color:var(--butterInk');
+    expect(row).toContain('border-bottom:1px solid var(--adaptiveGrey200'); // 줄을 잡았다(아래 부재 단언이 공허하지 않음)
+    expect(markup).not.toContain('background:var(--butterBg');
   });
 
   /**
-   * 「후광」(선택 표시 H안, 2026-09-24) — 진한 3px 액자가 부드러운 화면에서 혼자 딱딱하게 튀어(사용자) 카드색 틈 3px +
-   * 중간 세이지(Blue500) 테 3px로 바꿨다. 잔디 「오늘」 링(`TODAY_RING`)과 같은 「틈 + 세이지」 문법이다.
-   *
-   * <p>⚠️ 옛 단언 `'0 0 0 3px'`는 새 문자열의 <b>틈</b>(카드색 3px)에도 들어 있어 우연히 통과한다 — 판별하는 조각으로 잰다.
+   * 고른 칸 — 후광 링을 걷고(이펙트 0) 바닥 기준 확대(88 → 104) + 잉크 체크 배지로 선다. 안 고른 칸은 .7(.45는 40대 이상에게
+   * 지워진 것으로 읽혔다). 판(`data-board`)·바닥 정렬은 아래 「REQ-07 안 1 배치」가 잰다.
    */
-  it('캐러셀의 고른 칸은 후광(카드색 틈 3 + 세이지 테 3) + 체크 배지로 선다(흐림으로 지우지 않는다)', () => {
+  it('캐러셀의 고른 칸은 후광 없이 바닥 기준 확대 + 체크 배지로 선다(흐림으로 지우지 않는다)', () => {
     const books = [book(1, '데미안'), book(2, '사피엔스')];
     const markup = renderHome({ readingBooks: books }, { selectedBookId: 1 });
     const at = markup.indexOf('aria-current="true"');
     const cell = markup.slice(markup.lastIndexOf('<button', at), markup.indexOf('</button>', at));
     const button = cell.slice(0, cell.indexOf('>') + 1);
 
-    expect(button).toContain('box-shadow:0 0 0 3px var(--adaptiveGrey100, #FBF9F4), 0 0 0 6px var(--adaptiveBlue500, #5B7F55)');
-    expect(button).toContain('border-radius:8px'); // 후광이 둥글게 흐르려면 칸 모서리도 둥글어야 한다
+    expect(button).toContain(`scale(${104 / 88})`);
+    expect(button).not.toContain('box-shadow');
+    expect(button).toContain('border-radius:2px');
     expect(cell).toContain('data-check-badge');
-    expect(markup).toContain('opacity:0.7'); // 안 고른 칸은 .7 — .45는 40대 이상에게 지워진 것으로 읽혔다
+    expect(markup).toContain('opacity:0.7');
   });
 
-  it('체크 배지는 밝은 원 + 세이지 테 + 세이지 체크다 — 진한 채움은 탭바 원 하나다(선택 표시 H안)', () => {
+  it('체크 배지는 잉크 원 + 미색 체크다(spec §6.1 #17) — 옛 밝은 원 + 세이지 테는 걷었다', () => {
     const markup = renderHome({ readingBooks: [book(1, '데미안'), book(2, '사피엔스')] }, { selectedBookId: 1 });
     const at = markup.indexOf('data-check-badge');
     const badge = markup.slice(markup.lastIndexOf('<span', at), markup.indexOf('</span>', at));
 
-    // 양성 먼저 — 배지 조각을 제대로 잘랐는지(아래 부재 단언이 공허하지 않은지) 같은 렌더에서 확인한다(T-149).
-    expect(badge).toContain('background:var(--adaptiveGrey100');
-    expect(badge).toContain('border:2px solid var(--adaptiveBlue500');
-    expect(badge).toContain('stroke:var(--adaptiveBlue700');
-    expect(badge).not.toContain('background:var(--adaptiveBlue700');
-    expect(badge).not.toContain('--filledInk');
+    expect(badge).toContain('background:var(--adaptiveBlue500');
+    expect(badge).toContain('stroke:var(--filledInk');
+    expect(badge).not.toContain('border:2px solid');
   });
 
-  it('캐러셀 표지는 모서리 8이다 — 안쪽이 4로 각지면 후광이 둥글게 흐르지 않는다', () => {
+  it('캐러셀 표지는 모서리 2다 — 표지는 물건이라 각이 선다(에디토리얼)', () => {
     const markup = renderHome({ readingBooks: [book(1, '데미안'), book(2, '사피엔스')] }, { selectedBookId: 1 });
     const at = markup.indexOf('data-cover-title="사피엔스"'); // 안 고른 칸도 같은 모서리 — 스와이프 중 모양이 튀지 않게
     const cell = markup.slice(at, markup.indexOf('</button>', at));
 
     expect(cell).toContain('>사</div>'); // 자리 표지(CoverInitial)까지 잘렸다
-    expect(cell.slice(cell.indexOf('>') + 1)).toContain('border-radius:8px');
+    expect(cell.slice(cell.indexOf('>') + 1)).toContain('border-radius:2px');
   });
 
-  it('모드 세그먼트는 15이고, 고른 쪽은 밝은 칸 + 진한 글자다 — 홈의 진한 채움은 탭바 원 하나다(톤 조율 A)', () => {
+  it('모드 세그먼트는 밑줄형이다(안 1) — 고른 쪽은 강조 잉크 밑줄 2px + 강조 글자 500, 채우지 않는다', () => {
     const markup = renderHome();
     const at = markup.indexOf('aria-pressed="true"');
     const tag = markup.slice(at, markup.indexOf('>', at));
 
-    expect(tag).toContain('font-size:15px');
-    expect(tag).toContain('background:var(--adaptiveGrey100');
+    expect(tag).toContain('font-size:14px');
+    expect(tag).toContain('border-bottom:2px solid var(--adaptiveBlue700');
     expect(tag).toContain('color:var(--adaptiveBlue700');
-    expect(tag).toContain('box-shadow:'); // 작은 부풂 — 고른 칸이 트랙 위로 떠야 「고른 쪽」이 읽힌다
-    expect(tag).not.toContain('background:var(--adaptiveBlue700');
+    expect(tag).toContain('font-weight:500');
+    expect(tag).toContain('background:transparent');
+    expect(tag).toContain('min-height:44px');
+    expect(tag).not.toContain('box-shadow');
   });
 });
 
@@ -2148,8 +2282,9 @@ describe('목표 달성 메달 (PR-2)', () => {
     const at = markup.indexOf('기록 보기');
     const tag = markup.slice(markup.lastIndexOf('<button', at), at);
 
-    // 맨 <button>이라 `--btn-filled` 마커는 원래 붙을 수 없다 — 부재가 아니라 옅은 세이지 바탕을 양성으로 본다.
-    expect(tag).toContain('background:var(--adaptiveBlue50,'); // 경계 `,` — Blue500에 안 맞게
+    // 맨 <button>이라 `--btn-filled` 마커는 원래 붙을 수 없다 — 부재가 아니라 외곽선 알약(PR-2 #9)을 양성으로 본다.
+    expect(tag).toContain('border:1px solid var(--adaptiveBlue700');
+    expect(tag).toContain('background:transparent');
   });
 
   /**
@@ -2395,7 +2530,6 @@ describe('측정 중 책 바꾸기 문', () => {
           onTimerChange={() => {}}
           celebrate={false}
           onGoGoal={() => {}}
-          goalAdPending={false}
           onGoSettings={() => {}}
           onError={() => {}}
           onOpenMargin={() => {}}
@@ -2404,5 +2538,173 @@ describe('측정 중 책 바꾸기 문', () => {
       </TDSMobileProvider>,
     );
     expect(study).toContain('책 바꾸기');
+  });
+});
+
+/**
+ * 에디토리얼 재테마 PR-2 — 홈을 안 1 배치(머리띠 → 아치 → 오늘 표 → 고르기 선반 → 피드)로 세운다.
+ * 계획 §7 PR-2 테스트 표 1~8. 숫자(게이지 폭 240 · 아래 44 · 머리띠 16 — D5)는 컷 승인이 게이트라 여기서 박지 않는다.
+ */
+describe('REQ-07 안 1 배치 (PR-2)', () => {
+  /** JSX·블록·줄 주석을 걷어낸 홈 소스 — 「광고 손잡이 배선」과 같은 방식(T-205). */
+  const homeCode = homeSource.replace(/\{?\/\*[\s\S]*?\*\/\}?/g, '').replace(/^\s*\/\/.*$/gm, '');
+  /** `marker`를 품은 여는 태그 하나. */
+  const tagWith = (markup: string, marker: string) => {
+    const at = markup.indexOf(marker);
+    return at < 0 ? '' : markup.slice(markup.lastIndexOf('<', at), markup.indexOf('>', at) + 1);
+  };
+  const rowsOf = (markup: string) => [...markup.matchAll(/data-today-row="([^"]*)"/g)].map((m) => m[1]);
+  const books = [book(1, '데미안', { author: '헤르만 헤세' }), book(2, '사피엔스')];
+
+  it('REQ-07 · 홈 순서는 머리띠 → 아치 → 오늘 표 → 고르기 선반 → 피드', () => {
+    const markup = renderHome({ readingBooks: books });
+    const at = ['data-masthead', 'data-arch', 'data-today-table', 'data-picker', 'data-feed-tab'].map((m) => markup.indexOf(m));
+
+    expect(at.every((i) => i > -1)).toBe(true);
+    expect([...at].sort((a, b) => a - b)).toEqual(at);
+  });
+
+  it('REQ-07 · 오늘 표 줄은 남은 시간 · 하루 목표 · (읽지 않은 대화)이고 대화 줄은 미읽음이 있을 때만', () => {
+    expect(rowsOf(renderHome({}, { chatUnread: 0 }))).toEqual(['remaining', 'goal']);
+    const withChat = renderHome({}, { chatUnread: 2 });
+
+    expect(rowsOf(withChat)).toEqual(['remaining', 'goal', 'unread']);
+    // 대화는 표 안의 줄이다 — 따로 선 카드(<section>)가 남지 않는다.
+    expect(withChat.indexOf('읽지 않은 대화 2')).toBeLessThan(withChat.indexOf('data-picker'));
+    expect(withChat.lastIndexOf('<section', withChat.indexOf('읽지 않은 대화 2'))).toBeLessThan(withChat.indexOf('data-today-table'));
+    // 「하루 목표 30분 · 바꾸기」의 가운데 점은 빠졌다(대조표 #11) — 「바꾸기」가 줄 오른쪽 끝으로 갔다.
+    expect(withChat).not.toContain('>·<');
+  });
+
+  it('REQ-08 · 광고 손잡이가 사는 ⓘ 상자는 표 줄 1(남은 시간) 바로 아래, 줄 2(하루 목표) 앞에 선다', () => {
+    const table = homeCode.indexOf('data-today-table');
+    const remainingRow = homeCode.indexOf('data-today-row="remaining"');
+    const note = homeCode.indexOf('<RemainingNote');
+    const goalRow = homeCode.indexOf('data-today-row="goal"');
+
+    expect(table).toBeGreaterThan(-1);
+    expect(remainingRow).toBeGreaterThan(table);
+    expect(note).toBeGreaterThan(remainingRow);
+    expect(note).toBeLessThan(goalRow);
+  });
+
+  it('REQ-07 · 시계 크기 — 5자 84, 그 이상 68 · 렌더된 시계가 84px', () => {
+    expect(heroClockSize('25:00')).toBe(84);
+    expect(heroClockSize('01:25:00')).toBe(68);
+    expect(tagWith(renderHome(), 'data-hero-clock')).toContain('font-size:84px');
+  });
+
+  /**
+   * U-4 실측(목 모드 390 · Noto Serif KR 500 84px): `tabular-nums`를 줘도 「11:11」 177px · 「88:88」 211px — 이 명조엔 고정폭
+   * 숫자가 없다. 그래서 숫자마다 1ch 칸에 세운다(계획 §11 U-4 처방). 안 그러면 측정 중 매초 시계가 좌우로 흔들린다.
+   */
+  it('REQ-07 · 시계 숫자는 한 자씩 1ch 칸에 선다 — 읽기 이름은 시계 글자 그대로', () => {
+    const markup = renderHome();
+    const at = markup.indexOf('data-hero-clock');
+    const clock = markup.slice(markup.lastIndexOf('<div', at), markup.indexOf('</div>', at));
+
+    expect(clock).toContain('aria-label="45:00"');
+    expect(clock.match(/width:1ch/g)).toHaveLength(4);
+  });
+
+  it('REQ-07 · 고르기 선반 — 바닥 정렬 트랙 · 잉크 판 하나 · 바닥 기준 확대 · 후광 없음 · 잉크 체크 배지', () => {
+    const markup = renderHome({ readingBooks: books }, { selectedBookId: 1 });
+    const board = tagWith(markup, 'data-board');
+    const current = tagWith(markup, 'aria-current="true"');
+    const badgeAt = markup.indexOf('data-check-badge');
+    const badge = markup.slice(markup.lastIndexOf('<span', badgeAt), markup.indexOf('</span>', badgeAt));
+
+    expect(markup).toContain('align-items:flex-end');
+    expect([...markup.matchAll(/data-board/g)]).toHaveLength(1);
+    expect(board).toContain('1px solid var(--adaptiveGrey800');
+    expect(current).toContain('transform-origin:bottom center');
+    expect(markup).not.toContain('0 0 0 6px');
+    // 잉크 원(토큰 500 — 채움 버튼 가드가 Blue700 바탕 꼴을 센다) + 미색 체크.
+    expect(badge).toContain('background:var(--adaptiveBlue500');
+    expect(badge).toContain('stroke:var(--filledInk');
+  });
+
+  it('REQ-07 · 「여백에 글 남기기」는 판에 걸친 외곽선 알약(보이는 44)이다 — 판 뒤, 고른 책 제목 앞', () => {
+    const markup = renderHome({ readingBooks: books }, { selectedBookId: 1 });
+    const at = markup.indexOf('>여백에 글 남기기<');
+    const pill = markup.slice(markup.lastIndexOf('<button', at), at);
+
+    expect(at).toBeGreaterThan(-1);
+    expect(pill).toContain('border:1px solid var(--adaptiveBlue700');
+    expect(pill).toContain('border-radius:999px');
+    expect(pill).toContain('height:44px');
+    expect(markup.indexOf('data-board')).toBeLessThan(at);
+    expect(at).toBeLessThan(markup.indexOf('data-selected-book'));
+  });
+
+  it('REQ-07 · 문 그릇은 위에 붙고 z를 세우지 않는다 — 여백 안내가 열려도 알약 제자리 · 가운데 · 딤이 탭바를 덮는다', () => {
+    dismissCoachmark('bookshop'); // 투어 마지막 걸음 → 여백 안내가 문에 붙는다
+    const markup = renderHome({ readingBooks: books }, { selectedBookId: 1 });
+    const at = markup.indexOf('data-door');
+    const [outer, inner] = markup.slice(at).split('>');
+
+    expect(markup).toContain('읽다가 떠오른 생각을 여백에');
+    expect(at).toBeGreaterThan(-1);
+    // bottom:0이면 아래로 붙은 그릇이 말풍선 높이만큼 알약을 위로 밀어 고른 표지를 덮는다.
+    expect(outer).toContain('top:calc(100% - 44px)');
+    expect(outer).not.toContain('bottom:');
+    // z가 서면 쌓임 맥락이 생겨 딤(fixed z101)이 그 안에 갇히고 탭바(z100)가 밝게 남는다.
+    expect(outer).not.toContain('z-index');
+    // 안쪽이 말풍선 폭으로 넓어져도 알약은 가운데(표지 가운데)에 선다.
+    expect(inner).toContain('text-align:center');
+  });
+
+  it('REQ-08 · 측정 중(독서) — 측정 줄이 오늘 표의 줄이고, 「읽는 중」 표지는 64다', () => {
+    const reading = book(7, '미움받을 용기', { author: '기시미 이치로' });
+    const markup = renderHome({
+      hasActiveSession: true,
+      activeStartedAt: new Date().toISOString(),
+      activeBookTitle: '미움받을 용기',
+      activeBook: reading,
+      readingBooks: [reading],
+    });
+
+    expect(rowsOf(markup)).toEqual(['remaining', 'goal', 'measuring']);
+    expect(card(markup, READING_NOW_HEADER)).toContain('width:64px');
+  });
+
+  it('REQ-08 · 측정 중(공부) — 눈썹 「오늘 공부한 시간」, 게이지·남은 시간 줄 없음, 측정 줄이 표 줄이다', () => {
+    const markup = renderToStaticMarkup(
+      <TDSMobileProvider userAgent={userAgent}>
+        <Home
+          dashboard={dashboard()}
+          mode="study"
+          study={{ ...IDLE_STUDY, hasActiveSession: true, activeStartedAt: new Date().toISOString(), activeBook: null, books: [] }}
+          onChangeMode={() => {}}
+          onBlockedModeChange={() => {}}
+          selectedBookId={undefined}
+          onSelectBook={() => {}}
+          onTimerChange={() => {}}
+          celebrate={false}
+          onGoGoal={() => {}}
+          onGoSettings={() => {}}
+          onError={() => {}}
+          onOpenMargin={() => {}}
+          onComposeMargin={() => {}}
+        />
+      </TDSMobileProvider>,
+    );
+
+    expect(markup).toContain('오늘 공부한 시간');
+    expect(markup).not.toContain('data-gauge-track');
+    expect(rowsOf(markup)).toEqual(['measuring']);
+    expect(markup).toContain('책 바꾸기');
+  });
+
+  it('REQ-14 · 밤에 밝게 남는 자리는 아치 + 오늘 표 한 그릇 — 둘이 종이색으로 칠하고 .lamp-page 규칙엔 배경 선언이 없다', () => {
+    const markup = renderHome({ hasActiveSession: true, activeStartedAt: new Date().toISOString() });
+    const css = readFileSync(new URL('./global.css', import.meta.url), 'utf8');
+    const lampRule = css.slice(css.indexOf('body.reading-lamp .lamp-page {'), css.indexOf('}', css.indexOf('body.reading-lamp .lamp-page {')));
+
+    expect(tagWith(markup, 'data-arch')).toContain('background:var(--adaptiveGrey100');
+    expect(tagWith(markup, 'data-today-table')).toContain('background:var(--adaptiveGrey100');
+    expect(markup.indexOf(LAMP_PAGE_CLASS)).toBeLessThan(markup.indexOf('data-arch'));
+    expect(lampRule).toContain('--adaptiveGrey100'); // 규칙을 잡았다(아래 부재 단언이 공허하지 않음)
+    expect(lampRule).not.toMatch(/\bbackground\s*:/);
   });
 });

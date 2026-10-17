@@ -33,22 +33,21 @@ import {
 } from '../api';
 import { useBackClose } from '../back';
 import { cacheGet, cacheKeyProfile, cacheKeyProfileBooks, cachePut } from '../cache';
-import { PERSONALITY_AD_GROUP_ID, watchRewardAd } from '../toss';
+import { PERSONALITY_AD_GROUP_ID, preloadAd, useAdSlot, watchRewardAd } from '../toss';
 import {
   Avatar,
   ErrorMessage,
+  FIELD,
   Loading,
-  PUFF,
+  OUTLINE_PILL,
   SECTION_RULE,
   SERIF_VALUE,
-  SOFT_OUTLINE,
-  SOFT_ROW,
   Screen,
   SectionTitle,
   Sheet,
   Text,
 } from '../ui';
-import { waiverErrorMessage } from './Home';
+import { rewardAdButton, waiverErrorMessage } from './Home';
 import { BookGrid, SECTIONS } from './Library';
 import { MarginBoard, MarginCard, hasFreshStory, tabStyle } from './Story';
 
@@ -266,7 +265,7 @@ export function MutualFollowers({ users, total }: { users?: UserBrief[]; total?:
               display: 'flex',
               marginLeft: i === 0 ? 0 : -7,
               borderRadius: '50%',
-              border: '2px solid var(--adaptiveBackground, #FCFAF5)',
+              border: '2px solid var(--adaptiveBackground, #F5F0E6)',
             }}
           >
             <Avatar nickname={u.nickname} size={20} />
@@ -292,9 +291,9 @@ export function MutualFollowers({ users, total }: { users?: UserBrief[]; total?:
 /** TDS `Button`(기본 size)의 실측 높이 — 옆에 세우는 정사각 ⋯ 버튼의 한 변이다(목 모드 390×844 실측: 57px). */
 const TDS_BUTTON_HEIGHT = 57;
 
-/** 팔로우 옆 정사각 버튼(종이비행기·⋯) — Soft 보조 손잡이(1.5px 세이지 실선). 높이는 flex stretch가 옆 팔로우 버튼에 맞춘다. */
+/** 팔로우 옆 정사각 버튼(종이비행기·⋯) — 외곽선 알약(강조 1px). 높이는 flex stretch가 옆 팔로우 버튼에 맞춘다. */
 const SQUARE_BUTTON: CSSProperties = {
-  ...SOFT_OUTLINE,
+  ...OUTLINE_PILL,
   flex: '0 0 auto',
   width: TDS_BUTTON_HEIGHT, // 높이는 stretch가 정한다 — 어긋나 봐야 「정사각이 아님」이지 「높이 불일치」는 아니다
   padding: 0,
@@ -720,6 +719,12 @@ export function ProfileCard({
   const sectionTitle = shelfTitle(activeTag, statusFilter, books.length);
   const openable = followCountsOpenable(profile.self, onOpenFollowList !== undefined);
   const actions = personalityActions(profile.self, personalityStatus, PERSONALITY_AD_GROUP_ID);
+  /** 성향 광고 — 버튼이 설 자격이 있을 때만 미리 불러 둔다. 광고 경로가 도는 동안(adBusy)은 다음 장을 부르지 않는다. */
+  const adStatus = useAdSlot(PERSONALITY_AD_GROUP_ID, actions.includes('ad') && !adBusy);
+  const ad = rewardAdButton(
+    adStatus,
+    personalityStatus?.hasSelected ? '광고 보고 다시 분석하기' : '광고 보고 성향 분석 받기',
+  );
 
   /*
    * 나가는 길은 **토스 네이티브 내비게이션 바의 뒤로가기**다(2026-09-02, T-220). 이 화면은 같은 자리에서
@@ -760,7 +765,7 @@ export function ProfileCard({
       <div style={{ marginTop: 14, display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
         {/* 이 화면의 제목이다. 15px/500 이었는데 개구엔 500이 없어 400으로 떨어져, 본문(700)보다
             얇게 렌더됐다 — 강조하려고 쓴 값이 정확히 반대로 작동한 자리. */}
-        <span style={{ fontSize: 19, fontWeight: 700, color: 'var(--adaptiveGrey900, #3A362E)' }}>
+        <span style={{ fontSize: 19, fontWeight: 500, color: 'var(--adaptiveGrey900, #1D1B18)' }}>
           {profile.nickname}
         </span>
         {/* 「나를 팔로우함」 — 둘러보기 카드에 있던 칩이 이사 온 자리(인스타는 이름 옆 배지로 단다).
@@ -770,9 +775,9 @@ export function ProfileCard({
             style={{
               fontSize: 14,
               padding: '2px 7px',
-              borderRadius: 9,
-              background: 'var(--adaptiveGrey200, #E4DDD0)',
-              color: 'var(--adaptiveGrey700, #57534A)',
+              borderRadius: 2,
+              background: 'var(--softDent, #ECE5D8)', // 태그 = paper-2 옅은 면(설계 §6-1)
+              color: 'var(--adaptiveGrey700, #4A453E)',
             }}
           >
             나를 팔로우함
@@ -833,10 +838,10 @@ export function ProfileCard({
                     style={{ flex: 1 }}
                     variant="weak"
                     size="small"
-                    disabled={adBusy}
-                    onClick={onClaimPersonality}
+                    disabled={adBusy || ad.action === null}
+                    onClick={ad.action === 'retry' ? () => preloadAd(PERSONALITY_AD_GROUP_ID) : onClaimPersonality}
                   >
-                    {personalityStatus.hasSelected ? '광고 보고 다시 분석하기' : '광고 보고 성향 분석 받기'}
+                    {ad.label}
                   </Button>
                 ) : (
                   // 보관함 — 비교 대상이 둘 이상일 때만. 「문구가 바뀌었나」를 확인할 유일한 자리다.
@@ -1038,13 +1043,13 @@ function StatBody({ label, count }: { label: string; count: number }) {
           ...SERIF_VALUE,
           display: 'block',
           fontSize: 24,
-          color: 'var(--adaptiveGrey900, #3A362E)',
+          color: 'var(--adaptiveGrey900, #1D1B18)',
         }}
         data-stat={label}
       >
         {count}
       </span>
-      <span style={{ display: 'block', marginTop: 2, fontSize: 13, color: 'var(--adaptiveGrey600, #6F6A5E)' }}>
+      <span style={{ display: 'block', marginTop: 2, fontSize: 13, color: 'var(--adaptiveGrey600, #645E54)' }}>
         {label}
       </span>
     </>
@@ -1106,14 +1111,14 @@ function Bio({ text }: { text: string }) {
     // 요약이다. 화면에 그냥 떠 있으면 다섯 줄짜리 벽으로 읽히고, 상자에 담기면 「분석 결과」가 된다.
     <div
       data-bio-card=""
-      // 부푼 면 — 화면에 한 장뿐이라 큰 그림자 예산 안이다(설계 §6).
-      style={{ ...PUFF, borderRadius: 20, marginTop: 12, padding: 12 }}
+      // 상자 = 가는 선 테(면·그림자 없음 — 에디토리얼). 테가 「분석 결과」라는 묶음을 말한다.
+      style={{ ...BOX, marginTop: 12, padding: 12 }}
     >
       <span
         style={{
           fontSize: 14,
           lineHeight: 1.55,
-          color: 'var(--adaptiveGrey900, #3A362E)',
+          color: 'var(--adaptiveGrey900, #1D1B18)',
           wordBreak: 'keep-all',
           // clamp는 넘칠 때만 자른다 — 짧은 서술엔 이 블록이 걸려도 아무 일도 일어나지 않는다.
           ...(clamped
@@ -1137,7 +1142,7 @@ function Bio({ text }: { text: string }) {
             border: 'none',
             background: 'transparent',
             fontSize: 13,
-            color: 'var(--adaptiveGrey600, #6F6A5E)',
+            color: 'var(--adaptiveGrey600, #645E54)',
             cursor: 'pointer',
           }}
         >
@@ -1179,12 +1184,12 @@ export function ArchiveSheet({
           key={e.id}
           data-archive-entry=""
           style={{
-            // 시트 안 반복 카드 — 옅은 실선 행(SOFT_ROW), 그림자 없음.
-            ...SOFT_ROW,
+            // 시트 안 반복 카드 — 가는 선 테 상자, 그림자 없음.
+            ...BOX,
             marginBottom: 10,
             padding: 14,
             // 대표 카드만 테두리 색으로 — 여러 장을 훑을 때 "지금 걸린 것"을 잃지 않게(격자 시트와 같은 문법).
-            ...(e.selected ? { border: '1.5px solid var(--adaptiveBlue500, #5B7F55)' } : {}),
+            ...(e.selected ? { border: '1px solid var(--adaptiveBlue700, #1D1B18)' } : {}),
           }}
         >
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
@@ -1198,8 +1203,8 @@ export function ArchiveSheet({
                   padding: '3px 8px',
                   borderRadius: 999,
                   fontSize: 14,
-                  background: 'var(--adaptiveBlue500, #5B7F55)',
-                  color: '#FFFDF8',
+                  background: 'var(--adaptiveBlue500, #1D1B18)',
+                  color: 'var(--filledInk, #F5F0E6)', // 잉크 위 글자 = 종이(밤엔 토큰이 뒤집힌다)
                 }}
               >
                 지금 대표
@@ -1256,7 +1261,7 @@ export function SafetyPanel({
   const [detail, setDetail] = useState('');
 
   return (
-    <div data-safety-panel="" style={{ ...PUFF, borderRadius: 20, marginTop: 12, padding: 16 }}>
+    <div data-safety-panel="" style={{ ...BOX, marginTop: 12, padding: 16 }}>
       <Text typography="st12" color="grey600" style={{ display: 'block', marginBottom: 10 }}>
         신고 사유
       </Text>
@@ -1265,7 +1270,7 @@ export function SafetyPanel({
         value={reason}
         disabled={busy}
         onChange={(e) => setReason(e.target.value as ReportReason)}
-        style={{ ...SOFT_OUTLINE, width: '100%', padding: 10, fontSize: 15 }}
+        style={{ ...FIELD, width: '100%', padding: 10, fontSize: 15, color: 'var(--adaptiveGrey800, #1D1B18)' }}
       >
         {REPORT_REASONS.map((r) => (
           <option key={r.value} value={r.value}>
@@ -1283,7 +1288,7 @@ export function SafetyPanel({
         />
       </div>
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginTop: 12 }}>
-        <Button style={{ flex: 1 }} size="small" disabled={busy} onClick={() => onReport(reason, detail.trim())}>
+        <Button style={{ flex: 1 }} size="small" variant="weak" disabled={busy} onClick={() => onReport(reason, detail.trim())}>
           신고하기
         </Button>
         {/* 차단은 되돌리기 비싸다 — 그 순간 상대 책방이 404가 되고 이 화면도 닫힌다. 한 탭 더 받는다. */}
@@ -1306,30 +1311,42 @@ export function SafetyPanel({
   );
 }
 
+/** 면 없는 상자 — 가는 선 테 + 반경 2(에디토리얼 PR-1). 성향 카드·신고 패널·보관함 카드가 쓴다. */
+const BOX: CSSProperties = { border: '1px solid var(--adaptiveGrey200, #D9D1C3)', borderRadius: 2 };
+
 /**
- * 상태 필터 칩 — 성향 태그 칩과 같은 문법(알약·13px)이되 <b>걸린 것만 배경이 반전</b>된다.
- * 지금 무엇으로 좁혔는지는 소제목도 말하지만, 줄 안에서 "어느 칩이 눌렸나"는 색이 져야 한 눈에 읽힌다.
+ * 고르기 칩 — 책방 상태 필터 · 설정 독서 알림 방식이 같은 것을 쓴다.
+ *
+ * <p>결정 ①(2026-10-12): 고른 칩은 <b>채우지 않는다</b> — 잉크 1px 테 + 잉크 글자 500. 검정 채움은 화면 주 동작(검정 알약)
+ * 하나뿐이어야 한다(REQ-06 · 화면당 검정 알약 ≤ 1). 안 고른 칩은 가는 선 테 + 보조 글자 400. 테 두께가 둘 다 1px이라
+ * 고르기가 바뀌어도 칩 크기가 안 변한다. 「어느 칩이 눌렸나」는 테의 진하기와 굵기가 함께 말한다.
  */
 export const filterChipStyle = (active: boolean) =>
   ({
     display: 'inline-block',
     padding: '6px 10px',
     borderRadius: 999,
-    border: 'none',
+    border: `1px solid ${active ? 'var(--adaptiveGrey800, #1D1B18)' : 'var(--adaptiveGrey200, #D9D1C3)'}`,
     fontSize: 14,
-    background: active ? 'var(--adaptiveBlue500, #6E8A6A)' : 'var(--adaptiveGrey100, #FCFAF5)',
-    color: active ? '#FFFDF8' : 'var(--adaptiveGrey700, #57534A)',
+    background: 'transparent',
+    color: active ? 'var(--adaptiveGrey800, #1D1B18)' : 'var(--adaptiveGrey700, #4A453E)',
+    fontWeight: active ? 500 : 400,
     cursor: 'pointer',
   }) as const;
 
+/**
+ * 책BTI 태그 — 누르는 것은 외곽선 알약, 못 누르는 것은 「나를 팔로우함」과 같은 태그(paper-2 면 r2).
+ * 옛 모양(종이 면 r999)은 종이 바탕 위라 면이 안 보여, 누르는 태그와 못 누르는 태그가 글자색으로만 갈렸다.
+ */
 const chipStyle = (clickable: boolean) =>
-  ({
-    display: 'inline-block',
-    padding: '6px 10px',
-    borderRadius: 999,
-    border: 'none',
-    fontSize: 14,
-    background: 'var(--adaptiveGrey100, #FCFAF5)',
-    color: clickable ? 'var(--adaptiveBlue500, #6E8A6A)' : 'var(--adaptiveGrey700, #57534A)',
-    cursor: clickable ? 'pointer' : 'default',
-  }) as const;
+  clickable
+    ? ({ ...OUTLINE_PILL, display: 'inline-block', padding: '6px 10px', fontSize: 14, cursor: 'pointer' } as const)
+    : ({
+        display: 'inline-block',
+        padding: '6px 10px',
+        borderRadius: 2,
+        border: 'none',
+        fontSize: 14,
+        background: 'var(--softDent, #ECE5D8)',
+        color: 'var(--adaptiveGrey700, #4A453E)',
+      } as const);

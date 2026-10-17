@@ -47,4 +47,11 @@ describe('메달 그림 (GoalMedal)', () => {
     expect(markup).toContain('<circle'); // 그림은 있다(아래 부재 단언이 공허하지 않음)
     expect(markup).not.toMatch(/<(text|image|foreignObject)\b/);
   });
+
+  /** 에디토리얼 PR-2 — 입체 금메달이 잉크 선 도장(원 두 겹 + 새싹)이 된다. 그라데이션·금색이 돌아오면 여기서 잡힌다. */
+  it('REQ-08 · 목표 달성 도장 — 그라데이션·금색 0, 잉크 선 원 두 겹', () => {
+    expect(markup).not.toContain('<radialGradient');
+    expect(markup).not.toMatch(/#(FFF8DF|EEDB97|D9BF6A|FFFFFF)/i);
+    expect(markup.match(/<circle[^>]*fill="none"/g)).toHaveLength(2);
+  });
 });

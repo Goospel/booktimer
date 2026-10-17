@@ -6,6 +6,8 @@
 import { describe, test, expect, vi, beforeEach, afterEach } from 'vitest';
 import { mount } from '@vue/test-utils';
 import ProfileApp from '../src/profile/ProfileApp.vue';
+import ShelfPanel from '../src/profile/ShelfPanel.vue';
+import { coverStyle } from '../src/books/pure';
 
 function profileJson(self: boolean) {
     return {
@@ -170,5 +172,23 @@ describe('ProfileApp 와이드 경계', () => {
         mockFetch(true);
         mount(ProfileApp, { attachTo: document.body });
         expect(matchMedia).toHaveBeenCalledWith('(min-width: 1100px)');
+    });
+});
+
+// 에디토리얼(PR-2) — 옛 줄무늬 종이(색 없음)였던 책방 무표지 칸이 제목 천 색을 받는다(같은 책 = 같은 색).
+describe('REQ-14 · 책방 무표지 표지도 제목 천 색', () => {
+    test('무표지 책 칸의 인라인 배경이 coverStyle(제목)의 칸 색이다', () => {
+        const w = mount(ShelfPanel, {
+            props: {
+                books: [{ id: 1, title: '미움받을 용기', author: null, coverUrl: null, status: '읽는 중', seconds: 0, purchaseLink: null, lastStoryAt: null }],
+                shelfFilter: null, shelfSort: null, self: true, coupangEnabled: false, yes24Enabled: false, kyoboEnabled: false, loginId: 'me',
+            },
+        });
+        const ph = w.find('.shop-cover-ph');
+        expect(ph.exists()).toBe(true);
+        const hex = coverStyle('미움받을 용기').background;
+        const rgb = `rgb(${[1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16)).join(', ')})`;
+        expect(ph.attributes('style') ?? '').toContain(`background: ${rgb}`);
+        w.unmount();
     });
 });

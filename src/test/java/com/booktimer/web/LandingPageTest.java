@@ -103,6 +103,28 @@ class LandingPageTest {
     }
 
     @Test
+    @DisplayName("REQ-17 · 랜딩 히어로에 판화 한 점, 「교체 예정」 0")
+    void landing_heroHasWoodcut_noDevNote() throws Exception {
+        String html = mockMvc.perform(get("/"))
+                .andExpect(status().isOk())
+                .andReturn().getResponse().getContentAsString();
+        // 판화 한 점 — 장식이라 읽기 도구는 건너뛴다.
+        org.assertj.core.api.Assertions.assertThat(html.split("class=\"woodcut", -1).length - 1).isEqualTo(1);
+        org.assertj.core.api.Assertions.assertThat(html).contains("class=\"woodcut woodcut-180\" aria-hidden=\"true\"");
+        // 운영 랜딩에 개발 메모가 남지 않는다.
+        org.assertj.core.api.Assertions.assertThat(html).doesNotContain("교체 예정").doesNotContain("일러스트 자리");
+    }
+
+    @Test
+    @DisplayName("랜딩 잔디 문구는 색을 말하지 않는다 — 잔디가 잉크 농담이 된 뒤 「초록」은 거짓이다")
+    void landing_grassCopy_doesNotClaimGreen() throws Exception {
+        mockMvc.perform(get("/"))
+                .andExpect(status().isOk())
+                .andExpect(content().string(containsString("하루를 채울 때마다 한 칸씩 짙어져요.")))
+                .andExpect(content().string(not(containsString("초록"))));
+    }
+
+    @Test
     @DisplayName("랜딩은 '남의 잔디·서재 구경'처럼 현재 없는 기능을 광고하지 않는다")
     void landing_doesNotAdvertiseViewingOthersGardenOrGrass() throws Exception {
         // 남의 독서 잔디·서재 열람은 미구현(서재·잔디 라우트는 본인 전용, 남의 공개 잔디는 직렬화 안 되는 dead-code).

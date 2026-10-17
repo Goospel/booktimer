@@ -1,6 +1,7 @@
 import { TDSMobileProvider } from '@toss/tds-mobile';
 import { renderToStaticMarkup } from 'react-dom/server';
-import { beforeEach, describe, expect, it } from 'vitest';
+import { isValidElement, type ReactNode } from 'react';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { BookStatus, MarginEntry, MarginResponse, MyBookSummary, Recommendation, SearchRow } from './api';
 import { CACHE_SHELF, cacheClear, cacheKeyMargin, cachePut } from './cache';
@@ -17,13 +18,20 @@ import {
   RecommendCard,
   SearchResultRow,
   Shelf,
+  ShelfRow,
   marginBoxView,
   bookStats,
   metaLine,
   needsPublishConfirm,
   resolveSelected,
+  shelfSections,
+  shelfSelection,
+  revealScrollLeft,
+  revealSpan,
+  revealCell,
 } from './screens/Library';
-import { stubLocalStorage, userAgent } from './test-fixtures';
+import { tagWith } from './soft-guard';
+import { clickHandlerFor, stubLocalStorage, userAgent } from './test-fixtures';
 
 beforeEach(() => {
   stubLocalStorage(); // 「책 추가하기」가 렌더 중에 코치마크를 봤는지 읽는다
@@ -61,9 +69,8 @@ function book(
 function shelf(
   books: MyBookSummary[],
   {
-    tab = 'READING' as BookStatus,
-    // `undefined`(아직 안 고름)가 기본이다 — `null`은 「책 추가」 칸을 <b>고른</b> 값이라 뜻이 다르다.
-    selectedId = undefined as number | null | undefined,
+    // `undefined` = 아직 안 고름(기본 선택이 선다). 선반 3단엔 「책 추가 칸을 고름」(`null`) 상태가 없다 — 칸은 누르면 곧장 검색이다.
+    selectedId = undefined as number | undefined,
     sheet = null as LibrarySheet,
     myLoginId = 'goospel' as string | null,
     searchEnabled = true,
@@ -73,13 +80,11 @@ function shelf(
     <TDSMobileProvider userAgent={userAgent}>
       <Shelf
         books={books}
-        tab={tab}
         selectedId={selectedId}
         sheet={sheet}
         busy={false}
         myLoginId={myLoginId}
         searchEnabled={searchEnabled}
-        onTab={() => {}}
         onSelect={() => {}}
         onSheet={() => {}}
         onAction={() => {}}
@@ -92,87 +97,369 @@ function shelf(
   );
 }
 
-/** 탭 세 개가 늘 서 있고, 보이는 책은 고른 탭의 것만 — 세로로 길던 3섹션 나열을 대체한다. */
-describe('서재 탭', () => {
+const count = (haystack: string, needle: string) => haystack.split(needle).length - 1;
+
+/** 선반 한 단의 마크업 — 그 단의 여는 표식부터 다음 단(또는 펼친 책) 앞까지. */
+function shelfPart(markup: string, status: BookStatus): string {
+  const at = markup.indexOf(`data-shelf="${status}"`);
+  expect(at).toBeGreaterThan(-1); // 단 자체가 사라지면 아래 단언이 공허해진다
+  const ends = [markup.indexOf('data-shelf="', at + 1), markup.indexOf('data-open-book', at)].filter((i) => i > at);
+  return markup.slice(at, ends.length > 0 ? Math.min(...ends) : undefined);
+}
+
+/** 선반 세 단(펼친 책 앞까지) — ✓·알약이 「선반 위에 몇 개인가」를 셀 때 쓴다. */
+function shelvesOf(markup: string): string {
+  const at = markup.indexOf('data-shelf="READING"');
+  const end = markup.indexOf('data-open-book');
+  expect(at).toBeGreaterThan(-1);
+  expect(end).toBeGreaterThan(at);
+  return markup.slice(at, end);
+}
+
+/** 표지 칸 하나 — 그 칸의 여는 표식부터 다음 칸·다음 단·펼친 책 중 먼저 오는 것 앞까지. */
+function cellOf(markup: string, id: number): string {
+  const at = markup.indexOf(`data-shelf-item="${id}"`);
+  expect(at).toBeGreaterThan(-1);
+  const ends = ['data-shelf-item="', 'data-shelf="', 'data-open-book']
+    .map((k) => markup.indexOf(k, at + 1))
+    .filter((i) => i > at);
+  return markup.slice(at, ends.length > 0 ? Math.min(...ends) : undefined);
+}
+
+/** 선반 줄(가로 스크롤 컨테이너)의 여는 태그들 — 높이·넘침을 태그에서 잰다. */
+const rowTags = (markup: string) => markup.match(/<div[^>]*data-shelf-row=""[^>]*>/g) ?? [];
+
+/** 훅 없는 선반 한 단 — 정적 렌더가 못 보는 `onClick`을 엘리먼트 트리에서 꺼내 부른다(StudyMeasuringLine 관례). */
+function rowProps(books: MyBookSummary[], extra: Partial<Parameters<typeof ShelfRow>[0]> = {}): Parameters<typeof ShelfRow>[0] {
+  return {
+    section: shelfSections(books)[0],
+    selectedId: null,
+    lead: true,
+    eager: true,
+    busy: false,
+    canWrite: true,
+    onSelect: () => {},
+    onAddBook: () => {},
+    onCompose: () => {},
+    onOpenGrid: () => {},
+    ...extra,
+  };
+}
+
+/** 트리에서 「책 추가」 칸(`data-lead-card`)의 `onClick` — 칸의 글자는 `NoBookCard` 안이라 라벨로는 못 찾는다. */
+const leadClick = (node: ReactNode): (() => void) | undefined => {
+  if (Array.isArray(node)) {
+    for (const child of node) {
+      const hit = leadClick(child);
+      if (hit) return hit;
+    }
+    return undefined;
+  }
+  if (!isValidElement(node)) return undefined;
+  const props = node.props as Record<string, unknown> & { children?: ReactNode };
+  if ('data-lead-card' in props && typeof props.onClick === 'function') return props.onClick as () => void;
+  return leadClick(props.children);
+};
+
+/**
+ * 선반 3단(에디토리얼 PR-3 · 안 1 §7.2) — 탭 세 칸 + 한 권씩 캐러셀을 대신한다. 세 상태가 늘 함께 서서 모든 책이
+ * 한눈에 들고, 선반은 가로로 넘쳐 권수가 늘어도 높이가 그대로다(8/14 「세로로 너무 길어」는 권수 비례 목록 이야기였다).
+ */
+describe('REQ-10 · 선반은 언제나 세 단이다(빈 선반도)', () => {
   const books = [
-    book(1, '읽는책', 'READING'),
-    book(2, '끝낸책', 'FINISHED'),
-    book(3, '살책', 'WANT_TO_READ'),
+    book(1, '가', 'READING'),
+    book(2, '나', 'READING'),
+    book(3, '다', 'READING'),
+    book(4, '라', 'FINISHED'),
+    book(5, '마', 'WANT_TO_READ'),
   ];
 
-  /**
-   * 탭은 <b>이름만</b> 말한다 — 권수는 「펼쳐보기」 시트 제목(`읽는 중 N권`)이 계속 진다.
-   * 경계(`>…</button>`)로 재는 이유: 라벨과 닫는 태그 사이에 아무것도 없어야 숫자가 없는 것이다.
-   */
-  it('탭은 이름만 적는다 — 권수 숫자는 시트 제목의 몫이다', () => {
+  it('shelfSections는 언제나 셋이고 SECTIONS 순서다 — 책이 없는 단도 빠지지 않는다', () => {
+    const sections = shelfSections([book(4, '라', 'FINISHED')]);
+
+    expect(sections.map((s) => s.status)).toEqual(['READING', 'FINISHED', 'WANT_TO_READ']);
+    expect(sections.map((s) => s.books.map((b) => b.title))).toEqual([[], ['라'], []]);
+    expect(sections.map((s) => s.title)).toEqual(['읽는 중', '다 읽음', '읽고 싶어요']);
+    expect(sections[0].empty).toBe('읽는 중인 책이 없어요');
+  });
+
+  it('shelfSections는 받은 순서를 지킨다 — 서버 정렬을 선반이 뒤섞지 않는다', () => {
+    expect(shelfSections(books)[0].books.map((b) => b.id)).toEqual([1, 2, 3]);
+  });
+
+  it('머리에 이름과 권수가 선다', () => {
     const markup = shelf(books);
 
-    expect(markup).toContain('>읽는 중</button>');
-    expect(markup).toContain('>다 읽음</button>');
-    expect(markup).toContain('>읽고 싶어요</button>');
+    expect(shelfPart(markup, 'READING')).toMatch(/>읽는 중<\/span><span[^>]*>3</);
+    expect(shelfPart(markup, 'FINISHED')).toMatch(/>다 읽음<\/span><span[^>]*>1</);
+    expect(shelfPart(markup, 'WANT_TO_READ')).toMatch(/>읽고 싶어요<\/span><span[^>]*>1</);
   });
 
-  it('빈 탭도 라벨은 남는다 — 탭이 나타났다 사라지면 자리가 흔들린다', () => {
-    const markup = shelf([book(1, '읽는책', 'READING')]);
+  it('빈 단도 서고 판 위에 그 상태의 빈 문구가 선다 — 0을 숫자로 박제하지 않는다', () => {
+    const markup = shelf([book(1, '가', 'READING')]);
+    const finished = shelfPart(markup, 'FINISHED');
 
-    expect(markup).toContain('>다 읽음</button>');
-    expect(markup).toContain('>읽고 싶어요</button>');
-    expect(textOf(markup)).not.toContain('다 읽음 0'); // 0을 박제하지도 않는다
+    expect(finished).toContain('다 읽은 책이 없어요');
+    expect(finished).toContain('data-board');
+    expect(finished).not.toMatch(/>0</);
+    expect(shelfPart(markup, 'WANT_TO_READ')).toContain('읽고 싶은 책이 없어요');
   });
 
-  it('고른 탭의 책만 캐러셀에 세운다', () => {
-    const markup = shelf(books, { tab: 'FINISHED' });
-
-    expect(markup).toContain('끝낸책');
-    expect(markup).not.toContain('읽는책');
-    expect(markup).not.toContain('살책');
-  });
-
-  it('고른 탭이 비었으면 그 탭의 안내만 남고 관리 버튼은 없다', () => {
-    const markup = shelf([book(1, '읽는책', 'READING')], { tab: 'FINISHED' });
-
-    expect(markup).toContain('다 읽은 책이 없어요');
-    expect(markup).not.toContain('관리');
-  });
-
-  it('책이 하나도 없어도 캐러셀이 선다 — 0권이라고 다른 화면이 뜨지 않는다(홈과 같은 처리)', () => {
+  it('책이 0권이어도 세 단이 선다 — 0권이라고 다른 화면이 뜨지 않는다', () => {
     const markup = shelf([]);
 
-    expect(markup).toContain('책 추가');
-    expect(markup).toContain('>읽는 중</button>'); // 탭도 그대로 — 빈 상태라고 자리가 사라지지 않는다
+    expect(count(markup, 'data-shelf="')).toBe(3);
+    expect(shelfPart(markup, 'READING')).toContain('data-lead-card');
+  });
+
+  it('책 0권 + 검색 꺼짐이어도 세 단이 서고, 펼친 책 자리에 안내 한 줄이 남는다', () => {
+    const markup = shelf([], { searchEnabled: false });
+
+    expect(count(markup, 'data-shelf="')).toBe(3);
+    expect(markup).not.toContain('data-open-book');
+    expect(markup).toContain('아직 책이 없어요');
   });
 
   /**
-   * 검색이 꺼진 날의 마지막 폴백 — 「책 추가」 칸이 게이트에 걸려 사라지면 캐러셀에 세울 것이 하나도 없다.
-   * 그때 옛 문장이 남지 않으면 <b>빈 화면</b>이 된다.
+   * T-159 — 웹뷰는 `overflow-y`를 만나면 그 트랙의 가로 터치까지 죽였다. `touch-action: pan-x`도 걸지 않는다: 선반 셋이 화면 절반을
+   * 덮으므로, 선반 위에서 시작한 세로 스와이프로 페이지가 내려가야 한다(홈 캐러셀의 pan-x는 확대된 고른 표지의 세로 들썩임 때문이다).
    */
-  it('책 0권 + 검색 꺼짐이면 옛 안내 문장이 남는다 — 지우면 아무것도 없는 화면이다', () => {
-    expect(shelf([], { searchEnabled: false })).toContain('아직 책이 없어요');
+  it('선반 줄은 가로로만 넘친다 — overflow-y·pan-x·스냅을 걸지 않는다(T-159)', () => {
+    const rows = rowTags(shelf(books));
+
+    expect(rows).toHaveLength(3);
+    for (const row of rows) {
+      expect(row).toContain('overflow-x:auto');
+      expect(row).not.toContain('overflow-y');
+      expect(row).not.toContain('touch-action');
+      expect(row).not.toContain('scroll-snap');
+    }
+  });
+
+  it('첫 선반 표지만 바로 싣는다 — 셋째 단까지 한꺼번에 받으면 첫 화면 요청이 몰린다', () => {
+    const covered = (id: number, title: string, status: BookStatus) => book(id, title, status, { coverUrl: `https://img.test/${id}.jpg` });
+    const markup = shelf([covered(1, '가', 'READING'), covered(2, '나', 'FINISHED'), covered(3, '다', 'WANT_TO_READ')]);
+
+    expect(shelfPart(markup, 'READING')).toContain('loading="eager"');
+    expect(shelfPart(markup, 'FINISHED')).toContain('loading="lazy"');
+    expect(shelfPart(markup, 'FINISHED')).not.toContain('loading="eager"');
+    expect(shelfPart(markup, 'WANT_TO_READ')).not.toContain('loading="eager"');
+  });
+});
+
+describe('REQ-11 · 선택 하나가 세 선반을 가로지르고 선반 높이를 안 바꾼다', () => {
+  const books = [book(1, '가', 'READING'), book(2, '나', 'READING'), book(3, '다', 'FINISHED'), book(4, '라', 'WANT_TO_READ')];
+
+  it.each([
+    ['유효한 id면 그 책', 3, 3],
+    ['아직 안 골랐으면 읽는 중 첫 책', undefined, 1],
+    ['지워진 id면 기본으로', 99, 1],
+  ] as const)('shelfSelection — %s', (_, id, expected) => {
+    expect(shelfSelection(books, id)?.id).toBe(expected);
+  });
+
+  it('shelfSelection — 읽는 중이 비면 다 읽음 → 읽고 싶어요 첫 책 순서다(받은 순서가 아니라 선반 순서)', () => {
+    expect(shelfSelection([book(4, '라', 'WANT_TO_READ'), book(3, '다', 'FINISHED')], undefined)?.id).toBe(3);
+    expect(shelfSelection([book(4, '라', 'WANT_TO_READ')], undefined)?.id).toBe(4);
+  });
+
+  it('shelfSelection — 0권이면 null', () => {
+    expect(shelfSelection([], undefined)).toBeNull();
+    expect(shelfSelection([], 1)).toBeNull();
+  });
+
+  it('상태를 옮긴 책은 같은 id라 선택이 따라간다 — 관리 시트로 옮긴 뒤 ✓가 새 선반에 선다', () => {
+    const moved = books.map((b) => (b.id === 1 ? { ...b, status: 'FINISHED' as const } : b));
+
+    expect(shelfSelection(moved, 1)?.status).toBe('FINISHED');
+    expect(cellOf(shelf(moved, { selectedId: 1 }), 1)).toContain('data-check-badge');
+    expect(shelfPart(shelf(moved, { selectedId: 1 }), 'FINISHED')).toContain('data-shelf-item="1"');
+  });
+
+  it('✓와 검정 알약은 선반 위 그 표지 하나에만 선다', () => {
+    const markup = shelf(books, { selectedId: 3 });
+    const shelves = shelvesOf(markup);
+
+    expect(count(shelves, 'data-check-badge')).toBe(1);
+    expect(count(shelves, 'data-margin-pill')).toBe(1);
+    expect(cellOf(markup, 3)).toContain('data-check-badge');
+    expect(cellOf(markup, 3)).toContain('data-margin-pill');
+  });
+
+  it('고른 단이 1단이든 3단이든 세 줄의 높이가 같다 — 넘침 자리는 단마다 미리 잡는다', () => {
+    const heights = (id: number) => rowTags(shelf(books, { selectedId: id })).map((t) => t.match(/[;"]height:(\d+)px/)?.[1]);
+
+    expect(heights(1)).toEqual(['134', '134', '134']); // 표지 112 + 알약 넘침 22
+    expect(heights(4)).toEqual(heights(1));
+  });
+
+  it('표지를 누르면 그 책을 고른다', () => {
+    const onSelect = vi.fn();
+    const tree = ShelfRow(rowProps(books, { onSelect }));
+    // 표지 버튼은 aria-label이 제목이다(글자는 표지 그림 안이라 라벨로 못 찾는다) — 그 버튼을 찾아 누른다.
+    const coverClick = (node: ReactNode, title: string): (() => void) | undefined => {
+      if (Array.isArray(node)) {
+        for (const child of node) {
+          const hit = coverClick(child, title);
+          if (hit) return hit;
+        }
+        return undefined;
+      }
+      if (!isValidElement(node)) return undefined;
+      const props = node.props as Record<string, unknown> & { children?: ReactNode };
+      if (props['aria-label'] === title && typeof props.onClick === 'function') return props.onClick as () => void;
+      return coverClick(props.children, title);
+    };
+    coverClick(tree, '나')?.();
+    expect(onSelect).toHaveBeenCalledWith(2);
+  });
+});
+
+describe('REQ-10 · 「펼쳐보기 ›」는 2권 이상 선반에만, 격자 제목은 그 선반 이름 + 권수', () => {
+  const books = [
+    book(1, '가', 'READING'),
+    book(2, '나', 'READING'),
+    book(3, '다', 'READING'),
+    book(4, '라', 'FINISHED'),
+    book(5, '마', 'FINISHED'),
+    book(6, '바', 'WANT_TO_READ'),
+  ];
+
+  it('2권 이상인 단 머리에만 선다 — 1권 단의 격자는 그 한 권뿐이라 죽은 문이다', () => {
+    const markup = shelf(books);
+
+    expect(shelfPart(markup, 'READING')).toContain('펼쳐보기 ›');
+    expect(shelfPart(markup, 'FINISHED')).toContain('펼쳐보기 ›');
+    expect(shelfPart(markup, 'WANT_TO_READ')).not.toContain('펼쳐보기');
+  });
+
+  it('제목 줄에는 「펼쳐보기」가 없다 — 단 머리로 옮겼다', () => {
+    const markup = shelf(books);
+
+    expect(count(markup, '펼쳐보기')).toBe(2);
+  });
+
+  it('누름 영역은 44다 — 글자 링크라 보이는 크기보다 손가락 몫이 크다', () => {
+    expect(tagBefore(shelf(books), '펼쳐보기 ›')).toContain('min-height:44px');
+  });
+
+  it('격자는 그 단의 책만 편다 — 제목은 그 단 이름 + 권수', () => {
+    const markup = shelf(books, { selectedId: 4, sheet: { kind: 'grid', status: 'FINISHED' } });
+    const grid = markup.slice(markup.indexOf('repeat(3,minmax(0,1fr))'));
+
+    expect(markup).toContain('다 읽음 2권');
+    expect(grid).toContain('data-grid-title="라"');
+    expect(grid).toContain('data-grid-title="마"');
+    expect(grid).not.toContain('data-grid-title="가"');
+  });
+
+  it('펼쳐보기를 누르면 그 단의 격자를 연다', () => {
+    const onOpenGrid = vi.fn();
+
+    clickHandlerFor(ShelfRow(rowProps(books, { onOpenGrid })), '펼쳐보기')?.();
+    expect(onOpenGrid).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('REQ-10 · 「여백에 글쓰기」는 고른 표지에 걸친 검정 알약이다', () => {
+  const books = [book(1, '가', 'READING'), book(2, '나', 'READING'), book(3, '다', 'FINISHED')];
+  const pill = (markup: string) => markup.match(/<button[^>]*data-margin-pill=""[^>]*>/)?.[0] ?? '';
+
+  it('보이는 높이 44 = 누름 영역이고 세로 가운데가 판 높이다(위 22 · 아래 22)', () => {
+    const tag = pill(shelf(books, { selectedId: 2 }));
+
+    expect(tag).toContain('position:absolute');
+    expect(tag).toContain('top:90px'); // 표지 112 − 22
+    expect(tag).toContain('width:112px');
+    expect(tag).toContain('height:44px');
+  });
+
+  it('가로 가운데가 표지 가운데다 — 112 알약이 80 표지보다 16씩 넘친다', () => {
+    expect(pill(shelf(books, { selectedId: 2 }))).toContain('left:-16px');
+  });
+
+  it('줄의 첫 칸이면 왼쪽 끝에 붙는다 — 넘친 16을 스크롤 컨테이너가 잘라 낸다', () => {
+    expect(pill(shelf(books, { selectedId: 3 }))).toContain('left:0');
   });
 
   /**
-   * ⚠️ 가운데 정렬은 <b>바깥 div</b>가 해야 한다 — TDS `Text`는 넘긴 style에서 `textAlign`을 걸러내
-   * 인라인 스타일에 남기지 않는다(목 모드 실측 2026-08-29: computed `text-align: start`로 왼쪽에
-   * 붙어 있었다). 통짜 `toContain`은 격자 셀(`data-grid-title`)의 `text-align:center`에 걸려 늘
-   * 통과하므로, 문구를 <b>가장 가까이 감싼 div</b>만 본다(글자 수 창은 TDS가 끼워 넣는 `<style>`
-   * 블록에 먹혀 눈금이 안 맞는다).
+   * 첫 칸이면 알약이 오른쪽으로 32 넘쳐 이웃 표지(간격 20)에 12 걸친다. 이웃 칸도 positioned라 DOM 순서상 **이웃 표지가 알약 위에** 칠해져
+   * 「여백에 글쓰기」 끝이 표지에 먹혔다(목 모드 06·04 컷). 알약만 한 층 올린다 — 이웃 칸들은 z가 없어 이 1이 이긴다.
    */
-  const wrapperOf = (markup: string, text: string) => {
-    const at = markup.indexOf(text);
-    expect(at).toBeGreaterThan(-1); // 문구 자체가 사라지면 이 단언이 공허해진다
-    return markup.slice(markup.lastIndexOf('<div', at), at);
+  it('알약은 이웃 표지보다 위 층이다 — 첫 칸이라 이웃에 걸쳐도 글자가 표지에 먹히지 않는다', () => {
+    expect(pill(shelf(books, { selectedId: 3 }))).toContain('z-index:1');
+  });
+
+  it('읽는 중 첫 책은 첫 칸이 아니다(「책 추가」 칸이 앞) — 검색이 꺼진 날엔 첫 칸이다', () => {
+    expect(pill(shelf(books, { selectedId: 1 }))).toContain('left:-16px');
+    expect(pill(shelf(books, { selectedId: 1, searchEnabled: false }))).toContain('left:0');
+  });
+
+  it('핸들이 없으면 알약이 없다 — 그래도 줄 높이는 그대로다', () => {
+    const markup = shelf(books, { selectedId: 2, myLoginId: null });
+
+    expect(markup).not.toContain('data-margin-pill');
+    expect(markup).not.toContain('여백에 글쓰기');
+    expect(rowTags(markup).map((t) => t.match(/[;"]height:(\d+)px/)?.[1])).toEqual(['134', '134', '134']);
+  });
+
+  it('검정 알약은 화면에 하나다', () => {
+    expect(count(shelf(books, { selectedId: 2 }), 'background:var(--adaptiveBlue700,')).toBe(1);
+  });
+
+  it('누르면 고른 책으로 작성이 열린다', () => {
+    const onCompose = vi.fn();
+
+    clickHandlerFor(ShelfRow(rowProps(books, { selectedId: 2, onCompose })), '여백에 글쓰기')?.();
+    expect(onCompose).toHaveBeenCalledWith(books[1]);
+  });
+});
+
+describe('REQ-10 · 펼친 책', () => {
+  const books = [
+    book(1, '미움받을 용기', 'READING', { author: '기시미 이치로', seconds: 7_200, isPublic: true }),
+    book(2, '데미안', 'FINISHED', { author: '헤르만 헤세' }),
+  ];
+  const openOf = (markup: string) => {
+    const at = markup.indexOf('data-open-book');
+    expect(at).toBeGreaterThan(-1);
+    const end = markup.indexOf('data-margin-box', at);
+    return markup.slice(at, end > at ? end : undefined);
   };
 
-  it('빈 탭 안내는 가운데 정렬이다 — 「책 추가」 칸이 선 날', () => {
-    const markup = shelf([book(1, '읽는책', 'READING')], { tab: 'FINISHED' });
+  it('작은 표지(56)에 선반과 같은 ✓가 선다 — 고른 표지와 머리를 잇는다', () => {
+    const open = openOf(shelf(books, { selectedId: 1 }));
 
-    expect(wrapperOf(markup, '다 읽은 책이 없어요')).toContain('text-align:center');
+    expect(open).toContain('width:56px');
+    expect(open).toContain('data-check-badge');
   });
 
-  it('빈 탭 안내는 가운데 정렬이다 — 검색이 꺼져 「책 추가」 칸이 없는 날', () => {
-    const markup = shelf([book(1, '읽는책', 'READING')], { tab: 'FINISHED', searchEnabled: false });
+  it('제목·저자·칩이 선다 — 제목은 명조 22이고 두 줄에서 자른다', () => {
+    const markup = shelf(books, { selectedId: 1 });
+    const open = openOf(markup);
+    const title = tagBefore(open, '미움받을 용기');
 
-    expect(wrapperOf(markup, '다 읽은 책이 없어요')).toContain('text-align:center');
+    expect(title).toContain('font-size:22px');
+    expect(title).toContain('Noto Serif KR');
+    expect(title).toContain('-webkit-line-clamp:2');
+    expect(open).toContain('기시미 이치로');
+    expect(open).toContain('data-book-chip');
+    expect(textOf(open)).toContain('2시간 읽음');
+  });
+
+  it('「관리」는 외곽선 알약이고 손잡이 줄은 없다', () => {
+    const open = openOf(shelf(books, { selectedId: 1 }));
+
+    expect(tagBefore(open, '관리')).toContain('1px solid var(--adaptiveBlue700');
+    expect(open).not.toContain('flex:2'); // 옛 전폭 손잡이 줄(쓰기 2 : 관리 1)
+  });
+
+  it('고른 책을 바꾸면 펼친 책도 그 책이다', () => {
+    expect(openOf(shelf(books, { selectedId: 2 }))).toContain('데미안');
+  });
+
+  it('비공개 책에도 선다', () => {
+    expect(openOf(shelf([book(5, '메모책', 'READING')], { selectedId: 5 }))).toContain('메모책');
   });
 });
 
@@ -202,7 +489,7 @@ describe('책 상태 칩 (bookStats)', () => {
   it('읽은 시간은 「N 읽음」으로 — 「2시간」만 있으면 무엇의 2시간인지 안 보인다', () => {
     expect(bookStats(book(1, '데미안', 'READING', { seconds: 7200, isPublic: true }))).toEqual([
       { label: '2시간 읽음', value: '2시간', tone: 'neutral' },
-      { label: '공개', tone: 'sage' },
+      { label: '공개', tone: 'ink' },
     ]);
   });
 
@@ -216,7 +503,7 @@ describe('책 상태 칩 (bookStats)', () => {
     const shown = bookStats(book(1, '가', 'READING', { isPublic: true }));
     const hidden = bookStats(book(2, '나', 'READING', { isPublic: false }));
 
-    expect(shown.at(-1)!.tone).toBe('sage');
+    expect(shown.at(-1)!.tone).toBe('ink');
     expect(hidden.at(-1)!.tone).toBe('outline');
   });
 
@@ -390,8 +677,8 @@ describe('인라인 여백 박스 표시 (MarginBoxView)', () => {
   });
 
   it('빈 박스는 헤더 아랫선도 접는다', () => {
-    expect(box(margin([]))).not.toContain('border-bottom:1px solid var(--adaptiveGrey200');
-    expect(box(three)).toContain('border-bottom:1px solid var(--adaptiveGrey200'); // 글이 있으면 그대로
+    expect(box(margin([]))).not.toContain('border-bottom:1px solid var(--adaptiveGrey800');
+    expect(box(three)).toContain('border-bottom:1px solid var(--adaptiveGrey800'); // 글이 있으면 그대로(섹션 머리 = 잉크 선)
   });
 
   /** 회귀 가드 — 위 셋이 「전체 보기를 통째로 걷어라」로 미끄러지지 않게 반대편을 함께 못 박는다. */
@@ -424,33 +711,16 @@ describe('인라인 여백 박스 표시 (MarginBoxView)', () => {
 });
 
 /**
- * 서재 손잡이 줄 + 인라인 박스 — 「여백」을 눌러 목록 화면까지 가야 <b>무엇을 남겼는지</b> 보이던 것을
- * 뒤집었다: 글은 박스가 그 자리에서 보여 주고, 손잡이는 <b>작성 직행</b>이 된다(홈 문과 같은 경로).
- * 핸들이 없으면 서버가 여백 대상을 찾지 못하므로 글쓰기·박스 둘 다 그리지 않는다.
+ * 펼친 책 아래 인라인 여백 박스 — 글은 박스가 그 자리에서 보여 주고, 손잡이(고른 표지에 걸친 검정 알약)는 <b>작성 직행</b>이다.
+ * 핸들이 없으면 서버가 여백 대상을 찾지 못하므로 알약·박스 둘 다 그리지 않는다.
  */
-describe('서재 손잡이 줄과 인라인 여백 박스', () => {
-  it('손잡이는 작성 직행과 관리 둘이다 — 목록으로 가던 옛 「여백」 버튼은 없다', () => {
-    const markup = shelf([book(1, '데미안', 'READING')], { selectedId: 1 });
-
-    expect(markup).toContain('여백에 글쓰기');
-    expect(markup).toContain('관리');
-    expect(markup).not.toContain('>여백</button>'); // 옛 손잡이(라벨이 「여백」뿐인 버튼)
-  });
-
-  it('두 손잡이는 전폭을 2:1로 나눠 가진다 — 쓰기가 주, 관리가 보조다', () => {
-    const markup = shelf([book(1, '데미안', 'READING')], { selectedId: 1 });
-
-    expect(markup).toContain('flex:2');
-    expect(markup).toContain('flex:1');
-    // 시안 2c에서 틴트(.14)가 **채움**으로 바뀌었다 — 이 화면의 주 동작 하나라는 뜻이 색으로 선다.
-    expect(tagBefore(markup, '여백에 글쓰기')).toContain('--adaptiveBlue700');
-  });
-
+describe('펼친 책 아래 인라인 여백 박스', () => {
   it('고른 책 아래 박스가 선다 — effect가 안 도는 정적 렌더에서는 로딩이다', () => {
     const markup = shelf([book(1, '데미안', 'READING')], { selectedId: 1 });
 
     expect(markup).toContain('data-margin-box');
     expect(markup).toContain('불러오는 중');
+    expect(markup).not.toContain('>여백</button>'); // 옛 손잡이(라벨이 「여백」뿐인 버튼)
   });
 
   it('비공개 책에도 선다 — 비공개 책의 여백은 나만 보는 메모다(결정 2)', () => {
@@ -468,10 +738,9 @@ describe('서재 손잡이 줄과 인라인 여백 박스', () => {
     expect(markup).toContain('관리');
   });
 
-  it('빈 탭에는 손잡이 줄도 박스도 없다 — 가리킬 책이 없다', () => {
-    const markup = shelf([book(1, '읽는책', 'READING')], { tab: 'FINISHED' });
+  it('0권이면 알약도 박스도 없다 — 가리킬 책이 없다', () => {
+    const markup = shelf([]);
 
-    expect(markup).toContain('다 읽은 책이 없어요');
     expect(markup).not.toContain('여백에 글쓰기');
     expect(markup).not.toContain('data-margin-box');
   });
@@ -547,6 +816,20 @@ describe('관리 시트', () => {
     expect(markup).not.toContain('서재에서 삭제');
   });
 
+  /**
+   * 여러 권일 때 시트는 <b>고른</b> 책을 받는다(리뷰 P12) — 한 권 픽스처로는 `books[0]`이 곧 고른 책이라 갈리지 않는다.
+   * 첫 권(읽는 중·비공개)과 고른 둘째 권(다 읽음·공개)을 상태·공개 모두 다르게 둬 어느 쪽을 그렸는지 시트 행으로 읽는다.
+   */
+  it('여러 권이면 첫 권이 아니라 고른 책의 시트를 연다', () => {
+    const many = [book(1, '데미안', 'READING'), book(2, '수레바퀴 아래서', 'FINISHED', { isPublic: true })];
+
+    const markup = shelf(many, { selectedId: 2, sheet: actions });
+
+    expect(markup).toContain('읽는 중(으)로 옮기기');
+    expect(markup).toContain('비공개로 바꾸기');
+    expect(markup).not.toContain('다 읽음(으)로 옮기기');
+  });
+
   it('확인 단계에서는 삭제와 취소만 남는다', () => {
     const markup = shelf(books, { selectedId: 1, sheet: { kind: 'actions', confirmDelete: true, confirmPublish: false } });
 
@@ -576,19 +859,6 @@ describe('공개 전환 확인 판정 (needsPublishConfirm)', () => {
 
   it('필드가 없는 옛 서버 응답은 0으로 취급해 묻지 않는다 — 보안 게이트가 아니라 고지 UX라 fail-open', () => {
     expect(needsPublishConfirm(book(1, '메모책', 'READING', { isPublic: false }))).toBe(false);
-  });
-});
-
-/** 펼쳐보기 — 캐러셀로 훑기 답답한 권수를 격자로 한 번에 본다(화면 이동 없이 같은 화면 위). */
-describe('펼쳐보기 시트', () => {
-  const books = [book(1, '가', 'READING'), book(2, '나', 'READING'), book(3, '다', 'READING'), book(4, '라', 'FINISHED')];
-
-  it('고른 탭의 책을 전부 격자에 편다', () => {
-    const markup = shelf(books, { selectedId: 1, sheet: { kind: 'grid' } });
-
-    expect(markup).toContain('읽는 중 3권');
-    expect(markup).toContain('repeat(3,minmax(0,1fr))');
-    expect(markup).not.toContain('라');
   });
 });
 
@@ -1152,6 +1422,21 @@ describe('검색 결과 — 이미 서재에 있는 책', () => {
     expect(markup).not.toContain('여백 ');
   });
 
+  // 에디토리얼 PR-4 — 검색 행은 RULE_ROW(아래 가는 선 · 모서리 0 · 면 없음), 담긴 행만 paper-2. 「여백 N」은 외곽선 알약 손잡이.
+  it('검색 행은 가는 선 행이다 — 안 담긴 행은 면이 없고 담긴 행만 paper-2', () => {
+    const open = tagWith(row(false), 'type="button"');
+    expect(open).toContain('border-bottom:1px solid var(--adaptiveGrey200');
+    expect(open).toContain('border-radius:0');
+    expect(open).toContain('background:transparent');
+    expect(tagWith(row(true), 'book-owned')).toContain('background:var(--softDent');
+  });
+
+  it('「여백 N」 배지는 외곽선 알약이다', () => {
+    const badge = tagWith(badged(3), 'aria-label="이 책의 여백 3개 보기"');
+    expect(badge).toContain('border-radius:999px');
+    expect(badge).toContain('border:1px solid var(--adaptiveBlue700');
+  });
+
   it('담긴 책의 배지는 눌린다 — 행은 `disabled`지만 배지는 그 바깥이다', () => {
     expect(badged(2, true)).toMatch(/aria-label="이 책의 여백 2개 보기"/);
   });
@@ -1170,73 +1455,55 @@ describe('검색 결과 — 이미 서재에 있는 책', () => {
 });
 
 /**
- * 「책 추가」 칸 — 화면 맨 아래 전폭 버튼이던 것이 <b>캐러셀 0번</b>으로 들어왔다(2026-08-21).
+ * 「책 추가」 칸 — 읽는 중 선반 맨 앞의 점선 칸(안 1 §6.2 #6). 캐러셀 시절엔 칸을 <b>고르면</b> 아래가 「검색해서 담기」로
+ * 갈렸는데(2단계), 선반엔 「가운데 온 것」이 없으니 칸은 누르면 곧장 검색이다.
  *
- * <p>홈의 「책 없이」 칸과 같은 부품(`leadCard`)이고 규약도 같다: <b>0번은 언제나 특수 칸</b>이다.
- * 두 화면이 한 문장으로 통일되고, 「내 책을 훑는 손짓」과 「추가」가 같은 동작이 된다.
- *
- * <p>게이트와 안내는 여전히 <b>한 몸</b>이다 — 서버 플래그(`searchEnabled`)가 칸과 코치마크를 함께
- * 끈다. 따로 두면 플래그가 꺼진 날 없는 칸을 가리키는 안내만 남는다.
+ * <p>게이트와 안내는 여전히 <b>한 몸</b>이다 — 서버 플래그(`searchEnabled`)가 칸과 코치마크를 함께 끈다.
  */
-describe('책 추가 칸 (캐러셀 0번)', () => {
+describe('REQ-10 · 「책 추가」 칸은 읽는 중 선반 맨 앞이고 누르면 곧장 검색', () => {
   const GUIDE = '읽을 책은 여기서 찾아 담아요';
-  const books = [book(1, '읽는책', 'READING'), book(2, '딴책', 'READING')];
+  const books = [book(1, '읽는책', 'READING'), book(2, '끝낸책', 'FINISHED')];
 
-  it('전폭 「책 추가하기」 버튼이 사라졌다 — 칸이 그 일을 대신한다', () => {
+  it('읽는 중 단의 첫 칸이다 — 실제 책보다 앞', () => {
+    const reading = shelfPart(shelf(books), 'READING');
+
+    expect(reading.indexOf('data-lead-card')).toBeGreaterThan(-1);
+    expect(reading.indexOf('data-lead-card')).toBeLessThan(reading.indexOf('data-shelf-item="1"'));
+  });
+
+  it('다른 단에는 없다 — 담을 곳은 검색 결과에서 고른다(안 1 기각안 E)', () => {
+    expect(count(shelf(books), 'data-lead-card')).toBe(1);
+  });
+
+  it('표지와 같은 크기(80×112)의 점선 상자다 — 색 상자면 실제 표지와 구분이 안 된다', () => {
+    const reading = shelfPart(shelf(books), 'READING');
+
+    expect(reading).toContain('border:1px dashed');
+    expect(reading).toContain('width:80px;height:112px');
+  });
+
+  /**
+   * 안내(코치마크)가 줄을 딤 위로 들어 올려도 칸 자체가 투명하면 **딤이 칸 속으로 비쳐** 가리키는 바로 그 칸만 어둡게 보였다
+   * (목 모드 투어 실측 — 불투명한 표지는 밝고 점선 칸만 흐렸다). 칸에 종이 면을 깐다 — 평소엔 바탕과 같은 색이라 안 보인다.
+   */
+  it('칸은 종이 면을 깐다 — 안내가 떴을 때 딤이 칸 속으로 비치지 않게', () => {
+    const tag = shelf(books).match(/<button[^>]*data-lead-card=""[^>]*>/)?.[0] ?? '';
+
+    expect(tag).toContain('background:var(--adaptiveGrey100,');
+  });
+
+  it('누르면 곧장 검색으로 간다 — 고르기를 거치지 않는다', () => {
+    const onAddBook = vi.fn();
+    const onSelect = vi.fn();
+
+    leadClick(ShelfRow(rowProps(books, { onAddBook, onSelect })))?.();
+    expect(onAddBook).toHaveBeenCalledTimes(1);
+    expect(onSelect).toHaveBeenCalledTimes(0); // 실제로 누른 뒤의 0이다 — 옛 흐름(칸 고르기)이면 1이 된다
+  });
+
+  it('옛 2단계 「검색해서 담기」·「책 추가하기」가 없다', () => {
+    expect(shelf([])).not.toContain('검색해서 담기');
     expect(shelf(books)).not.toContain('책 추가하기');
-  });
-
-  it('점선 칸이 실제 책보다 앞에 선다 — 0번이라는 규약이 곧 마크업 순서다', () => {
-    const markup = shelf(books);
-
-    expect(markup.indexOf('data-lead-card')).toBeGreaterThan(-1);
-    expect(markup.indexOf('data-lead-card')).toBeLessThan(markup.indexOf('data-cover-title'));
-  });
-
-  it('표지와 같은 크기의 점선 상자다 — 색 상자면 실제 표지와 구분이 안 된다', () => {
-    expect(shelf(books)).toContain('border:2px dashed');
-  });
-
-  /**
-   * 칸이 가운데 오면 아래가 통째로 갈린다 — 캐러셀 문법이 「가운데 온 것이 곧 대상」이라,
-   * 가리킬 책이 없는데 그 책의 손잡이·여백이 서 있으면 <b>다른 책의 것을 그 칸의 것으로 읽는다</b>.
-   */
-  describe('칸이 가운데 왔을 때 (selectedId === null)', () => {
-    const centered = () => shelf(books, { selectedId: null });
-
-    it('제목 자리가 「책 추가」가 되고 무엇을 하는 칸인지 한 줄로 말한다', () => {
-      const markup = centered();
-
-      expect(markup).toContain('data-selected-book="책 추가"');
-      expect(markup).toContain('제목으로 검색해 서재에 담아요');
-    });
-
-    it('손잡이가 「검색해서 담기」 하나로 갈린다 — 가리킬 책이 없으니 여백·관리는 뜻이 없다', () => {
-      const markup = centered();
-
-      expect(markup).toContain('검색해서 담기');
-      expect(markup).not.toContain('여백에 글쓰기');
-      expect(markup).not.toContain('관리');
-    });
-
-    it('여백 박스가 없다 — 남의 책 여백을 이 칸의 것으로 읽게 두지 않는다', () => {
-      expect(centered()).not.toContain('전체 보기');
-    });
-  });
-
-  it('책이 가운데면 아래는 지금 그대로다 — 칸이 생겼다고 평소 화면이 바뀌지 않는다', () => {
-    const markup = shelf(books, { selectedId: 1 });
-
-    expect(markup).toContain('여백에 글쓰기');
-    expect(markup).not.toContain('검색해서 담기');
-  });
-
-  /**
-   * `undefined`(아직 안 고름)와 `null`(칸을 고름)은 다른 값이다 — 하나로 합치면 서재를 열 때마다
-   * 「책 추가」가 가운데인 채로 시작한다(홈이 먼저 밟은 구분 — `App.tsx`).
-   */
-  it('아직 안 골랐으면 첫 책이 가운데다 — 칸을 고른 것과 다르다', () => {
-    expect(shelf(books)).toContain('data-selected-book="읽는책"');
   });
 
   it('검색이 꺼져 있으면 칸도 안내도 없다 — 없는 칸을 가리키지 않는다', () => {
@@ -1248,13 +1515,23 @@ describe('책 추가 칸 (캐러셀 0번)', () => {
     expect(markup).not.toContain(GUIDE);
   });
 
-  it('바로 앞 걸음(서재 설명)을 본 뒤에 칸과 안내가 함께 뜬다 — 흐름이 이 화면으로 데려온 직후다', () => {
+  it('REQ-16 · 안내는 「책 추가」 칸이 든 읽는 중 선반을 감싸고, 말풍선은 그 선반 아래 다음 단보다 앞에 선다', () => {
+    dismissCoachmark('library');
+
+    const markup = shelf(books);
+    const guide = markup.indexOf(GUIDE);
+
+    expect(guide).toBeGreaterThan(markup.indexOf('data-lead-card'));
+    expect(guide).toBeLessThan(markup.indexOf('data-shelf="FINISHED"'));
+  });
+
+  it('REQ-16 · 말풍선 꼬리는 줄 가운데(고른 표지의 알약)가 아니라 맨 앞 「책 추가」 칸 가운데(40px)를 가리킨다', () => {
     dismissCoachmark('library');
 
     const markup = shelf(books);
 
-    expect(markup).toContain('data-lead-card');
-    expect(markup).toContain(GUIDE);
+    expect(markup).toContain('left:40px;margin-left:-9px');
+    expect(markup).not.toContain('left:50%;margin-left:-9px');
   });
 
   it('앞 걸음 전에는 안내가 뜨지 않는다 — 딤 두 장이 겹치지 않는다', () => {
@@ -1308,7 +1585,7 @@ describe('서재 세션 캐시', () => {
     const markup = library();
 
     expect(markup).toContain('데미안');
-    expect(markup).toContain('>읽는 중</button>');
+    expect(markup).toContain('data-shelf="READING"');
   });
 
   it('캐시된 책장은 검색 가능 여부까지 되살린다 — 「책 추가」 칸이 한 박자 늦게 나타나지 않게', () => {
@@ -1386,28 +1663,14 @@ const tagBefore = (markup: string, text: string) => {
 describe('서재 위계 (시안 2c)', () => {
   const read = (extra = {}) => book(1, '미움받을 용기', 'READING', { seconds: 7_200, ...extra });
 
-  it('고른 세그먼트만 굵고 그림자를 진다 — 색만으로는 어느 탭인지 약하다', () => {
-    const markup = shelf([read()], { tab: 'READING' });
-    const on = tagBefore(markup, '읽는 중');
-    const off = tagBefore(markup, '다 읽음');
-
-    expect(on).toContain('font-weight:700');
-    expect(on).toContain('box-shadow');
-    expect(off).not.toBe('');
-    expect(off).not.toContain('box-shadow');
-    // 크기·모서리도 함께 잠근다 — 굵기만 재면 13->14, r10->r8이 조용히 지나간다(자가 리뷰 실측).
-    expect(on).toContain('font-size:13px');
-    expect(on).toContain('border-radius:10px');
-  });
-
   it('「N시간 읽음」 칩은 시간만 세리프다 — 「읽음」까지 세리프면 값이 어디까지인지 흐려진다', () => {
-    const markup = shelf([read()], { tab: 'READING', selectedId: 1 });
+    const markup = shelf([read()], { selectedId: 1 });
 
-    expect(tagBefore(markup, '2시간')).toContain('Gowun Batang');
-    expect(tagBefore(markup, ' 읽음')).not.toContain('Gowun Batang');
+    expect(tagBefore(markup, '2시간')).toContain('Noto Serif KR');
+    expect(tagBefore(markup, ' 읽음')).not.toContain('Noto Serif KR');
   });
 
-  it('여백 헤더는 16이고 카운트만 세리프다', () => {
+  it('REQ-10 · 여백 머리 20 — 사양서 원값 32를 그대로 옮기지 않는다(L3)', () => {
     const markup = renderToStaticMarkup(
       <TDSMobileProvider userAgent={userAgent}>
         <MarginBoxView
@@ -1422,53 +1685,54 @@ describe('서재 위계 (시안 2c)', () => {
         />
       </TDSMobileProvider>,
     );
+    const head = tagBefore(markup, '여백');
 
-    expect(tagBefore(markup, '여백')).toContain('font-size:16px');
+    expect(head).toContain('font-size:20px');
+    expect(head).toContain('Noto Serif KR');
   });
 
-  it('「여백에 글쓰기」는 채움 버튼이다 — 이 화면의 주 동작 하나', () => {
-    const tag = tagBefore(shelf([read()], { tab: 'READING', selectedId: 1 }), '여백에 글쓰기');
+  it('「전체 보기 ›」의 누름 영역은 44다', () => {
+    const markup = renderToStaticMarkup(
+      <TDSMobileProvider userAgent={userAgent}>
+        <MarginBoxView view="loading" now={0} onOpenAll={() => {}} />
+      </TDSMobileProvider>,
+    );
+
+    expect(tagBefore(markup, '전체 보기')).toContain('min-height:44px');
+  });
+
+  it('「여백에 글쓰기」는 검정 알약이다 — 이 화면의 주 동작 하나', () => {
+    const tag = tagBefore(shelf([read()], { selectedId: 1 }), '여백에 글쓰기');
 
     expect(tag).not.toBe('');
     // 경계 `,`까지 적는다 — `--adaptiveBlue50`만 적으면 `--adaptiveBlue500`(진한 점 색)에도 맞는다(리뷰 M6).
-    expect(tag).toContain('background:var(--adaptiveBlue50,'); // 옅은 타일 — 진한 채움은 탭바 원 하나다(톤 조율 A)
-    expect(tag).toContain('color:var(--adaptiveBlue700'); // 진한 글자 — 밤엔 밝은 세이지로 스왑된다
-    expect(tag).toContain('var(--puffShadow'); // 채움은 부푼다(TDS 채움 버튼 규칙과 같은 그림자)
+    expect(tag).toContain('background:var(--adaptiveBlue700,'); // 강조 잉크 바탕(공부 모드에선 파란 잉크)
+    expect(tag).toContain('color:var(--filledInk'); // 미색 글자
+    expect(tag).toContain('border-radius:999px');
+    expect(tag).not.toContain('box-shadow');
     expect(tag).toContain('font-size:15px'); // 시안 15.5 -> 계단 15(설계 D3 반올림)
   });
 
-  /**
-   * Soft PR-3 — 연필 프레임을 걷었다(이 자리는 옛 「두 버튼 다 연필 프레임」 단언이었다 — 그 태그에
-   * `border-image`가 실제로 실려 있었으므로 아래 부재 단언은 공허하지 않다). 한 줄에 나란한 두 버튼은
-   * 이제 <b>면과 선</b>으로 위계를 말한다: 주 동작은 부푼 채움, 보조 「관리」는 1.5px 세이지 실선.
-   * 설계 D5의 `FilledButton` 교체를 안 따른 이유(TDS가 56px 최소 높이를 박는다)는 그대로 유효하다.
-   */
-  it('「여백에 글쓰기」는 부푼 채움, 「관리」는 1.5px 실선 — 연필 프레임은 둘 다 없다', () => {
-    const markup = shelf([read()], { tab: 'READING', selectedId: 1 });
+  it('「여백에 글쓰기」는 검정 알약(44), 「관리」는 외곽선 알약(보이는 38) — 면이 있고 없음으로 위계가 갈린다', () => {
+    const markup = shelf([read()], { selectedId: 1 });
     const write = tagBefore(markup, '여백에 글쓰기');
     const manage = tagBefore(markup, '관리');
 
     expect(write).not.toBe('');
     expect(manage).not.toBe('');
-    expect(manage).toContain('1.5px solid var(--adaptiveBlue700');
+    expect(manage).toContain('1px solid var(--adaptiveBlue700');
     expect(write).not.toContain('border-image');
     expect(manage).not.toContain('border-image');
-    expect(write).toContain(`height:${HANDLE_ROW_HEIGHT}px`);
+    expect(write).toContain('height:44px');
     expect(manage).toContain(`height:${HANDLE_ROW_HEIGHT}px`);
   });
 
-  it('「검색해서 담기」는 옅은 세이지 채움(primary)이다 — 옛 세이지 틴트 리터럴은 새 팔레트를 못 탔다', () => {
-    const tag = tagBefore(shelf([], { tab: 'READING', selectedId: null }), '검색해서 담기');
-
-    expect(tag).toContain('background:var(--adaptiveBlue50,'); // 경계 `,` — Blue500에 안 맞게
-    expect(tag).toContain(`height:${HANDLE_ROW_HEIGHT}px`);
+  it('공부 서재가 가져다 쓰는 `handleStyle`은 외곽선 알약 그대로다', () => {
+    expect(handleStyle.border).toBe('1px solid var(--adaptiveBlue700, #1D1B18)');
+    expect(handleStyle.borderRadius).toBe(999);
   });
 
-  it('제목 줄 「펼쳐보기」도 1.5px 실선 손잡이다(`handleStyle`)', () => {
-    expect(handleStyle.border).toBe('1.5px solid var(--adaptiveBlue700, #3F5A3C)');
-  });
-
-  it('여백 박스는 부푼 면이다 — 옛 크림 상자 + 연필선 자리', () => {
+  it('여백 박스는 면·그림자가 없다 — 경계는 머리 줄 아래 잉크 선과 여백이다(에디토리얼)', () => {
     const markup = renderToStaticMarkup(
       <TDSMobileProvider userAgent={userAgent}>
         <MarginBoxView view="loading" now={0} onOpenAll={() => {}} />
@@ -1477,22 +1741,20 @@ describe('서재 위계 (시안 2c)', () => {
     const box = markup.match(/<div data-margin-box=""[^>]*>/)?.[0] ?? '';
 
     expect(box).not.toBe('');
-    expect(box).toContain('var(--puffShadow');
-    expect(box).not.toContain('border-image');
+    expect(box).toContain('margin-top:24px');
+    expect(box).not.toContain('box-shadow');
   });
 
-  it('관리 시트 행은 1.5px 옅은 실선 줄이다(`SOFT_ROW`) — 위험 행 글자는 빨강 그대로', () => {
+  it('관리 시트 행은 아래 가는 선 줄이다(`RULE_ROW`) — 위험 행 글자는 빨강 그대로', () => {
     const markup = shelf([read()], {
-      tab: 'READING',
       selectedId: 1,
       sheet: { kind: 'actions', confirmDelete: false, confirmPublish: false },
     });
     const row = tagBefore(markup, '다 읽음(으)로 옮기기');
     const danger = tagBefore(markup, '서재에서 삭제');
 
-    expect(row).toContain('1.5px solid var(--adaptiveGrey200');
-    expect(row).not.toContain('border-image');
-    expect(danger).toContain('#A32D2D');
+    expect(row).toContain('border-bottom:1px solid var(--adaptiveGrey200');
+    expect(danger).toContain('var(--adaptiveRed500, #A8322A)');
   });
 
   /**
@@ -1508,5 +1770,129 @@ describe('서재 위계 (시안 2c)', () => {
     for (const chip of chips) {
       if (chip.value !== undefined) expect(chip.label.startsWith(chip.value)).toBe(true);
     }
+  });
+});
+
+/**
+ * 화면 순서와 머리(안 1 §7.2 · D6 추천) — 아치 → 선반 세 단 → 펼친 책 → 여백. 펼친 책을 선반 위로 올리는 배치(대안 ⓐ)는
+ * 안 1이 기각한 배치라 코드는 추천 하나만 짓는다(ⓐ는 목 모드 덮어쓰기 컷으로만 보여 드린다).
+ */
+describe('REQ-11 · 펼친 책 자리 · REQ-12 · 서재 아치', () => {
+  function library() {
+    return renderToStaticMarkup(
+      <TDSMobileProvider userAgent={userAgent}>
+        <Library
+          myLoginId="goospel"
+          onError={() => {}}
+          onShelfChanged={() => {}}
+          onOpenMargin={() => {}}
+          onComposeMargin={() => {}}
+          onOpenBookMargin={() => {}}
+        />
+      </TDSMobileProvider>,
+    );
+  }
+
+  beforeEach(() => {
+    cachePut(CACHE_SHELF, { searchEnabled: true, books: [book(1, '데미안', 'READING'), book(2, '코스모스', 'WANT_TO_READ')] });
+  });
+
+  it('아치 → 선반 세 단 → 펼친 책 → 여백 순서다', () => {
+    const markup = library();
+    const at = ['data-arch', 'data-shelf="READING"', 'data-shelf="FINISHED"', 'data-shelf="WANT_TO_READ"', 'data-open-book', 'data-margin-box'].map(
+      (k) => markup.indexOf(k),
+    );
+
+    expect(at.every((i) => i > -1)).toBe(true);
+    expect([...at].sort((a, b) => a - b)).toEqual(at);
+  });
+
+  it('아치는 폭 260 작은 창이고 판화가 한 점이다', () => {
+    const markup = library();
+    const arch = markup.match(/<div[^>]*data-arch=""[^>]*>/)?.[0] ?? '';
+
+    expect(arch).toContain('width:260px');
+    expect(count(markup, 'data-woodcut')).toBe(1);
+    expect(markup.indexOf('data-woodcut')).toBeGreaterThan(markup.indexOf('data-arch'));
+    expect(markup.indexOf('data-woodcut')).toBeLessThan(markup.indexOf('data-shelf="READING"'));
+  });
+
+  it('「내 서재」는 아치 안 명조 32다', () => {
+    const markup = library();
+    const title = tagBefore(markup, '내 서재');
+
+    expect(markup.indexOf('내 서재')).toBeLessThan(markup.indexOf('data-shelf="READING"'));
+    expect(title).toContain('font-size:32px');
+    expect(title).toContain('Noto Serif KR');
+  });
+});
+
+/**
+ * 밖에서 고른 책(추가 직후 · 격자에서 고름 · 관리 시트로 상태를 옮긴 뒤)이 선반 밖에 있으면 그 표지로 민다.
+ * 이미 다 보이면 건드리지 않는다 — 손가락으로 민 자리를 빼앗지 않는다(홈 `recenterIndex` 관례).
+ */
+describe('선반을 고른 표지로 밀기 (revealScrollLeft)', () => {
+  it('표지가 다 보이면 null — 옮기지 않는다', () => {
+    expect(revealScrollLeft(0, 350, 100, 80)).toBeNull();
+    expect(revealScrollLeft(100, 350, 370, 80)).toBeNull(); // 370+80 = 450 = 100+350 경계
+  });
+
+  it('오른쪽 밖이면 그 표지를 가운데로', () => {
+    expect(revealScrollLeft(0, 350, 400, 80)).toBe(400 - (350 - 80) / 2);
+  });
+
+  it('왼쪽 밖이면 가운데로 — 0 아래로는 안 간다', () => {
+    expect(revealScrollLeft(300, 350, 100, 80)).toBe(0);
+    expect(revealScrollLeft(600, 350, 500, 80)).toBe(500 - 135);
+  });
+
+  it('알약이 있으면 판정 범위는 알약(112)이다 — 표지만 보여도 넘친 16이 잘리면 민다(리뷰 실측: 끝까지 민 줄의 마지막 칸)', () => {
+    // 표지 칸 300 → 알약 284–396. 줄을 30 민 상태의 보이는 범위는 30–380이라 표지(300–380)는 다 보이지만 알약 오른쪽 16이 잘린다.
+    expect(revealSpan(300, true)).toEqual([284, 112]);
+    expect(revealScrollLeft(30, 350, ...revealSpan(300, true))).not.toBeNull();
+    expect(revealScrollLeft(30, 350, ...revealSpan(300, false))).toBeNull(); // 알약 없는 사람(게스트)은 표지만 본다
+  });
+
+  it('첫 칸 알약은 왼쪽 끝에 붙는다 — 판정 범위도 0에서 시작한다(렌더의 clamp와 같은 식)', () => {
+    expect(revealSpan(0, true)).toEqual([0, 112]);
+    expect(revealSpan(0, false)).toEqual([0, 80]);
+  });
+
+  /**
+   * 배선 — 선반 effect가 실제로 미는 값. 위 둘은 `revealSpan`을 따로 재서, effect가 표지 범위(80)로 되돌아가도 초록이었다(리뷰 P3).
+   * 같은 줄(30 민 상태, 보이는 30–380)·같은 칸(300)에서 알약이 있으면 밀고, 없으면(게스트) 그대로다.
+   */
+  it('고른 칸으로 미는 배선은 알약 범위로 잰다 — 표지는 다 보여도 알약이 잘리면 민다', () => {
+    const withPill = { scrollLeft: 30, clientWidth: 350 };
+    revealCell(withPill, 300, true);
+    expect(withPill.scrollLeft).toBe(284 - (350 - 112) / 2);
+
+    const guest = { scrollLeft: 30, clientWidth: 350 };
+    revealCell(guest, 300, false);
+    expect(guest.scrollLeft).toBe(30);
+  });
+});
+
+describe('서재 상태 칩 옷 (에디토리얼 PR-4)', () => {
+  // 칩은 <span>이라 누르지 못한다 — 못 누르는 태그 옷(paper-2 면 r2). 비공개만 면 없이 테로 눌린다(색이 곧 공개 여부).
+  const chips = (isPublic: boolean) =>
+    shelf([book(1, '데미안', 'READING', { seconds: 7200, isPublic })], { selectedId: 1 })
+      .match(/<span data-book-chip=""[^>]*>/g) ?? [];
+
+  it('읽은 시간·공개 칩은 paper-2 면 r2다 — r20 알약이 아니다', () => {
+    const [time, pub] = chips(true);
+    for (const tag of [time, pub]) {
+      expect(tag).toContain('background:var(--softDent, #ECE5D8)');
+      expect(tag).toContain('border-radius:2px');
+    }
+    expect(time).toContain('color:var(--adaptiveGrey700');
+    expect(pub).toContain('color:var(--adaptiveBlue700');
+  });
+
+  it('비공개 칩은 면 없이 1px 테 r2다 — 공개와 형태로 갈린다', () => {
+    const priv = chips(false).at(-1)!;
+    expect(priv).toContain('background:transparent');
+    expect(priv).toContain('border:1px solid var(--adaptiveGrey200');
+    expect(priv).toContain('border-radius:2px');
   });
 });
