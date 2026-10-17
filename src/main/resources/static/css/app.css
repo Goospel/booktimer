@@ -15,213 +15,158 @@
        「라이트만 그린다」는 사실 진술이라, UA가 보기엔 여전히 「다크를 지원하지 않는 페이지」다.
        사용자가 다크를 켜면 아래 블록이 color-scheme: dark로 덮어 이 opt-out을 스스로 푼다. */
     color-scheme: only light;
-    /* 종이톤 + 세이지 그린 팔레트. 이름은 유지(무파괴), 값만 교체 → 전역 리프레시. */
-    --bg: #F7F2E8;          /* 종이 배경(따뜻한 크림) — 위에 결이 옅게 얹히는 것까지 감안한 값 */
-    --card-bg: #FCFAF5;     /* 카드 표면(종이톤 화이트) */
-    --text: #2C2A24;        /* 잉크(따뜻한 차콜) */
-    --muted: #6F6A5E;       /* 흐린 글자 */
-    --accent: #6E8A6A;      /* 세이지(악센트/CTA) */
-    --accent-hover: #4F6B4C;/* 딥 세이지(hover/강조·아이콘) */
-    --danger: #dc2626;
-    --danger-hover: #b91c1c;
-    --border: #E4DDD0;      /* 따뜻한 보더 */
-    --ok: #2F8F6B;          /* 타이머 달성색 — 세이지와 변별되게 더 선명한 초록으로 톤 조정 */
-    --radius: 14px;
-    --radius-sm: 8px;       /* 버튼·칩용 작은 라운드 */
+
+    /* ── 에디토리얼 팔레트(2026-10 PR-2 — 미니앱 에디토리얼과 같은 값, 설계 §5-2) ─────────────
+       토큰 **이름은 그대로, 값만** 역할 군으로 모았다(옛 세이지·파스텔 → 종이·옅은 면·가는 선·잉크·글자 3단·빨강).
+       규칙 1,100여 개를 안 건드리고 색이 따라오게 하려는 것이라, 같은 값이 된 변종(`--warn-bg-2/3/4` 등)도 합치지 않는다.
+       강조는 **잉크 하나**다 — 성공·주의·정보색은 잉크 + 옅은 면으로 모이고(D8=①) 뜻은 문구가 진다. 빨강(오류·삭제)만 남는다.
+       종이·잉크·글자·선·잔디·빨강은 미니앱 global.css와 같아야 한다 — editorialTheme.test.ts가 그 파일을 읽어 대조한다.
+       군 표(이름 → 값)는 darkTokens.test.ts가 상수로 박아 둔다 — 여기에 토큰을 더하면 그 표와 아래 다크 블록에도 짝을 넣는다. */
+
+    /* S 면 — 종이. 카드 면 = 바탕이라 낮엔 면이 안 보인다(독서등에서만 종이 한 장이 된다). */
+    --bg: #F5F0E6;
+    --card-bg: #F5F0E6;
+    --surface: #F5F0E6;
+    --paper-1: #F5F0E6;
+    --paper-1-2: #F5F0E6;
+    --paper-1-3: #F5F0E6;
+    --paper-4: #F5F0E6;
+    --paper-4-2: #F5F0E6;
+
+    /* F 옅은 면 — 태그·알림·읽고 싶어요 배지·고른 행. 흐린 글자 5.13 · 보조 글자 7.58. */
+    --sage-soft: #ECE5D8;
+    --sage-soft-2: #ECE5D8;
+    --paper-2: #ECE5D8;
+    --paper-3: #ECE5D8;
+    --paper-2-2: #ECE5D8;
+    --paper-2-3: #ECE5D8;
+    --info-soft: #ECE5D8;
+    --info-soft-2: #ECE5D8;
+    --info-soft-3: #ECE5D8;
+    --info-soft-4: #ECE5D8;
+    --ok-soft: #ECE5D8;
+    --ok-soft-2: #ECE5D8;
+    --ok-soft-3: #ECE5D8;
+    --ok-soft-4: #ECE5D8;
+    --ok-soft-5: #ECE5D8;
+    --warn-bg: #ECE5D8;
+    --warn-bg-2: #ECE5D8;
+    --warn-bg-3: #ECE5D8;
+    --warn-bg-4: #ECE5D8;
+
+    /* H 호버 면 — 잉크 6%(미니앱 --accentPill). 별칭 --nav-hover-bg는 세로 바·하단 .link-row가 공유하는 단일 출처. */
+    --sage-hover: rgba(29, 27, 24, .06);
+    --sage-hover-2: rgba(29, 27, 24, .06);
+    --nav-hover-bg: var(--sage-hover);
+
+    /* L 가는 선 — 장식·구분 전용. 종이 대비 1.33이라 입력칸 경계로는 못 쓴다(입력칸은 --muted). */
+    --border: #D9D1C3;
+    --border-2: #D9D1C3;
+    --border-3: #D9D1C3;
+    --border-4: #D9D1C3;
+    --line-1: #D9D1C3;
+    --line-1-2: #D9D1C3;
+    --line-1-3: #D9D1C3;
+    --line-1-4: #D9D1C3;
+    --line-1-5: #D9D1C3;
+    --line-1-6: #D9D1C3;
+    --line-1-7: #D9D1C3;
+    --line-2: #D9D1C3;
+    --line-2-2: #D9D1C3;
+    --sage-line: #D9D1C3;
+    --sage-line-2: #D9D1C3;
+    --ok-line: #D9D1C3;
+    --ok-line-2: #D9D1C3;
+    --ok-line-3: #D9D1C3;
+    --warn-border: #D9D1C3;
+    --warn-border-2: #D9D1C3;
+    --warn-border-3: #D9D1C3;
+    --warn-border-4: #D9D1C3;
+    --nav-hover-border: #D9D1C3;
+    --nav-hover-border-2: #D9D1C3;
+
+    /* I 잉크 — 본문 글자이자 유일한 강조(종이 위 15.13). 「채움 전용」 이름(--accent-fill·--ok-fill·--accent-hover-2)은
+       공부 카드(.is-study)가 강조 자리만 파란 잉크로 갈아 끼울 때 함께 따라간다. */
+    --text: #1D1B18;
+    --accent: #1D1B18;
+    --accent-hover: #1D1B18;
+    --accent-fill: #1D1B18;
+    --accent-hover-2: #1D1B18;
+    --ok: #1D1B18;
+    --ok-fill: #1D1B18;
+    --ok-ink: #1D1B18;
+    --ok-ink-2: #1D1B18;
+    --info-ink: #1D1B18;
+    --warn-fg: #1D1B18;
+    --warn-fg-2: #1D1B18;
+    --warn-fg-3: #1D1B18;
+    --warn-fg-4: #1D1B18;
+    --warn-fg-5: #1D1B18;
+
+    /* T 보조 글자(8.36) · M 흐린 글자(5.65 — 입력칸 경계·자리글자도 이 값) */
+    --ink-2: #4A453E;
+    --muted: #645E54;
+    --muted-2: #645E54;
+    --muted-3: #645E54;
+    --neutral-3-2: #645E54;
+    --neutral-3-3: #645E54;
+
+    /* N 비글자 단계 — 막대·점·테(미니앱 --adaptiveBlue200~400). 직접 채운 잔디 칸 테 = --neutral-2. */
+    --neutral-1: #B9AF9F;
+    --sage-1: #B9AF9F;
+    --sage-2: #B9AF9F;
+    --sage-3: #B9AF9F;
+    --sage-4: #B9AF9F;
+    --neutral-2: #9C9182;
+    --sage-5: #9C9182;
+    --sage-6: #9C9182;
+    --neutral-3: #6F675B;
+    --sage-7: #6F675B;
+    --sage-8: #6F675B;
+    --graphite: #6F675B;
+
+    /* O 잉크 채움(검정 알약·다 읽음 배지) 위 글자 — 미색(15.13) */
+    --on-accent: #F5F0E6;
+
+    /* R 빨강 — 오류·삭제만. 낮 #A8322A(종이 5.86)는 미니앱 --adaptiveRed500과 같은 값. 진한 단·옅은 면·선은 웹 전용. */
+    --danger: #A8322A;
+    --danger-ink: #A8322A;
+    --danger-ink-2: #A8322A;
+    --danger-hover: #8C2A23;
+    --danger-ink-deep: #8C2A23;
+    --danger-ink-deep-2: #8C2A23;
+    --danger-ink-deep-3: #8C2A23;
+    --danger-ink-deep-4: #8C2A23;
+    --danger-soft: #F6E7E4;
+    --danger-soft-2: #F6E7E4;
+    --danger-soft-3: #F6E7E4;
+    --danger-soft-4: #F6E7E4;
+    --danger-soft-5: #F6E7E4;
+    --danger-line: #E4C6C2;
+    --danger-line-2: #E4C6C2;
+    --danger-line-3: #E4C6C2;
+    --danger-line-4: #E4C6C2;
+
+    /* G 잔디 — 잉크 농담 5단(미달 → 달성으로 진해진다). 소비자는 /history·/study/history의 .grass-cell.level-*. */
+    --grass-0: #E6DFD2;
+    --grass-1: #CDC3B2;
+    --grass-2: #A29785;
+    --grass-3: #625A4F;
+    --grass-4: #1D1B18;
+
+    /* X 포커스 링(잉크 50% — 종이 위 합성 3.20) · 시트·모달 뒤 딤(잉크 45% — 미니앱 시트 딤) */
+    --focus-ring: rgba(29, 27, 24, .5);
+    --scrim: rgba(29, 27, 24, .45);
+    --scrim-soft: rgba(29, 27, 24, .45);
+    --scrim-2: rgba(29, 27, 24, .45);
+    --scrim-3: rgba(29, 27, 24, .45);
+
+    /* 비색 — 모서리는 0 · 2px · 999px · 50%뿐이다(그릇 0 · 표지·배지·셀 2 · 버튼·칩 999). 토큰 둘은 2px로 모았다. */
+    --radius: 2px;
+    --radius-sm: 2px;
     /* 명조 — 제목·값·이니셜·시계. 미니앱 global.css와 같은 줄. 리터럴로 직접 적지 않는다(editorialTheme.test.ts). */
     --font-serif: 'Noto Serif KR', 'Noto Serif CJK KR', serif;
-    --shadow: 0 1px 2px rgba(60, 50, 30, .05), 0 8px 24px rgba(60, 50, 30, .06);
-    /* 보조 토큰 — 랜딩부터 점진 적용(전역 강제 아님) */
-    --sage-soft: #E7EEE2;   /* 연한 세이지 fill */
-    /* nav hover — 양옆 세로 바 메뉴(.rail-item)와 하단 .link-row 버튼이 공유하는 hover 상태(단일 출처).
-       한쪽 색만 바꿔 둘이 어긋나는 drift를 막는다. */
-    --nav-hover-bg: var(--sage-soft);   /* hover 배경 = 연녹 채움(#E7EEE2) */
-    --nav-hover-border: #CFE0C2;        /* hover 테두리 = 연녹 */
-    /* 포커스 링 — 입력칸 focus·강조 hover가 공유(세이지 #6E8A6A=rgb(110,138,106) 기반).
-       #287 토큰 교체가 못 건드린 raw 인디고 잔재를 토큰화해 전역 일관 유지. */
-    --focus-ring: rgba(110, 138, 106, .30);
-
-    /* ── 의미 토큰 — 규칙에 흩어져 있던 색 리터럴 158개의 집합소 ─────────────
-       다크는 `:root`를 갈아끼워 동작하므로, 규칙에 hex를 직접 적으면 그 자리만 다크에서
-       크림색으로 남는다. 그래서 자리마다 `[data-theme]` 오버라이드를 다는 대신(= 규칙마다
-       두 벌을 유지하게 된다) 값을 여기로 끌어올렸다. 라이트 값은 옮겨온 리터럴 그대로다 —
-       근처의 1~2단계 차이(#FBF8F1과 #FAF7EF 같은)만 한 토큰으로 합쳤다.
-       ⚠️ 여기에 토큰을 더하면 아래 다크 블록에도 반드시 짝을 넣는다(darkTokens.test.ts가 운다). */
-    --surface: #fff;        /* 폼·패널의 흰 표면 — 종이(--card-bg)보다 한 겹 위 */
-    --on-accent: #fff;      /* accent·danger 채움 위의 글자·아이콘 */
-    --paper-1: #FAF7EF;     /* 카드 안의 한 단 옅은 면(책방 카드·대시보드 패널) */
-    --line-1: #EDE7DA;      /* 옅은 구분선·스켈레톤 채움 */
-    --line-2: #D8CDB9;      /* 또렷한 구분선·점 */
-    --sage-hover: #DDE7D8;  /* 세이지 채움의 hover */
-    --sage-line: #C4D3BC;   /* 세이지 테두리 */
-    --ok-soft: #E0EFE6;     /* 달성·공개 배지 채움 */
-    --ok-line: #C9E3D4;
-    --ok-ink: #2F5D3E;      /* 달성 문구(--ok보다 가라앉은 초록) */
-    --warn-bg: #F6ECD9;     /* 주의 배너·읽고싶음 배지 */
-    --warn-border: #E6D3AE;
-    --warn-fg: #8A6D3B;
-    --danger-soft: #F6E7E4; /* 위험 카드·오류 alert 채움 */
-    --danger-line: #E4C6C2;
-    --danger-ink: #C0524A;  /* 테라코타 — 인증(#B0524A)과 설정(#C0524A)에 갈려 있던 것을 합쳤다 */
-    --danger-ink-deep: #A5443C; /* 그 위 한 단 진한 쪽(버튼 hover·긴 오류 문구) */
-    --info-soft: #E8F0FE;   /* 파랑 정보 배지(태그·피드백 상태) */
-    --info-ink: #1D4ED8;
-    --ink-2: #4A463D;       /* 본문(--text)과 흐린 글자(--muted) 사이 */
-    --scrim: rgba(20, 19, 16, .55);      /* 시트·모달 뒤 딤 */
-    --scrim-soft: rgba(34, 32, 26, .34);
-
-    /* ── 계열 변종 — 라이트 값은 옮기기 전 리터럴 그대로다 ────────────────────
-       근접값 통합을 하지 않는다(사용자 결정 2026-09-10): 요청은 다크모드 도입이지 라이트
-       재색칠이 아니다. 그래서 1/255 차이라도 제 토큰을 준다 — 「미세하니 괜찮다」를 한 번
-       허용하면 라이트가 조용히 다른 화면이 된다. 숫자 접미사는 같은 계열의 서로 다른 라이트
-       값이고, **다크에선 계열 대표값 하나로 모인다**(그쪽은 이번에 새로 잡은 팔레트라 통합이
-       설계 의도다 — 아래 다크 블록의 같은 이름들이 전부 같은 값인 이유). */
-    --warn-bg-2: #FFFBEB;        /* .cap-badge · .alert-warn */
-    --warn-bg-3: #FFF6E5;        /* .warn-box */
-    --warn-bg-4: #F0E8DB;        /* .shop-badge-want · 책 상태 배지(읽고싶음) */
-    --warn-border-2: #FCD34D;    /* .cap-badge */
-    --warn-border-3: #FDE68A;    /* .alert-warn */
-    --warn-border-4: #F1D48A;    /* .warn-box */
-    --warn-fg-2: #92400E;        /* .alert-warn · .btn-inline-link */
-    --warn-fg-3: #B45309;        /* .cap-badge */
-    --warn-fg-4: #8A6A1C;        /* .warn-box */
-    --warn-fg-5: #B06A2C;        /* .missed-debt */
-    --ok-soft-2: #ECFDF5;        /* .goal-badge · .alert-ok */
-    --ok-soft-3: #E2F0E8;        /* .dash-pill-ok */
-    --ok-soft-4: #E9F2EB;        /* .dash-state-achieved */
-    --ok-soft-5: #E7F6EC;        /* .fb-resolved */
-    --ok-line-2: #A7F3D0;        /* .alert-ok */
-    --ok-line-3: #CFE4D6;        /* .dash-state-achieved */
-    --ok-ink-2: #15803D;         /* .fb-resolved */
-    --danger-soft-2: #FEF2F2;    /* .alert-error */
-    --danger-soft-3: #F7ECEA;    /* .shelf-load-error */
-    --danger-soft-4: #FFF0EE;    /* .shop-menu-item-danger:hover */
-    --danger-soft-5: #F7E3E0;    /* .set-alert-error */
-    --danger-line-2: #FECACA;    /* .alert-error · .danger-zone */
-    --danger-line-3: #ECD6D2;    /* .shelf-load-error */
-    --danger-line-4: #E4B7B1;    /* .set-alert-error */
-    --danger-ink-2: #B0524A;     /* 인증 화면 오류(설정의 #C0524A와 갈려 있던 쪽) */
-    --danger-ink-deep-2: #A6584F; /* .shelf-load-error */
-    --danger-ink-deep-3: #9A3A32; /* .set-alert-error */
-    --danger-ink-deep-4: #B03A2E; /* .story-composer-count.over */
-    --info-soft-2: #EEF2FF;      /* .book-status-badge · .reason-chip */
-    --info-soft-3: #E6F0FF;      /* .fb-read */
-    --info-soft-4: #EEF5FF;      /* .fb-reply-shown */
-    --line-1-2: #EFE9DC;         /* .grass-legend */
-    --line-1-3: #EFE9DD;         /* 책 상세 기록 행 */
-    --line-1-4: #EFEADD;         /* 스켈레톤 · 책 상태 배지 폴백 */
-    --line-1-5: #F0EBDF;         /* .missed-list li */
-    --line-1-6: #E9E2D4;         /* .pbti-divider · .pbti-help-note--muted */
-    --line-1-7: #E8E0D2;         /* .shop-cover-ph 줄무늬 */
-    --line-2-2: #D8CFBE;         /* .shelf-empty 점선 */
-    --paper-1-2: #FBF8F1;        /* .shelf-empty */
-    --paper-1-3: #F6F2E9;        /* .book-sheet-panel */
-    --paper-2-2: rgba(0, 0, 0, .05);  /* .fb-type */
-    --paper-2-3: rgba(0, 0, 0, .06);  /* .fb-submitted */
-    --paper-4-2: #F2EEE4;        /* .skeleton-line.w55 */
-    --border-2: rgba(0, 0, 0, .15);   /* 피드백 폼 입력칸 */
-    --border-3: rgba(0, 0, 0, .08);   /* .fb-item */
-    --border-4: rgba(0, 0, 0, .12);   /* .fb-filter a */
-    --muted-2: rgba(0, 0, 0, .55);    /* .fb-submitted 글자 */
-    --neutral-3-2: #9A917F;      /* 잔디 요일·월 라벨 */
-    --neutral-3-3: #8A857A;      /* 설정 배지·부가안내·스위치 노브 */
-    --sage-hover-2: #DCE8D2;     /* .shop-tag-click:hover */
-    --sage-line-2: #C9D3C2;      /* .personality-badge-cand */
-    --scrim-2: rgba(0, 0, 0, .45);        /* .shop-report-modal-overlay */
-    --scrim-3: rgba(128, 128, 128, .45);  /* .settings-page .set-card-overlay */
-
-    /* ── 채움 전용 토큰 — `.is-study`가 갈아끼우지 않는다 ────────────────────
-       공부 카드는 --accent·--ok·--sage-soft를 파랑으로 덮는다. 그런데 origin/main은 아래 자리들을
-       세이지 **리터럴**로 적어 둬서 공부 카드 안에서도 초록이었다 — 토큰으로 옮기는 순간 파랑을
-       따라가 라이트 화면이 바뀐다. 그래서 같은 값의 별도 토큰을 둔다: 라이트는 어디서나 세이지,
-       다크에서는 테마를 따라간다(아래 다크 블록 + 다크 `.is-study`가 짝을 맞춘다). */
-    --accent-fill: #6E8A6A;        /* 연한 accent 채움(색 혼합의 원료) */
-    --accent-hover-2: #4F6B4C;     /* .shop-badge-reading 글자 */
-    --ok-fill: #2F8F6B;            /* 완독 배지·달성 아이콘 */
-    --sage-soft-2: #E7EEE2;        /* 대시보드 칩·트랙 채움 */
-    --nav-hover-border-2: #CFE0C2; /* .shop-tag-click 테두리 */
-    --muted-3: #7A7566;            /* .hist-tab 비활성 글자 */
-    /* 랜딩 확장 팔레트 — raw hex 산재 금지; 시안에서 추출한 중간 음영 토큰 */
-    --paper-2: #EAE9DD;
-    --paper-3: #ECE6D8;
-    --paper-4: #F1EEE6;
-    --sage-1: #E3E4D4;
-    --sage-2: #D8E2D4;
-    --sage-3: #D6DDC8;
-    --sage-4: #B9C3A8;
-    --sage-5: #B6C9AE;
-    --sage-6: #A9C0A2;
-    --sage-7: #8FAE86;
-    --sage-8: #7E8A6E;
-    --neutral-1: #CFC6B4;
-    --neutral-2: #C4BCAC;
-    --neutral-3: #9A9486;
-    /* 잔디 5단계 — 이제 소비자는 /history·/study/history의 .grass-cell.level-* 하나다
-     (대시보드 잔디는 2026-09-07에 걷었다).
-       값 바꾸면 둘 다 반영(발견 7: 대비 강화). 미달→달성 순으로 진해진다. */
-    --grass-0: #EAE4D7;
-    --grass-1: #C3D9B0;
-    --grass-2: #94BE7F;
-    --grass-3: #5E9250;
-    --grass-4: #35662F;
-
-    /* ── 종이·연필 테마 (A안) ──────────────────────────────────
-       흑연(연필심) 색. 기존 --border(#E4DDD0)는 남겨 두되, 테두리를 그리는 주체는
-       아래 --pencil-frame으로 옮겨간다. */
-    --graphite: #55504A;
-
-    /* 연필 테두리 — 필터를 넣은 SVG를 data URI로 박아 border-image로 쓴다.
-       ⚠️ 인라인 <svg>의 filter를 참조하지 않는 이유: 이 앱엔 공통 레이아웃이 없어
-       36개 템플릿에 전부 <svg>를 심어야 하고, 새 페이지마다 잊으면 테두리가 사라진다.
-       data URI는 CSS 한 곳으로 끝나고, 필터도 이미지 디코드 때 1회만 계산돼 더 싸다.
-       (% 는 URL 인코딩과 충돌하므로 %25 로 이스케이프한다.) */
-    --pencil-frame: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='300' height='300'%3E%3Cfilter id='a' x='-20%25' y='-20%25' width='140%25' height='140%25'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.5' numOctaves='4' seed='5' result='g'/%3E%3CfeColorMatrix in='g' type='matrix' values='0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0.55 0 0 0 0.62' result='m'/%3E%3CfeComposite in='SourceGraphic' in2='m' operator='in'/%3E%3C/filter%3E%3Cfilter id='b' x='-20%25' y='-20%25' width='140%25' height='140%25'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.5' numOctaves='4' seed='23' result='g'/%3E%3CfeColorMatrix in='g' type='matrix' values='0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0.5 0 0 0 0.25' result='m'/%3E%3CfeComposite in='SourceGraphic' in2='m' operator='in'/%3E%3C/filter%3E%3Crect x='1.6' y='1.6' width='296.8' height='296.8' rx='7' fill='none' stroke='%2355504A' stroke-width='1.9' filter='url(%23a)'/%3E%3Crect x='2.4' y='2.4' width='295.2' height='295.2' rx='7' fill='none' stroke='%236B655C' stroke-width='1.4' filter='url(%23b)'/%3E%3C/svg%3E");
-    /* 흐린 연필선 — 보조 구획(입력칸 등)이 카드와 같은 무게로 튀지 않게 */
-    --pencil-frame-soft: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='300' height='300'%3E%3Cfilter id='a' x='-20%25' y='-20%25' width='140%25' height='140%25'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.5' numOctaves='4' seed='13' result='g'/%3E%3CfeColorMatrix in='g' type='matrix' values='0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0.5 0 0 0 0.55' result='m'/%3E%3CfeComposite in='SourceGraphic' in2='m' operator='in'/%3E%3C/filter%3E%3Crect x='1.7' y='1.7' width='296.6' height='296.6' rx='7' fill='none' stroke='%238C857A' stroke-width='1.6' filter='url(%23a)'/%3E%3C/svg%3E");
-    /* 쓰는 법: `border-image: var(--pencil-frame) 8 / 8px stretch;`
-       `<slice> / <width>` 문법이 핵심이다 — slice(8)는 SVG 타일에서 잘라낼 폭, width(8px)는 화면에
-       그릴 폭이고, 이 둘은 요소의 실제 `border-width`와 **독립**이다. 그래서 border-width는 1px로 두고
-       그림만 8px로 그리면 테두리가 두꺼워져도 레이아웃이 1px도 밀리지 않는다(패딩 안쪽으로 그려진다).
-       기존 `border: 1px solid var(--border)` 선언을 건드리지 않고 얹을 수 있는 이유가 이것이다.
-       ⚠️ 선을 휘게 하는 필터(feDisplacementMap)를 쓰지 않는다 — border-image는 300px 타일을
-       요소 폭에 맞춰 늘이고 줄이는데, 좁은 버튼에서는 3배 넘게 압축된다. 굴곡이 있으면 파장도 같은 배율로
-       짧아져 변위가 선 두께를 넘어서고, 그 순간 선은 휘는 게 아니라 가장자리가 깎여 「픽셀이 깨진 선」이
-       된다(실측 반려). 연필선의 정체는 흔들림이 아니라 **흑연이 종이 결에 걸려 생기는 농도 얼룩**이라,
-       고주파 노이즈를 선의 알파에 곱해 진하기만 들쑓날롭하게 만든다. 고주파 입자는 압축돼도
-       고와질 뿐이라 굴곡과 달리 지글거리지 않는다.
-
-       ⚠️ repeat은 `stretch`다. `round`(타일 반복)를 쓰면 농도 얼룩이 타일 경계에서 어긋나
-       이음매마다 줄이 보인다(feTurbulence에 stitchTiles를 안 쓴다).
-       ⚠️ 이 한 벌을 `--pencil` 같은 변수로 묶어 `border-image: var(--pencil)`로 쓰면 안 된다 —
-       축약형에 var()를 통째로 넣으면(그 변수가 또 var를 품으면) Chrome이 선언 전체를 무효로 버린다
-       (실측: slice가 기본값 100%로 남아 테두리가 통째로 안 그려진다). slice·width·repeat은 리터럴로.
-
-       ⚠️ 안쪽으로 그려지는 7px 띠를 배경 있는 자식·<img> 콘텐츠가 덮으면 선이 얇아진다(자식은 부모 테두리
-       위에 그려진다). 선은 바깥 가장자리 0.65~3.1px에만 사니 불투명한 것은 4px 이상 띄우거나(padding·margin),
-       띄울 수 없는 세그먼트류는 ::after 오버레이로 프레임을 자식 위에 얹는다(.shelf-filter-chips).
-       검사: frontend/e2e/pencil-frame.spec.ts(로컬 bootRun 후 npm --prefix frontend run test:e2e). */
-
-    /* 종이 결 — feTurbulence 노이즈 2겹(알갱이·섬유결). 이미지 파일도 요청도 0건.
-
-       ⚠️ 노이즈를 색이 아니라 **알파**로 얹는다. 한때 무채색 회색 rect를 30% 불투명도로 깔았는데,
-       그건 결이 아니라 안개다 — 회색을 30% 섞는 것은 밑에 깔린 검정을 회색으로 들어올리는 일이라,
-       종이 배경 위에서는 결로 보여도 책 표지 사진 위에서는 한 겹 바랜 것처럼 반투명해진다
-       (사용자 반려 2026-08-18, T-191). 글자는 대비가 커서 버티는 탓에 웹·목 모드 검증을 모두
-       통과했고 표지에서만 티가 났다. feColorMatrix의 알파 행으로 옮기면(`0.9*R - 0.42`, 음수는
-       0으로 클램프) 대부분의 픽셀이 완전투명이라 밑의 색을 건드리지 않고 드문 입자만 어둡게
-       얹힌다 — 연필선을 「흔든 선」에서 「농도 얼룩」으로 고친 것과 같은 수법이다(T-190).
-
-       큰 얼룩(mottle) 겹은 뺐다: 알파로 옮기면 결이 아니라 넓은 어두운 반점(때)이 된다.
-
-   ⚠️ 알파로 옮기는 것만으로는 부족하고 **밀도**도 결의 일부다. 한때 입자가 픽셀의 61%를 덮었는데,
-   그러면 종이색 토큰을 아무리 밝혀도 눈에 들어오는 건 합성 결과라 종이가 칙칙해진다 — #F3EEE4를
-   깔아도 실제로 보이는 색은 #E5E0D6이었다(사용자 반려 2026-08-19, T-193). 표지도 다시 뿌예진다:
-   입자색은 중간 어둠이라 표지의 가장 어두운 부분보다 밝고, 그런 입자를 많이 깔면 검정을 들어올린다
-   (T-191과 같은 병이고 이번엔 원인이 opacity가 아니라 밀도다). 그래서 알파 오프셋을 올려 켜지는
-   픽셀을 25%로 줄이고 입자색도 한 단계 올렸다.
-   ⚠️ 세기를 고칠 땐 캔버스로 합성색을 재서 판정한다 — 눈으로는 종이색 변화와 구별이 안 된다. */
-    --grain: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='300' height='300'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.75' numOctaves='4' stitchTiles='stitch'/%3E%3CfeColorMatrix type='matrix' values='0 0 0 0 0.26 0 0 0 0 0.24 0 0 0 0 0.20 0.7 0 0 0 -0.40'/%3E%3C/filter%3E%3Crect width='300' height='300' filter='url(%23n)'/%3E%3C/svg%3E");
-    --fiber: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='440' height='440'%3E%3Cfilter id='f'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.008 0.9' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix type='matrix' values='0 0 0 0 0.28 0 0 0 0 0.26 0 0 0 0 0.21 0.4 0 0 0 -0.26'/%3E%3C/filter%3E%3Crect width='440' height='440' filter='url(%23f)'/%3E%3C/svg%3E");
+    /* 질감·그림자 토큰(--shadow·--pencil-frame·--pencil-frame-soft·--grain·--fiber)은 PR-2에서 지웠다 — 이펙트 0. */
 }
 
 * { box-sizing: border-box; }
@@ -3016,39 +2961,16 @@ body.dashboard-page #dashboard-app { gap: 20px; }
    스위치가 바 있는 화면 전부에 뜨므로(홈 Vue · 비홈 SSR) 여백도 바 있는 화면 전부. 스크롤 중 겹침은 고정 요소의 본성이라 범위 밖. */
 body.has-rails { padding-bottom: calc(100px + env(safe-area-inset-bottom, 0px)); }
 
-/* 공부 잉크 — 카드 스코프 토큰 스왑(미니앱 body.study-mode의 카드 한정판, 값은 그쪽과 같다).
+/* 공부 잉크 — 카드 스코프 토큰 스왑(미니앱 body.study-mode의 카드 한정판, 값은 그쪽과 같다 — editorialTheme.test.ts 대조).
    대시보드 카드(.dash-card)와 /study/history의 .card가 같은 클래스를 쓴다 — 규칙 하나가 두 화면을 덮는다.
-   is-study가 없는 독서 카드엔 한 줄도 안 닿고, 카드 밖(브랜드 헤더 등)의 --accent도 그대로다.
-   --nav-hover-*·--ok까지 덮는 이유: :root에서 var()로 해석된 값이라 --sage-soft만 덮어선 hover·요약 강조가
-   세이지로 남는다. --ok가 닿는 곳은 공부 카드 안에선 .grass-summary strong과 회당 시간 달성 줄
-   (.dash-session-line.is-reached) 둘이다(.dash-*-ok는 독서 달성 전용) — 둘 다 초록이 아니라 이 공부 잉크로 칠해진다. */
+   에디토리얼(2026-10 PR-2): **강조 자리만** 파란 잉크(#2B4A6F — 종이 8.00, 그 위 미색 8.00)로 갈아 끼우고 종이·면·선·본문 잉크는
+   낮 값을 그대로 상속한다(옛 푸른 히어로 면·칩 면·숫자 리터럴 규칙은 걷었다). 주 버튼은 --accent-fill을 따르니 저절로 파란 알약,
+   잔디는 파란 잉크 농담 사다리(미니앱 --grass1~4). 0단(기록 없음)은 종이 쪽 그대로. */
 .is-study, #side-rails[data-mode="study"], body.study-lamp .lamp-page .is-study {
-    --accent: #5F7E96; --accent-hover: #47657C; --sage-soft: #E6ECF0;
-    --nav-hover-bg: #E6ECF0; --nav-hover-border: #D6E0E7;
-    --ok: #47657C;
-    /* 잔디 사다리 — 파랑 200·400·600·800(미니앱 --grass1~4). 0단(기록 없음)은 종이색 그대로 */
-    --grass-1: #AFC4D2; --grass-2: #83A0B4; --grass-3: #536F85; --grass-4: #3A5266;
-    /* 채움 전용 토큰은 공부 카드에서도 라이트 값 그대로다(:root와 같은 값) — origin/main 픽셀 보존.
-       다크판만 아래 `:root[data-theme="dark"] .is-study`에서 파랑으로 간다. */
-    --accent-fill: #6E8A6A; --accent-hover-2: #4F6B4C; --ok-fill: #2F8F6B;
-    --sage-soft-2: #E7EEE2; --nav-hover-border-2: #CFE0C2;
+    --accent: #2B4A6F; --accent-hover: #2B4A6F; --ok: #2B4A6F;
+    --accent-fill: #2B4A6F; --accent-hover-2: #2B4A6F; --ok-fill: #2B4A6F;
+    --grass-1: #B8C3D1; --grass-2: #8598B0; --grass-3: #4F6A8B; --grass-4: #2B4A6F;
 }
-.dash-timer-hero.is-study { background: #EFF3F6; }   /* 푸른 종이는 히어로만(미니앱 --heroCardBg) */
-/* body.study-lamp .lamp-page 짝(0,4,1)은 독서등 밑 카드에서 다크 리터럴(0,4,0, 파일 끝)을 이기려고 붙인다. */
-.is-study .dash-pill, .is-study .grass-streak,   /* 연속일 칩은 독서 카드에만 있어 .dash-streak-chip은 뺐다 */
-.is-study .dash-progress-track,
-.is-study .dash-btn-outline:hover,
-body.study-lamp .lamp-page .is-study .dash-pill, body.study-lamp .lamp-page .is-study .grass-streak,
-body.study-lamp .lamp-page .is-study .dash-progress-track,
-body.study-lamp .lamp-page .is-study .dash-btn-outline:hover { background: #E6ECF0; }   /* 리터럴 #E7EEE2 자리들 */
-.is-study .dash-timer-num, body.study-lamp .lamp-page .is-study .dash-timer-num { color: #47657C; }
-/* .btn-primary의 채움은 :root 토큰이 아니라 세이지 리터럴 rgba(110,138,106,…)이라 위 스왑이 안 닿는다 —
-   공부 카드 안에서만 초록 버튼이 남아 「파랑 카드 + 파랑 글자 + 초록 버튼」이 됐다(/study/books가 첫 자리).
-   hover는 :not(:disabled)로 좁힌다 — 안 그러면 .btn-primary:disabled:hover(같은 특이성·앞선 위치)를 눌러
-   비활성 버튼까지 hover에 반응한다. 스코프가 공부 전용이라 독서 화면엔 한 줄도 안 닿는다. */
-.is-study .btn-primary { background-color: var(--sage-soft); }
-.is-study .btn-primary:hover:not(:disabled),
-body.study-lamp .lamp-page .is-study .btn-primary:hover:not(:disabled) { background-color: #D6E0E7; }  /* --nav-hover-border와 같은 한 단 짙은 파랑 */
 
 /* 공부 서재(/study/books) — 회독 칩은 토큰만 쓰므로 .is-study 카드 안에서 저절로 파랑이다(리터럴 없음).
    ± 버튼은 .book-actions 규칙(padding·width:auto)을 그대로 받고, 여기선 가로 정렬만 얹는다 —
@@ -4079,9 +4001,7 @@ body.has-rails .container:not(.narrow-page) .study-plan-form { max-width: 620px;
 @media (max-width: 639px) { .rail { display: none; } body.has-rails { padding-left: 16px; padding-right: 16px; } }
 
 /* ── 다크 테마 ────────────────────────────────────────────
-   `:root`의 색 토큰만 덮는다. 토큰이 안 닿는 raw 리터럴 규칙(설정 배너·상태 배지·흰 채움 등)은
-   아직 크림색으로 남아 있고, 그래서 이 단계는 다크런치다 — 토글을 안 꽂았으므로 저장값을
-   손으로 넣지 않는 한 아무도 이 블록을 보지 못한다(theme.js 끝 주석).
+   `:root`의 색 토큰만 덮는다(raw 색 래칫 — darkTokens.test.ts — 이 토큰 밖 리터럴을 막는다). 사용자 토글(theme.js)이 켠다.
 
    ⚠️ `@media not print`로 통째로 감싼다 — 종이엔 항상 라이트가 나가야 한다. 다크로 인쇄하면
    잉크를 통째로 붓는 꼴이고, 대부분의 프린터 드라이버는 배경을 아예 안 그려 글자만 흰색으로 남긴다.
@@ -4095,184 +4015,154 @@ body.has-rails .container:not(.narrow-page) .study-plan-form { max-width: 620px;
        동시에 크롬 Auto Dark Theme의 표적에서도 벗어난다 — 이미 다크를 그리는 페이지는 안 뒤집는다. */
     color-scheme: dark;
 
-    --bg: #1E1C18;          /* 어두운 종이(따뜻한 차콜) */
-    --card-bg: #26231E;     /* 카드 표면 — 배경보다 한 단 밝게 */
-    --text: #E8E2D6;        /* 잉크 반전 — 순백이 아니라 종이색 계열이라 눈이 덜 시리다 */
-    --muted: #A8A196;
-    --accent: #8FAE86;      /* = 라이트 --sage-7. 다크에선 원래 세이지(#6E8A6A)가 너무 가라앉는다 */
-    --accent-hover: #B6C9AE;/* 다크는 hover가 '더 밝은' 쪽이다 — 라이트와 방향이 반대 */
-    --danger: #E5766B;      /* 라이트의 #dc2626은 다크 위에서 대비가 안 난다 */
-    --danger-hover: #F0918A;
-    --border: #3A362F;      /* 장식선(실제 테두리는 연필 프레임이 그린다) */
-    --ok: #5FBF95;
-    --shadow: 0 1px 2px rgba(0,0,0,.35), 0 8px 24px rgba(0,0,0,.40);
-    --sage-soft: #2E3A2C;
-    --nav-hover-border: #45563F;
-    /* 라이트와 같은 별칭을 다시 적는다 — 다크 테마(html)에선 없어도 따라오지만, 독서등(body.study-lamp)은 body에서
-       토큰을 다시 깔아 html에서 라이트로 계산된 값(#E7EEE2)이 그대로 상속된다(밤 바 hover 대비 1.09, 리뷰 실측). */
-    --nav-hover-bg: var(--sage-soft);
-    --focus-ring: rgba(143, 174, 134, .40);
-
-    /* 의미 토큰 다크판 — 라이트 짝과 1:1이다(darkTokens.test.ts가 양방향으로 센다).
-       채움은 어두운 쪽으로, 글자는 밝은 쪽으로 뒤집는다. 채움 위 글자 대비는 전부 AA(4.5) 이상으로
-       잡았고, 그중 --on-accent는 테스트가 직접 계산해 지킨다 — 밝은 세이지 채움 위에 흰 글자를
-       그대로 두면 2.45라, 이 한 자리가 다크에서 유일하게 AA를 못 넘던 곳이었다. */
-    --surface: #2C2823;
-    --on-accent: #1E1C18;   /* 밝은 accent 채움 위엔 어두운 글자다(라이트와 방향이 반대) */
-    --paper-1: #24211C;
-    --line-1: #33302A;
-    --line-2: #4A4538;
-    --sage-hover: #3A4A36;
-    --sage-line: #45563F;
-    --ok-soft: #22392F;
-    --ok-line: #35544A;
-    --ok-ink: #8FD5B4;
-    --warn-bg: #3A3222;
-    --warn-border: #5A4A2A;
-    --warn-fg: #E0B86A;
-    --danger-soft: #33201D;
-    --danger-line: #5A3A34;
+    /* 에디토리얼 밤 = 「밤 책상」(D2=① — 미니앱 독서등 main 블록과 같은 값, 설계 §5-3). 낮과 1:1 짝이다(darkTokens.test.ts가
+       양방향으로 센다). 면 없음 — 카드 면 = 책상이고 덩어리는 선과 여백이 가른다. 대비는 책상 #1C1A17 기준이다. */
+    /* S 면 — 책상 */
+    --bg: #1C1A17;
+    --card-bg: #1C1A17;
+    --surface: #1C1A17;
+    --paper-1: #1C1A17;
+    --paper-1-2: #1C1A17;
+    --paper-1-3: #1C1A17;
+    --paper-4: #1C1A17;
+    --paper-4-2: #1C1A17;
+    /* F 옅은 면 — 그 위 글자 12.40 · 흐린 5.26 */
+    --sage-soft: #2C2925;
+    --sage-soft-2: #2C2925;
+    --paper-2: #2C2925;
+    --paper-3: #2C2925;
+    --paper-2-2: #2C2925;
+    --paper-2-3: #2C2925;
+    --info-soft: #2C2925;
+    --info-soft-2: #2C2925;
+    --info-soft-3: #2C2925;
+    --info-soft-4: #2C2925;
+    --ok-soft: #2C2925;
+    --ok-soft-2: #2C2925;
+    --ok-soft-3: #2C2925;
+    --ok-soft-4: #2C2925;
+    --ok-soft-5: #2C2925;
+    --warn-bg: #2C2925;
+    --warn-bg-2: #2C2925;
+    --warn-bg-3: #2C2925;
+    --warn-bg-4: #2C2925;
+    /* H 호버 면 — 밝은 잉크 8%. 별칭을 다시 적는다 — 독서등(body.study-lamp)은 body에서 토큰을 다시 깔아
+       html에서 라이트로 계산된 별칭이 그대로 상속된다(밤 바 hover 대비 1.09, 리뷰 실측). */
+    --sage-hover: rgba(242, 237, 227, .08);
+    --sage-hover-2: rgba(242, 237, 227, .08);
+    --nav-hover-bg: var(--sage-hover);
+    /* L 가는 선(장식 1.45) */
+    --border: #3A3630;
+    --border-2: #3A3630;
+    --border-3: #3A3630;
+    --border-4: #3A3630;
+    --line-1: #3A3630;
+    --line-1-2: #3A3630;
+    --line-1-3: #3A3630;
+    --line-1-4: #3A3630;
+    --line-1-5: #3A3630;
+    --line-1-6: #3A3630;
+    --line-1-7: #3A3630;
+    --line-2: #3A3630;
+    --line-2-2: #3A3630;
+    --sage-line: #3A3630;
+    --sage-line-2: #3A3630;
+    --ok-line: #3A3630;
+    --ok-line-2: #3A3630;
+    --ok-line-3: #3A3630;
+    --warn-border: #3A3630;
+    --warn-border-2: #3A3630;
+    --warn-border-3: #3A3630;
+    --warn-border-4: #3A3630;
+    --nav-hover-border: #3A3630;
+    --nav-hover-border-2: #3A3630;
+    /* I 밝은 잉크 — 글자이자 강조(14.88). 밝은 알약 위 글자는 책상색(--on-accent). */
+    --text: #F2EDE3;
+    --accent: #F2EDE3;
+    --accent-hover: #F2EDE3;
+    --accent-fill: #F2EDE3;
+    --accent-hover-2: #F2EDE3;
+    --ok: #F2EDE3;
+    --ok-fill: #F2EDE3;
+    --ok-ink: #F2EDE3;
+    --ok-ink-2: #F2EDE3;
+    --info-ink: #F2EDE3;
+    --warn-fg: #F2EDE3;
+    --warn-fg-2: #F2EDE3;
+    --warn-fg-3: #F2EDE3;
+    --warn-fg-4: #F2EDE3;
+    --warn-fg-5: #F2EDE3;
+    /* T 보조(11.21) · M 흐린(6.31 — 입력칸 경계 3:1 이상) */
+    --ink-2: #D6CFC2;
+    --muted: #A39B8E;
+    --muted-2: #A39B8E;
+    --muted-3: #A39B8E;
+    --neutral-3-2: #A39B8E;
+    --neutral-3-3: #A39B8E;
+    /* N 비글자 단계 — 1.98 / 3.70 / 6.31 */
+    --neutral-1: #4F4A42;
+    --sage-1: #4F4A42;
+    --sage-2: #4F4A42;
+    --sage-3: #4F4A42;
+    --sage-4: #4F4A42;
+    --neutral-2: #7A7367;
+    --sage-5: #7A7367;
+    --sage-6: #7A7367;
+    --neutral-3: #A39B8E;
+    --sage-7: #A39B8E;
+    --sage-8: #A39B8E;
+    --graphite: #A39B8E;
+    /* O 밝은 알약 위 글자 — 책상색(14.88) */
+    --on-accent: #1C1A17;
+    /* R 빨강 — 옛 다크 값 유지(이미 AA). 밤 #E5766B(5.90)는 미니앱 독서등 --adaptiveRed500과 같은 값. */
+    --danger: #E5766B;
     --danger-ink: #E5766B;
+    --danger-ink-2: #E5766B;
+    --danger-hover: #F0918A;
     --danger-ink-deep: #F0918A;
-    --info-soft: #232E3B;
-    --info-ink: #8FB4E8;
-    --ink-2: #C6BFB2;
-    --scrim: rgba(0, 0, 0, .62);        /* 어두운 화면 위에선 딤이 더 진해야 층이 보인다 */
-    --scrim-soft: rgba(0, 0, 0, .5);
-
-    /* 계열 변종의 다크판 — 라이트에서 갈라진 값들이 여기선 계열 대표값 하나로 모인다.
-       라이트를 「지금 그대로」 두느라 토큰이 늘었을 뿐, 다크 팔레트는 갈라질 이유가 없다.
-       (같은 계열 안에서 값이 전부 같은 것은 실수가 아니라 의도다 — 대표값을 조정할 땐 함께 옮긴다.) */
-    --warn-bg-2: #3A3222;
-    --warn-bg-3: #3A3222;
-    --warn-bg-4: #3A3222;
-    --warn-border-2: #5A4A2A;
-    --warn-border-3: #5A4A2A;
-    --warn-border-4: #5A4A2A;
-    --warn-fg-2: #E0B86A;
-    --warn-fg-3: #E0B86A;
-    --warn-fg-4: #E0B86A;
-    --warn-fg-5: #E0B86A;
-    --ok-soft-2: #22392F;
-    --ok-soft-3: #22392F;
-    --ok-soft-4: #22392F;
-    --ok-soft-5: #22392F;
-    --ok-line-2: #35544A;
-    --ok-line-3: #35544A;
-    --ok-ink-2: #8FD5B4;
+    --danger-ink-deep-2: #F0918A;
+    --danger-ink-deep-3: #F0918A;
+    --danger-ink-deep-4: #F0918A;
+    --danger-soft: #33201D;
     --danger-soft-2: #33201D;
     --danger-soft-3: #33201D;
     --danger-soft-4: #33201D;
     --danger-soft-5: #33201D;
+    --danger-line: #5A3A34;
     --danger-line-2: #5A3A34;
     --danger-line-3: #5A3A34;
     --danger-line-4: #5A3A34;
-    --danger-ink-2: #E5766B;
-    --danger-ink-deep-2: #F0918A;
-    --danger-ink-deep-3: #F0918A;
-    --danger-ink-deep-4: #F0918A;
-    --info-soft-2: #232E3B;
-    --info-soft-3: #232E3B;
-    --info-soft-4: #232E3B;
-    --line-1-2: #33302A;
-    --line-1-3: #33302A;
-    --line-1-4: #33302A;
-    --line-1-5: #33302A;
-    --line-1-6: #33302A;
-    --line-1-7: #33302A;
-    --line-2-2: #4A4538;
-    --paper-1-2: #24211C;
-    --paper-1-3: #24211C;
-    --paper-2-2: #2A2722;
-    --paper-2-3: #2A2722;
-    --paper-4-2: #24211C;
-    --border-2: #3A362F;
-    --border-3: #3A362F;
-    --border-4: #3A362F;
-    --muted-2: #A8A196;
-    --neutral-3-2: #9A9486;
-    --neutral-3-3: #9A9486;
-    --sage-hover-2: #3A4A36;
-    --sage-line-2: #45563F;
+    /* G 잔디 — 밤엔 달성 쪽으로 갈수록 '밝아진다'(낮은 진해진다). 이웃 단 1.65 / 1.87 / 1.71 / 2.36. */
+    --grass-0: #2C2925;
+    --grass-1: #4F4A42;
+    --grass-2: #7A7367;
+    --grass-3: #A39B8E;
+    --grass-4: #F2EDE3;
+    /* X 포커스 링(밝은 잉크 50% — 합성 4.65) · 딤(어두운 화면 위에선 딤이 더 진해야 층이 보인다 — 옛 다크 값 유지) */
+    --focus-ring: rgba(242, 237, 227, .5);
+    --scrim: rgba(0, 0, 0, .62);
+    --scrim-soft: rgba(0, 0, 0, .5);
     --scrim-2: rgba(0, 0, 0, .62);
     --scrim-3: rgba(0, 0, 0, .62);
-    --accent-fill: #8FAE86;
-    --accent-hover-2: #B6C9AE;
-    --ok-fill: #5FBF95;
-    --sage-soft-2: #2E3A2C;
-    --nav-hover-border-2: #45563F;
-    --muted-3: #A8A196;
-    --paper-2: #2A2722;
-    --paper-3: #2E2A24;
-    --paper-4: #24211C;
-    --sage-1: #2F332A;
-    --sage-2: #2C3A2E;
-    --sage-3: #33392B;
-    --sage-4: #4A5540;
-    --sage-5: #4E6247;
-    --sage-6: #5C7456;
-    --sage-7: #7E9C76;
-    --sage-8: #93A184;
-    --neutral-1: #4A4538;
-    --neutral-2: #5A5346;
-    --neutral-3: #9A9486;
-    /* 잔디 — 미달에서 달성으로 갈수록 '밝아진다'(라이트는 진해진다). 어두운 종이 위에서
-       진해지는 사다리는 배경에 먹혀 0단계와 4단계가 구별되지 않는다. */
-    --grass-0: #2C2A25;
-    --grass-1: #3E5A34;
-    --grass-2: #55804A;
-    --grass-3: #7BAA6B;
-    --grass-4: #A6D293;
-    --graphite: #B8B1A6;
-
-    /* 연필선·종이 결 — 라이트 URI에서 '선 색'과 '입자 색'만 갈아끼운 같은 그림이다.
-       필터 계수(알파 행·baseFrequency·seed)는 건드리지 않는다: 결의 정체는 색이 아니라 밀도이고,
-       25% 밀도는 라이트에서 사용자 반려 두 번을 거쳐 정해진 값이다(T-191·T-193).
-       어두운 종이 위에선 어두운 입자가 안 보이므로 입자만 밝은 쪽으로 뒤집는다. */
-    --pencil-frame: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='300' height='300'%3E%3Cfilter id='a' x='-20%25' y='-20%25' width='140%25' height='140%25'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.5' numOctaves='4' seed='5' result='g'/%3E%3CfeColorMatrix in='g' type='matrix' values='0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0.55 0 0 0 0.62' result='m'/%3E%3CfeComposite in='SourceGraphic' in2='m' operator='in'/%3E%3C/filter%3E%3Cfilter id='b' x='-20%25' y='-20%25' width='140%25' height='140%25'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.5' numOctaves='4' seed='23' result='g'/%3E%3CfeColorMatrix in='g' type='matrix' values='0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0.5 0 0 0 0.25' result='m'/%3E%3CfeComposite in='SourceGraphic' in2='m' operator='in'/%3E%3C/filter%3E%3Crect x='1.6' y='1.6' width='296.8' height='296.8' rx='7' fill='none' stroke='%23B8B1A6' stroke-width='1.9' filter='url(%23a)'/%3E%3Crect x='2.4' y='2.4' width='295.2' height='295.2' rx='7' fill='none' stroke='%23A19A8E' stroke-width='1.4' filter='url(%23b)'/%3E%3C/svg%3E");
-    --pencil-frame-soft: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='300' height='300'%3E%3Cfilter id='a' x='-20%25' y='-20%25' width='140%25' height='140%25'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.5' numOctaves='4' seed='13' result='g'/%3E%3CfeColorMatrix in='g' type='matrix' values='0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0.5 0 0 0 0.55' result='m'/%3E%3CfeComposite in='SourceGraphic' in2='m' operator='in'/%3E%3C/filter%3E%3Crect x='1.7' y='1.7' width='296.6' height='296.6' rx='7' fill='none' stroke='%23847D72' stroke-width='1.6' filter='url(%23a)'/%3E%3C/svg%3E");
-    --grain: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='300' height='300'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.75' numOctaves='4' stitchTiles='stitch'/%3E%3CfeColorMatrix type='matrix' values='0 0 0 0 0.82 0 0 0 0 0.78 0 0 0 0 0.70 0.7 0 0 0 -0.40'/%3E%3C/filter%3E%3Crect width='300' height='300' filter='url(%23n)'/%3E%3C/svg%3E");
-    --fiber: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='440' height='440'%3E%3Cfilter id='f'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.008 0.9' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix type='matrix' values='0 0 0 0 0.84 0 0 0 0 0.80 0 0 0 0 0.72 0.4 0 0 0 -0.26'/%3E%3C/filter%3E%3Crect width='440' height='440' filter='url(%23f)'/%3E%3C/svg%3E");
 }
 
-/* 공부 잉크 다크 — `.is-study`가 파랑 리터럴로 덮는 토큰들의 다크판.
-   이게 없으면 공부 화면만 다크에서 세이지로 튄다(라이트에선 파랑인데 다크에선 초록이 되는 셈). */
+/* 공부 잉크 다크 — `.is-study`가 갈아 끼우는 10개(강조 6 + 잔디 4)의 밤판. 강조 = #8FA9BE(책상 7.10, 그 위 책상색 7.10). */
 :root[data-theme="dark"] .is-study, body.study-lamp .is-study,
 :root[data-theme="dark"] #side-rails[data-mode="study"], body.study-lamp #side-rails[data-mode="study"] {
-    --accent: #8FA9BE;
-    --accent-hover: #AFC4D2;
-    --sage-soft: #27323B;
-    --nav-hover-bg: #27323B;
-    --nav-hover-border: #3A4C5A;
-    --ok: #AFC4D2;
-    --accent-fill: #8FA9BE; --accent-hover-2: #AFC4D2; --ok-fill: #AFC4D2;
-    --sage-soft-2: #27323B; --nav-hover-border-2: #3A4C5A;
+    --accent: #8FA9BE; --accent-hover: #8FA9BE; --ok: #8FA9BE;
+    --accent-fill: #8FA9BE; --accent-hover-2: #8FA9BE; --ok-fill: #8FA9BE;
     --grass-1: #34495A;
     --grass-2: #4A6A80;
     --grass-3: #6F92AA;
     --grass-4: #A0BED0;
 }
-/* `.is-study`가 토큰이 아니라 값으로 직접 칠한 자리들 — 토큰 스왑이 안 닿아 따로 덮는다. */
-:root[data-theme="dark"] .dash-timer-hero.is-study { background: #222A30; }
-:root[data-theme="dark"] .is-study .dash-pill,
-:root[data-theme="dark"] .is-study .grass-streak,
-:root[data-theme="dark"] .is-study .dash-progress-track,
-:root[data-theme="dark"] .is-study .dash-btn-outline:hover { background: #27323B; }
-:root[data-theme="dark"] .is-study .dash-timer-num { color: #AFC4D2; }
-:root[data-theme="dark"] .is-study .btn-primary:hover:not(:disabled) { background-color: #3A4C5A; }
 
-/* ── 독서등(공부) — 측정 중 홈이 밤이 되고 합쳐진 카드만 등불 밑 종이로 남는다(설계 2026-09-15-study-focus-lamp).
-   토큰은 위 두 목록과 라이트 두 목록에 범위를 덧붙여 얻는다(복제 0) — 여기엔 미니앱 독서등 값 셋과 불빛뿐이다.
+/* ── 독서등(공부) — 측정 중 홈이 밤 책상이 되고 합쳐진 카드만 종이 한 장으로 남는다(설계 2026-09-15-study-focus-lamp ·
+   에디토리얼 §5-4). 밤 = 위 다크 팔레트 그대로(목록에 body.study-lamp), 종이 = 라이트 목록의 `body.study-lamp .lamp-page`.
+   에디토리얼엔 광원이 없다 — 옛 불빛(::after 방사 그라데이션)·글로우를 걷었다(이펙트 0).
    ⚠️ 움직이지 않는다(T-176). 켜고 끄는 전환은 View Transition의 root 크로스페이드가 맡는다.
-   ⚠️ 이 자리(다크 절 안)여야 한다 — 밖에 두면 raw 색 래칫이 운다. */
-body.study-lamp { --bg: #2B251D; --card-bg: #322B22; }                 /* 밤이 된 종이 · 바 표면 */
-body.study-lamp::after {                                                /* 스탠드 불빛 — 결(90) 아래·바(95) 아래, 시안 승인값 */
-    content: ''; position: fixed; inset: 0; pointer-events: none; z-index: 89;
-    background: radial-gradient(ellipse 74% 30% at 50% 22%, rgba(255, 220, 160, .15) 0%, rgba(255, 220, 160, 0) 72%);
-}
+   ⚠️ 이 자리(다크 절 안)여야 한다 — 상속 color는 body 계산값(밤 글자)이 내려오므로 낮 토큰으로 다시 계산시킨다(시안 실측). */
 body.study-lamp .lamp-page {
-    --card-bg: #FBF6EA;                       /* 등불 밑이라 낮의 카드지보다 살짝 따뜻하다 */
-    color: var(--text);                       /* 상속 color는 body 계산값이 내려온다 — 낮 토큰으로 다시 계산시킨다(시안 실측) */
-    box-shadow: 0 0 54px 16px rgba(255, 220, 160, .2);   /* 값이 고정된 불빛 한 겹 */
+    color: var(--text);
 }
 }
