@@ -51,7 +51,7 @@ public class CspNonceFilter extends OncePerRequestFilter {
      *   <li>{@code style-src 'unsafe-inline'} — 관리자 화면의 {@code <style>} 5개와 인라인 {@code style=}
      *       속성 18개가 여기 걸린다. 스크립트와 달리 CSS 주입은 위력이 훨씬 낮아, 그 18곳을 다 뜯는
      *       회귀 위험보다 이쪽이 낫다고 봤다(스크립트는 절대 이렇게 하지 않는다).</li>
-     *   <li>{@code style-src·font-src}의 구글 폰트 두 호스트 — 본문 폰트(고운돋움)를 {@code app.css}가
+     *   <li>{@code style-src·font-src}의 구글 폰트 두 호스트 — 제목·본문 폰트(Noto Serif KR·Noto Sans KR)를 {@code app.css}가
      *       <b>{@code @import}로</b> 불러온다. 템플릿엔 {@code <link>}가 없어서 HTML만 훑으면 안 보이고,
      *       빠뜨리면 폰트만 조용히 시스템 기본으로 떨어진다(실 브라우저 확인에서 잡았다 — 단위테스트는
      *       전부 통과했다). 실제 폰트 파일은 {@code fonts.gstatic.com}에서 오므로 두 호스트가 한 쌍이다.</li>

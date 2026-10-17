@@ -8,6 +8,7 @@ import { defaultStudyBookOf } from './defaultBook'
 import type { StudyBookRow } from '../study/api'
 import type { AwayInterval } from './studyAway'
 import { AWAY_GRACE_MS } from './studyAway'
+import ClockDigits from '../shared/ClockDigits.vue'
 
 const props = withDefaults(defineProps<{
     /** 오늘 공부한 초(완료 세션 합) — 측정 중 몫은 elapsed로 얹는다(독서와 같은 분업). */
@@ -123,19 +124,19 @@ defineExpose({ closeEdit })
         <div v-if="hasActiveSession" class="focus-bar" data-testid="focus-bar">
             <span class="dash-pill dash-pill-pulse"><span class="dash-pulse-dot"></span>측정 중</span>
             <!-- .vt-clock은 두 상태에 **하나씩만** — 둘 다 그리면 전환 이름이 겹쳐 브라우저가 전환을 통째로 건너뛴다. -->
-            <span class="dash-timer-num vt-clock" data-testid="focus-today">{{ fmtMSS(todaySeconds + counted) }}</span>
+            <span class="dash-timer-num vt-clock" data-testid="focus-today"><ClockDigits :text="fmtMSS(todaySeconds + counted)" /></span>
             <div class="focus-kv" data-testid="focus-session">
                 <span class="dash-kv-k">이번 측정</span>
-                <span class="dash-kv-v dash-kv-v-num">{{ fmtMSS(counted) }}</span>
+                <span class="dash-kv-v dash-kv-v-num"><ClockDigits :text="fmtMSS(counted)" /></span>
             </div>
             <!-- 회당 시간이 없는 책·책 없이 = 스톱워치라 이 칸이 없다. 닿아도 측정은 계속된다(색·문구만 바뀐다). -->
             <div v-if="view.kind === 'countdown'" class="focus-kv dash-session-line">
                 <span class="dash-kv-k">남은 시간 · 회당 {{ goalLabel(view.goal) }}</span>
-                <span class="dash-kv-v dash-kv-v-num">{{ fmtMSS(view.remaining) }}</span>
+                <span class="dash-kv-v dash-kv-v-num"><ClockDigits :text="fmtMSS(view.remaining)" /></span>
             </div>
             <div v-else-if="view.kind === 'reached'" class="focus-kv dash-session-line is-reached">
                 <span class="dash-kv-k">회당 {{ goalLabel(view.goal) }} 달성</span>
-                <span class="dash-kv-v dash-kv-v-num">+{{ fmtMSS(view.overflow) }}</span>
+                <span class="dash-kv-v dash-kv-v-num"><ClockDigits :text="`+${fmtMSS(view.overflow)}`" /></span>
             </div>
             <div class="focus-kv is-book" data-testid="focus-book">
                 <span class="dash-kv-k">지금 공부하는 책</span>
@@ -183,7 +184,7 @@ defineExpose({ closeEdit })
         <template v-if="!hasActiveSession">
         <div class="dash-timer-left">
             <span class="dash-pill">오늘 공부한 시간</span>
-            <div class="dash-timer-num vt-clock">{{ fmtMSS(todaySeconds + counted) }}</div>
+            <div class="dash-timer-num vt-clock"><ClockDigits :text="fmtMSS(todaySeconds + counted)" /></div>
         </div>
 
         <div class="dash-timer-right">

@@ -4,6 +4,7 @@ import type { BookOption } from './types'
 import { useReadingTimer } from './useReadingTimer'
 import { computeProgress, panelState, goalLabel, fmtMSS } from './timerProgress'
 import BookPickForm from './BookPickForm.vue'
+import ClockDigits from '../shared/ClockDigits.vue'
 
 const props = defineProps<{
     remainingSeconds: number
@@ -85,7 +86,7 @@ function totalHM(s: number): string {
             <span class="dash-pill" :class="{ 'dash-pill-ok': progress.isAchieved }">
                 {{ progress.isAchieved ? '🌿 오늘 목표 달성!' : '오늘 읽은 시간' }}
             </span>
-            <div class="dash-timer-num" :class="{ 'dash-timer-num-ok': progress.isAchieved }">{{ todayReadDisplay }}</div>
+            <div class="dash-timer-num" :class="{ 'dash-timer-num-ok': progress.isAchieved }"><ClockDigits :text="todayReadDisplay" /></div>
             <div class="dash-progress-wrap">
                 <div class="dash-progress-track">
                     <div class="dash-progress-fill" :class="{ 'dash-progress-fill-ok': progress.isAchieved }"
@@ -93,7 +94,7 @@ function totalHM(s: number): string {
                 </div>
                 <div class="dash-progress-meta">
                     <span>오늘 목표 {{ goalText }}</span>
-                    <span class="dash-progress-pct">{{ remainingLabel }}</span>
+                    <span class="dash-progress-pct"><ClockDigits :text="remainingLabel" /></span>
                 </div>
             </div>
             <p v-if="showForgive" class="dash-forgive-note">
@@ -110,7 +111,7 @@ function totalHM(s: number): string {
                 <div v-if="state === 'measuring'" key="measuring" class="dash-state-panel">
                     <div class="dash-state-row">
                         <span class="dash-pill dash-pill-pulse"><span class="dash-pulse-dot"></span>측정 중</span>
-                        <span class="dash-session-time">{{ sessionDisplay }}</span>
+                        <span class="dash-session-time"><ClockDigits :text="sessionDisplay" /></span>
                     </div>
                     <div class="dash-divider"></div>
                     <!-- 책 없이 재는 중엔 빈칸이 아니라 「책 없이」가 상태다(R2 P11). 누적 줄은 책이 있을 때만 —
