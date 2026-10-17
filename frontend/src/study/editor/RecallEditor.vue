@@ -107,7 +107,15 @@ const editor = useEditor({
     extensions: recallExtensions(slashSuggestion),
     editable: !props.disabled,
     // textarea 시절의 aria-label을 잇는다 — 스크린리더에게 이 상자가 무엇인지.
-    editorProps: { attributes: { 'aria-label': props.ariaLabel, 'aria-expanded': 'false' } },
+    // 캐럿을 화면 아래 가운데 「독서|공부」 알약(띠 54.8px · 힌트 91.6px) 위로 올린다 — 기본값은 창 아래 5px라
+    // 긴 글 끝에서 지금 쓰는 줄이 알약 밑에 깔렸다(2026-10-17 실측). ProseMirror는 CSS scroll-padding을 읽지 않으니
+    // 같은 값(app.css `body.has-rails` padding-bottom 100)을 여기 다시 적는다 — RecallEditor.test.ts가 둘을 대조한다.
+    // ponytail: safe-area(아이폰 홈 바 34px)는 못 더한다 — 그때 띠 88.8px라 100으로 아직 비킨다.
+    editorProps: {
+        attributes: { 'aria-label': props.ariaLabel, 'aria-expanded': 'false' },
+        scrollThreshold: { top: 0, right: 0, bottom: 100, left: 0 },
+        scrollMargin: { top: 5, right: 5, bottom: 100, left: 5 },
+    },
     onUpdate: ({ editor: e }) => emit('update:modelValue', markdownOf(e)),
     onTransaction: () => { tick.value += 1; },
 });
