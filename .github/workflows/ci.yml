@@ -12,6 +12,13 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
+      # 줄끝 규칙(.gitattributes)과 저장소 blob이 맞는지 — 어긋난 파일은 모든 작업 폴더에서 내용 변화 없이
+      # 영구 「수정됨」이 되어 브랜치 전환·rebase를 막는다(T-108 — dependabot gradle wrapper 업데이트가
+      # 2026-06·2026-10 두 번 CRLF gradlew.bat을 넣었다). 걸리면 그 PR에 `git add --renormalize <파일>` 한 커밋.
+      - name: Verify line endings match .gitattributes
+        run: |
+          git add --renormalize .
+          git diff --cached --name-only --exit-code
       # forwarded 헤더 신뢰 경계. 앱 테스트로는 원리상 못 잡는다(경계가 Caddy에 있다) —
       # 여기가 뚫리면 로그인 IP 잠금이 통째로 무력화되므로 PR 게이트에 둔다. 러너에 Docker 내장.
       - name: Verify Caddy forwarded-header trust boundary
