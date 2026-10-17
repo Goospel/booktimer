@@ -60,7 +60,8 @@ body.landing-page {
 }
 
 .lp-nav-links a {
-    text-decoration: none;
+    text-decoration: underline;   /* 맨 글자 링크 — 밑줄이 「누를 것」 신호(U-15) */
+    text-underline-offset: 3px;
     color: var(--muted);
     font-size: 0.9rem;
     transition: color .15s;
@@ -159,35 +160,20 @@ body.landing-page {
 }
 
 /* ================================================================
-   플레이스홀더 — 비주얼 자리(실제 캡처로 교체 예정)
+   히어로 그림 — 아치 창 + 판화 한 점(.woodcut은 app.css). 면 없이 잉크 1px 선만.
+   폭은 고정(넓게 늘이면 돔이 거대해진다), 높이 단계 380/280/220은 반응형 절이 맡는다.
    ================================================================ */
 .lp-placeholder {
-    background: var(--sage-soft);   /* 단색 상자 — 아치·판화는 PR-4 */
-    border-radius: 2px;
+    width: min(360px, 100%);
+    box-sizing: border-box;
+    margin-inline: auto;
     min-height: 380px;
     display: flex;
-    flex-direction: column;
     align-items: center;
     justify-content: center;
-    gap: 10px;
     padding: 40px 32px;
-    border: 1px solid var(--border);
-}
-
-.lp-placeholder-label {
-    font-weight: 500;
-    font-size: 0.9rem;
-    color: var(--accent-hover);
-    text-align: center;
-    word-break: keep-all;
-}
-
-.lp-placeholder-sub {
-    font-size: 0.8rem;
-    color: var(--muted);
-    max-width: 200px;
-    line-height: 1.5;
-    text-align: center;
+    border: 1px solid var(--text);
+    border-radius: 999px 999px 0 0;
 }
 
 /* ================================================================
@@ -599,7 +585,8 @@ body.landing-page {
 }
 
 .lp-footer a {
-    text-decoration: none;
+    text-decoration: underline;   /* 맨 글자 링크 — 밑줄이 「누를 것」 신호(U-15) */
+    text-underline-offset: 3px;
     color: var(--muted);
     font-size: 0.85rem;
     transition: color .15s;
