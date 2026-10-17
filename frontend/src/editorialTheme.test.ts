@@ -491,11 +491,17 @@ describe('에디토리얼 옷 — 색 · 선 · 면 · 버튼 (PR-2)', () => {
             const m = merged(APP(), s);
             return (m.get('background') ?? m.get('background-color')) !== 'transparent';
         })).toEqual([]);
+        // 글자색 — 선언이 없으면 UA 필드 글자색(낮 #000 · 밤 #FFF)이 토큰 밖 색으로 선다(재검토 실측: 밤 select 순백).
+        expect(based.map((r) => r.selector).filter((s) => merged(APP(), s).get('color') !== 'var(--text)')).toEqual([]);
         for (const s of ['.study-day ::placeholder', '.study-editor-placeholder']) {
             const m = merged(APP(), s);
             expect(m.get('color'), s).toBe('var(--muted)');
             expect(m.get('opacity') ?? '1', s).toBe('1');
         }
+    });
+
+    it('맨 링크(클래스 없는 a)는 잉크 — 빠지면 UA 기본 파랑으로 돌아간다(§5-6 「맨 링크」)', () => {
+        expect(merged(APP(), 'a').get('color')).toBe('var(--text)');
     });
 
     it('REQ-10 · 카드·패널엔 면 테두리·그림자가 없다', () => {

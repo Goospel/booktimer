@@ -520,7 +520,7 @@ a { color: var(--text); }
     font-weight: 500;
 }
 
-/* 누적 상한 도달 경고 (호박색) */
+/* 누적 상한 도달 경고 (옅은 면 + 잉크 — 에디토리얼은 상태색을 빨강만 남긴다) */
 .cap-badge {
     margin: 12px 0 0;
     padding: 10px 12px;
@@ -670,6 +670,7 @@ button:disabled { opacity: .5; cursor: not-allowed; }
     border: 1px solid var(--muted);
     border-radius: 2px;
     background: transparent;
+    color: var(--text);
 }
 .field select { appearance: auto; cursor: pointer; }
 .field input:focus,
@@ -1096,6 +1097,7 @@ button:disabled { opacity: .5; cursor: not-allowed; }
     border: 1px solid var(--muted);
     border-radius: 2px;
     background: transparent;
+    color: var(--text);
 }
 /* 입력칸 포커스 = 잉크 테(에디토리얼 §5-6 「입력칸」 — 흐린 글자색 테가 잉크로 진해진다). 링은 브라우저 기본 포커스 표시 그대로. */
 .book-search-form input[type=text]:focus, .book-manual-form input[type=text]:focus,
@@ -1984,7 +1986,7 @@ a.shop-count:hover, a.shop-count:hover strong { color: var(--accent); }
 .legal-table th { background: var(--bg); font-weight: 500; }
 
 /* 이번 주 빠뜨린 날 (독서 기록 화면 7일 윈도우 부채 채우기) — 시안: 박스 행 → border-bottom 리스트,
-   날짜 위 / "N분 부족"(호박색) 아래 세로 스택 + 우측 채우기 고스트 버튼. */
+   날짜 위 / "N분 부족"(옅은 면 + 잉크) 아래 세로 스택 + 우측 채우기 고스트 버튼. */
 .missed-list { list-style: none; padding: 0; margin: 8px 0 0; }
 .missed-list li { display: flex; align-items: center; gap: 12px; padding: 13px 4px; border-bottom: 1px solid var(--line-1-5); }
 .missed-list li:last-child { border-bottom: none; }
@@ -2145,9 +2147,8 @@ body.history-page.history-wide .container { max-width: 940px; }
    책BTI 페이지 재스킨 (/personality) — Claude Design 이식.
    스코프: .pbti-* 신규 클래스 + personality 전용 .personality-* 와 .carousel-*
    (이 둘은 personality 페이지에서만 쓰여 재스킨해도 회귀 0). 공유 클래스
-   (.card · .greeting · .status-line · .tag-chip · .btn-* · .record-* · .link-row)는 미접촉.
-   토큰: --bg #F7F2E8 · --card-bg #FCFAF5 · --text #2C2A24 · --muted #6F6A5E
-        · --accent #6E8A6A · --accent-hover #4F6B4C · --border #E4DDD0 · --sage-soft #E7EEE2
+   (.card · .greeting · .status-line · .btn-* · .record-* · .link-row)는 미접촉.
+   토큰: :root 단일 출처(값은 파일 머리 토큰 블록).
    ═══════════════════════════════════════════════════════════════════════ */
 
 /* #personality-app 직계 간격: 공유 16px(N-115) 그룹 위에 페이지 스코프로 18px 덮어쓰기
@@ -2267,7 +2268,7 @@ body.personality-page #personality-app { gap: 18px; }
     -webkit-overflow-scrolling: touch;
     scroll-behavior: smooth;
     scrollbar-width: none;
-    padding-block: 6px;  /* 카드 그림자가 overflow-x 트랙에 위아래로 잘리지 않게 여유 */
+    padding-block: 6px;  /* 고른 카드의 잉크 테가 overflow-x 트랙에 위아래로 잘리지 않게 여유 */
 }
 .personality-carousel::-webkit-scrollbar { display: none; }
 .personality-slide {
@@ -2321,7 +2322,7 @@ body.personality-page #personality-app { gap: 18px; }
     border-radius: 0;
     padding: 18px;
 }
-/* 대표(선택) 카드 — sage 테두리 + 은은한 sage 리프트로 한눈에 구분 */
+/* 대표(선택) 카드 — 잉크 1px 테로 한눈에 구분 */
 .personality-entry.is-selected {
     border-color: var(--text);
 }
