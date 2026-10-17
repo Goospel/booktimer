@@ -555,3 +555,86 @@ describe('에디토리얼 옷 — 색 · 선 · 면 · 버튼 (PR-2)', () => {
         expect(/const\s+CACHE\s*=\s*'([^']+)'/.exec(readFileSync(join(STATIC_DIR, 'sw.js'), 'utf8'))?.[1]).toBe('shell-v9');
     });
 });
+
+/** `@media <query>` 블록 안쪽 CSS(같은 조건 블록이 여럿이면 이어 붙인다). 조건 문자열은 공백만 접어 정확히 비교한다. */
+function mediaInner(css: string, query: string): string {
+    let out = '';
+    const re = /@media([^{]*)\{/g;
+    let m: RegExpExecArray | null;
+    while ((m = re.exec(css))) {
+        let depth = 1;
+        let j = re.lastIndex;
+        for (; j < css.length && depth > 0; j++) {
+            if (css[j] === '{') depth++;
+            else if (css[j] === '}') depth--;
+        }
+        if (m[1].trim().replace(/\s+/g, ' ') === query) out += css.slice(re.lastIndex, j - 1) + '\n';
+    }
+    return out;
+}
+/** 그 `@media` 안에서 셀렉터의 최종 선언. */
+function mergedIn(css: string, query: string, selector: string): Map<string, string> {
+    const out = new Map<string, string>();
+    for (const r of rulesP(mediaInner(css, query)).filter((x) => x.selector === selector)) for (const [p, v] of declsOf(r.body)) out.set(p, v);
+    return out;
+}
+
+describe('에디토리얼 홈 — 아치 표제창 + 오늘 표 (PR-3)', () => {
+    it('REQ-16 · 홈 시계 칸은 아치다', () => {
+        const m = merged(APP(), '.dash-timer-left');
+        expect(m.get('border-radius')).toBe('999px 999px 0 0');
+        expect(m.get('border')).toBe('1px solid var(--text)');
+        expect(m.get('width')).toBe('min(400px, 100%)');
+        expect(m.get('min-height')).toBe('296px');
+        // 아치 안 내용은 세로 가운데(시안 사양서 §14 ⓕ) — 위로 붙으면 돔 아래가 비어 보인다.
+        expect(m.get('justify-content')).toBe('center');
+        expect(mergedIn(APP(), '(max-width: 639px)', '.dash-timer-left').get('min-height')).toBe('252px');
+    });
+
+    it('REQ-16 · 시계는 5자 84 · 그 이상 68(CSS)', () => {
+        const short = merged(APP(), '.dash-timer-left .dash-timer-num');
+        expect(short.get('font-size')).toBe('84px');
+        expect(short.get('line-height')).toBe('88px');
+        const long = merged(APP(), '.dash-timer-left .dash-timer-num.is-long');
+        expect(long.get('font-size')).toBe('min(68px, calc((100vw - 90px) / 4.1))');
+        expect(long.get('line-height')).toBe('72px');
+    });
+
+    it('REQ-16 · 오늘 표는 면 없는 줄 표', () => {
+        for (const s of ['.dash-kv', '.dash-state-row', '.dash-book-chip']) {
+            const m = merged(APP(), s);
+            expect(m.get('border-bottom'), s).toBe('1px solid var(--border)');
+            expect(m.get('min-height'), s).toBe('48px');
+        }
+        const v = merged(APP(), '.dash-kv .dash-kv-v');
+        expect(v.get('font-family')).toBe('var(--font-serif)');
+        expect(v.get('font-weight')).toBe('500');
+        expect(v.get('font-size')).toBe('24px');
+        expect(v.get('line-height')).toBe('30px');
+        expect(merged(APP(), '.dash-kv .dash-kv-k').get('font-size')).toBe('14px');
+        // 넓으면 한 줄 두 칸 + 표 위 잉크 선, 좁으면 위아래(접히는 지점을 미디어 쿼리 하나로 — flex-wrap으로 접히면 선을 끌 수 없다).
+        expect(mergedIn(APP(), '(min-width: 1100px)', '.dash-timer-hero').get('flex-wrap')).toBe('nowrap');
+        // 위 맞춤 — 표 위 잉크 선이 아치 꼭대기와 같은 높이에 선다(시안 사양서 §14 ⓑ: 가운데 맞춤이면 표 높이에 따라 어긋난다).
+        expect(mergedIn(APP(), '(min-width: 1100px)', '.dash-timer-hero').get('align-items')).toBe('flex-start');
+        expect(mergedIn(APP(), '(min-width: 1100px)', '.dash-timer-right').get('border-top')).toBe('1px solid var(--text)');
+        expect(mergedIn(APP(), '(max-width: 1099px)', '.dash-timer-hero').get('flex-direction')).toBe('column');
+        // 옛 경계(520)에 히어로 규칙이 남으면 두 경계가 겹친다.
+        expect(rulesP(mediaInner(APP(), '(max-width: 520px)')).filter((r) => r.selector.startsWith('.dash-timer'))).toEqual([]);
+        // 회귀 — 상태 패널은 PR-2가 면·테를 걷었다.
+        expect(cardFrameLeaks(rulesP(APP()).filter((r) => r.selector === '.dash-state-panel'))).toEqual([]);
+    });
+
+    it('REQ-16 · 홈 카드 머리(여백·필기)는 섹션 머리 — 명조 22/30 + 잉크 선', () => {
+        for (const s of ['.dash-margin-card > .dash-card-head', '.dash-recall-card > .dash-card-head']) {
+            expect(merged(APP(), s).get('border-bottom'), s).toBe('1px solid var(--text)');
+            const pill = merged(APP(), `${s} .dash-pill`);
+            expect(pill.get('font-family'), s).toBe('var(--font-serif)');
+            expect(pill.get('font-size'), s).toBe('22px');
+            expect(pill.get('line-height'), s).toBe('30px');
+            expect(pill.get('color'), s).toBe('var(--text)');
+        }
+        const chip = merged(APP(), '.dash-streak-chip');
+        expect(chip.get('background')).toBe('transparent');
+        expect(chip.get('color')).toBe('var(--muted)');
+    });
+});

@@ -2512,7 +2512,19 @@ body.personality-page #personality-app { gap: 18px; }
     gap: clamp(22px, 3vw, 40px);
     align-items: center;
 }
-.dash-timer-left { flex: 1 1 320px; min-width: 0; display: flex; flex-direction: column; gap: 16px; }
+/* 아치 표제창(에디토리얼 PR-3 — 미니앱 ui.tsx 아치와 같은 잉크 1px · 999 999 0 0). 폭은 고정 —
+   반경이 폭의 절반이라 넓게 늘이면 돔이 거대해진다. 342×252(미니앱)의 비율로 400×296. 내용은 세로 가운데. */
+.dash-timer-left {
+    flex: 0 0 auto; width: min(400px, 100%); min-height: 296px; min-width: 0;
+    display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 16px;
+    padding: 40px 24px 44px; text-align: center;
+    border: 1px solid var(--text); border-radius: 999px 999px 0 0;
+}
+.dash-timer-left .dash-pill { align-self: center; font-size: 14px; line-height: 21px; }
+/* 시계 — 5자(mm:ss) 84/88 · 1시간 넘은 8자 68/72(좁은 폭은 화면 폭에 맞춰 줄인다 — 미니앱 Home.tsx와 같은 식).
+   측정 중 공부 머리 막대(.focus-bar)의 시계는 아치 밖이라 이 크기를 받지 않는다. */
+.dash-timer-left .dash-timer-num { font-size: 84px; line-height: 88px; }
+.dash-timer-left .dash-timer-num.is-long { font-size: min(68px, calc((100vw - 90px) / 4.1)); line-height: 72px; }
 .dash-timer-num {
     font-family: var(--font-serif);
     font-weight: 500;
@@ -2527,27 +2539,27 @@ body.personality-page #personality-app { gap: 18px; }
 }
 /* 목표 달성 시 히어로 숫자·진행바를 --ok(성취 = 잉크)로 전환 — 색만, 새 색 없음(가드레일) */
 .dash-timer-num-ok { color: var(--ok); }
-.dash-progress-wrap { display: flex; flex-direction: column; gap: 8px; max-width: 420px; }
-.dash-progress-track { height: 10px; border-radius: 999px; background: var(--sage-soft-2); overflow: hidden; }
-.dash-progress-fill { height: 100%; background: var(--accent); border-radius: 999px; transition: width .5s ease, background .4s ease; }
+.dash-progress-wrap { display: flex; flex-direction: column; gap: 8px; width: 240px; max-width: 100%; }
+.dash-progress-track { height: 4px; border-radius: 2px; background: var(--border); overflow: hidden; }
+.dash-progress-fill { height: 100%; background: var(--accent); border-radius: 2px; transition: width .5s ease, background .4s ease; }
 .dash-progress-fill-ok { background: var(--ok); }
 .dash-progress-meta { display: flex; justify-content: space-between; font-size: 13px; color: var(--muted); }
 .dash-progress-pct { color: var(--accent-hover); font-variant-numeric: tabular-nums; }
-/* 7일 자동 용서 안내 — 점선 상단 구분, 톤 다운(밀린 빚을 위협이 아니라 안심으로) */
+/* 밀린 시간 안내 — 오늘 표 끝(주 버튼 아래) 가는 선 위, 톤 다운(밀린 빚을 위협이 아니라 안심으로) */
 .dash-forgive-note {
     margin: 2px 0 0;
     padding-top: 12px;
-    border-top: 1px dashed var(--border);
+    border-top: 1px solid var(--border);
     font-size: 13px;
     line-height: 1.5;
     color: var(--muted);
-    max-width: 420px;          /* 진행바(.dash-progress-wrap)와 폭 정렬 — 형제 폭 불일치 제거 */
     word-break: keep-all;      /* 한글 어절(공백) 단위 개행 — 조사 중간 끊김 방지 */
     overflow-wrap: break-word; /* 긴 불가분 토큰 오버플로 안전장치 */
     text-wrap: pretty;         /* 마지막 줄 고아 단어 방지 (미지원 브라우저는 무시) */
 }
 
-.dash-timer-right { flex: 1 1 290px; min-width: 0; }
+/* 오늘 표 — 면 없는 줄 표(줄 = 아래 가는 선 · 값 = 명조). 넓으면 아치 옆 칸, 좁으면 아래(경계는 히어로 미디어 쿼리 둘). */
+.dash-timer-right { flex: 1 1 320px; max-width: 560px; min-width: 0; }
 
 /* 상태 패널 */
 .dash-state-panel {
@@ -2559,7 +2571,9 @@ body.personality-page #personality-app { gap: 18px; }
     flex-direction: column;
     gap: 14px;
 }
-.dash-state-row { display: flex; align-items: center; justify-content: space-between; }
+.dash-state-row { display: flex; align-items: center; justify-content: space-between; min-height: 48px; border-bottom: 1px solid var(--border); }
+.dash-state-row .dash-pill { align-self: center; }   /* 눈썹 기본 flex-start면 「측정 중」이 시간 값보다 위로 뜬다 */
+.dash-state-row + .dash-divider { display: none; }   /* 줄 선이 구분을 맡는다 — 둘이면 이중선 */
 .dash-pill-pulse { gap: 7px; }
 .dash-pulse-dot {
     width: 7px; height: 7px; border-radius: 50%;
@@ -2573,12 +2587,17 @@ body.personality-page #personality-app { gap: 18px; }
 .dash-session-time {
     font-family: var(--font-serif);
     font-weight: 500;
-    font-size: 22px;
+    font-size: 24px;
+    line-height: 30px;
     color: var(--accent-hover);
     font-variant-numeric: tabular-nums;
 }
 .dash-divider { height: 1px; background: var(--border); }
-.dash-kv { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; }
+.dash-kv { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; min-height: 48px; padding: 9px 0; border-bottom: 1px solid var(--border); }
+/* 오늘 표 라벨 14 흐린 · 값 명조 24/30(미니앱 「큰 값」). 공부 머리 막대(.focus-kv)는 같은 라벨·값 클래스를 쓰지만 이 줄 밖이라 그대로. */
+.dash-kv .dash-kv-k { font-size: 14px; }
+.dash-kv .dash-kv-v,
+.dash-kv .dash-kv-v-num { font-family: var(--font-serif); font-weight: 500; font-size: 24px; line-height: 30px; }
 .dash-kv-k { font-size: 13px; color: var(--muted); }
 .dash-kv-v { font-family: var(--font-serif); font-weight: 500; font-size: 16px; color: var(--text); text-align: right; }
 .dash-kv-v-num { font-size: 14.5px; color: var(--text); font-variant-numeric: tabular-nums; }
@@ -2613,8 +2632,8 @@ body.personality-page #personality-app { gap: 18px; }
 .dash-btn-link { display: block; width: 100%; box-sizing: border-box; text-align: center; text-decoration: none; }
 
 /* ACHIEVED */
-.dash-state-achieved { background: var(--card-bg); text-align: center; align-items: center; gap: 12px; }
-.dash-achieved-title { margin: 0; font-family: var(--font-serif); font-weight: 500; font-size: 19px; color: var(--ok); line-height: 1.4; }
+.dash-state-achieved { text-align: center; align-items: center; gap: 12px; }
+.dash-achieved-title { margin: 0; font-family: var(--font-serif); font-weight: 500; font-size: 19px; color: var(--text); line-height: 1.4; }
 .dash-achieved-sub { margin: 0; font-size: 13.5px; color: var(--muted); line-height: 1.5; }
 /* 달성 패널에 측정 시작 폼이 함께 들어갈 때: 격려 텍스트는 가운데 유지, 폼 컨트롤은 풀폭으로
    (패널이 align-items:center라 폼 자식이 좁아지는 것 방지). */
@@ -2653,7 +2672,7 @@ body.personality-page #personality-app { gap: 18px; }
 /* 책 칩(측정 시작 진입, §6.5) — 기본 책 표지 + 제목 + '바꾸기' pill. 카드 토큰 재사용(새 색 없음). */
 .dash-book-chip {
     display: flex; align-items: center; gap: 12px;
-    padding: 10px 0; border: 0;
+    padding: 10px 0; border: 0; border-bottom: 1px solid var(--border); min-height: 48px;
     border-radius: 0; background: var(--card-bg);
 }
 .dash-book-chip-cover {
@@ -2670,12 +2689,14 @@ img.dash-book-chip-cover { object-fit: cover; background: var(--line-1); }
     flex: 1 1 auto; min-width: 0; font-weight: 500; color: var(--text); line-height: 1.35;
     display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
 }
+/* 「바꾸기 ›」 — 표 안의 글자 링크(외곽선 알약이면 표 줄 하나에 버튼이 둘로 보인다). › 는 화면 읽기에서 뺀다. */
 .dash-book-chip-change {
-    width: auto; flex-shrink: 0; padding: 6px 12px; border: 1px solid var(--text);
-    border-radius: 999px;
-    background: none; color: var(--text); font-size: 13px; cursor: pointer;
+    width: auto; flex-shrink: 0; padding: 6px 0; border: 0;
+    border-radius: 0;
+    background: none; color: var(--text); font-size: 13px; font-weight: 500; cursor: pointer;
 }
-.dash-book-chip-change:hover { background: var(--sage-hover); }
+.dash-book-chip-change::after { content: " \203A" / ""; }
+.dash-book-chip-change:hover { text-decoration: underline; }
 .dash-book-chip-change:disabled { opacity: .5; cursor: default; }
 /* '책 없이 시작' — 눈에 띄지 않는 보조 링크(시작을 막지 않되 기본 강조는 '측정 시작'). */
 .dash-bookless {
@@ -2693,9 +2714,14 @@ img.dash-book-chip-cover { object-fit: cover; background: var(--line-1); }
 .dash-card-note { margin: 0; font-size: 14px; color: var(--muted); line-height: 1.6; }
 .dash-streak-chip {
     display: inline-flex; align-items: center; gap: 7px;
-    background: var(--sage-soft-2); color: var(--accent-hover);
-    font-size: 13px; padding: 6px 13px; border-radius: 999px;
+    background: transparent; color: var(--muted);
+    font-size: 13px; padding: 0; border-radius: 999px;
 }
+/* 홈 카드 머리(여백 · 공부 필기) = 섹션 머리 — 명조 22/30 잉크 + 잉크 1px 선(`.card h2`와 같은 값). 눈썹(.dash-pill)을 머리로 올린다. */
+.dash-margin-card > .dash-card-head,
+.dash-recall-card > .dash-card-head { padding-bottom: 8px; border-bottom: 1px solid var(--text); }
+.dash-margin-card > .dash-card-head .dash-pill,
+.dash-recall-card > .dash-card-head .dash-pill { font-family: var(--font-serif); font-weight: 500; font-size: 22px; line-height: 30px; color: var(--text); }
 .dash-streak-chip strong { font-variant-numeric: tabular-nums; }
 
 /* 홈 여백 미리보기 — 최근 2건. 넓어지면 2열로 눕는다(카드가 둘뿐이라 auto-fit이면 충분하다).
@@ -2723,12 +2749,18 @@ img.dash-book-chip-cover { object-fit: cover; background: var(--line-1); }
     display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 12px;
 }
 
-/* 좁은 폭: 히어로 2단을 세로로 */
-@media (max-width: 520px) {
+/* 1099px 이하: 아치 위 · 오늘 표 아래(둘 다 가운데, 표는 최대 560). 경계는 아래 ≥1100 절과 맞물린다 —
+   flex-wrap으로 접히면 CSS가 그 상태를 몰라 표 위 선을 켜고 끌 수 없다. 좁은 화면에선 아치 밑선이 표 위 선을 대신한다. */
+@media (max-width: 1099px) {
     .dash-timer-hero { flex-direction: column; align-items: stretch; }
-    /* column 축에선 flex-basis(320/290px)가 height로 잡혀 좌블록이 과잉 높이 → 공백.
+    /* column 축에선 flex-basis(320px)가 height로 잡혀 블록이 과잉 높이 → 공백.
        basis를 auto로 풀어 콘텐츠 높이로 (N-118 부류 아님, flexbox 축 전환 함정) */
     .dash-timer-left, .dash-timer-right { flex: 0 0 auto; }
+    .dash-timer-left { align-self: center; }   /* stretch가 400 고정 아치를 늘이지 않게 */
+    .dash-timer-right { align-self: center; width: 100%; }
+}
+@media (max-width: 639px) {
+    .dash-timer-left { min-height: 252px; }
 }
 
 /* ── PR-3: 헤더 사용자영역 · 서재 · 로그아웃 · 와이드 2단 ── */
@@ -2737,7 +2769,12 @@ img.dash-book-chip-cover { object-fit: cover; background: var(--line-1); }
    경계 1100px은 원래 잔디에서 나온 값이다(1년치가 16px 칸으로 스크롤 없이 들어가는 최소 폭). 잔디는
    2026-09-07에 걷었지만 경계는 그대로 둔다 — 3열 타일·백지복습 2열이 편해지는 폭이 마침 같은 자리다. */
 @media (min-width: 1100px) {
-    .dash-progress-wrap, .dash-forgive-note { max-width: none; }        /* 좌열 전체 폭 — 420px 제한은 460px 시절 값이다 */
+    /* 홈 히어로 — 아치 | 오늘 표 한 줄. 표가 옆 칸이라 아치 밑선이 표 위를 잇지 못해 표 위에 잉크 선을 따로 긋는다.
+       위 맞춤 — 그 선이 아치 꼭대기와 같은 높이에 선다(가운데 맞춤이면 표 높이 — 측정 중·공부·밀린 시간 안내 — 마다 어긋났다). */
+    .dash-timer-hero { flex-wrap: nowrap; align-items: flex-start; }
+    .dash-timer-right { border-top: 1px solid var(--text); }
+    /* 공부 측정 중 머리 막대는 아치가 없다 — 막대·회당 시간 폼·안내가 한 줄씩(flex-basis 100%) 떨어져야 한다. */
+    .dash-timer-hero:has(> .focus-bar) { flex-wrap: wrap; }
 
     /* 홈 백지복습 — 본문을 왼쪽에 크게, 책·과목·범위를 오른쪽 좁은 열로. 안 그러면 한 줄짜리 「과목」
        입력이 1100px로 늘어나 잔디를 걷어낸 이유를 그대로 되부른다.
