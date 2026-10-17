@@ -18,7 +18,7 @@
     "test:e2e": "playwright test"
   },
   "devDependencies": {
-    "@playwright/test": "^1.64.0",
+    "@playwright/test": "^1.64.1",
     "@vitejs/plugin-vue": "^6",
     "@vue/test-utils": "^2",
     "cross-env": "^7",
@@ -30,13 +30,13 @@
     "vue": "^3.5"
   },
   "dependencies": {
-    "@tiptap/core": "^3.31.4",
-    "@tiptap/extension-highlight": "^3.31.4",
+    "@tiptap/core": "^3.32.0",
+    "@tiptap/extension-highlight": "^3.32.0",
     "@tiptap/extension-list": "^3.31.3",
-    "@tiptap/markdown": "^3.31.4",
-    "@tiptap/pm": "^3.31.4",
-    "@tiptap/starter-kit": "^3.31.4",
-    "@tiptap/suggestion": "^3.31.4",
-    "@tiptap/vue-3": "^3.31.4"
+    "@tiptap/markdown": "^3.32.0",
+    "@tiptap/pm": "^3.32.0",
+    "@tiptap/starter-kit": "^3.32.0",
+    "@tiptap/suggestion": "^3.32.0",
+    "@tiptap/vue-3": "^3.32.0"
   }
 }
