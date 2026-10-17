@@ -2940,6 +2940,10 @@ body.dashboard-page #dashboard-app { gap: 20px; }
 /* 마지막 콘텐츠(명언·광고·폼 버튼·편집기 하단)가 스위치 밑에 깔리지 않게 — body 기본 32 + 스위치 띠 상단 55 + 숨 13.
    스위치가 바 있는 화면 전부에 뜨므로(홈 Vue · 비홈 SSR) 여백도 바 있는 화면 전부. 스크롤 중 겹침은 고정 요소의 본성이라 범위 밖. */
 body.has-rails { padding-bottom: calc(100px + env(safe-area-inset-bottom, 0px)); }
+/* 브라우저가 스스로 정하는 스크롤(Tab 포커스·글자 입력 캐럿)도 같은 띠를 비킨다 — 안 주면 창 맨 아래 끝에 맞춰 알약 밑에 깔린다
+   (2026-10-17 실측: 4폭 Tab 포커스 일부 가림 10건 → 0). 스크롤 루트가 html이라 body 클래스를 :has로 올려 읽는다.
+   편집기(ProseMirror)는 이걸 안 읽어 RecallEditor.vue scrollMargin에 같은 100을 따로 둔다. */
+:root:has(> body.has-rails) { scroll-padding-bottom: calc(100px + env(safe-area-inset-bottom, 0px)); }
 
 /* 공부 잉크 — 카드 스코프 토큰 스왑(미니앱 body.study-mode의 카드 한정판, 값은 그쪽과 같다 — editorialTheme.test.ts 대조).
    대시보드 카드(.dash-card)와 /study/history의 .card가 같은 클래스를 쓴다 — 규칙 하나가 두 화면을 덮는다.
