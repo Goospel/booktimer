@@ -1099,6 +1099,12 @@ button:disabled { opacity: .5; cursor: not-allowed; }
     border-radius: 2px;
     background: transparent;
 }
+/* 입력칸 포커스 = 잉크 테(에디토리얼 §5-6 「입력칸」 — 흐린 글자색 테가 잉크로 진해진다). 링은 브라우저 기본 포커스 표시 그대로. */
+.book-search-form input[type=text]:focus, .book-manual-form input[type=text]:focus,
+.book-manual-form select:focus, .book-add-form select:focus, .book-actions select:focus,
+.search-row input[type=text]:focus, .book-sheet-search input:focus, .shop-report-field select:focus,
+.fb-form .fb-field select:focus, .fb-form .fb-field input:focus, .fb-form .fb-field textarea:focus,
+.fb-reply-form textarea:focus { border-color: var(--text); }
 
 /* 검색 폼: 검색 기준 칩을 위에 두고, 입력+버튼을 아래 한 줄로. */
 .book-search-form { flex-direction: column; align-items: stretch; }
