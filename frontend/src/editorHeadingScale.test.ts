@@ -11,8 +11,8 @@ import { describe, expect, it } from 'vitest';
  * 단일 face라 제목의 굵게가 <b>합성 볼드</b>였다. 크기·굵기 두 축이 다 흐려서, 필기를 훑어볼 때
  * 제목이 제목으로 잡히지 않았다(사용자 지적).
  *
- * <p>그래서 세 축을 갈라 둔다 — 크기(본문 대비 배수) · 위 여백 · 서체(고운바탕은 실제 700 face가
- * 로드돼 있어 합성 볼드를 피한다). 이 테스트가 단독으로 잡는 실패는 <b>그 세 축 중 하나가 본문과
+ * <p>그래서 세 축을 갈라 둔다 — 크기(본문 대비 배수) · 위 여백 · 서체(2026-10 에디토리얼부터 명조
+ * Noto Serif KR 500 — 실린 face 그대로라 합성 볼드가 없다. 본문 고딕과 서체 자체가 갈린다). 이 테스트가 단독으로 잡는 실패는 <b>그 세 축 중 하나가 본문과
  * 같은 값으로 되돌아가는 것</b>이다 — 되돌리면 화면을 열지 않아도 여기서 먼저 운다.
  *
  * <p>⚠️ 값 검사이므로 <b>음성 판정 전용</b>이다. 「대비가 충분하다」는 미감은 이 테스트가 증명하지
@@ -60,10 +60,10 @@ describe('필기 편집기 제목 — 본문과의 대비', () => {
         expect(h2).toBeLessThan(px(H1, 'font-size'));
     });
 
-    it('두 제목은 고운바탕 700 — 합성 볼드가 아닌 실제 굵기', () => {
+    it('편집기 두 제목은 명조 500 — 실린 face 그대로(합성 볼드 아님)', () => {
         for (const sel of [H1, H2]) {
-            expect(block(sel)).toMatch(/font-family\s*:\s*'Gowun Batang'/);
-            expect(block(sel)).toMatch(/font-weight\s*:\s*700/);
+            expect(block(sel)).toMatch(/font-family\s*:\s*var\(--font-serif\)/);
+            expect(block(sel)).toMatch(/font-weight\s*:\s*500/);
         }
     });
 

@@ -15,15 +15,16 @@ import java.util.regex.Pattern;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
- * 웹 본문 타이포 규약 가드 — <b>기능 글자는 고운돋움 400</b>(2026-09-03).
+ * 웹 본문 타이포 규약 가드 — <b>기능 글자는 Noto Sans KR 400</b>(2026-10 에디토리얼 — 그 전 2026-09-03~ 고운돋움).
  *
- * <p>미니앱이 「또렷한 연필」 ③-A(2026-08-24)에서 내린 결론을 웹에 옮긴 것이다. 근거 전문은
- * {@code miniapp/src/global.css} 의 {@code html body} 주석에 있다 — 요지는 셋이다.
+ * <p>미니앱이 「또렷한 연필」 ③-A(2026-08-24)에서 내린 결론을 웹에 옮긴 것이고, 서체는 미니앱 에디토리얼
+ * (2026-10-14 출시)과 같은 Noto Sans KR 이다. 근거 전문은 {@code miniapp/src/global.css} 의 {@code html body}
+ * 주석에 있다 — 요지는 셋이다.
  * ① 기본값이 다수(기능 글자)를 맡고 장식이 손드는 쪽만 안정적이다(방향이 뒤집히면 지정 안 한
- * 다음 화면이 다시 손글씨로 태어난다). ② 손글씨(Gaegu)를 <b>폴백으로도</b> 남기지 않는다 —
- * 남기면 고운돋움이 못 그리는 글리프만 손글씨로 떨어져 한 단어 안에서 서체가 갈린다.
- * ③ {@code font-weight} 를 400 으로 <b>명시</b>한다 — 700 은 개구의 얇은 획을 메우던 보정인데,
- * 고운돋움에서 700 은 전면 합성 볼드라 400/700 강조 축을 통째로 무너뜨린다.
+ * 다음 화면이 다시 장식 서체로 태어난다). ② 손글씨(Gaegu)를 <b>폴백으로도</b> 남기지 않는다 —
+ * 남기면 본문 서체가 못 그리는 글리프만 손글씨로 떨어져 한 단어 안에서 서체가 갈린다.
+ * ③ {@code font-weight} 를 400 으로 <b>명시</b>한다 — 실린 face 는 400·500 뿐이고({@code font-synthesis: style} — 굵기 합성 끔),
+ * 강조는 500 으로 선다(굵기 가드는 {@code frontend/src/editorialTheme.test.ts}).
  *
  * <p>Spring 컨텍스트 없이 <b>소스 파일을 직접 읽는다</b> — {@code PwaStaticAccessTest} 가
  * {@code manifest.json} 을 그렇게 읽는 전례를 따른다. build 산출물이 아니라 소스를 봐야
@@ -75,18 +76,18 @@ class AppStylesheetTypographyTest {
     }
 
     @Test
-    @DisplayName("body 의 font-family 스택 맨 앞이 고운돋움이다 (폴백으로 밀리면 실패)")
-    void bodyFontFamily_startsWithGowunDodum() throws IOException {
+    @DisplayName("body 서체 1순위가 Noto Sans KR 이다 (폴백으로 밀리면 실패)")
+    void bodyFontFamily_startsWithNotoSansKr() throws IOException {
         assertThat(declaration(bodyBlock(), "font-family"))
-                .as("기능 글자가 기본값 — 고운돋움이 1순위여야 한다")
-                .startsWith("\"Gowun Dodum\"");
+                .as("기능 글자가 기본값 — Noto Sans KR 이 1순위여야 한다(미니앱 에디토리얼과 같은 본문 서체)")
+                .startsWith("\"Noto Sans KR\"");
     }
 
     @Test
     @DisplayName("body 의 font-weight 가 400 으로 명시돼 있다 (700 보정이 돌아오면 실패)")
     void bodyFontWeight_isExplicit400() throws IOException {
         assertThat(declaration(bodyBlock(), "font-weight"))
-                .as("400 을 명시해야 결과가 결정적이고, 700/600 명시가 강조 축으로 살아난다")
+                .as("400 을 명시해야 결과가 결정적이고, 500 명시가 강조 축으로 살아난다")
                 .isEqualTo("400");
     }
 
