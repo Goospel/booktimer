@@ -31,6 +31,13 @@ public enum RateLimitAction {
     STUDY_NOTE_CREATE(30, Duration.ofHours(1)),
 
     /**
+     * 공부 필기 <b>사진 올리기</b>({@code POST /api/study/notes/images}). 공부 한 시간에 스크린샷 수십 장이 정상 —
+     * 겨누는 것은 스크립트 폭주와 힙이다. 조회 GET에는 안 건다 — 장을 열면 여러 장이 한꺼번에 오고, 조회의 힙 위험은
+     * 횟수가 아니라 동시성이라 이 상한으로는 못 묶는다({@code StudyNoteApiController#image}의 {@code ponytail:}).
+     */
+    STUDY_NOTE_IMAGE(60, Duration.ofHours(1)),
+
+    /**
      * 여백 글 좋아요. 작성(시간당 10)보다 훨씬 넉넉한 건 <b>정상 사용이 연타</b>여서다 — 목록을 훑으며
      * 마음에 든 문장마다 누르는 것이 이 기능의 쓰임이라, 작성과 같은 한도를 두면 일반 사용이 걸린다.
      */

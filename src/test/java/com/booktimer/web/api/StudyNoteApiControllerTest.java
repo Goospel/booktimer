@@ -275,6 +275,55 @@ class StudyNoteApiControllerTest {
                 .isEqualTo("탭 A가 쓴 긴 본문");
     }
 
+    // ── ⑤-1 옛 화면 가드 — 사진 노드를 모르는 편집기(열린 옛 번들 탭)가 사진 줄을 지운 채 저장하지 못하게 ──
+
+    private static final String PHOTO = "![](/api/study/notes/images/12)";
+
+    /** 새 편집기(사진 노드를 켠 번들)의 갱신 요청 — {@code imageAware: true}가 실린다. 기존 {@link #updateBody}는 옛 클라다. */
+    private static String updateBodyAware(String body, int revision) {
+        return """
+                {"title":null,"body":"%s","revision":%d,"imageAware":true}
+                """.formatted(body, revision);
+    }
+
+    @Test
+    @DisplayName("REQ-07 · 갱신: 사진이 든 필기를 imageAware 없이 고치면 409 「필기 화면이 새로 바뀌었어요」 — 본문·revision 그대로")
+    void update_photoNoteFromOutdatedEditor_is409() throws Exception {
+        User user = register("noteoldtab");
+        Long bookId = book(user, "책").getId();
+        Long id = createNote("noteoldtab", bookId, null, "앞 " + PHOTO + " 뒤");
+
+        // 옛 편집기는 사진 줄을 지운 채 저장한다 — 자동저장이라 사용자는 모른다.
+        mockMvc.perform(post("/api/study/notes/" + id).with(user("noteoldtab")).with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(updateBody(null, "앞\\n\\n뒤 한 글자", 0)))
+                .andExpect(status().isConflict())
+                .andExpect(content().string(org.hamcrest.Matchers.startsWith("필기 화면이 새로 바뀌었어요")));
+
+        StudyNote saved = noteRepository.findById(id).orElseThrow();
+        assertThat(saved.getBody()).as("409를 돌려주면서 덮어쓰면 안 된다").isEqualTo("앞 " + PHOTO + " 뒤");
+        assertThat(saved.getRevision()).isZero();
+    }
+
+    @Test
+    @DisplayName("REQ-07 · 갱신: imageAware:true면 사진 든 필기도 200 · 사진 없는 필기는 플래그 없이도 200")
+    void update_imageAwareOrPhotoless_isOk() throws Exception {
+        User user = register("notenewtab");
+        Long bookId = book(user, "책").getId();
+        Long photoNote = createNote("notenewtab", bookId, null, PHOTO);
+        Long plainNote = createNote("notenewtab", bookId, null, "글만");
+
+        mockMvc.perform(post("/api/study/notes/" + photoNote).with(user("notenewtab")).with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(updateBodyAware(PHOTO + " 설명", 0)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.revision").value(1));
+        mockMvc.perform(post("/api/study/notes/" + plainNote).with(user("notenewtab")).with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(updateBody(null, "글만 고침", 0)))
+                .andExpect(status().isOk());
+    }
+
     @Test
     @DisplayName("갱신: 성공하면 revision이 1 오른다")
     void update_bumpsRevision() throws Exception {
@@ -479,6 +528,19 @@ class StudyNoteApiControllerTest {
                 .andExpect(jsonPath("$.excluded[0].title").value("여백"))
                 .andExpect(jsonPath("$.chars").value(23_478))
                 .andExpect(jsonPath("$.limit").value(24_000));
+    }
+
+    @Test
+    @DisplayName("REQ-09 · 채점 기준 응답에 photos가 실린다")
+    void reference_carriesPhotoCount() throws Exception {
+        User user = register("noterefphoto");
+        Long bookId = book(user, "책").getId();
+        createNote("noterefphoto", bookId, null, PHOTO + "\\n칠판 " + PHOTO);
+
+        mockMvc.perform(get("/api/study/notes/reference").param("bookId", String.valueOf(bookId))
+                        .with(user("noterefphoto")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.photos").value(2));
     }
 
     @Test

@@ -4,6 +4,7 @@ import java.time.LocalDate;
 import java.time.ZoneId;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.regex.Matcher;
 
 /**
  * 백지복습 채점의 <b>정답지</b> — 그 책의 필기를 최근순으로 상한까지 담은 것.
@@ -78,7 +79,7 @@ public record NoteReference(List<StudyNote> included, List<StudyNote> excluded, 
      * {@code text}의 문구가 바뀌는 날 조용히 어긋난다(테스트가 {@code chars == text().length()}로 잠근다).
      */
     private static int cost(StudyNote note) {
-        return header(note, "0000-00-00").length() + note.chars() + SEPARATOR.length();
+        return header(note, "0000-00-00").length() + promptBody(note).length() + SEPARATOR.length();
     }
 
     /** @param date {@code yyyy-MM-dd} — 길이가 상수(10)라 비용 계산은 자리표시 날짜로 같은 문을 지난다. */
@@ -88,6 +89,19 @@ public record NoteReference(List<StudyNote> included, List<StudyNote> excluded, 
                 + " (" + date + ")\n";
     }
 
+    /** 필기 사진 자리 — 분석은 텍스트 블록만 보내 모델은 사진을 받지 않는다. 주소 대신 이 표시를 싣는다(설계 D2). */
+    static final String IMAGE_PLACEHOLDER = "[사진 — AI에게는 보이지 않음]";
+
+    /** 모델이 받는 본문 — 비용({@link #cost})과 조립({@link #text})이 <b>같은 이 함수</b>를 지나는 것이 요점(chars == text().length() 잠금 유지). */
+    private static String promptBody(StudyNote note) {
+        return StudyNoteImage.MARKDOWN_REF.matcher(note.getBody()).replaceAll(Matcher.quoteReplacement(IMAGE_PLACEHOLDER));
+    }
+
+    /** 포함된 장의 사진 수 — 카드가 「사진 N장은 채점 기준에 안 들어가요」로 말한다(조용한 누락 금지). 빠진 장은 세지 않는다. */
+    public int photos() {
+        return included.stream().mapToInt(n -> StudyNoteImage.countIn(n.getBody())).sum();
+    }
+
     /** 장과 장 사이 — 비용 계산과 조립이 같은 값을 본다. */
     private static final String SEPARATOR = "\n\n";
 
@@ -95,7 +109,8 @@ public record NoteReference(List<StudyNote> included, List<StudyNote> excluded, 
      * 프롬프트에 실리는 문자열 — 장마다 제목·날짜 헤더 + 본문 그대로.
      *
      * <p>본문은 마크다운째로 넘긴다(백지복습 본문과 같은 규율) — 여기서 문법을 벗기면 무엇을 체크했고
-     * 무엇을 강조했는지가 모델에게서 사라진다.
+     * 무엇을 강조했는지가 모델에게서 사라진다. 사진 표식만 자리표시({@link #IMAGE_PLACEHOLDER})로 바꾼다 —
+     * 주소가 프롬프트·국외로 나가지 않고, 모델은 어차피 사진을 받지 않는다.
      *
      * @param zone 헤더 날짜를 읽을 타임존 — <b>유저 타임존</b>이다. UTC로 찍으면 아침에 쓴 필기가
      *             전날로 보여, 모델이 받는 「언제 적은 것인가」가 하루씩 어긋난다
@@ -104,7 +119,7 @@ public record NoteReference(List<StudyNote> included, List<StudyNote> excluded, 
         StringBuilder text = new StringBuilder();
         for (StudyNote note : included) {
             text.append(header(note, LocalDate.ofInstant(note.getUpdatedAt(), zone).toString()))
-                    .append(note.getBody()).append(SEPARATOR);
+                    .append(promptBody(note)).append(SEPARATOR);
         }
         return text.toString();
     }

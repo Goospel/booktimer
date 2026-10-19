@@ -18,7 +18,8 @@ REGION="${AWS_REGION:-ap-northeast-2}"
 BUCKET="${BACKUP_BUCKET:-booktimer-ops-$(aws sts get-caller-identity --query Account --output text --region "$REGION")}"
 STAMP="$(date -u +%Y%m%dT%H%M%SZ)"
 FILE="booktimer-${STAMP}.sql.gz"
-TMP="/tmp/${FILE}"
+# /var/tmp인 이유: 필기 사진(MEDIUMBLOB)이 덤프를 키운다. AL2023의 /tmp는 tmpfs(메모리 — MySQL·앱·facefit과 같은 2GB)일 수 있다(설계 U-4).
+TMP="/var/tmp/${FILE}"
 trap 'rm -f "$TMP"' EXIT
 
 # 테스트용 — 실제 덤프·업로드 없이 확정된 대상만 찍고 끝낸다.
@@ -45,8 +46,10 @@ dump() { docker compose -f compose.prod.yaml exec -T mysql \
 # 복원되면 마이그레이션이 재실행되지 않아 앱이 세션 테이블 부재로 기동 실패한다.
 # 그래서 뒤에 --no-data 덤프를 같은 스트림에 이어붙여 빈 테이블 구조는 남긴다
 # (본 덤프의 USE booktimer; 가 먼저 나오므로 뒤 덤프도 같은 DB 컨텍스트에서 실행된다).
+#
+# --hex-blob: BLOB(필기 사진)을 16진으로 — 이진 바이트가 덤프의 문자셋 변환을 거치지 않는다. 헥스는 gzip이 잘 눌러 크기는 거의 같다.
 {
-    dump --single-transaction --routines --triggers --databases booktimer facefit \
+    dump --single-transaction --hex-blob --routines --triggers --databases booktimer facefit \
         --ignore-table=booktimer.SPRING_SESSION \
         --ignore-table=booktimer.SPRING_SESSION_ATTRIBUTES
     dump --no-data booktimer SPRING_SESSION SPRING_SESSION_ATTRIBUTES

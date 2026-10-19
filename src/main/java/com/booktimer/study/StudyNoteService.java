@@ -4,11 +4,18 @@ import com.booktimer.book.StudyBook;
 import com.booktimer.security.RateLimitAction;
 import com.booktimer.security.RateLimitService;
 import com.booktimer.user.User;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.multipart.MultipartFile;
 import org.springframework.web.server.ResponseStatusException;
 
+import java.io.IOException;
+import java.time.Clock;
+import java.time.Duration;
+import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
 
@@ -23,12 +30,24 @@ import java.util.Optional;
 @Transactional
 public class StudyNoteService {
 
-    private final StudyNoteRepository noteRepository;
-    private final RateLimitService rateLimitService;
+    private static final Logger log = LoggerFactory.getLogger(StudyNoteService.class);
 
-    public StudyNoteService(StudyNoteRepository noteRepository, RateLimitService rateLimitService) {
+    /** 「표시한 밤의 다음 밤」에 지워지게(매일 같은 시각) — 처리방침 5절 「3일 안에」와 짝이다(한 밤을 건너뛰어도 72시간). */
+    static final Duration ORPHAN_GRACE = Duration.ofHours(20);
+
+    static final String OUTDATED_EDITOR = "필기 화면이 새로 바뀌었어요 — 브라우저에서 이 페이지를 새로고침(F5)한 뒤 이어서 써 주세요";
+
+    private final StudyNoteRepository noteRepository;
+    private final StudyNoteImageRepository imageRepository;
+    private final RateLimitService rateLimitService;
+    private final Clock clock;
+
+    public StudyNoteService(StudyNoteRepository noteRepository, StudyNoteImageRepository imageRepository,
+                            RateLimitService rateLimitService, Clock clock) {
         this.noteRepository = noteRepository;
+        this.imageRepository = imageRepository;
         this.rateLimitService = rateLimitService;
+        this.clock = clock;
     }
 
     /** 그 책의 필기 목록(최근 고친 순). 화면은 본문 없이 라벨·크기만 그린다. */
@@ -84,13 +103,21 @@ public class StudyNoteService {
      * <p><b>소유권을 먼저</b> 확정하고 검증은 그 뒤다({@link #owned}가 404를 던진다) — 순서를 뒤집으면
      * 남의 필기가 400(길이 위반)을, 없는 필기가 404를 줘 그 차이로 존재 여부를 캐낼 수 있다(IDOR).
      *
-     * @param revision 클라가 마지막으로 받은 {@code revision}
+     * <p>순서: 소유(404) → 옛 편집기 가드(409) → 판 대조(409)·검증(400).
+     *
+     * @param revision   클라가 마지막으로 받은 {@code revision}
+     * @param imageAware 사진 노드를 켠 편집기(새 번들)만 참이다 — 거짓이면 사진 든 필기를 고칠 수 없다
      * @throws ResponseStatusException  404 — 없거나 남의 필기(존재 비노출) /
-     *                                  409 — 그 사이 다른 곳에서 고쳐졌다. <b>덮어쓰지 않는다</b>
+     *                                  409 — 그 사이 다른 곳에서 고쳐졌거나 옛 화면이다. <b>덮어쓰지 않는다</b>
      * @throws IllegalArgumentException 본문이 비었거나 길이 위반(→ 400). 생성과 <b>같은 규칙·같은 답</b>이다
      */
-    public StudyNote update(User user, Long id, String title, String body, int revision) {
+    public StudyNote update(User user, Long id, String title, String body, int revision, boolean imageAware) {
         StudyNote note = owned(user, id);
+        if (!imageAware && StudyNoteImage.referencedIn(note.getBody())) {
+            // 사진 노드를 모르는 편집기(열린 옛 번들 탭)는 사진 줄을 지운 채 저장한다 — 자동저장이라 사용자는 모른다(설계 §2-4 ①).
+            // 플래그는 사진 노드를 켠 새 편집기만 싣는다. 옛 화면도 이 문구를 상태줄에 그대로 띄운다.
+            throw new ResponseStatusException(HttpStatus.CONFLICT, OUTDATED_EDITOR);
+        }
         try {
             note.edit(title, body, revision);
         } catch (StudyNote.StaleNoteException e) {
@@ -98,6 +125,60 @@ public class StudyNoteService {
                     "다른 곳에서 고쳐진 필기예요 — 새로고침한 뒤 이어서 써 주세요");
         }
         return noteRepository.save(note);
+    }
+
+    /**
+     * 필기 사진 한 장 — 순서: 파트·크기·형식(400·413) → 레이트리밋(429) → 사람당 용량(400) → 전체 용량(503) → 저장.
+     * 검증이 상한보다 먼저인 것은 전사와 같은 규율이다(잘못 만든 요청이 그 시간의 몫을 깎지 않게). 승인 게이트 없음(설계 D5).
+     */
+    public StudyNoteImage uploadImage(User user, MultipartFile file) {
+        StudyNoteImage image = StudyNoteImage.of(user, readImage(file), clock.instant());
+        if (!rateLimitService.allow(RateLimitAction.STUDY_NOTE_IMAGE, user.getId())) {
+            throw new ResponseStatusException(HttpStatus.TOO_MANY_REQUESTS, "사진을 너무 자주 올렸어요 — 잠시 뒤 다시 올려 주세요");
+        }
+        if (imageRepository.totalBytes(user) + image.byteSize() > StudyNoteImage.QUOTA_BYTES) {
+            throw new IllegalArgumentException("사진은 한 사람당 200MB까지 둘 수 있어요 — 안 쓰는 사진이 든 필기를 지우면 며칠 안에 자리가 생겨요");
+        }
+        if (imageRepository.totalBytesAll() + image.byteSize() > StudyNoteImage.TOTAL_QUOTA_BYTES) {
+            // 운영자가 볼 단서 — 이 줄이 찍히면 data 열을 S3로 옮길 때다(설계 §4-1). 503 본문은 화면이 그대로 띄운다(study/pure.ts errorMessage).
+            log.warn("필기 사진 전체 상한 도달 — 업로드 거절(user {}). data 열을 S3로 옮길 때다", user.getId());
+            throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE, "지금은 사진을 더 넣을 수 없어요 — 서비스의 사진 저장 공간이 찼어요");
+        }
+        return imageRepository.save(image);
+    }
+
+    /** 내 사진일 때만 — 남의 것이면 빈 값이다(호출부가 404로 옮긴다, 존재 비노출). */
+    @Transactional(readOnly = true)
+    public Optional<StudyNoteImage> image(User user, Long id) {
+        return imageRepository.findByIdAndUser(id, user);
+    }
+
+    /**
+     * 사진 정리 — 순서가 계약이다: 풀기 → 지우기 → 표시. 표시가 마지막이라 오늘 처음 고아가 된 사진은 오늘 지워지지 않는다.
+     * 바이트를 읽지 않는다. 두 색이 겹쳐 두 번 돌아도 멱등이다.
+     */
+    public SweepResult sweepImages(Instant now) {
+        int unmarked = imageRepository.unmarkReferenced();
+        int deleted = imageRepository.deleteOrphanedBefore(now.minus(ORPHAN_GRACE));
+        int marked = imageRepository.markOrphans(now);
+        return new SweepResult(unmarked, deleted, marked);
+    }
+
+    public record SweepResult(int unmarked, int deleted, int marked) { }
+
+    /** 업로드를 검증하고 바이트로 읽는다 — JPEG 아님은 {@link StudyNoteImage#of}가 400으로 던진다. */
+    private static byte[] readImage(MultipartFile file) {
+        if (file == null || file.isEmpty()) {
+            throw new IllegalArgumentException("사진을 골라 주세요");
+        }
+        if (file.getSize() > StudyRecallService.MAX_IMAGE_BYTES) {
+            throw new ResponseStatusException(HttpStatus.PAYLOAD_TOO_LARGE, "사진은 3MB 이하로 올려 주세요");
+        }
+        try {
+            return file.getBytes();
+        } catch (IOException e) {
+            throw new IllegalArgumentException("사진을 읽을 수 없어요 — 다시 올려 주세요");
+        }
     }
 
     /** @throws ResponseStatusException 404 — 없거나 남의 필기(존재 비노출) */

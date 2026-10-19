@@ -80,7 +80,8 @@ public class GlobalExceptionHandler {
      * 영영 못 본다(핸들러가 아직 null이다) — 컨트롤러에 두면 조용히 아래 catch-all로 떨어져 <b>500 +
      * error.html + 스택트레이스</b>가 된다. 사용자에겐 「사진이 크다」가, 로그엔 서버 결함이 찍힌다.
      *
-     * <p>본문을 뷰가 아니라 평문으로 돌려주는 것은 이 예외가 API(사진 전사)에서만 나기 때문이다 —
+     * <p>본문을 뷰가 아니라 평문으로 돌려주는 것은 이 예외가 사진 업로드 두 문(전사·필기 사진)에서만 나기 때문이다
+     * — 둘 다 3MB라 같은 문구가 맞다 —
      * 화면의 {@code errorMessage()}가 그 문구를 그대로 상태줄에 띄운다.
      */
     @ExceptionHandler(MaxUploadSizeExceededException.class)

@@ -28,6 +28,10 @@ jobs:
       # 죽어 파일 전체가 3일간 빨간불인 걸 아무도 몰랐다(2026-09-22 발견). 그래서 PR 게이트로 올린다.
       - name: Verify SSM-to-env mapping contract
         run: bash deploy/tests/test-render-env.sh
+      # MySQL 운영 계약 — 필기 사진(BLOB)이 생긴 뒤로 덤프 플래그가 조용히 빠지면 복원할 때에야 드러나고, binlog가 다시 켜지면 디스크가 조용히 찬다.
+      # 로컬 수동이면 깨져도 모른다(render-env 선례).
+      - name: Verify MySQL backup and binlog contract
+        run: bash deploy/tests/test-backup-mysql.sh
       - uses: actions/setup-node@v7
         with:
           node-version: '20'
