@@ -8,7 +8,9 @@
 --
 -- ① data는 mediumblob(최대 16MB)이다 — blob(64KB)이면 운영에서만 「Data too long」이 난다. H2(MODE=MySQL)는 둘을 똑같이
 --    BINARY LARGE OBJECT로 보고해 테스트가 이 차이를 못 잡는다(설계 원장 U-1이 mysql:8.4에서 잰다).
---    엔티티는 @Lob byte[]가 맞다 — H2가 Types.BLOB(2004)으로 보고해 validate와 맞는다(V85·V89의 「@Lob 금지」는 text 이야기다).
+--    엔티티는 @Lob + length = 16_777_215(MEDIUMBLOB 최대 길이)다 — H2는 Types.BLOB(2004)으로 보고해 validate와 맞고,
+--    MySQL은 그 길이로 mediumblob을 기대한다(length 없이는 tinyblob을 기대해 MySQL validate가 깨진다 — 2026-10-19 mysql:8.4 실측).
+--    V85·V89의 「@Lob 금지」는 text 이야기다.
 -- ② byte_size는 사람당·서비스 전체 용량 합계를 바이트를 읽지 않고 더하려는 사본이다.
 -- ③ 매일 mysqldump에 그대로 실린다 — backup-mysql.sh가 --hex-blob과 /var/tmp를 쓰는 이유.
 --    운영 MySQL은 바이너리 로그를 끈다(compose.prod.yaml --disable-log-bin) — 켜 두면(8.x 기본 FULL·30일) 사진 한 장이

@@ -54,6 +54,7 @@ class StudyNoteImageTextTest {
             "1. ![](/api/study/notes/images/12)\\n2. 설명"                                | "2. 설명"
             "- ![](/api/study/notes/images/12)"                                          | "- ![](/api/study/notes/images/12)"
             "- 글 ![](/api/study/notes/images/12)"                                        | "- 글 ![](/api/study/notes/images/12)"
+            "- [ ]\\n설명"                                                               | "- [ ]"
             """)
     @DisplayName("REQ-08 · preview는 사진만 있는 줄을 건너뛰고 다음 글 줄을 준다 — 글 줄이 없으면 첫 사진 줄 그대로")
     void preview_skipsPhotoOnlyLines(String body, String expected) {

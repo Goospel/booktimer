@@ -61,9 +61,10 @@ public class StudyNoteImage {
     // ponytail: 사진 바이트가 MySQL에 산다 — 매일 덤프·탈퇴 purge·H2 테스트가 저절로 덮는 대가로 천장은 DB 크기다.
     // 전체 상한(TOTAL_QUOTA_BYTES, 2GB)에 닿거나 덤프가 눈에 띄게 길어지면 이 필드만 S3로 빼는 자리(id·주인·정리·본문 참조 꼴은 그대로).
     // @Lob — H2가 MEDIUMBLOB을 Types.BLOB으로 보고해 validate가 BLOB 매핑을 요구한다(2026-10-19 실측).
+    // length = MEDIUMBLOB 최대 길이 — 없으면 MySQLDialect가 tinyblob(255바이트)을 기대해 MySQL validate가 깨진다(H2는 그대로 BLOB).
     // ⚠️ 이 엔티티를 여러 개 싣는 쿼리를 만들지 않는다(바이트가 다 힙에 올라온다) — 합계·삭제·정리는 리포지터리의 JPQL·SQL로만.
     @Lob
-    @Column(nullable = false)
+    @Column(nullable = false, length = 16_777_215)
     private byte[] data;
 
     @Column(name = "created_at", nullable = false, updatable = false)
@@ -109,13 +110,13 @@ public class StudyNoteImage {
     }
 
     /**
-     * 사진만 있는 줄인가 — 목록 preview가 건너뛴다(REQ-08). 빈 줄은 아니다.
+     * 사진만 있는 줄인가 — 목록 preview가 건너뛴다(REQ-08). 빈 줄도, 사진 없이 표식만 있는 줄(`- [ ]`)도 아니다.
      * 줄머리 표식(`- `·`> `·`# `·`1. `·`- [ ] `)을 <b>먼저 걷고</b> 본다 — 안 걷으면 `- ![](…)`가 글 줄로 잡혀 그 줄이 이름이 되고,
      * 화면은 그 한 줄에서 「사진」을 만든다(열린 장은 본문 전체를 봐서 다음 글 줄이 이름 — 같은 장의 이름이 갈린다).
      */
     static boolean isPhotoOnly(String line) {
         String rest = TASK_BOX.matcher(BLOCK_MARKERS.matcher(line).replaceFirst("")).replaceFirst("");
-        return !line.isBlank() && MARKDOWN_REF.matcher(rest).replaceAll("").isBlank();
+        return MARKDOWN_REF.matcher(rest).find() && MARKDOWN_REF.matcher(rest).replaceAll("").isBlank();
     }
 
     int byteSize() {

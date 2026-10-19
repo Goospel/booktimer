@@ -60,7 +60,8 @@ services:
       - --innodb-buffer-pool-size=256M
       # 바이너리 로그를 끈다 — 복제·시점 복구를 안 쓰고(백업은 매일 mysqldump뿐), binlog는 데이터와 같은 EBS라 디스크 사고엔 쓸모가 없다.
       # 켜 두면(8.x 기본 ROW·FULL·30일) 필기 사진(MEDIUMBLOB) 한 장이 INSERT·정리 UPDATE 앞뒤·DELETE로 약 4번 실려 30일 남아,
-      # 사람당·전체 상한이 디스크(facefit과 공유)를 못 묶는다. 이 줄을 바꾸면 다음 배포가 mysql을 다시 만든다(deploy-on-ec2.sh는 --no-deps가 없다).
+      # 사람당·전체 상한이 디스크(facefit과 공유)를 못 묶는다. 이 줄을 바꾸면 다음 배포가 mysql을 다시 만든다(deploy-on-ec2.sh는 --no-deps가 없다) —
+      # 같은 MySQL을 쓰는 facefit-api(별개 compose 프로젝트)도 그동안 끊긴다. 배포 뒤 그 로그·헬스를 보고, 다시 못 붙으면 docker restart facefit-api.
       - --disable-log-bin
     environment:
       MYSQL_DATABASE: booktimer

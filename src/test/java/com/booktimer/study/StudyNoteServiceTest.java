@@ -133,6 +133,7 @@ class StudyNoteServiceTest {
         Long id = image(user);
 
         noteService.sweepImages(night(0));
+        noteService.sweepImages(night(0).plusSeconds(30));   // 두 색이 같은 밤에 겹쳐 한 번 더 돈다 — 유예(ORPHAN_GRACE)의 아래쪽 경계
         assertThat(imageRepository.existsById(id)).as("첫 밤엔 표시만 — 되돌리기 여유").isTrue();
 
         noteService.sweepImages(night(1));

@@ -137,12 +137,13 @@ class StudyNoteImageApiControllerTest {
     }
 
     @Test
-    @DisplayName("REQ-02 · 업로드: JPEG 머리가 아니면 400 「JPG 사진만 올릴 수 있어요」 — 0으로 채운 40만 바이트·PNG 머리, 행 0")
+    @DisplayName("REQ-02 · 업로드: JPEG 머리가 아니면 400 「JPG 사진만 올릴 수 있어요」 — 0으로 채운 40만 바이트·PNG 머리·셋째 바이트만 틀린 머리, 행 0")
     void upload_nonJpeg_is400() throws Exception {
         User user = register("imgfmt");
         byte[] png = {(byte) 0x89, 'P', 'N', 'G', 0x0D, 0x0A, 0x1A, 0x0A, 0, 0};
+        byte[] almost = {(byte) 0xFF, (byte) 0xD8, 0, 0, 0};   // 첫 두 바이트만 맞다 — 머리 검사가 첫 바이트만 보면 통과한다
 
-        for (byte[] bytes : new byte[][] {new byte[400_000], png}) {
+        for (byte[] bytes : new byte[][] {new byte[400_000], png, almost}) {
             mockMvc.perform(upload(bytes).with(user("imgfmt")).with(csrf()))
                     .andExpect(status().isBadRequest())
                     .andExpect(content().string("JPG 사진만 올릴 수 있어요"));
@@ -221,6 +222,9 @@ class StudyNoteImageApiControllerTest {
         for (int i = 0; i < 59; i++) {
             rateLimitService.allow(RateLimitAction.STUDY_NOTE_IMAGE, user.getId());
         }
+        // 검증이 상한보다 먼저 — 잘못 만든 요청(400)은 그 시간의 몫을 깎지 않는다. 깎으면 아래 60번째가 429가 된다.
+        mockMvc.perform(upload(new byte[] {1, 2, 3, 4}).with(user("imgrate")).with(csrf()))
+                .andExpect(status().isBadRequest());
 
         mockMvc.perform(upload(jpeg(100)).with(user("imgrate")).with(csrf()))
                 .andExpect(status().isOk());

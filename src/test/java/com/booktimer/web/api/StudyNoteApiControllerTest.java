@@ -305,6 +305,22 @@ class StudyNoteApiControllerTest {
         assertThat(saved.getRevision()).isZero();
     }
 
+    /** 가드를 소유 확인 앞으로 옮기면 남의 사진 든 필기가 409, 없는 필기가 404 — 그 차이로 존재·사진 유무가 샌다. */
+    @Test
+    @DisplayName("REQ-07 · IDOR: 남의 사진 든 필기를 imageAware 없이 고치면 409가 아니라 404다 — 소유 확인이 옛 화면 가드보다 먼저")
+    void update_othersPhotoNoteFromOutdatedEditor_is404() throws Exception {
+        User owner = register("notephotoowner");
+        register("notephotothief");
+        Long bookId = book(owner, "주인의 책").getId();
+        Long id = createNote("notephotoowner", bookId, null, "앞 " + PHOTO + " 뒤");
+
+        mockMvc.perform(post("/api/study/notes/" + id).with(user("notephotothief")).with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(updateBody(null, "훔쳐 쓴 본문", 0)))
+                .andExpect(status().isNotFound());
+        assertThat(noteRepository.findById(id).orElseThrow().getBody()).isEqualTo("앞 " + PHOTO + " 뒤");
+    }
+
     @Test
     @DisplayName("REQ-07 · 갱신: imageAware:true면 사진 든 필기도 200 · 사진 없는 필기는 플래그 없이도 200")
     void update_imageAwareOrPhotoless_isOk() throws Exception {
