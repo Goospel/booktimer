@@ -158,11 +158,17 @@ public class StudyNoteApiController {
                         Boolean.TRUE.equals(request.imageAware())));
     }
 
-    /** @return 200 {@code {deleted:true}} / 404 없거나 남의 것 */
+    /**
+     * 필기를 지운다 — 「지우기」 버튼(본문 없음)과 자동 삭제({@code {revision}})가 같은 문이다.
+     *
+     * @param request 본문이 없으면 null(「지우기」 버튼·열린 옛 번들). <b>required = false</b>여야 한다 — 빠지면 본문 없는 요청이 전부 400이 된다
+     * @return 200 {@code {deleted:true}} / 404 없거나 남의 것 / 409 revision이 낡았다(지우지 않는다)
+     */
     @PostMapping("/api/study/notes/{id}/delete")
-    public DeleteResult delete(Principal principal, @PathVariable Long id) {
+    public DeleteResult delete(Principal principal, @PathVariable Long id,
+                               @RequestBody(required = false) DeleteRequest request) {
         User user = currentUserService.resolve(principal);
-        noteService.delete(user, id);
+        noteService.delete(user, id, request == null ? null : request.revision());
         return new DeleteResult(true);
     }
 
@@ -214,6 +220,9 @@ public class StudyNoteApiController {
      *                   <b>래퍼 Boolean이어야 한다</b> — 원시형이면 필드가 빠진 옛 요청이 전부 실패한다(api.ts의 revision 주석과 같은 성질).
      */
     public record UpdateRequest(String title, String body, int revision, Boolean imageAware) {}
+
+    /** @param revision 자동 삭제만 싣는다. 래퍼 Integer여야 한다 — 빠진 요청이 실패하지 않게({@link UpdateRequest}의 imageAware와 같은 성질) */
+    public record DeleteRequest(Integer revision) {}
 
     public record DeleteResult(boolean deleted) {}
 

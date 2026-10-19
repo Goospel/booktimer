@@ -514,6 +514,90 @@ class StudyNoteApiControllerTest {
         assertThat(noteRepository.findById(id)).isEmpty();
     }
 
+    // ── ⑦-1 자동 삭제의 판 대조 — 설계 2026-10-19 note-empty-body-save ──────
+    //
+    // 화면이 저장된 장의 본문을 다 비우면 그 장을 지운다(확인창 없음). 그래서 삭제에도 갱신과 같은
+    // revision 규율을 건다 — 다른 탭·기기에서 더 쓴 글을 낡은 탭의 자동 삭제가 조용히 지우면 안 된다.
+    // REQ 번호는 그 설계 문서의 지역 번호다(위 사진 테스트의 REQ-07·09와 다른 문서).
+
+    private static String deleteBody(int revision) {
+        return """
+                {"revision":%d}
+                """.formatted(revision);
+    }
+
+    @Test
+    @DisplayName("REQ-04 · 삭제: 낡은 revision은 409이고 행·본문이 그대로다 — 다른 곳에서 더 쓴 글을 자동 삭제가 지우지 않는다")
+    void delete_withStaleRevision_is409AndKeepsNote() throws Exception {
+        User user = register("notedelstale");
+        Long bookId = book(user, "책").getId();
+        Long id = createNote("notedelstale", bookId, null, "처음 쓴 본문");
+
+        mockMvc.perform(post("/api/study/notes/" + id).with(user("notedelstale")).with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(updateBody(null, "다른 탭이 더 쓴 본문", 0)))
+                .andExpect(status().isOk());
+
+        // 이 탭은 아직 revision 0을 들고 본문을 다 비웠다 — 여기서 지우면 다른 탭의 글이 사라진다.
+        mockMvc.perform(post("/api/study/notes/" + id + "/delete").with(user("notedelstale")).with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(deleteBody(0)))
+                .andExpect(status().isConflict())
+                .andExpect(content().string("다른 곳에서 고쳐진 필기예요 — 새로고침한 뒤 이어서 써 주세요"));
+
+        assertThat(noteRepository.findById(id))
+                .as("409를 돌려주면서 지우면 안 된다")
+                .hasValueSatisfying(n -> assertThat(n.getBody()).isEqualTo("다른 탭이 더 쓴 본문"));
+    }
+
+    @Test
+    @DisplayName("REQ-04 · 삭제: 최신 revision이면 지워진다(위 409의 양성 대조)")
+    void delete_withCurrentRevision_removesNote() throws Exception {
+        User user = register("notedelcur");
+        Long bookId = book(user, "책").getId();
+        Long id = createNote("notedelcur", bookId, null, "비울 필기");
+
+        mockMvc.perform(post("/api/study/notes/" + id + "/delete").with(user("notedelcur")).with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(deleteBody(0)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.deleted").value(true));
+
+        assertThat(noteRepository.findById(id)).isEmpty();
+    }
+
+    @Test
+    @DisplayName("REQ-05 · IDOR: 남의 필기를 낡은 revision으로 지워도 409가 아니라 404다 — 소유 확인이 판 대조보다 먼저")
+    void delete_othersNoteWithStaleRevision_is404() throws Exception {
+        User owner = register("notedelowner");
+        register("notedelthief");
+        Long bookId = book(owner, "주인의 책").getId();
+        Long id = createNote("notedelowner", bookId, null, "주인이 쓴 본문");
+
+        mockMvc.perform(post("/api/study/notes/" + id + "/delete").with(user("notedelthief")).with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(deleteBody(7)))
+                .andExpect(status().isNotFound());
+
+        assertThat(noteRepository.findById(id)).isPresent();
+    }
+
+    @Test
+    @DisplayName("REQ-06 · 삭제: 본문 없는 요청(「지우기」 버튼·옛 화면)은 Content-Type이 JSON이어도 지금처럼 지워진다")
+    void delete_jsonHeaderWithoutBody_removesNote() throws Exception {
+        User user = register("notedelnobody");
+        Long bookId = book(user, "책").getId();
+        Long id = createNote("notedelnobody", bookId, null, "지울 필기");
+
+        // 실제 클라 post()는 본문이 없어도 이 헤더를 늘 붙인다 — @RequestBody(required = false)가 빠지면 400이 된다.
+        mockMvc.perform(post("/api/study/notes/" + id + "/delete").with(user("notedelnobody")).with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.deleted").value(true));
+
+        assertThat(noteRepository.findById(id)).isEmpty();
+    }
+
     // ── ⑧ 채점 기준 (PR-3) ───────────────────────────────────────────────────
     //
     // 이 문의 존재 이유는 <b>조용한 누락 금지</b>다. 상한에 걸려 빠진 장을 화면이 말하려면 그 수를

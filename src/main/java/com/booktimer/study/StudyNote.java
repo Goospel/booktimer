@@ -114,6 +114,16 @@ public class StudyNote extends BaseTimeEntity {
     }
 
     /**
+     * 클라가 본 판이 아직 최신인가 — 아니면 {@link StaleNoteException}. 갱신({@link #edit})과 자동 삭제
+     * ({@code StudyNoteService.delete})가 <b>같은 대조</b>를 지난다.
+     */
+    void requireRevision(int expectedRevision) {
+        if (expectedRevision != this.revision) {
+            throw new StaleNoteException(expectedRevision, this.revision);
+        }
+    }
+
+    /**
      * 본문을 갈아 쓴다 — <b>기대 판이 맞을 때만</b>.
      *
      * <p>대조와 증가가 한 메서드인 것이 요점이다. 서비스가 비교하고 엔티티가 올리는 식으로 쪼개면
@@ -124,9 +134,7 @@ public class StudyNote extends BaseTimeEntity {
      * @throws IllegalArgumentException 본문이 비었거나 길이를 넘는 경우
      */
     public void edit(String title, String body, int expectedRevision) {
-        if (expectedRevision != this.revision) {
-            throw new StaleNoteException(expectedRevision, this.revision);
-        }
+        requireRevision(expectedRevision);
         // 검증을 대입보다 먼저 끝낸다 — 제목이 길다고 본문만 바뀐 반쪽 상태가 남으면 안 된다.
         String nextTitle = optionalTitle(title);
         String nextBody = requireBody(body);
