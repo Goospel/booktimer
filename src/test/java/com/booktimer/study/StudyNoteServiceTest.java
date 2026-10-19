@@ -146,11 +146,19 @@ class StudyNoteServiceTest {
         Long id = image(user);
         noteService.sweepImages(night(0));   // 표시
 
-        note(user, bookOf(user), ref(id));   // 되돌리기
+        StudyNote restored = note(user, bookOf(user), ref(id));   // 되돌리기
         noteService.sweepImages(night(1));
-        noteService.sweepImages(night(2));
-
         assertThat(imageRepository.existsById(id)).isTrue();
+
+        // 표시가 정말 풀렸는지 — 다시 빼면 처음부터 하루 여유를 다시 받아야 한다. 해제 없이 옛 표시(밤 0)가 남아 있으면
+        // 지우는 문장의 미참조 재확인만으로는 위 단언이 통과하고, 여기서 다시 빼는 순간 하루 여유 없이 곧바로 지워진다.
+        noteRepository.delete(restored);
+        noteRepository.flush();
+        noteService.sweepImages(night(2));
+        assertThat(imageRepository.existsById(id)).as("새 표시는 오늘 밤 — 다음 밤까지 되돌리기 여유").isTrue();
+
+        noteService.sweepImages(night(3));
+        assertThat(imageRepository.existsById(id)).isFalse();
     }
 
     @Test
