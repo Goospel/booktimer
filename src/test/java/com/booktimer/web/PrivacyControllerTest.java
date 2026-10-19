@@ -148,6 +148,8 @@ class PrivacyControllerTest {
                 // 5절 보관·삭제
                 .andExpect(content().string(containsString("<strong>3일 안에 삭제</strong>")))
                 .andExpect(content().string(containsString("회원 탈퇴 시에는 <strong>즉시 삭제</strong>합니다")))
+                // 5절 파기 절차 — 백업 보존 7일은 S3 lifecycle(expire-mysql-backups-7d, mysql/ 접두)로 확인한 값(설계 U-16)
+                .andExpect(content().string(containsString("<strong>백업 보관 주기(7일)가 지나면서 함께 소멸</strong>")))
                 // 6-1 이전되는 항목·보유 기간
                 .andExpect(content().string(containsString("그 자리에는 사진이 있었다는 표시만 들어갑니다")))
                 .andExpect(content().string(containsString("<strong>사진 전사로 올린 사진은 서비스 서버에 저장하지 않습니다</strong>")))
