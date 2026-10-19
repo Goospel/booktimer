@@ -107,4 +107,24 @@ class PrivacyControllerTest {
                 .andExpect(content().string(containsString("독서 알림을 설정한 경우에만")))
                 .andExpect(content().string(containsString("이용자가 직접 켠 독서 알림")));
     }
+
+    /**
+     * 처리방침은 사실을 주장한다 — 2절 열거는 {@code study_*} 열(V78~V93, V92가 지운 하루 목표는 뺀다)과,
+     * 6-1의 필기 항목은 {@code NoteReference.text}의 헤더(제목·고친 날짜)·본문과 같아야 한다.
+     * 이 전송은 2026-09-11(#1087)부터 일어났는데 처리방침엔 「필기」가 없었다.
+     */
+    @Test
+    @DisplayName("REQ-10 · 처리방침 바로잡기 — GET /privacy: 공부 기록 수집 항목·이용 목적과, AI 분석에 같은 책의 공부 필기(제목·본문·날짜)가 함께 간다는 사실을 고지한다")
+    void getPrivacy_disclosesStudyRecordsAndNotesSentToAnalysis() throws Exception {
+        mockMvc.perform(get("/privacy"))
+                // 2절 수집 항목
+                .andExpect(content().string(containsString("<li><strong>공부 기록</strong> — 「공부」 화면을 쓰는 경우에만")))
+                .andExpect(content().string(containsString("측정한 공부 시간(책별 회당 목표 시간과 목표 도달 알림을 보낸 시각 포함)")))
+                .andExpect(content().string(containsString("공부 서재에 담은 책(직접 적은 링크 주소 포함)")))
+                .andExpect(content().string(containsString("<strong>공부 필기</strong>(제목·본문)")))
+                // 3절 이용 목적
+                .andExpect(content().string(containsString("<li>「공부」 화면의 공부 시간 측정·일정·백지복습·공부 필기")))
+                // 6-1 이전되는 항목
+                .andExpect(content().string(containsString("분석하는 글과 같은 책의 <strong>공부 필기</strong>(제목·본문·마지막으로 고친 날짜")));
+    }
 }
