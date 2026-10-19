@@ -50,8 +50,8 @@ import static org.mockito.BDDMockito.given;
  * 나머지 테스트는 애초에 {@code file-size-threshold} 기본값(=0B) 세계에서 돈다.
  *
  * <p>그 두 구멍이 겹치면 <b>처리방침이 조용히 거짓</b>이 된다: threshold가 0이면 톰캣이 모든 파트를 즉시
- * 임시파일로 떨어뜨려 사진이 디스크를 거치는데, {@code privacy.html} 5-1절은 「사진은 서비스 서버에
- * 저장하지 않습니다」라고 적혀 있다. 그래서 이 클래스는 운영과 <b>같은 세 값</b>을 명시하고 진짜 톰캣을
+ * 임시파일로 떨어뜨려 사진이 디스크를 거치는데, {@code privacy.html} 6-1절은 「사진 전사로 올린 사진은
+ * 서비스 서버에 저장하지 않습니다」라고 적혀 있다. 그래서 이 클래스는 운영과 <b>같은 세 값</b>을 명시하고 진짜 톰캣을
  * 띄운다.
  *
  * <p>재는 것은 둘이다:
@@ -136,7 +136,7 @@ class StudyRecallTranscribeUploadTest {
                 .as("어댑터가 호출되지 않아 디스크를 재지 못했다")
                 .isNotNull();
         assertThat(filesDuringRequest.get())
-                .as("사진이 임시파일로 떨어졌다 — file-size-threshold를 확인하라(처리방침 5-1이 걸려 있다)")
+                .as("사진이 임시파일로 떨어졌다 — file-size-threshold를 확인하라(처리방침 6-1(사진 전사)이 걸려 있다)")
                 .isEmpty();
     }
 

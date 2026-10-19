@@ -78,6 +78,17 @@ assert_re  "SPRING_SESSION 데이터 제외"        "$src" '--ignore-table=bookt
 assert_has "SPRING_SESSION_ATTRIBUTES 데이터 제외" "$src" "--ignore-table=booktimer.SPRING_SESSION_ATTRIBUTES"
 assert_has "  세션 스키마는 보존(--no-data)"      "$src" "--no-data booktimer SPRING_SESSION SPRING_SESSION_ATTRIBUTES"
 
+# ── Case 5: 필기 사진(BLOB)을 바이트 그대로 — --hex-blob · 임시파일은 디스크(/var/tmp) (정적 검사) ──
+# 주석 줄에 같은 낱말이 있으므로 dump 명령 줄·대입 줄에 앵커한다(grep -F 부분일치는 주석에 걸려 공허하다).
+assert_re  "BLOB은 16진으로(--hex-blob)"     "$src" '^[[:space:]]*dump [^#]*--hex-blob'
+assert_re  "  임시파일은 /var/tmp"            "$src" '^TMP="/var/tmp/'
+assert_not "  /tmp(tmpfs일 수 있다)가 아니다" "$src" 'TMP="/tmp/'
+
+# ── Case 6: 운영 MySQL은 바이너리 로그를 끈다 (정적 검사 — 설계 D7) ──
+# 켜 두면 사진 바이트가 binlog에 30일 쌓여 상한이 디스크를 못 묶는다. compose 주석이 아니라 command 목록 항목에 앵커한다.
+compose="$(cat deploy/compose.prod.yaml)"
+assert_re  "운영 MySQL binlog 끔(--disable-log-bin)" "$compose" '^[[:space:]]*- --disable-log-bin[[:space:]]*$'
+
 echo
 if [ "$FAILED" = 0 ]; then echo "ALL PASS"; else echo "SOME FAILED"; fi
 exit "$FAILED"

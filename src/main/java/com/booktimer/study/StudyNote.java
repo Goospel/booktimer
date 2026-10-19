@@ -13,6 +13,8 @@ import jakarta.persistence.JoinColumn;
 import jakarta.persistence.ManyToOne;
 import jakarta.persistence.Table;
 
+import java.util.List;
+
 /**
  * 공부 필기 한 장 — 책을 보며 그때그때 적은 것.
  *
@@ -145,9 +147,15 @@ public class StudyNote extends BaseTimeEntity {
      * 거의 모든 행을 「제목 없음」으로 그린다. 그렇다고 목록에 본문을 통째로 싣지는 않는다 — 한 줄이면
      * 라벨을 만들기에 충분하다. 마크다운 표식을 <b>여기서 벗기지 않는 것</b>도 의도다: 파생은 화면 몫이고
      * (서버는 사용자가 친 것만 안다), 벗기는 규칙이 두 곳에 생기면 라벨이 화면마다 달라진다.
+     *
+     * <p>사진만 있는 줄(줄머리 표식 뒤 포함)은 이름이 못 된다 — 줄을 고를 뿐 표식은 여전히 안 벗긴다. 고르는 규칙은
+     * 화면 notes.ts와 같은 리터럴 표로 묶는다({@link StudyNoteImage#isPhotoOnly} — 고를 줄은 서버만 알 수 있어 생긴
+     * 위 원칙의 예외이고, 그 어긋남을 StudyNoteImageTextTest·notes.test.ts 공유 표가 막는다).
      */
     public String preview() {
-        String line = body.lines().map(String::strip).filter(s -> !s.isEmpty()).findFirst().orElse("");
+        List<String> lines = body.lines().map(String::strip).filter(s -> !s.isEmpty()).toList();
+        String line = lines.stream().filter(s -> !StudyNoteImage.isPhotoOnly(s)).findFirst()
+                .orElse(lines.isEmpty() ? "" : lines.get(0));
         return line.length() > PREVIEW_MAX ? line.substring(0, PREVIEW_MAX) : line;
     }
 

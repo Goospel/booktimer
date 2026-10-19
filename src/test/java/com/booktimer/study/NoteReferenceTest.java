@@ -169,6 +169,38 @@ class NoteReferenceTest {
                 .isNotEmpty();
     }
 
+    // ── 필기 사진 (설계 D2 — 사진은 모델에 보내지 않고 자리만 표시한다) ─────────────
+
+    private static final String PHOTO = "![](/api/study/notes/images/12)";
+
+    @Test
+    @DisplayName("REQ-09 · 정답지엔 사진 주소 대신 「[사진 — AI에게는 보이지 않음]」이 실리고 chars는 text().length()와 같다 — 주소 문자열은 text에 0번")
+    void text_replacesPhotoWithPlaceholder() {
+        NoteReference reference = NoteReference.select(
+                List.of(note(null, PHOTO + "\n설명 " + PHOTO, "2026-09-10T01:00:00Z")), MAX);
+
+        String text = reference.text(ZoneId.of("Asia/Seoul"));
+
+        assertThat(text).isEqualTo("### 필기: 제목 없음 (2026-09-10)\n"
+                + "[사진 — AI에게는 보이지 않음]\n설명 [사진 — AI에게는 보이지 않음]\n\n");
+        assertThat(text).doesNotContain("/api/study/notes/images/");
+        assertThat(reference.chars())
+                .as("비용과 조립이 같은 본문을 봐야 한다 — 한쪽만 바꾸면 카드 수치가 프롬프트와 갈린다")
+                .isEqualTo(text.length());
+    }
+
+    @Test
+    @DisplayName("REQ-09 · photos는 포함된 장의 사진만 센다(상한에 걸려 빠진 장 제외)")
+    void photos_countsIncludedOnly() {
+        // 상한을 좁혀 두 번째 장이 빠지게 한다 — 그 장의 사진 셋은 카드에 세면 안 된다(모델이 안 받는다).
+        NoteReference reference = NoteReference.select(
+                List.of(note("최근", PHOTO + PHOTO, "2026-09-10T01:00:00Z"),
+                        note("옛것", PHOTO + PHOTO + PHOTO + "ㄱ".repeat(100), "2026-09-01T01:00:00Z")), 100);
+
+        assertThat(reference.excluded()).extracting(StudyNote::getTitle).containsExactly("옛것");
+        assertThat(reference.photos()).isEqualTo(2);
+    }
+
     @Test
     @DisplayName("text: 제목의 개행은 공백으로 접힌다 — 블록 안 섹션 위조 시도가 헤더 한 줄을 못 벗어난다")
     void text_foldsTitleNewlines() {

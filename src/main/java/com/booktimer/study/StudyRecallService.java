@@ -58,8 +58,11 @@ public class StudyRecallService {
      */
     private static final Set<String> ALLOWED_IMAGE_TYPES = Set.of("image/jpeg", "image/png", "image/webp");
 
-    /** 사진 한 장의 상한. {@code spring.servlet.multipart.max-file-size}와 <b>같은 값</b>이어야 한다. */
-    private static final long MAX_IMAGE_BYTES = 3L * 1024 * 1024;
+    /**
+     * 사진 한 장의 상한 — 전사·필기 사진({@link StudyNoteService#uploadImage}) 둘 다.
+     * 전역 {@code spring.servlet.multipart.max-file-size}·413 문구와 <b>같은 값</b>이어야 한다.
+     */
+    static final long MAX_IMAGE_BYTES = 3L * 1024 * 1024;
 
     private final StudyRecallRepository recallRepository;
     private final StudyAiAccessService accessService;

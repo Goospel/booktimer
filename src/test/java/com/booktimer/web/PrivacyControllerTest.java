@@ -129,4 +129,31 @@ class PrivacyControllerTest {
                 // 6-1 이전되는 항목
                 .andExpect(content().string(containsString("분석하는 글과 같은 책의 <strong>공부 필기</strong>(제목·본문·마지막으로 고친 날짜")));
     }
+
+    /**
+     * 필기 사진(V99 study_note_image) — 수집·보관·삭제와 국외 이전 여부가 코드와 같은 말이어야 한다.
+     * 「3일 안에」는 {@code StudyNoteService.ORPHAN_GRACE}·04:50 정리 크론과 짝이고, 「표시만 들어간다」는
+     * {@code NoteReference.IMAGE_PLACEHOLDER}와 짝이다. 옛 무범위 문장 「사진은 서비스 서버에 저장하지 않습니다」는
+     * 필기 사진이 생긴 뒤로 거짓이라 사진 전사로 한정한다.
+     * 「탈퇴 즉시」를 {@code <strong>즉시 삭제</strong>} 홀로 재지 않는 이유 — 대화 데이터 줄에 이미 있어 구현 전에도 참이다.
+     */
+    @Test
+    @DisplayName("REQ-23 · GET /privacy: 필기 사진 수집·3일 안 삭제·탈퇴 즉시, AI 분석엔 사진 대신 자리 표시, 무저장 문장은 사진 전사로 한정")
+    void getPrivacy_disclosesNoteImages() throws Exception {
+        mockMvc.perform(get("/privacy"))
+                // 2절 수집 항목
+                .andExpect(content().string(containsString("<strong>필기 사진</strong>(화면에서 넣은 사진은 브라우저가 줄여 올립니다")))
+                // 3절 이용 목적
+                .andExpect(content().string(containsString("공부 필기(필기 사진 포함)")))
+                // 5절 보관·삭제
+                .andExpect(content().string(containsString("<strong>3일 안에 삭제</strong>")))
+                .andExpect(content().string(containsString("회원 탈퇴 시에는 <strong>즉시 삭제</strong>합니다")))
+                // 5절 파기 절차 — 백업 보존 7일은 S3 lifecycle(expire-mysql-backups-7d, mysql/ 접두)로 확인한 값(설계 U-16)
+                .andExpect(content().string(containsString("<strong>백업 보관 주기(7일)가 지나면서 함께 소멸</strong>")))
+                // 6-1 이전되는 항목·보유 기간
+                .andExpect(content().string(containsString("그 자리에는 사진이 있었다는 표시만 들어갑니다")))
+                .andExpect(content().string(containsString("<strong>사진 전사로 올린 사진은 서비스 서버에 저장하지 않습니다</strong>")))
+                .andExpect(content().string(org.hamcrest.Matchers.not(
+                        containsString("<strong>사진은 서비스 서버에 저장하지 않습니다</strong>"))));
+    }
 }

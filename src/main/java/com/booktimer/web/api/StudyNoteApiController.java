@@ -19,6 +19,7 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.multipart.MultipartFile;
 import org.springframework.web.server.ResponseStatusException;
 
 import java.security.Principal;
@@ -88,6 +89,37 @@ public class StudyNoteApiController {
     }
 
     /**
+     * 필기 사진 한 장 — 서버가 <b>저장한다</b>(전사와 다르다). {@code /{id}}보다 위에 둔다(reference와 같은 이유 — 순서를 보인다).
+     *
+     * <p>파트는 {@code required = false}로 받아 직접 검증한다 — 빠진 파트가 error.html이 아니라 평문 400이 되게(전사와 같다).
+     *
+     * @return 200 {@link ImageUploadResponse} / 400 파트·형식·사람당 용량 / 403 CSRF / 413 3MB / 429 / 503 서비스 전체 상한
+     */
+    @PostMapping("/api/study/notes/images")
+    public ImageUploadResponse uploadImage(Principal principal,
+                                           @RequestParam(name = "image", required = false) MultipartFile image) {
+        User user = currentUserService.resolve(principal);
+        return new ImageUploadResponse(noteService.uploadImage(user, image).src());
+    }
+
+    /**
+     * 필기 사진 보기 — 주인만. 남의 것·없는 것은 같은 404(빈 본문 — 문구를 {@code Accept: image/*}에 협상시키지 않는다).
+     * 헤더는 Spring Security 기본({@code nosniff}·{@code no-store})을 덮지 않는다 — 공용 PC에서 로그아웃 뒤 캐시에 남지 않게.
+     *
+     * <p>ponytail: no-store라 장을 다시 열면 다시 받는다 — 트래픽이 문제 되면 ETag + checkNotModified(소유 확인 뒤)로.
+     * <p>ponytail: 본문이 byte[] 통째라 느린 수신 동안 장당 최대 3MB(API로 직접 올린 것)가 힙에 머문다 — 동시 100여 건이면 힙 350MB에 닿는다.
+     * 기존 multipart 파싱(max-request-size 10MB) 노출과 같은 급이라 받아들인다. 넘치면 사용자별 동시 조회 세마포어 또는 Blob 스트리밍으로
+     * (분당 레이트리밋은 동시성을 못 묶어 처방이 아니다 — 설계 §11).
+     */
+    @GetMapping("/api/study/notes/images/{id}")
+    public ResponseEntity<byte[]> image(Principal principal, @PathVariable Long id) {
+        User user = currentUserService.resolve(principal);
+        return noteService.image(user, id)
+                .map(img -> ResponseEntity.ok().contentType(MediaType.IMAGE_JPEG).body(img.getData()))
+                .orElseGet(() -> ResponseEntity.notFound().build());
+    }
+
+    /**
      * 필기 한 장(본문 포함).
      *
      * @return 200 {@link NoteResponse} / 404 없거나 남의 것
@@ -122,7 +154,8 @@ public class StudyNoteApiController {
     public NoteResponse update(Principal principal, @PathVariable Long id, @RequestBody UpdateRequest request) {
         User user = currentUserService.resolve(principal);
         return NoteResponse.from(
-                noteService.update(user, id, request.title(), request.body(), request.revision()));
+                noteService.update(user, id, request.title(), request.body(), request.revision(),
+                        Boolean.TRUE.equals(request.imageAware())));
     }
 
     /** @return 200 {@code {deleted:true}} / 404 없거나 남의 것 */
@@ -175,10 +208,17 @@ public class StudyNoteApiController {
      */
     public record CreateRequest(Long bookId, String title, String body) {}
 
-    /** @param revision 클라가 마지막으로 받은 판 번호 — 서버 값과 다르면 409 */
-    public record UpdateRequest(String title, String body, int revision) {}
+    /**
+     * @param revision   클라가 마지막으로 받은 판 번호 — 서버 값과 다르면 409
+     * @param imageAware 사진 노드를 켠 편집기(새 번들)만 true를 싣는다 — 없으면 사진 든 필기 갱신은 409(옛 번들 탭).
+     *                   <b>래퍼 Boolean이어야 한다</b> — 원시형이면 필드가 빠진 옛 요청이 전부 실패한다(api.ts의 revision 주석과 같은 성질).
+     */
+    public record UpdateRequest(String title, String body, int revision, Boolean imageAware) {}
 
     public record DeleteResult(boolean deleted) {}
+
+    /** @param src 본문에 넣을 주소 — 편집기 OWN_IMAGE_PATH({@code ^/api/study/notes/images/[1-9]\d*$})와 같은 꼴 */
+    public record ImageUploadResponse(String src) {}
 
     /**
      * 목록 한 행 — <b>본문이 없다</b>. 목록은 라벨과 크기만 필요하고, 본문까지 실으면 수백 장짜리 책의
@@ -203,14 +243,15 @@ public class StudyNoteApiController {
      * @param excluded 상한에 걸려 <b>빠진</b> 장 — 이 필드가 이 문의 존재 이유다. 조용히 빠지면
      *                 사용자는 자기 필기가 채점에서 제외된 것을 영영 모른다
      * @param limit    지금 적용 중인 상한 — 화면이 「24,000자까지」를 하드코딩하지 않게 서버가 말한다
+     * @param photos   포함된 장의 사진 수 — 화면이 「사진 N장은 채점 기준에 안 들어가요」를 말할 근거(사진은 모델에 안 간다)
      */
     public record NoteReferenceResponse(List<NoteRow> included, List<NoteRow> excluded,
-                                        int chars, int limit) {
+                                        int chars, int limit, int photos) {
         static NoteReferenceResponse from(NoteReference reference) {
             return new NoteReferenceResponse(
                     reference.included().stream().map(NoteRow::from).toList(),
                     reference.excluded().stream().map(NoteRow::from).toList(),
-                    reference.chars(), NoteReference.MAX_CHARS);
+                    reference.chars(), NoteReference.MAX_CHARS, reference.photos());
         }
     }
 
