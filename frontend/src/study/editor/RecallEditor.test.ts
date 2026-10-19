@@ -599,6 +599,10 @@ describe('필기 사진 넣는 길', () => {
         await vi.waitFor(() => expect(statusOf(wrapper)).toBe('사진을 넣으려던 필기가 바뀌어 넣지 않았어요 — 다시 넣어 주세요.'));
         expect(photoCount(wrapper)).toBe(0);
         expect(h.calls).toHaveLength(1);
+        // 장 열기는 연달아 두 번 부른다(선올림 → retarget, 설계 §4-8·§15 FE-1) — 두 번째가 문구를 지우면 사진이 말없이 사라진다
+        (wrapper.vm as AnyEditor).dropPendingImages();
+        await wrapper.vm.$nextTick();
+        expect(statusOf(wrapper)).toBe('사진을 넣으려던 필기가 바뀌어 넣지 않았어요 — 다시 넣어 주세요.');
 
         await pickFiles(wrapper, [jpgFile('4.jpg')]);
         await vi.waitFor(() => expect(h.calls).toHaveLength(2));
@@ -646,6 +650,13 @@ describe('필기 사진 넣는 길', () => {
     test('REQ-15 · 잠긴 편집기는 버튼이 꺼지고, 올리는 사이 잠기면 넣지 않고 「편집이 잠겨」를 말한다', async () => {
         const locked = await mountEditor('', { uploadImage: async () => '/api/study/notes/images/1', disabled: true });
         expect(locked.find('[data-testid="editor-btn-image"]').attributes('disabled')).toBeDefined();
+        // 잠긴 편집기는 ProseMirror가 drop을 안 받아 루트(onRootDrop)로 온다 — 페이지는 떠나지 않되 올리지도 않는다(addImages의 disabled 가드)
+        const lockedUpload = vi.fn(async () => '/api/study/notes/images/1');
+        const lockedDrop = await mountEditor('', { uploadImage: lockedUpload, disabled: true });
+        expect(fireDrag(lockedDrop.find('.study-editor-toolbar').element, 'drop', [jpgFile()]).defaultPrevented).toBe(true);
+        await new Promise((r) => setTimeout(r, 50));
+        expect(lockedUpload).not.toHaveBeenCalled();
+        expect(photoCount(lockedDrop)).toBe(0);
 
         const h = heldUploads();
         const wrapper = await mountEditor('', { uploadImage: h.upload });

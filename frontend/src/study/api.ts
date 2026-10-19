@@ -360,7 +360,6 @@ export async function createNote(input: { bookId: number; title: string; body: s
     return json(await post('/api/study/notes', input, keepalive), '필기를 저장하지 못했어요.');
 }
 
-/** @param keepalive 탭이 닫히는 중의 마지막 플러시. */
 /**
  * 필기 사진 한 장을 올리고 본문에 넣을 주소를 받는다 — 서버가 <b>저장한다</b>(전사와 다르다).
  * 원본 파일 이름은 보내지 않는다(note.jpg — 이름에 개인정보가 섞일 수 있다). Content-Type을 손으로 안 적는 이유는 transcribePhotos와 같다.
@@ -378,6 +377,7 @@ export async function uploadNoteImage(jpeg: Blob): Promise<string> {
 
 /**
  * @param input.imageAware 사진 노드를 켠 편집기만 싣는다 — 없으면 서버가 사진 든 필기의 갱신을 409로 막는다(열린 옛 번들 탭).
+ * @param keepalive 탭이 닫히는 중의 마지막 플러시.
  */
 export async function updateNote(
     id: number,
