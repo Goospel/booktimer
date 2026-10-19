@@ -124,6 +124,8 @@ class PrivacyControllerTest {
                 .andExpect(content().string(containsString("<strong>공부 필기</strong>(제목·본문)")))
                 // 3절 이용 목적
                 .andExpect(content().string(containsString("<li>「공부」 화면의 공부 시간 측정·일정·백지복습·공부 필기")))
+                // 2절의 「목표 도달 알림을 보낸 시각」과 짝이 되는 목적(StudyGoalPushService)
+                .andExpect(content().string(containsString("책별 회당 목표 시간에 닿았을 때의 토스 알림 발송")))
                 // 6-1 이전되는 항목
                 .andExpect(content().string(containsString("분석하는 글과 같은 책의 <strong>공부 필기</strong>(제목·본문·마지막으로 고친 날짜")));
     }
