@@ -7,6 +7,8 @@
 import { describe, test, expect, vi, beforeEach, afterEach } from 'vitest';
 import { mount, flushPromises, type VueWrapper } from '@vue/test-utils';
 
+vi.mock('../src/study/image', () => ({ shrinkForUpload: vi.fn(async (file: File) => ({ blob: new Blob([new Uint8Array([0xFF, 0xD8, 0xFF])], { type: 'image/jpeg' }), dataUrl: '', name: file.name })) }));
+
 import StudyNotesCard from '../src/dashboard/StudyNotesCard.vue';
 
 const BOOKS = [
@@ -82,4 +84,58 @@ describe('홈 필기 카드 — focusEnd 중계', () => {
         (w.vm as unknown as { focusEnd: () => void }).focusEnd();
         await vi.waitFor(() => expect(document.activeElement).toBe(w.find('.ProseMirror').element));
     });
+});
+
+// 필기 사진(설계 2026-10-19 T12 ①′) — 실제 NotesPanel·RecallEditor로 「빈 장 → 빈 장」 전환을 잰다. 대역으로는 못 잰다:
+// 편집기는 장 사이에 재사용되고 '' → ''는 modelValue watch가 안 본다 — 세대를 watch에 둔 구현이 여기서만 빨강이다(검토 FE-1).
+describe('홈 필기 카드 — 사진을 올리는 사이 새 필기', () => {
+    test('REQ-16 · 빈 새 필기에 사진 세 장을 넣고 첫 장이 올라가는 사이 「새 필기」를 누르면 어느 장에도 안 들어간다 — 그 뒤 넣은 한 장은 들어간다(대조군)', async () => {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        (document as any).createRange = () => ({
+            setStart: () => {}, setEnd: () => {}, commonAncestorContainer: document.body,
+            getBoundingClientRect: () => ({ top: 0, bottom: 0, left: 0, right: 0, width: 0, height: 0 }),
+            getClientRects: () => ({ length: 0, item: () => null, [Symbol.iterator]: function* () {} }),
+        });
+        let first!: (r: Response) => void;
+        let uploads = 0;
+        vi.stubGlobal('fetch', vi.fn((url: string, init?: RequestInit) => {
+            const ok = (body: object) => ({ ok: true, status: 200, json: async () => body, text: async () => '' }) as Response;
+            if (url === '/api/study/notes/images') {
+                uploads += 1;
+                const src = `/api/study/notes/images/${100 + uploads}`;
+                return uploads === 1 ? new Promise<Response>((r) => { first = () => r(ok({ src })); }) : Promise.resolve(ok({ src }));
+            }
+            if (url === '/api/study/notes' && init?.method === 'POST') {
+                const body = JSON.parse(String(init.body)) as { body: string };
+                return Promise.resolve(ok({ id: 50, bookId: 9, title: null, body: body.body, revision: 0, updatedAt: '2026-10-19T00:00:00Z' }));
+            }
+            return Promise.resolve(url.includes('/api/study/notes?') ? ok({ notes: [] }) : ({ ok: false, status: 404, json: async () => ({}), text: async () => '' } as Response));
+        }));
+        const creates = () => vi.mocked(fetch).mock.calls
+            .filter((c) => String(c[0]) === '/api/study/notes' && (c[1] as RequestInit | undefined)?.method === 'POST')
+            .map((c) => (JSON.parse(String((c[1] as RequestInit).body)) as { body: string }).body);
+        const pick = async (w: VueWrapper, n: number) => {
+            const input = w.find('[data-testid="editor-image-input"]');
+            const files = Array.from({ length: n }, (_, i) => new File(['x'], `${i}.jpg`, { type: 'image/jpeg' }));
+            Object.defineProperty(input.element, 'files', { value: files, configurable: true });
+            await input.trigger('change');
+        };
+
+        const w = await mountCard(9);
+        await vi.waitFor(() => expect(w.find('.ProseMirror').exists()).toBe(true));
+        await pick(w, 3);
+        await vi.waitFor(() => expect(uploads).toBe(1));
+        await w.find('[data-testid="notes-new"]').trigger('click');
+        await flushPromises();
+        first(undefined as unknown as Response);
+        await vi.waitFor(() => expect(w.find('[data-testid="editor-image-status"]').text()).toContain('필기가 바뀌어 넣지 않았어요'));
+        await new Promise((r) => setTimeout(r, 1700));   // 디바운스(1.5초)를 넘겨도
+        expect(uploads).toBe(1);        // 쌓여 있던 2·3번째 장은 올리지도 않는다
+        expect(creates()).toEqual([]);  // 빈 장은 저장하지 않는다 — 어느 장에도 사진이 안 들어갔다
+
+        await pick(w, 1);
+        await vi.waitFor(() => expect(creates()).toHaveLength(1), { timeout: 4000 });
+        const saved = creates()[0];
+        expect(saved.match(/!\[\]\(\/api\/study\/notes\/images\/\d+\)/g)).toEqual(['![](/api/study/notes/images/102)']);
+    }, 10_000);
 });

@@ -2,11 +2,12 @@
 import { computed, onBeforeUnmount, onMounted, ref, useId, watch } from 'vue';
 
 import {
-    ApiError, createNote, deleteNote, fetchNote, fetchNotes, updateNote,
+    ApiError, createNote, deleteNote, fetchNote, fetchNotes, updateNote, uploadNoteImage,
     type Note, type NoteRow, type StudyBookRow,
 } from './api';
 import RecallEditor from './editor/RecallEditor.vue';
 import { bodyBudget } from './editor/pure';
+import { shrinkForUpload } from './image';
 import { nextSaveState, noteDateLabel, noteLabel, previewOf, savedAtLabel, type SaveState } from './notes';
 
 /**
@@ -32,7 +33,7 @@ const props = defineProps<{
 }>();
 
 /** 편집기 캐럿 중계 — 홈 필기 카드가 공부 측정 시작 전환 뒤 부른다. 서재 0권이면 편집기가 없어 no-op. */
-const editorRef = ref<{ focusEnd: () => void } | null>(null);
+const editorRef = ref<{ focusEnd: () => void; dropPendingImages: () => void } | null>(null);
 defineExpose({ focusEnd: () => editorRef.value?.focusEnd() });
 
 /** 마지막 타이핑에서 저장까지의 틈. 잃을 수 있는 최대치가 이만큼이다. */
@@ -72,9 +73,19 @@ function blank(): Draft {
     return { id: null, bookId: bookId.value, title: '', body: '', revision: 0 };
 }
 
+/**
+ * 세대를 올린다 — 날아가 있던 저장 응답과, <b>편집기에 쌓여 있던 사진</b>이 새 장에 닿지 않게. seq를 올리는 자리는 전부 이것을 부른다:
+ * retarget(새 필기·책 전환·?note=·조회 완료) · openNote의 조회 전 선올림 · remove의 선올림. retarget만 부르면 openNote의 조회 틈에
+ * 끝난 사진이 옛 장 화면에 들어갔다가 저장되지 않고 사라진다(설계 §4-8 실측).
+ */
+function bumpSeq(): void {
+    seq += 1;
+    editorRef.value?.dropPendingImages();
+}
+
 /** 편집 대상을 갈아 끼운다 — 날아가 있던 왕복의 응답이 여기 닿지 않게 세대를 올린다. */
 function retarget(next: Draft): void {
-    seq += 1;
+    bumpSeq();
     draft.value = next;
     state.value = { kind: 'idle' };
 }
@@ -272,7 +283,8 @@ async function sendOnce(keepalive: boolean): Promise<void> {
     try {
         const saved: Note = id === null
             ? await createNote({ bookId: book, title, body }, keepalive)
-            : await updateNote(id, { title, body, revision }, keepalive);
+            // imageAware — 「이 편집기는 사진 노드를 켰다(:upload-image)」. 둘이 이 파일 안에서 같이 움직인다.
+            : await updateNote(id, { title, body, revision, imageAware: true }, keepalive);
         // 갈아탄 뒤 도착한 응답은 통째로 버린다 — id·revision을 되쓰면 새 장이 옛 장의 자리에 저장되고,
         // 목록 행도 남의 책에 꽂힌다. 화면에 없는 장의 성패를 상태줄에 띄울 이유도 없다.
         if (mine !== seq) return;
@@ -309,8 +321,8 @@ function upsertRow(saved: Note): void {
 
 async function openNote(id: number): Promise<void> {
     await flush();
-    const mine = seq + 1;
-    seq = mine; // 조회 중에 또 갈아타면, 늦게 온 이쪽이 화면을 덮지 않는다
+    bumpSeq(); // 조회 중에 또 갈아타면, 늦게 온 이쪽이 화면을 덮지 않는다
+    const mine = seq;
     try {
         const found = await fetchNote(id);
         if (mine !== seq) return;
@@ -342,7 +354,7 @@ async function remove(): Promise<void> {
     clearTimer();
     // 지우기는 플러시하지 않는다(지울 글을 먼저 저장할 이유가 없다) — 대신 세대를 올려, 날아가 있던
     // 저장이 돌아와 **지운 장의 id**를 새 초안에 붙이는 것을 막는다.
-    seq += 1;
+    bumpSeq();
     try {
         await deleteNote(id);
         notes.value = notes.value.filter((n) => n.id !== id);
@@ -350,6 +362,30 @@ async function remove(): Promise<void> {
     } catch (e) {
         listError.value = e instanceof Error && e.message ? e.message : '필기를 지우지 못했어요.';
     }
+}
+
+/**
+ * 편집기가 부르는 사진 올리기 — 줄여서 올리고 주소를 준다. 보낼 때의 세대(seq)를 들고 갔다가 돌아와 대조한다(sendOnce와 같은 규율):
+ * 그 사이 다른 장·책으로 갈아탔으면 거절한다 — 안 그러면 사진이 새 장에 붙는다. 올라간 사진은 어디에도 안 쓰여 정리 배치가 치운다.
+ * (주된 막이는 편집기 세대 — bumpSeq가 dropPendingImages를 부른다. 이 대조는 같은 규율의 두 번째 벨트로 남긴다.)
+ * 던지는 문구는 편집기 상태줄에 그대로 뜬다(잠김은 편집기가 삽입 자리에서 직접 본다).
+ */
+async function uploadImage(file: File): Promise<string> {
+    const mine = seq;
+    let jpeg: Blob;
+    try {
+        jpeg = (await shrinkForUpload(file)).blob;
+    } catch {
+        throw new Error('사진을 열지 못했어요 — JPG·PNG 사진으로 다시 해 주세요.');
+    }
+    let src: string;
+    try {
+        src = await uploadNoteImage(jpeg);
+    } catch (e) {
+        throw e instanceof ApiError ? e : new Error('사진을 올리지 못했어요 — 연결을 확인하고 다시 해 주세요.');   // fetch TypeError는 영어 문구라 바꾼다
+    }
+    if (mine !== seq) throw new Error('사진을 넣으려던 필기가 바뀌어 넣지 않았어요 — 다시 넣어 주세요.');
+    return src;
 }
 </script>
 
@@ -433,6 +469,7 @@ async function remove(): Promise<void> {
                 v-model="draft.body"
                 aria-label="필기 본문"
                 :disabled="locked"
+                :upload-image="uploadImage"
                 placeholder="책을 보며 그때그때 적어 보세요 — 쓰는 대로 저장돼요."
                 @update:model-value="onEdit"
             >

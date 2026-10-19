@@ -361,9 +361,27 @@ export async function createNote(input: { bookId: number; title: string; body: s
 }
 
 /** @param keepalive 탭이 닫히는 중의 마지막 플러시. */
+/**
+ * 필기 사진 한 장을 올리고 본문에 넣을 주소를 받는다 — 서버가 <b>저장한다</b>(전사와 다르다).
+ * 원본 파일 이름은 보내지 않는다(note.jpg — 이름에 개인정보가 섞일 수 있다). Content-Type을 손으로 안 적는 이유는 transcribePhotos와 같다.
+ * 404는 공용 errorMessage가 「책을 찾을 수 없어요」로 바꾸므로 여기서 따로 말한다.
+ */
+export async function uploadNoteImage(jpeg: Blob): Promise<string> {
+    const form = new FormData();
+    form.append('image', jpeg, 'note.jpg');
+    const res = await fetch('/api/study/notes/images', {
+        method: 'POST', credentials: 'same-origin', headers: { 'X-CSRF-TOKEN': getCsrfToken() }, body: form,
+    });
+    if (res.status === 404) throw new ApiError(404, '사진을 올리지 못했어요 — 잠시 뒤 다시 해 주세요.');
+    return (await json<{ src: string }>(res, '사진을 올리지 못했어요.')).src;
+}
+
+/**
+ * @param input.imageAware 사진 노드를 켠 편집기만 싣는다 — 없으면 서버가 사진 든 필기의 갱신을 409로 막는다(열린 옛 번들 탭).
+ */
 export async function updateNote(
     id: number,
-    input: { title: string; body: string; revision: number },
+    input: { title: string; body: string; revision: number; imageAware: true },
     keepalive = false,
 ): Promise<Note> {
     return json(await post(`/api/study/notes/${id}`, input, keepalive), '필기를 저장하지 못했어요.');
@@ -385,6 +403,8 @@ export interface NoteReferenceView {
     excluded: NoteRow[];
     chars: number;
     limit: number;
+    /** 포함된 장의 사진 수. 화면이 말해야 한다(사진 속 필기는 채점에 안 들어간다). */
+    photos: number;
 }
 
 export async function fetchNoteReference(bookId: number): Promise<NoteReferenceView> {

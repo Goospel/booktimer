@@ -39,6 +39,9 @@ export async function shrinkForUpload(file: File): Promise<ShrunkImage> {
 
         const ctx = canvas.getContext('2d');
         if (!ctx) throw new Error('canvas 2d context를 열 수 없어요');
+        // JPEG엔 투명이 없다 — 캔버스 명세상 투명 픽셀은 불투명 검정 위에 합성돼, 투명 PNG(도식·내보낸 그림)의 검은 글씨가 사라진다. 흰 바탕을 먼저 깐다.
+        ctx.fillStyle = '#fff';
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
         ctx.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
 
         const dataUrl = canvas.toDataURL('image/jpeg', QUALITY);

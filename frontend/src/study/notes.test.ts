@@ -148,6 +148,48 @@ describe('previewOf — 목록에 실리는 본문 첫 줄', () => {
     });
 });
 
+// 필기 사진(설계 2026-10-19 T13) — 서버 StudyNoteImageTextTest의 preview 표와 <b>같은 리터럴</b>이다.
+// 두 곳이 갈리면 같은 장의 이름이 열 때(draft.body 전체)와 닫을 때(서버 preview 한 줄) 달라진다.
+const PREVIEW_TABLE: [string, string][] = [
+    ['![](/api/study/notes/images/12)\n설명 줄', '설명 줄'],
+    ['![](/api/study/notes/images/12)![](/api/study/notes/images/13)', '![](/api/study/notes/images/12)![](/api/study/notes/images/13)'],
+    ['글 ![](/api/study/notes/images/12) 글', '글 ![](/api/study/notes/images/12) 글'],
+    ['\n  \n![](/api/study/notes/images/12)  \n\n두 번째 글', '두 번째 글'],
+    ['- ![](/api/study/notes/images/12)\n- 설명', '- 설명'],
+    ['> ![](/api/study/notes/images/12)\n> 설명', '> 설명'],
+    ['# ![](/api/study/notes/images/12)\n설명', '설명'],
+    ['- [ ] ![](/api/study/notes/images/12)\n- [ ] 설명', '- [ ] 설명'],
+    ['1. ![](/api/study/notes/images/12)\n2. 설명', '2. 설명'],
+    ['- ![](/api/study/notes/images/12)', '- ![](/api/study/notes/images/12)'],
+    ['- 글 ![](/api/study/notes/images/12)', '- 글 ![](/api/study/notes/images/12)'],
+    // 사진 없이 표식만 있는 줄은 사진만 있는 줄이 아니다(서버 리뷰 SEC-2 — 공유 표의 행).
+    ['- [ ]\n설명', '- [ ]'],
+];
+
+describe('필기 사진 라벨', () => {
+    test('REQ-17 · 사진만 있는 줄은 건너뛰고 다음 글 줄이 이름이다 · 사진뿐이면 「사진」 · 잘린 사진 꼬리는 안 보인다 · previewOf는 서버 preview와 같은 표', () => {
+        expect(noteLabel(null, '![](/api/study/notes/images/12)\n설명 줄')).toBe('설명 줄');
+        expect(noteLabel(null, '![](/api/study/notes/images/12)')).toBe('사진');
+        expect(noteLabel(null, '설명 ![](/api/stu')).toBe('설명');
+        expect(noteLabel(null, '글 ![](/api/study/notes/images/12) 글')).toBe('글 글');
+        // 사진이 없는 글은 지금과 같다 — 사진이 없으면 「사진」이 아니라 「제목 없음」.
+        expect(noteLabel(null, '   ')).toBe('제목 없음');
+        for (const [body, expected] of PREVIEW_TABLE) {
+            expect(previewOf(body), JSON.stringify(body)).toBe(expected);
+        }
+    });
+
+    test('REQ-17 · 줄머리 표식 뒤 사진 줄이 있어도 열린 장과 닫힌 장의 이름이 같다', () => {
+        const rows = PREVIEW_TABLE.slice(4, 9);   // 줄머리 표식 행 5개 — 다음 줄이 설명이다
+        for (const [body] of rows) {
+            expect(noteLabel(null, body), JSON.stringify(body)).toBe('설명');
+            expect(noteLabel(null, previewOf(body)), JSON.stringify(body)).toBe('설명');
+        }
+        // 사진만 있는 목록 줄은 열어도 닫아도 「사진」이다.
+        expect(noteLabel(null, '- ![](/api/study/notes/images/12)')).toBe('사진');
+    });
+});
+
 // 필기 화면(/study/notes)의 행이 `/?note=<id>`로 홈을 연다 — 홈은 이 값으로 그 장을 편집기에 싣는다.
 // 양의 정수가 아니면 null이다: `0`·음수·글자로 fetchNote를 두드리면 404 왕복만 하나 는다.
 describe('noteIdParam — 홈이 열 필기', () => {
