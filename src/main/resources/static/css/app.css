@@ -3733,6 +3733,13 @@ body.has-rails { padding-bottom: calc(100px + env(safe-area-inset-bottom, 0px));
 .study-editor .ProseMirror mark { background: var(--sage-soft); color: inherit; border-radius: 2px; padding: 0 2px; }
 .study-editor .ProseMirror blockquote { border-left: 3px solid var(--border); padding-left: 10px; color: var(--muted); }
 .study-editor .ProseMirror hr { border: 0; border-top: 1px solid var(--border); margin: 12px 0; }
+/* 필기 사진 — 노드는 인라인 원자다(editor/noteImage.ts). 1568px 원본이 카드 밖으로 나가지 않게 폭·높이를 묶는다.
+   테는 두르지 않는다: .study-editor 아래 border 색은 muted·text·danger뿐이다(editorialTheme.test.ts REQ-09).
+   인라인 그대로 두는 이유: 블록으로 그리면 사진 앞뒤 캐럿이 안 보이는 브라우저가 있다 — 폭 100% 사진은 어차피 한 줄을 혼자 쓴다.
+   ProseMirror의 빈 img.ProseMirror-separator도 이 선택자에 걸리지만 Tiptap이 주입한 !important 0×0 규칙이 이긴다. */
+.study-editor .ProseMirror img { vertical-align: bottom; max-width: 100%; max-height: 480px; height: auto; border-radius: var(--radius-sm); }
+.study-editor .ProseMirror img.ProseMirror-selectednode { box-shadow: 0 0 0 3px var(--focus-ring); }
+.study-editor-image-status:empty { margin: 0; }
 
 /* 슬래시 메뉴 — 캐럿 좌표는 컴포넌트가 인라인 style로 준다(tippy·floating-ui를 안 넣는 이유).
    ⚠️ fixed인 것이 일부러다: 좌표를 뷰포트 기준으로 계산하면(slashPosition) 조상 상자가 무엇이든

@@ -4,7 +4,7 @@
 // RecallEditor.test.ts가 맡는다.
 import { describe, test, expect } from 'vitest';
 
-import { BODY_MAX, SLASH_ITEMS, SLASH_WIDTH, bodyBudget, cleanMarkdown, filterSlashItems, slashHeight, slashPosition, tabAction, unescapeMarkdownEntities } from './pure';
+import { BODY_MAX, OWN_IMAGE_PATH, PHOTO_MARK_MAX, droppedImages, pastedImages, SLASH_ITEMS, SLASH_WIDTH, bodyBudget, cleanMarkdown, filterSlashItems, slashHeight, slashPosition, tabAction, unescapeMarkdownEntities } from './pure';
 
 describe('슬래시 메뉴 필터', () => {
     test('빈 질의는 전부 보여 준다 — `/`만 친 순간이 곧 「뭐가 있는지 보여 줘」다', () => {
@@ -151,5 +151,38 @@ describe('저장 마크다운 정리 — 빈 문단', () => {
     test('한 번 정리한 값은 다시 정리해도 같다 — 안 그러면 밖에서 돌아온 값과 매번 어긋난다', () => {
         const once = cleanMarkdown('# 제목\n\n- 하나\n\n&nbsp;\n\na &gt; b\n\n&gt; 인용');
         expect(cleanMarkdown(once)).toBe(once);
+    });
+});
+
+// 필기 사진(설계 2026-10-19 T11) — 붙여넣기·끌어다 놓기에서 「올릴 사진」을 고르는 규칙.
+describe('필기 사진 — 넣을 파일 고르기', () => {
+    const jpg = new File(['x'], 'a.jpg', { type: 'image/jpeg' });
+    const png = new File(['x'], 'b.png', { type: 'image/png' });
+    const pdf = new File(['x'], 'c.pdf', { type: 'application/pdf' });
+    const clip = (files: File[], text = '') => ({ files, getData: (t: string) => (t === 'text/plain' ? text : '') });
+
+    test('REQ-15 · pastedImages: 사진 파일만 고르고, 글이 함께 오면 빈 배열, 주소 한 줄이면 사진', () => {
+        expect(pastedImages(clip([jpg, pdf, png]))).toEqual([jpg, png]);
+        // 워드·한글·엑셀은 글을 복사해도 그 그림을 같이 싣는다 — 글이 이긴다.
+        expect(pastedImages(clip([png], '복사한 단락'))).toEqual([]);
+        // 크롬 「이미지 복사」는 파일 + 주소 한 줄(또는 빈 글)이다.
+        expect(pastedImages(clip([png], '  https://example.com/a.png  '))).toEqual([png]);
+        expect(pastedImages(clip([png], 'https://example.com/a.png 설명'))).toEqual([]);
+        expect(pastedImages(null)).toEqual([]);
+    });
+
+    test('REQ-15 · droppedImages: 사진 파일만 고른다', () => {
+        expect(droppedImages({ files: [pdf, jpg] })).toEqual([jpg]);
+        expect(droppedImages({ files: [pdf] })).toEqual([]);
+        expect(droppedImages(null)).toEqual([]);
+    });
+
+    test('OWN_IMAGE_PATH는 서버 src 꼴만 받는다', () => {
+        expect(OWN_IMAGE_PATH.test('/api/study/notes/images/12')).toBe(true);
+        for (const s of ['/api/study/notes/images/0', '/api/study/notes/images/12?x', 'data:image/png;base64,AA', 'https://x/api/study/notes/images/1']) {
+            expect(OWN_IMAGE_PATH.test(s), s).toBe(false);
+        }
+        // 표식 한 개가 상한 안이다 — 아홉 자리 id까지.
+        expect(`![](/api/study/notes/images/${'9'.repeat(9)})`.length).toBeLessThanOrEqual(PHOTO_MARK_MAX);
     });
 });

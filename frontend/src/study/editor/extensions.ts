@@ -5,6 +5,7 @@ import { Markdown } from '@tiptap/markdown';
 import StarterKit from '@tiptap/starter-kit';
 import { Suggestion, type SuggestionOptions } from '@tiptap/suggestion';
 
+import { NoteImage } from './noteImage';
 import { tabAction } from './pure';
 
 /** 편집기가 슬래시 팝업에 넘겨주는 몫 — 항목 목록·렌더·선택 명령은 화면(컴포넌트)이 안다. */
@@ -56,7 +57,7 @@ function slashCommand(slash: SlashSuggestion): Extension {
  * <p>저장 형식은 마크다운 문자열이라 <b>서버·DB가 그대로</b>다. `breaks: true`가 요점 —
  * 이게 없으면 편집기 도입 전에 평문으로 저장된 글의 줄바꿈이 열 때 통째로 한 문단이 된다.
  */
-export function recallExtensions(slash: SlashSuggestion): Extensions {
+export function recallExtensions(slash: SlashSuggestion, options: { images?: boolean } = {}): Extensions {
     return [
         StarterKit.configure({
             // 공부 메모에 코드·링크·취소선은 쓸 일이 없다 — 툴바에 없는 것을 문법으로만 열어 두지 않는다.
@@ -74,6 +75,8 @@ export function recallExtensions(slash: SlashSuggestion): Extensions {
             nested: true,
             a11y: { checkboxLabel: (node) => `할 일 체크박스: ${node.textContent || '내용 없음'}` },
         }),
+        // 필기 사진 — 사진을 올릴 수 있는 편집기(필기)만. 백지노트는 스키마에 이 노드가 없다(설계 D3).
+        ...(options.images ? [NoteImage] : []),
         slashCommand(slash),
         TabKeymap,
     ];

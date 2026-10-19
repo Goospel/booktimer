@@ -77,8 +77,14 @@ export function nextSaveState(state: SaveState, event: SaveEvent): SaveState {
 export function noteLabel(title: string | null, body: string): string {
     const trimmed = (title ?? '').trim();
     if (trimmed) return clip(trimmed);
-    const line = body.split('\n').map(stripMarkers).find((s) => s.length > 0);
-    return line ? clip(line) : '제목 없음';
+    let photo = false;
+    // 사진 표식(과 preview가 그 한가운데서 자른 꼬리)을 먼저 걷는다 — 사진만 있는 줄은 비어 이름이 못 되고, 다음 글 줄이 이름이다.
+    const line = body.split('\n').map((raw) => {
+        const s = raw.replace(PHOTO_MD, ' ').replace(PHOTO_TAIL, '');
+        if (s !== raw) photo = true;
+        return stripMarkers(s.replace(/ {2,}/g, ' '));
+    }).find((s) => s.length > 0);
+    return line ? clip(line) : photo ? '사진' : '제목 없음';
 }
 
 /**
@@ -89,8 +95,30 @@ export function noteLabel(title: string | null, body: string): string {
  * 규칙이 어긋나면 저장 직후의 라벨만 다른 이름이 된다.
  */
 export function previewOf(body: string): string {
-    const line = body.split('\n').map((s) => s.trim()).find((s) => s.length > 0) ?? '';
+    // 사진만 있는 줄은 건너뛴다(글 줄이 없으면 첫 줄) — 서버 StudyNote.preview()와 같은 규칙. 돌려주는 줄은 원래 그대로.
+    const lines = body.split('\n').map((s) => s.trim()).filter((s) => s.length > 0);
+    const line = lines.find((s) => !isPhotoOnly(s)) ?? lines[0] ?? '';
     return line.slice(0, PREVIEW_MAX);
+}
+
+/** 사진 표식 — editor/pure.ts OWN_IMAGE_PATH와 같은 꼴(alt 없음). 서버 StudyNoteImage.MARKDOWN_REF와 같은 리터럴 표로 잰다. */
+const PHOTO_MD = /!\[\]\(\/api\/study\/notes\/images\/[1-9]\d*\)/g;
+/** 서버 preview(80자)가 표식 한가운데서 자른 꼬리. 친 `![`는 저장값에서 `!\[`로 이스케이프되므로 맨 `![`는 사진뿐이다. */
+const PHOTO_TAIL = /!\[(?:\](?:\([^)\n]*)?)?$/;
+
+/** 줄머리 블록 표식 — 서버 StudyNoteImage.BLOCK_MARKERS·TASK_BOX와 같은 정규식. */
+function stripBlock(line: string): string {
+    return line.replace(/^\s*(?:#{1,6}\s+|[-*>]\s+|\d+\.\s+)+/, '').replace(/^\s*\[[ xX]\]\s*/, '');
+}
+
+/**
+ * 사진만 있는 줄 — 줄머리 표식을 먼저 걷고 본다(`- ![](…)`도 사진만 있는 줄 — 안 그러면 열린 장과 닫힌 장의 이름이 갈린다).
+ * 사진이 하나는 있어야 한다 — 표식만 있는 `- [ ]` 줄은 아니다(서버 isPhotoOnly와 같다).
+ */
+function isPhotoOnly(line: string): boolean {
+    const rest = stripBlock(line);
+    const without = rest.replace(PHOTO_MD, '');
+    return without !== rest && without.trim() === '';
 }
 
 /**
@@ -129,9 +157,7 @@ function clip(text: string): string {
 
 /** 줄머리 표식(`#`·`-`·`*`·`>`·`1.`·`[ ]`)과 강조 표식(`**`·`==`·`++`·`` ` ``)을 벗긴다. */
 function stripMarkers(line: string): string {
-    return line
-        .replace(/^\s*(?:#{1,6}\s+|[-*>]\s+|\d+\.\s+)+/, '')
-        .replace(/^\s*\[[ xX]\]\s*/, '')
+    return stripBlock(line)
         .replace(/\*\*|==|\+\+|`/g, '')
         .trim();
 }

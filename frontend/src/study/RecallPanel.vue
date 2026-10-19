@@ -370,6 +370,8 @@ async function onSave(thenAnalyze: boolean): Promise<void> {
                             <p class="status-line muted">
                                 {{ noteRef.included.length }}장, {{ noteRef.chars.toLocaleString() }}자
                             </p>
+                            <!-- 사진은 모델에 안 간다(설계 D2) — 말하지 않으면 사진 속 필기가 빠진 것을 사용자가 모른다. -->
+                            <p v-if="noteRef.photos" class="status-line muted" data-testid="recall-reference-photos">사진 {{ noteRef.photos }}장은 채점 기준에 들어가지 않아요 — AI는 필기의 글만 봐요.</p>
                             <p
                                 v-if="noteRef.excluded.length"
                                 class="status-line study-recall-reference-cut"

@@ -432,6 +432,22 @@ describe('백지복습 — 채점 기준으로 들어가는 필기', () => {
         expect(wrapper.find('.study-recall-reference-list').text()).not.toContain('아주 오래된 장');
     });
 
+    // 필기 사진(설계 2026-10-19 T14) — 사진은 모델에 안 간다. 말하지 않으면 사진 속 필기가 채점에서 빠진 것을 영영 모른다.
+    test('REQ-18 · 채점 기준에 사진이 있으면 「사진 N장은 채점 기준에 들어가지 않아요」', async () => {
+        const wrapper = await withReference({ included: [noteRefRow(3, '3장', 100)], excluded: [], chars: 100, limit: 24000, photos: 2 });
+        expect(wrapper.find('[data-testid="recall-reference-photos"]').text())
+            .toBe('사진 2장은 채점 기준에 들어가지 않아요 — AI는 필기의 글만 봐요.');
+    });
+
+    // 회귀 가드 — Red 없음(음성 판정 전용): 구현 전엔 그 줄 자체가 없다. 위 테스트가 같은 testid의 양성 쪽이다.
+    test('REQ-18 · photos가 0이거나 없으면 그 줄이 없다', async () => {
+        for (const extra of [{ photos: 0 }, {}]) {
+            const wrapper = await withReference({ included: [noteRefRow(3, '3장', 100)], excluded: [], chars: 100, limit: 24000, ...extra });
+            expect(wrapper.find('[data-testid="recall-reference-photos"]').exists()).toBe(false);
+            wrapper.unmount();
+        }
+    });
+
     test('필기가 0장이면 「범위와 글만으로 판단해요」 — 카드가 거짓 기대를 만들지 않는다', async () => {
         const wrapper = await withReference({ included: [], excluded: [], chars: 0, limit: 24000 });
 

@@ -10,7 +10,16 @@ import { h } from 'vue';
 
 import NotesPanel from './NotesPanel.vue';
 
-const { focusEndSpy } = vi.hoisted(() => ({ focusEndSpy: vi.fn() }));
+const { focusEndSpy, dropSpy } = vi.hoisted(() => ({ focusEndSpy: vi.fn(), dropSpy: vi.fn() }));
+
+// 사진 줄이기는 canvas가 필요하다 — jsdom엔 없다(RecallPanel.test 선례).
+vi.mock('./image', () => ({
+    shrinkForUpload: vi.fn(async (file: File) => ({
+        blob: new Blob([new Uint8Array([0xFF, 0xD8, 0xFF])], { type: 'image/jpeg' }),
+        dataUrl: 'data:image/jpeg;base64,/9j/',
+        name: file.name,
+    })),
+}));
 
 // 본문 편집기는 얇은 textarea 대역 — 이 파일의 관심은 편집기가 아니라 자동저장의 배선이다
 // (편집기 자체는 editor/RecallEditor.test.ts가 실제 Tiptap을 마운트해 잰다).
@@ -24,6 +33,7 @@ vi.mock('./editor/RecallEditor.vue', () => ({
             placeholder: { type: String, default: '' },
             ariaLabel: { type: String, default: '' },
             disabled: Boolean,
+            uploadImage: { type: Function, default: undefined },
         },
         emits: ['update:modelValue'],
         setup(props: { modelValue: string; disabled: boolean; ariaLabel: string },
@@ -32,7 +42,7 @@ vi.mock('./editor/RecallEditor.vue', () => ({
                   slots: Record<string, (() => unknown) | undefined>;
                   expose: (e: Record<string, unknown>) => void;
               }) {
-            expose({ focusEnd: focusEndSpy });
+            expose({ focusEnd: focusEndSpy, dropPendingImages: dropSpy });
             return () => h('div', [
                 h('textarea', {
                     'data-testid': 'recall-body',
@@ -68,10 +78,11 @@ function noteOf(over: Partial<Record<string, unknown>> = {}) {
     return { id: 5, bookId: 7, title: null, body: 'ㄱ', revision: 0, updatedAt: AT, ...over };
 }
 
-/** 저장 왕복만 센다 — 목록·본문 조회(GET)는 이 파일의 관심이 아니다. */
+/** 저장 왕복만 센다 — 목록·본문 조회(GET)와 사진 업로드(FormData)는 이 파일의 관심이 아니다. */
 function posts(): { url: string; body: Record<string, unknown> }[] {
     return vi.mocked(fetch).mock.calls
-        .filter((call) => (call[1] as RequestInit | undefined)?.method === 'POST')
+        .filter((call) => (call[1] as RequestInit | undefined)?.method === 'POST'
+            && typeof (call[1] as RequestInit).body !== 'object')
         .map((call) => ({
             url: String(call[0]),
             body: JSON.parse(String((call[1] as RequestInit).body ?? '{}')) as Record<string, unknown>,
@@ -124,6 +135,7 @@ function rowOf(id: number, title: string | null, preview = '') {
 
 beforeEach(() => {
     focusEndSpy.mockClear();
+    dropSpy.mockClear();
     vi.useFakeTimers();
     document.body.innerHTML = '<div></div>';
     vi.stubGlobal('fetch', vi.fn());
@@ -257,7 +269,7 @@ describe('필기 패널 — 자동저장', () => {
         expect(second.url).toBe('/api/study/notes/5');
         // 빠지거나 null이면 서버 `int`가 못 받아 500 + HTML 본문이 온다 — 자동저장이 통째로 죽는 자리.
         expect(typeof second.body.revision).toBe('number');
-        expect(second.body).toEqual({ title: '', body: 'ㄱㄴ', revision: 0 });
+        expect(second.body).toEqual({ title: '', body: 'ㄱㄴ', revision: 0, imageAware: true });
 
         // 세 번째는 서버가 준 새 판 번호(1)를 되싣는다 — 손으로 세지 않는다.
         vi.mocked(fetch).mockResolvedValueOnce(okJson(noteOf({ revision: 2 })));
@@ -477,7 +489,7 @@ describe('필기 패널 — 왕복 중에 갈아타도 남의 자리에 쓰지 �
 
         const last = posts()[posts().length - 1];
         expect(last.url).toBe('/api/study/notes/6');
-        expect(last.body).toEqual({ title: 'B', body: 'B본문+', revision: 4 });
+        expect(last.body).toEqual({ title: 'B', body: 'B본문+', revision: 4, imageAware: true });
     });
 
     // C-1 ③ — 지우기는 플러시하지 않는다. 앞선 왕복이 돌아와 **지운 장의 id**를 새 초안에 붙이면
@@ -680,7 +692,7 @@ describe('필기 패널 — 이어 쓰기 칩', () => {
         vi.mocked(fetch).mockResolvedValueOnce(okJson(noteOf({ id: 5, title: '가', body: '가 본문+', revision: 3 })));
         await type(wrapper, '가 본문+');
         await settle();
-        expect(posts()).toEqual([{ url: '/api/study/notes/5', body: { title: '가', body: '가 본문+', revision: 2 } }]);
+        expect(posts()).toEqual([{ url: '/api/study/notes/5', body: { title: '가', body: '가 본문+', revision: 2, imageAware: true } }]);
     });
 });
 
@@ -825,7 +837,7 @@ describe('필기 패널 — ?note= 핸드오프', () => {
         vi.mocked(fetch).mockResolvedValueOnce(okJson(noteOf({ id: 5, bookId: 7, body: '열린 글+', revision: 5 })));
         await type(wrapper, '열린 글+');
         await settle();
-        expect(posts()).toEqual([{ url: '/api/study/notes/5', body: { title: '3장', body: '열린 글+', revision: 4 } }]);
+        expect(posts()).toEqual([{ url: '/api/study/notes/5', body: { title: '3장', body: '열린 글+', revision: 4, imageAware: true } }]);
     });
 
     test('404면 기본 책의 빈 새 필기 + 오류 문구', async () => {
@@ -879,5 +891,100 @@ describe('필기 패널 — ?note= 핸드오프', () => {
         expect(urls()).toEqual(['/api/study/notes/5', '/api/study/notes?bookId=9']);
         expect(bookOf(wrapper)).toBe('9');
         expect((wrapper.find('[data-testid="recall-body"]').element as HTMLTextAreaElement).value).toBe('');
+    });
+});
+
+// 필기 사진(설계 2026-10-19 T12) — 패널이 편집기에 「올리기」를 넘기고, 장·책을 갈아 끼울 때 편집기의 대기 사진을 버린다.
+describe('필기 패널 — 사진', () => {
+    const PHOTO_FILE = new File([new Uint8Array([1])], '내 사진 원본.png', { type: 'image/png' });
+
+    function uploadOf(wrapper: VueWrapper): ((f: File) => Promise<string>) | undefined {
+        return wrapper.findComponent({ name: 'RecallEditorStub' }).props('uploadImage') as ((f: File) => Promise<string>) | undefined;
+    }
+
+    test('REQ-16 · 필기 편집기에 uploadImage가 넘어간다 — 빠지면 사진 노드가 꺼져 imageAware:true인 채로 사진이 지워진다', async () => {
+        const wrapper = await mountPanel();
+        expect(typeof uploadOf(wrapper)).toBe('function');
+    });
+
+    test('REQ-16 · uploadImage는 줄인 JPEG를 image 파트(note.jpg)로 CSRF 헤더와 함께 /api/study/notes/images에 올리고 받은 주소를 준다 — Content-Type은 손으로 안 적는다', async () => {
+        const wrapper = await mountPanel();
+        vi.mocked(fetch).mockResolvedValueOnce(okJson({ src: '/api/study/notes/images/31' }));
+        await expect(uploadOf(wrapper)!(PHOTO_FILE)).resolves.toBe('/api/study/notes/images/31');
+
+        const call = vi.mocked(fetch).mock.calls.find((c) => String(c[0]) === '/api/study/notes/images')!;
+        const init = call[1] as RequestInit;
+        expect(init.method).toBe('POST');
+        expect(init.headers).toEqual({ 'X-CSRF-TOKEN': 'tok' });
+        const part = (init.body as FormData).get('image') as File;
+        expect(part.name).toBe('note.jpg');   // 원본 이름(개인정보가 섞일 수 있다)은 보내지 않는다
+        expect(part.type).toBe('image/jpeg');
+        expect(part.size).toBe(3);   // 줄인 JPEG(대역 3바이트)다 — 원본(1바이트 PNG)이 아니다. jsdom File엔 arrayBuffer가 없다.
+    });
+
+    test('REQ-16 · 올리는 사이 다른 필기로 갈아타면 「사진을 넣으려던 필기가 바뀌어」 문구로 거절한다', async () => {
+        const wrapper = await mountPanel();
+        const pending = deferred();
+        vi.mocked(fetch).mockReturnValueOnce(pending.promise);
+        const result = uploadOf(wrapper)!(PHOTO_FILE);
+        await flushPromises();
+        await wrapper.find('[data-testid="notes-new"]').trigger('click');
+        await flushPromises();
+        pending.resolve(okJson({ src: '/api/study/notes/images/32' }));
+        await expect(result).rejects.toThrow('사진을 넣으려던 필기가 바뀌어 넣지 않았어요 — 다시 넣어 주세요.');
+    });
+
+    test('REQ-16 · 장·책을 갈아 끼울 때마다 편집기의 대기 사진을 버린다 — 새 필기·책 전환은 바로, 다른 장 열기·지우기는 응답이 오기 전에', async () => {
+        const wrapper = await mountPanel({ defaultBookId: 7 }, [rowOf(5, '가')]);
+
+        dropSpy.mockClear();
+        await wrapper.find('[data-testid="notes-new"]').trigger('click');
+        await flushPromises();
+        expect(dropSpy, '새 필기').toHaveBeenCalled();
+
+        dropSpy.mockClear();
+        vi.mocked(fetch).mockResolvedValueOnce(okJson({ notes: [rowOf(5, '가')] }));
+        await wrapper.setProps({ defaultBookId: 9 });
+        await flushPromises();
+        expect(dropSpy, '책 전환').toHaveBeenCalled();
+
+        // 다른 장 열기 — 조회 응답을 붙잡은 채로 본다(retarget에만 건 구현은 여기서 아직 안 불렀다).
+        dropSpy.mockClear();
+        const opening = deferred();
+        vi.mocked(fetch).mockReturnValueOnce(opening.promise);
+        await wrapper.find('[data-testid="notes-continue"]').trigger('click');
+        await flushPromises();
+        expect(dropSpy, '장 열기(응답 전)').toHaveBeenCalled();
+        opening.resolve(okJson(noteOf({ id: 5, bookId: 9, body: '가 본문', revision: 1 })));
+        await flushPromises();
+
+        // 지우기 — 삭제 응답을 붙잡은 채로 본다.
+        vi.stubGlobal('confirm', vi.fn(() => true));
+        dropSpy.mockClear();
+        const removing = deferred();
+        vi.mocked(fetch).mockReturnValueOnce(removing.promise);
+        await wrapper.find('[data-testid="notes-delete"]').trigger('click');
+        await flushPromises();
+        expect(dropSpy, '지우기(응답 전)').toHaveBeenCalled();
+        removing.resolve(okJson({ deleted: true }));
+        await flushPromises();
+    });
+
+    test('REQ-16 · 줄이기 실패·연결 실패는 한국어 문구로, 서버 문구는 그대로, 404는 전용 문구로 던진다', async () => {
+        const wrapper = await mountPanel();
+        const upload = uploadOf(wrapper)!;
+        const { shrinkForUpload } = await import('./image');
+
+        vi.mocked(shrinkForUpload).mockRejectedValueOnce(new DOMException('The source image could not be decoded.'));
+        await expect(upload(PHOTO_FILE)).rejects.toThrow('사진을 열지 못했어요 — JPG·PNG 사진으로 다시 해 주세요.');
+
+        vi.mocked(fetch).mockRejectedValueOnce(new TypeError('Failed to fetch'));
+        await expect(upload(PHOTO_FILE)).rejects.toThrow('사진을 올리지 못했어요 — 연결을 확인하고 다시 해 주세요.');
+
+        vi.mocked(fetch).mockResolvedValueOnce(fail(429, '사진을 너무 자주 올렸어요 — 잠시 뒤 다시 올려 주세요'));
+        await expect(upload(PHOTO_FILE)).rejects.toThrow('사진을 너무 자주 올렸어요 — 잠시 뒤 다시 올려 주세요');
+
+        vi.mocked(fetch).mockResolvedValueOnce(fail(404, ''));
+        await expect(upload(PHOTO_FILE)).rejects.toThrow('사진을 올리지 못했어요 — 잠시 뒤 다시 해 주세요.');
     });
 });

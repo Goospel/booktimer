@@ -11,6 +11,7 @@ import { fileURLToPath } from 'node:url';
 import { describe, test, expect, beforeEach, vi } from 'vitest';
 import { mount, type VueWrapper } from '@vue/test-utils';
 
+import { Slice } from '@tiptap/pm/model';
 import RecallEditor from './RecallEditor.vue';
 
 // ProseMirror는 좌표를 재려고 Range를 만든다 — jsdom엔 구현이 없어 마운트 자체가 깨진다.
@@ -28,10 +29,10 @@ beforeEach(() => {
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type AnyEditor = any;
 
-async function mountEditor(modelValue = ''): Promise<VueWrapper> {
+async function mountEditor(modelValue = '', extraProps: Record<string, unknown> = {}): Promise<VueWrapper> {
     const wrapper = mount(RecallEditor, {
         attachTo: document.body,
-        props: { modelValue, placeholder: '기억나는 것을 적어 보세요.' },
+        props: { modelValue, placeholder: '기억나는 것을 적어 보세요.', ...extraProps },
     });
     await vi.waitFor(() => expect(editorOf(wrapper)).toBeTruthy());
     return wrapper;
@@ -368,5 +369,355 @@ describe('알약 밑에 지금 쓰는 줄·포커스가 깔리지 않는다', ()
         const m = css.match(/^:root:has\(> body\.has-rails\)\s*\{[^}]*scroll-padding-bottom:\s*calc\((\d+)px/m);
         expect(m, ':root:has(> body.has-rails) { scroll-padding-bottom: calc(Npx + …) }').not.toBeNull();
         expect(Number(m![1])).toBeGreaterThanOrEqual(clearance);
+    });
+});
+
+// ── 필기 사진(설계 2026-10-19 T10) — 자기 마크다운 토큰을 가진 인라인 노드 `noteImage` ──────────────
+// view.pasteHTML이 ClipboardEvent를 만든다 — jsdom엔 없다.
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+(globalThis as any).ClipboardEvent ??= class extends Event { clipboardData = null; };
+
+const IMG = (n: number): string => `![](/api/study/notes/images/${n})`;
+/** 사진을 켠 편집기 — uploadImage를 받은 편집기만 사진을 안다. */
+const withPhotos = (upload: (f: File) => Promise<string> = async () => '/api/study/notes/images/99') => ({ uploadImage: upload });
+
+/** 숨은 파일 입력으로 고른다(RecallPanel.test 선례). */
+async function pickFiles(wrapper: VueWrapper, files: File[]): Promise<void> {
+    const input = wrapper.find('[data-testid="editor-image-input"]');
+    Object.defineProperty(input.element, 'files', { value: files, configurable: true });
+    await input.trigger('change');
+}
+
+function photoCount(wrapper: VueWrapper): number {
+    let n = 0;
+    editorOf(wrapper).state.doc.descendants((node: AnyEditor) => { if (node.type.name === 'noteImage') n += 1; });
+    return n;
+}
+
+const jpgFile = (name = 'a.jpg'): File => new File(['x'], name, { type: 'image/jpeg' });
+
+describe('필기 사진 노드', () => {
+    const SHAPES: string[] = [
+        IMG(1),                                       // 혼자 선 줄
+        `앞 ${IMG(1)} 뒤`,                            // 글 사이
+        `글 끝 ${IMG(1)}`,                            // 글 끝
+        `${IMG(1)}${IMG(2)}`,                         // 연속
+        `앞\n\n${IMG(1)}\n\n뒤`,                      // 문단 사이
+        `# 제목 ${IMG(1)}`,                           // 제목
+        `> ${IMG(1)}`,                                // 인용
+        `- ${IMG(1)}`,                                // 글머리
+        `- 하나\n  - ${IMG(1)}`,                      // 중첩
+        `1. ${IMG(1)}`,                               // 번호
+        `- [ ] ${IMG(1)}`,                            // 체크
+        `- [ ] 할 일 ${IMG(1)}`,                      // 체크 + 글
+    ];
+
+    test('REQ-12 · 사진 표식이 혼자 선 줄·글 사이·연속·제목·인용·글머리·중첩·번호·체크에서 그대로 왕복하고 문서가 스키마에 맞다', async () => {
+        for (const shape of SHAPES) {
+            const wrapper = await mountEditor(shape, withPhotos());
+            expect(markdown(wrapper), shape).toBe(shape);
+            expect(() => editorOf(wrapper).state.doc.check(), shape).not.toThrow();
+            expect(photoCount(wrapper), shape).toBeGreaterThan(0);
+            wrapper.unmount();
+        }
+    });
+
+    test('REQ-12 · 사진이 든 본문을 열고 한 글자 고쳐도 사진 줄이 저장값에 남는다', async () => {
+        const body = `설명\n\n${IMG(7)}`;
+        const wrapper = await mountEditor(body, withPhotos());
+        editorOf(wrapper).commands.insertContentAt(3, '!');
+        expect(lastEmitted(wrapper)).toBe(`설명!\n\n${IMG(7)}`);
+    });
+
+    // 회귀 가드 — Red 없음(음성 판정 전용): 구현 전엔 모르는 prop이 그냥 흘러내려 결과가 같다.
+    test('REQ-12 · 사진을 켜도 글만 있는 본문은 지금과 똑같이 왕복한다', async () => {
+        const texts = ['# 제목\n\n- 하나\n  - 둘\n\n- [ ] 할 일\n\n**굵게** ++밑줄++ ==형광==', '느낌표! 대괄호 [가] (괄호)', 'a > b & c', '줄1\n줄2'];
+        for (const t of texts) {
+            expect(markdown(await mountEditor(t, withPhotos())), t).toBe(markdown(await mountEditor(t)));
+        }
+    });
+
+    test('REQ-13 · 붙여넣은 외부·다른 출처·data:·blob: 사진은 노드가 되지 않고 우리 주소는 된다 — 같은 출처 절대주소는 상대로 저장된다', async () => {
+        const wrapper = await mountEditor('', withPhotos());
+        const origin = window.location.origin;
+        editorOf(wrapper).view.pasteHTML(
+            '<p>가<img src="https://example.com/x.jpg">'
+            + '<img src="data:image/png;base64,AAAA">'
+            + '<img src="blob:http://localhost/abc">'
+            + '<img src="http://other.test/api/study/notes/images/3">'
+            + '<img src="/api/study/notes/images/4?x=1">'
+            + '<img src="/api/study/notes/images/5">'
+            + `<img src="${origin}/api/study/notes/images/6">나</p>`,
+        );
+        const md = markdown(wrapper);
+        expect(md).toBe(`가${IMG(5)}${IMG(6)}나`);
+        expect(md).not.toMatch(/example|data:|blob:|other\.test|images\/3|images\/4/);
+    });
+
+    test('REQ-13 · 저장값에 data: 주소가 생기지 않는다 — data: img를 붙여넣어도, 업로드가 data:를 돌려줘도 · 업로드가 우리 주소를 돌려주면 들어간다(대조군)', async () => {
+        const replies = ['data:image/jpeg;base64,AAAA', '/api/study/notes/images/9'];
+        const wrapper = await mountEditor('', withPhotos(async () => replies.shift()!));
+        editorOf(wrapper).view.pasteHTML('<p><img src="data:image/png;base64,AAAA"></p>');
+
+        await pickFiles(wrapper, [jpgFile()]);
+        await vi.waitFor(() => expect(wrapper.find('[data-testid="editor-image-status"]').text()).toBe('사진을 넣지 못했어요.'));
+        expect(markdown(wrapper)).not.toContain('data:');
+        expect(photoCount(wrapper)).toBe(0);
+
+        await pickFiles(wrapper, [jpgFile()]);
+        await vi.waitFor(() => expect(photoCount(wrapper)).toBe(1));
+        expect(markdown(wrapper)).toBe(IMG(9));
+    });
+
+    test('REQ-14 · uploadImage 없는 편집기(백지노트)는 사진 버튼도 사진 노드도 없다 — 있는 편집기는 있다(대조군)', async () => {
+        const recall = await mountEditor(IMG(1));
+        expect(recall.find('[data-testid="editor-btn-image"]').exists()).toBe(false);
+        expect(recall.find('[data-testid="editor-image-input"]').exists()).toBe(false);
+        expect(editorOf(recall).schema.nodes.noteImage).toBeUndefined();
+
+        const notes = await mountEditor(IMG(1), withPhotos());
+        expect(notes.find('[data-testid="editor-btn-image"]').exists()).toBe(true);
+        expect(notes.find('[data-testid="editor-image-input"]').exists()).toBe(true);
+        expect(editorOf(notes).schema.nodes.noteImage).toBeDefined();
+    });
+});
+
+// ── 필기 사진 넣는 길(설계 2026-10-19 T11) ─────────────────────────────────────────────
+// jsdom엔 DataTransfer·DragEvent·ClipboardEvent가 없다 — 핸들러는 someProp으로 직접 부르고 이벤트는 손으로 만든다.
+// 「놓은 자리」는 단위테스트로 재지 않는다(posAtCoords가 스텁 위에서 {pos:0}) — 실 브라우저 U-6 ⓒ 몫.
+
+interface Deferred<T> { promise: Promise<T>; resolve: (v: T) => void; reject: (e: unknown) => void }
+function deferred<T>(): Deferred<T> {
+    let resolve!: (v: T) => void;
+    let reject!: (e: unknown) => void;
+    const promise = new Promise<T>((res, rej) => { resolve = res; reject = rej; });
+    return { promise, resolve, reject };
+}
+
+/** 부를 때마다 새 deferred를 내주는 업로드 대역 — calls[i]를 풀면 i번째 업로드가 끝난다. */
+function heldUploads(): { upload: (f: File) => Promise<string>; calls: Deferred<string>[]; files: File[] } {
+    const calls: Deferred<string>[] = [];
+    const files: File[] = [];
+    return {
+        calls, files,
+        upload: (f: File) => { const d = deferred<string>(); calls.push(d); files.push(f); return d.promise; },
+    };
+}
+
+const statusOf = (wrapper: VueWrapper): string => wrapper.find('[data-testid="editor-image-status"]').text();
+const pdfFile = (): File => new File(['x'], 'c.pdf', { type: 'application/pdf' });
+
+function paste(wrapper: VueWrapper, files: File[], text = '', html = ''): boolean {
+    const view = editorOf(wrapper).view;
+    const fake = { clipboardData: { files, getData: (t: string) => (t === 'text/plain' ? text : t === 'text/html' ? html : '') }, preventDefault() {} };
+    return !!view.someProp('handlePaste', (f: AnyEditor) => f(view, fake, Slice.empty));
+}
+
+function drop(wrapper: VueWrapper, files: File[], moved = false): boolean {
+    const view = editorOf(wrapper).view;
+    const fake = { dataTransfer: { files, types: ['Files'], getData: () => '' }, clientX: 1, clientY: 1, preventDefault() {} };
+    return !!view.someProp('handleDrop', (f: AnyEditor) => f(view, fake, Slice.empty, moved));
+}
+
+/** DOM으로 쏘는 드래그 — 좌표가 없으면 ProseMirror의 drop이 posAtCoords에서 일찍 돌아가 handleDrop을 안 부른다. */
+function fireDrag(target: Element, type: 'dragover' | 'drop', files: File[]): Event {
+    const ev = new Event(type, { bubbles: true, cancelable: true });
+    Object.defineProperty(ev, 'dataTransfer', { value: { files, types: ['Files'], getData: () => '' } });
+    Object.defineProperty(ev, 'clientX', { value: 1 });
+    Object.defineProperty(ev, 'clientY', { value: 1 });
+    target.dispatchEvent(ev);
+    return ev;
+}
+
+describe('필기 사진 넣는 길', () => {
+    beforeEach(() => {
+        // handleDrop이 부르는 view.posAtCoords가 이것을 직접 부른다(prosemirror-view) — 없으면 엉뚱한 이유의 빨강.
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        (document as any).elementFromPoint = () => null;
+    });
+
+    test('REQ-15 · 툴바 「사진 넣기」로 고른 두 장을 차례로 올려 넣는다', async () => {
+        const h = heldUploads();
+        const wrapper = await mountEditor('', { uploadImage: h.upload });
+        const a = jpgFile('a.jpg');
+        const b = jpgFile('b.jpg');
+        await pickFiles(wrapper, [a, b, pdfFile()]);
+        await vi.waitFor(() => expect(h.calls).toHaveLength(1));   // 한 장씩 — 둘째는 첫째가 끝난 뒤
+        h.calls[0].resolve('/api/study/notes/images/101');
+        await vi.waitFor(() => expect(h.calls).toHaveLength(2));
+        h.calls[1].resolve('/api/study/notes/images/102');
+        await vi.waitFor(() => expect(photoCount(wrapper)).toBe(2));
+        expect(h.files).toEqual([a, b]);
+        expect(markdown(wrapper)).toBe(`${IMG(101)}${IMG(102)}`);
+    });
+
+    test('REQ-15 · 붙여넣기에 사진 파일만 오면 올려 넣고 true, 글이 함께 오면 올리지 않고 false', async () => {
+        const upload = vi.fn(async () => '/api/study/notes/images/7');
+        const wrapper = await mountEditor('', { uploadImage: upload });
+        expect(paste(wrapper, [jpgFile()], '워드에서 복사한 단락')).toBe(false);
+        expect(upload).not.toHaveBeenCalled();
+        expect(paste(wrapper, [jpgFile()])).toBe(true);
+        await vi.waitFor(() => expect(photoCount(wrapper)).toBe(1));
+        expect(upload).toHaveBeenCalledTimes(1);
+    });
+
+    test('REQ-15 · 끌어다 놓은 사진은 올려 넣고, 사진 아닌 파일은 올리지 않되 true(브라우저가 파일로 떠나지 않게)와 「사진 파일만」 문구, moved는 false', async () => {
+        const upload = vi.fn(async () => '/api/study/notes/images/8');
+        const wrapper = await mountEditor('', { uploadImage: upload });
+        expect(drop(wrapper, [pdfFile()])).toBe(true);
+        await wrapper.vm.$nextTick();
+        expect(statusOf(wrapper)).toBe('사진 파일만 넣을 수 있어요.');
+        expect(upload).not.toHaveBeenCalled();
+        expect(drop(wrapper, [jpgFile()], true)).toBe(false);
+        expect(upload).not.toHaveBeenCalled();
+        expect(drop(wrapper, [jpgFile()])).toBe(true);
+        await vi.waitFor(() => expect(photoCount(wrapper)).toBe(1));
+        expect(upload).toHaveBeenCalledTimes(1);
+    });
+
+    test('REQ-15 · 편집기 상자의 본문 밖(툴바)에 놓은 사진도 받고 기본 동작을 막는다 — dragover도 막는다 · 본문 위 드롭은 한 번만 올린다', async () => {
+        const upload = vi.fn(async () => '/api/study/notes/images/9');
+        const wrapper = await mountEditor('', { uploadImage: upload });
+        const toolbar = wrapper.find('.study-editor-toolbar').element;
+        expect(fireDrag(toolbar, 'dragover', [jpgFile()]).defaultPrevented).toBe(true);
+        expect(fireDrag(toolbar, 'drop', [jpgFile()]).defaultPrevented).toBe(true);
+        await vi.waitFor(() => expect(photoCount(wrapper)).toBe(1));
+        expect(upload).toHaveBeenCalledTimes(1);
+
+        fireDrag(wrapper.find('.ProseMirror').element, 'drop', [jpgFile()]);
+        await vi.waitFor(() => expect(photoCount(wrapper)).toBe(2));
+        expect(upload).toHaveBeenCalledTimes(2);   // 루트가 defaultPrevented를 안 보면 3
+    });
+
+    test('REQ-15 · dropPendingImages 뒤엔 큐에 있던 사진도, 올리던 사진도 넣지 않는다 — 큐에 있던 장은 올리지도 않는다 · 그 뒤 넣은 사진은 들어간다(대조군)', async () => {
+        const h = heldUploads();
+        const wrapper = await mountEditor('', { uploadImage: h.upload });
+        await pickFiles(wrapper, [jpgFile('1.jpg'), jpgFile('2.jpg'), jpgFile('3.jpg')]);
+        await vi.waitFor(() => expect(h.calls).toHaveLength(1));
+        (wrapper.vm as AnyEditor).dropPendingImages();
+        h.calls[0].resolve('/api/study/notes/images/1');
+        await vi.waitFor(() => expect(statusOf(wrapper)).toBe('사진을 넣으려던 필기가 바뀌어 넣지 않았어요 — 다시 넣어 주세요.'));
+        expect(photoCount(wrapper)).toBe(0);
+        expect(h.calls).toHaveLength(1);
+        // 장 열기는 연달아 두 번 부른다(선올림 → retarget, 설계 §4-8·§15 FE-1) — 두 번째가 문구를 지우면 사진이 말없이 사라진다
+        (wrapper.vm as AnyEditor).dropPendingImages();
+        await wrapper.vm.$nextTick();
+        expect(statusOf(wrapper)).toBe('사진을 넣으려던 필기가 바뀌어 넣지 않았어요 — 다시 넣어 주세요.');
+
+        await pickFiles(wrapper, [jpgFile('4.jpg')]);
+        await vi.waitFor(() => expect(h.calls).toHaveLength(2));
+        h.calls[1].resolve('/api/study/notes/images/4');
+        await vi.waitFor(() => expect(photoCount(wrapper)).toBe(1));
+        expect(markdown(wrapper)).toBe(IMG(4));
+    });
+
+    test('REQ-15 · 사진은 선택의 끝에 들어간다 — 고른 사진·글을 갈아치우지 않고 제목 칸 포커스를 뺏지 않는다', async () => {
+        const replies = ['/api/study/notes/images/2', '/api/study/notes/images/3'];
+        const wrapper = await mountEditor(`가나다 ${IMG(1)}`, { uploadImage: async () => replies.shift()! });
+        const title = document.createElement('input');
+        document.body.appendChild(title);
+        title.focus();
+
+        editorOf(wrapper).commands.setTextSelection({ from: 1, to: 3 });   // 「가나」를 고른 채
+        await pickFiles(wrapper, [jpgFile()]);
+        await vi.waitFor(() => expect(photoCount(wrapper)).toBe(2));
+        expect(markdown(wrapper)).toBe(`가나${IMG(2)}다 ${IMG(1)}`);
+
+        const e = editorOf(wrapper);
+        let photoPos = -1;
+        e.state.doc.descendants((n: AnyEditor, pos: number) => { if (n.attrs?.src === '/api/study/notes/images/1') photoPos = pos; });
+        e.commands.setNodeSelection(photoPos);   // 사진을 고른 채
+        await pickFiles(wrapper, [jpgFile()]);
+        await vi.waitFor(() => expect(photoCount(wrapper)).toBe(3));
+        expect(markdown(wrapper)).toBe(`가나${IMG(2)}다 ${IMG(1)}${IMG(3)}`);
+        expect(document.activeElement).toBe(title);
+    });
+
+    test('REQ-15 · 올리는 중엔 「사진 올리는 중… N장」, 실패하면 던진 문구를 보인다', async () => {
+        const h = heldUploads();
+        const wrapper = await mountEditor('', { uploadImage: h.upload });
+        await pickFiles(wrapper, [jpgFile(), jpgFile()]);
+        await vi.waitFor(() => expect(statusOf(wrapper)).toBe('사진 올리는 중… 2장'));
+        await vi.waitFor(() => expect(h.calls).toHaveLength(1));
+        h.calls[0].reject(new Error('사진은 3MB 이하로 올려 주세요'));
+        await vi.waitFor(() => expect(statusOf(wrapper)).toBe('사진 올리는 중… 1장'));
+        await vi.waitFor(() => expect(h.calls).toHaveLength(2));
+        h.calls[1].reject(new Error('사진을 너무 자주 올렸어요 — 잠시 뒤 다시 올려 주세요'));
+        await vi.waitFor(() => expect(statusOf(wrapper)).toBe('사진을 너무 자주 올렸어요 — 잠시 뒤 다시 올려 주세요'));
+        expect(photoCount(wrapper)).toBe(0);
+    });
+
+    test('REQ-15 · 잠긴 편집기는 버튼이 꺼지고, 올리는 사이 잠기면 넣지 않고 「편집이 잠겨」를 말한다', async () => {
+        const locked = await mountEditor('', { uploadImage: async () => '/api/study/notes/images/1', disabled: true });
+        expect(locked.find('[data-testid="editor-btn-image"]').attributes('disabled')).toBeDefined();
+        // 잠긴 편집기는 ProseMirror가 drop을 안 받아 루트(onRootDrop)로 온다 — 페이지는 떠나지 않되 올리지도 않는다(addImages의 disabled 가드)
+        const lockedUpload = vi.fn(async () => '/api/study/notes/images/1');
+        const lockedDrop = await mountEditor('', { uploadImage: lockedUpload, disabled: true });
+        expect(fireDrag(lockedDrop.find('.study-editor-toolbar').element, 'drop', [jpgFile()]).defaultPrevented).toBe(true);
+        await new Promise((r) => setTimeout(r, 50));
+        expect(lockedUpload).not.toHaveBeenCalled();
+        expect(photoCount(lockedDrop)).toBe(0);
+
+        const h = heldUploads();
+        const wrapper = await mountEditor('', { uploadImage: h.upload });
+        expect(wrapper.find('[data-testid="editor-btn-image"]').attributes('disabled')).toBeUndefined();
+        await pickFiles(wrapper, [jpgFile()]);
+        await vi.waitFor(() => expect(h.calls).toHaveLength(1));
+        await wrapper.setProps({ disabled: true });
+        h.calls[0].resolve('/api/study/notes/images/5');
+        await vi.waitFor(() => expect(statusOf(wrapper)).toBe('편집이 잠겨 사진을 넣지 않았어요 — 새로고침한 뒤 다시 넣어 주세요.'));
+        expect(photoCount(wrapper)).toBe(0);
+    });
+
+    test('REQ-15 · 한글 조합 중엔 조합이 끝난 뒤 넣는다', async () => {
+        const h = heldUploads();
+        const wrapper = await mountEditor('가', { uploadImage: h.upload });
+        let composing = true;
+        Object.defineProperty(editorOf(wrapper).view, 'composing', { get: () => composing, configurable: true });
+        await pickFiles(wrapper, [jpgFile()]);
+        await vi.waitFor(() => expect(h.calls).toHaveLength(1));
+        h.calls[0].resolve('/api/study/notes/images/6');
+        await new Promise((r) => setTimeout(r, 160));
+        expect(photoCount(wrapper)).toBe(0);
+        composing = false;
+        await vi.waitFor(() => expect(photoCount(wrapper)).toBe(1));
+    });
+
+    test('REQ-15 · 붙여넣은 HTML에 남의 사진이 있으면 「다른 곳의 사진은 옮겨 오지 않아요」를 말하고 글은 붙인다', async () => {
+        const upload = vi.fn(async () => '/api/study/notes/images/1');
+        const wrapper = await mountEditor('', { uploadImage: upload });
+        const html = '<p>기사 글<img src="https://news.example.com/a.jpg"></p>';
+        const fake = { clipboardData: { files: [], getData: (t: string) => (t === 'text/html' ? html : t === 'text/plain' ? '기사 글' : '') }, preventDefault() {} };
+        editorOf(wrapper).view.pasteHTML(html, fake);
+        await wrapper.vm.$nextTick();
+        expect(statusOf(wrapper)).toBe('다른 곳의 사진은 옮겨 오지 않아요 — 사진은 파일로 저장한 뒤 넣어 주세요.');
+        expect(markdown(wrapper)).toBe('기사 글');
+        expect(upload).not.toHaveBeenCalled();
+    });
+
+    test('REQ-15 · 본문이 8000자에 거의 차면 올리지 않고 말한다', async () => {
+        const upload = vi.fn(async () => '/api/study/notes/images/1');
+        const wrapper = await mountEditor('ㄱ'.repeat(7980), { uploadImage: upload });
+        await pickFiles(wrapper, [jpgFile()]);
+        await vi.waitFor(() => expect(statusOf(wrapper)).toBe('본문이 8000자에 거의 차서 사진을 더 넣을 수 없어요 — 새 필기에 넣어 주세요.'));
+        expect(upload).not.toHaveBeenCalled();
+    });
+});
+
+// 필기 사진(설계 2026-10-19 T15) — 1568px 원본이 카드 밖으로 나가지 않고, 에디토리얼 테 규칙(REQ-09)을 어기지 않는다.
+// ⚠️ 형식 검사라 「넘침이 실제로 안 난다」는 실 브라우저(원장 U-9)가 본다.
+describe('필기 사진 CSS', () => {
+    const HERE = dirname(fileURLToPath(import.meta.url));
+    const css = readFileSync(join(HERE, '..', '..', '..', '..', 'src', 'main', 'resources', 'static', 'css', 'app.css'), 'utf8');
+
+    test('REQ-19 · app.css가 편집기 사진을 폭 100%·높이 480px 안에 두고 테를 두르지 않는다', () => {
+        const rules = [...css.matchAll(/\.study-editor \.ProseMirror img[^{]*\{([^}]*)\}/g)].map((m) => m[1]);
+        expect(rules.length, '.study-editor .ProseMirror img 규칙').toBeGreaterThan(0);
+        const base = rules[0];
+        expect(base).toMatch(/max-width:\s*100%/);
+        expect(base).toMatch(/max-height:\s*480px/);
+        // 모서리(border-radius)는 테가 아니다 — var(--radius-sm)은 에디토리얼 REQ-07이 허용한다.
+        for (const r of rules) expect(r).not.toMatch(/(^|[;\s])border(?!-radius)(-[a-z-]+)?\s*:/);
+        expect('a { border: 1px solid var(--border); }').toMatch(/(^|[;\s])border(?!-radius)(-[a-z-]+)?\s*:/);   // 양성 대조 — 정규식이 테를 잡는다
     });
 });

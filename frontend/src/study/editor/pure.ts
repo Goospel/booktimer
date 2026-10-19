@@ -1,6 +1,24 @@
 /** 서버 `StudyRecall.BODY_MAX`(VARCHAR 8000)와 같은 값 — 한쪽만 고치면 화면과 400이 어긋난다. */
 export const BODY_MAX = 8000;
 
+/** 필기 사진 주소 — 서버 StudyNoteImage.PATH + id. 이 꼴만 사진이다(노드 · 업로드 응답 검사 · 라벨이 같이 쓴다). */
+export const OWN_IMAGE_PATH = /^\/api\/study\/notes\/images\/[1-9]\d*$/;
+/** 사진 표식 한 개의 길이 상한(대략, `![](` + 경로 + id + `)`) — 본문이 이만큼도 안 남으면 사진을 넣지 않는다. */
+export const PHOTO_MARK_MAX = 40;
+
+/** 붙여넣기에서 올릴 사진 — 글이 함께 오면 글이 이긴다(워드·한글·엑셀은 글을 복사해도 그 그림을 같이 싣는다). 주소 한 줄은 「이미지 복사」다. */
+export function pastedImages(data: { files: ArrayLike<File>; getData(type: string): string } | null): File[] {
+    if (!data) return [];
+    const text = data.getData('text/plain').trim();
+    if (text !== '' && !/^https?:\/\/\S+$/.test(text)) return [];
+    return Array.from(data.files).filter((f) => f.type.startsWith('image/'));
+}
+
+/** 끌어다 놓은 파일 중 사진만 — 비면 부르는 쪽이 「사진 파일만」을 말한다. */
+export function droppedImages(data: { files: ArrayLike<File> } | null): File[] {
+    return data ? Array.from(data.files).filter((f) => f.type.startsWith('image/')) : [];
+}
+
 export interface SlashItem {
     id: string;
     label: string;

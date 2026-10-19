@@ -3,7 +3,11 @@ import { computed, ref, watch } from 'vue';
 import { EditorContent, useEditor } from '@tiptap/vue-3';
 
 import { recallExtensions, type SlashSuggestion } from './extensions';
-import { bodyBudget, cleanMarkdown, filterSlashItems, slashPosition, type SlashItem } from './pure';
+import { foreignImageCount } from './noteImage';
+import {
+    OWN_IMAGE_PATH, PHOTO_MARK_MAX, bodyBudget, cleanMarkdown, droppedImages, filterSlashItems, pastedImages, slashPosition,
+    type SlashItem,
+} from './pure';
 
 /**
  * 백지복습 본문 편집기 — 마크다운으로 받아 마크다운으로 돌려준다.
@@ -20,9 +24,32 @@ const props = withDefaults(defineProps<{
     disabled?: boolean;
     /** 스크린리더에게 이 상자가 무엇인지 — 필기 패널이 「필기 본문」으로 갈아 끼운다. */
     ariaLabel?: string;
-}>(), { ariaLabel: '백지복습 본문' });
+    /**
+     * 사진 올리기 — <b>이걸 받은 편집기만 사진을 안다</b>(필기만 넘긴다, 백지노트는 안 넘긴다 — 설계 D3).
+     * 파일을 받아 서버에 올리고 본문에 넣을 주소를 돌려준다. 던진 Error의 message가 화면 문구다.
+     */
+    uploadImage?: (file: File) => Promise<string>;
+}>(), { ariaLabel: '백지복습 본문', uploadImage: undefined });
 
 const emit = defineEmits<{ (e: 'update:modelValue', value: string): void }>();
+
+/** 사진 노드를 켤지 — 마운트 때 한 번(스키마는 도중에 안 바뀐다 — 나중에 prop이 바뀌어도 노드를 더하거나 빼지 않는다). */
+const images = !!props.uploadImage;
+const uploading = ref(0);
+const imageMessage = ref('');
+const imageInput = ref<HTMLInputElement | null>(null);
+let imageQueue: Promise<void> = Promise.resolve();   // 한 장씩 — 서버 힙·시간당 상한·삽입 순서
+/**
+ * 문서 세대 — 부르는 쪽이 장·책을 갈아 끼울 때 dropPendingImages()로 올린다. 이 편집기는 장 사이에 재사용되고(key 없음)
+ * 같은 문자열로 바뀌는 전환('' → '')은 modelValue watch가 못 본다 — 그래서 watch가 아니라 부르는 쪽이 알린다(설계 §4-8).
+ */
+let docGen = 0;
+const STALE = '사진을 넣으려던 필기가 바뀌어 넣지 않았어요 — 다시 넣어 주세요.';
+
+/** 한글 조합 중에 넣으면 조합 중인 음절이 깨진다 — 끝날 때까지 기다린다(상한 2초, 그 뒤엔 넣는다). */
+async function untilComposed(): Promise<void> {
+    for (let i = 0; i < 40 && editor.value?.view.composing; i += 1) await new Promise((r) => setTimeout(r, 50));
+}
 
 /** 툴바의 활성·잠금 상태를 다시 그리는 방아쇠 — `useEditor`는 트랜잭션에 반응하지 않는다. */
 const tick = ref(0);
@@ -104,7 +131,7 @@ function markdownOf(e: NonNullable<typeof editor.value>): string {
 const editor = useEditor({
     content: props.modelValue,
     contentType: 'markdown',
-    extensions: recallExtensions(slashSuggestion),
+    extensions: recallExtensions(slashSuggestion, { images }),
     editable: !props.disabled,
     // textarea 시절의 aria-label을 잇는다 — 스크린리더에게 이 상자가 무엇인지.
     // 캐럿을 화면 아래 가운데 「독서|공부」 알약(띠 54.8px · 힌트 91.6px) 위로 올린다 — 기본값은 창 아래 5px라
@@ -117,6 +144,33 @@ const editor = useEditor({
         attributes: { 'aria-label': props.ariaLabel, 'aria-expanded': 'false' },
         scrollThreshold: { top: 0, right: 0, bottom: 100, left: 0 },
         scrollMargin: { top: 5, right: 5, bottom: 100, left: 5 },
+        handlePaste: (_view, event) => {
+            if (!images) return false;
+            const files = pastedImages(event.clipboardData);
+            if (files.length === 0) {
+                // 남의 사진이 섞인 HTML — 노드 규칙이 그 img를 버린다. 조용히 빠지지 않게 말하고, 글은 평소처럼 붙인다.
+                if (foreignImageCount(event.clipboardData?.getData('text/html') ?? '') > 0) {
+                    imageMessage.value = '다른 곳의 사진은 옮겨 오지 않아요 — 사진은 파일로 저장한 뒤 넣어 주세요.';
+                }
+                return false;
+            }
+            addImages(files);   // Chrome 「이미지 복사」(파일 + 외부 img HTML)는 이 갈래 — 파일로 올라간다(핫링크 아님)
+            return true;
+        },
+        // 편집기 안에서 옮기기(moved)·글 조각 끌기는 기본 동작. 본문 위에 놓인 파일이면 언제나 받는다 — true면 ProseMirror가 preventDefault해
+        // 브라우저가 그 파일로 페이지를 옮기지 않는다(필기 편집기 한정). 본문 밖(툴바·칩·상태줄)은 onRootDrop이 받는다.
+        handleDrop: (view, event, _slice, moved) => {
+            if (!images || moved || !event.dataTransfer?.files.length) return false;
+            const files = droppedImages(event.dataTransfer);
+            if (files.length === 0) {
+                imageMessage.value = '사진 파일만 넣을 수 있어요.';
+                return true;
+            }
+            const at = view.posAtCoords({ left: event.clientX, top: event.clientY });
+            if (at) editor.value?.commands.setTextSelection(at.pos);
+            addImages(files);
+            return true;
+        },
     },
     onUpdate: ({ editor: e }) => emit('update:modelValue', markdownOf(e)),
     onTransaction: () => { tick.value += 1; },
@@ -283,6 +337,63 @@ function onToolClick(id: string): void {
     chain.run();
 }
 
+function addImages(files: File[]): void {
+    if (!props.uploadImage || props.disabled || files.length === 0) return;
+    imageMessage.value = '';
+    const gen = docGen;   // 넣으려던 장 — 큐에서 차례가 올 때의 세대가 아니라 <b>지금</b> 세대를 들고 간다(2번째 장부터 새 장에 들어가던 길)
+    for (const file of files) {
+        uploading.value += 1;
+        imageQueue = imageQueue.then(() => insertOne(file, gen)).finally(() => { uploading.value -= 1; });
+    }
+}
+
+async function insertOne(file: File, gen: number): Promise<void> {
+    try {
+        if (gen !== docGen) throw new Error(STALE);   // ① 차례를 기다리는 사이 장이 바뀌었다 — 올리지도 않는다
+        const now = editor.value ? markdownOf(editor.value) : props.modelValue;
+        if (bodyBudget(now).remaining < PHOTO_MARK_MAX) {
+            throw new Error('본문이 8000자에 거의 차서 사진을 더 넣을 수 없어요 — 새 필기에 넣어 주세요.');
+        }
+        const src = await props.uploadImage!(file);
+        if (!OWN_IMAGE_PATH.test(src)) throw new Error('사진을 넣지 못했어요.');   // 서버 주소만 — data:·외부 주소는 어떤 길로도 본문에 안 들어간다
+        await untilComposed();
+        if (gen !== docGen) throw new Error(STALE);   // ② 올리는·조합을 기다리는 사이 장이 바뀌었다 — 올라간 사진은 고아(정리가 치운다)
+        const e = editor.value;
+        if (!e || e.isDestroyed) return;   // 화면이 사라졌다 — 올라간 사진은 어디에도 안 쓰여 정리 배치가 치운다(파괴된 편집기에 부르면 예외 — 실측)
+        // ⚠️ 명령은 setEditable(false)를 무시한다(실측) — 잠김은 여기서 직접 본다.
+        if (!e.isEditable) throw new Error('편집이 잠겨 사진을 넣지 않았어요 — 새로고침한 뒤 다시 넣어 주세요.');
+        // 선택의 <b>끝</b>에 넣는다 — 고른 글·사진을 갈아치우지 않는다. focus()를 부르지 않는다(제목 칸 캐럿을 안 뺏는다). 실측: 설계 §2-4 ⑥.
+        e.commands.insertContentAt(e.state.selection.to, { type: 'noteImage', attrs: { src } });
+    } catch (err) {
+        imageMessage.value = err instanceof Error && err.message ? err.message : '사진을 넣지 못했어요.';
+    }
+}
+
+function onPickImages(event: Event): void {
+    const input = event.target as HTMLInputElement;
+    addImages(Array.from(input.files ?? []).filter((f) => f.type.startsWith('image/')));
+    input.value = '';   // 같은 파일을 다시 고를 수 있게(RecallPanel 선례)
+}
+
+/**
+ * 상자 루트의 드래그 — 본문(.ProseMirror) 밖(툴바·「이어 쓰기」 칩·상태줄)에 떨어진 파일도 받는다. 안 받으면 브라우저가 그 파일을 열며
+ * 앱을 떠난다(칩은 슬롯 형제라 ProseMirror의 dragover·drop이 못 본다 — app.css .study-editor-empty-slot). 본문 위 드롭은 handleDrop이
+ * 이미 처리해 defaultPrevented라 여기서 건너뛴다(두 번 올리지 않는다 — jsdom 실측). 백지노트(images 아님)는 지금 그대로.
+ */
+function onRootDragOver(event: DragEvent): void {
+    if (images && Array.from(event.dataTransfer?.types ?? []).includes('Files')) event.preventDefault();   // 놓을 수 있는 자리로 — 안 하면 drop이 오지 않는다
+}
+function onRootDrop(event: DragEvent): void {
+    if (!images || event.defaultPrevented || !event.dataTransfer?.files.length) return;
+    event.preventDefault();
+    const files = droppedImages(event.dataTransfer);
+    if (files.length === 0) {
+        imageMessage.value = '사진 파일만 넣을 수 있어요.';
+        return;
+    }
+    addImages(files);   // 본문 밖이라 놓은 자리가 없다 — 선택 끝에 들어간다
+}
+
 defineExpose({
     editor,
     markdown: () => (editor.value ? markdownOf(editor.value) : ''),
@@ -291,11 +402,17 @@ defineExpose({
      * 스크롤은 하지 않는다: 긴 필기면 막대(측정 종료·시간)가 시작 직후 화면 밖으로 밀린다. 치기 시작하면 브라우저가 캐럿으로 간다.
      */
     focusEnd: () => { editor.value?.commands.focus('end', { scrollIntoView: false }); },
+    /**
+     * 장·책을 갈아 끼울 때 부른다 — 큐에 있거나 올리는 중인 사진을 새 장에 넣지 않게(insertOne이 세대를 대조한다).
+     * <b>문구는 건드리지 않는다</b> — 버려지는 장이 STALE을 남긴다. 여기서 지우면 장 열기처럼 연달아 두 번 불릴 때(선올림 → retarget)
+     * 그 안내가 사라진다(설계 §4-8 실측). 남은 옛 문구는 다음 사진 넣기(addImages)가 지운다.
+     */
+    dropPendingImages: () => { docGen += 1; },
 });
 </script>
 
 <template>
-    <div class="study-editor" data-testid="recall-body">
+    <div class="study-editor" data-testid="recall-body" @dragover="onRootDragOver" @drop="onRootDrop">
         <div class="study-editor-toolbar" role="toolbar" aria-label="글 서식">
             <button
                 v-for="btn in TOOLBAR"
@@ -315,7 +432,22 @@ defineExpose({
                     <text v-if="btn.text" x="12" y="17" text-anchor="middle" font-size="13" font-weight="700" fill="currentColor" stroke="none">{{ btn.text }}</text>
                 </svg>
             </button>
+            <button
+                v-if="images"
+                type="button"
+                class="study-editor-btn"
+                title="사진 넣기 — 붙여 넣기·끌어다 놓기도 돼요"
+                aria-label="사진 넣기"
+                :disabled="disabled"
+                data-testid="editor-btn-image"
+                @click="imageInput?.click()"
+            >
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                    <path d="M4 5h16v14H4z" /><path d="M4 16l5-5 4 4 3-3 4 4" /><path d="M15.5 9h.01" />
+                </svg>
+            </button>
         </div>
+        <input v-if="images" ref="imageInput" type="file" accept="image/jpeg,image/png,image/webp" multiple hidden data-testid="editor-image-input" @change="onPickImages">
 
         <div class="study-editor-body">
             <EditorContent :editor="editor" class="study-editor-content" />
@@ -352,5 +484,7 @@ defineExpose({
         <p v-else-if="budget.remaining < 1000" class="status-line muted" data-testid="editor-budget">
             {{ budget.remaining }}자 남았어요.
         </p>
+        <!-- 늘 그려 두는 live region(내용만 바뀐다). 한 줄에 쓴다: 템플릿 줄바꿈이 공백 글자가 되면 :empty가 안 걸린다 -->
+        <p v-if="images" class="status-line study-editor-image-status" :class="uploading ? 'muted' : 'study-error'" role="status" data-testid="editor-image-status">{{ uploading ? `사진 올리는 중… ${uploading}장` : imageMessage }}</p>
     </div>
 </template>
