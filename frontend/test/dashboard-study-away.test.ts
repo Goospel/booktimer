@@ -12,6 +12,7 @@ import { describe, test, expect, vi, beforeEach, afterEach } from 'vitest';
 import { mount, flushPromises } from '@vue/test-utils';
 import DashboardApp from '../src/dashboard/DashboardApp.vue';
 import { AWAY_KEY, AWAY_PREF_KEY } from '../src/dashboard/studyAway';
+import { PAUSE_KEY } from '../src/dashboard/studyPause';
 
 const START = Date.parse('2026-09-28T01:00:00.000Z');
 const MOUNT_AT = START + 600_000;
@@ -212,11 +213,11 @@ describe('DashboardApp — 공부 측정 중 탭을 떠나면 멈춘다', () => 
 
     test('(w14) 안내 live region은 늘 있고 내용만 바뀐다 — 스크린리더가 삽입과 함께 놓치지 않게', async () => {
         const w = await mountDash();
-        const live = w.find('.dash-timer-hero [role="status"]');
+        const live = w.find('.dash-timer-hero .focus-away[role="status"]');
         expect(live.exists()).toBe(true);
         expect(live.text()).toBe('');
         await leaveFor(300_000);
-        const after = w.find('.dash-timer-hero [role="status"]');
+        const after = w.find('.dash-timer-hero .focus-away[role="status"]');
         expect(after.element).toBe(live.element);
         expect(after.text()).toContain('5분 자리를 비워');
     });
@@ -576,5 +577,222 @@ describe('DashboardApp — 자리 비움 선택 · 리뷰 보강', () => {
         setVisible('visible');
         await flushPromises();
         expect(request).toHaveBeenCalledTimes(2);
+    });
+});
+
+// 일시정지(설계 2026-10-20-study-timer-keyboard-shortcut §6-4·§7 Task 3) — 손으로 멈춘 구간은 자리 비움과 따로 원장(bt.study.pause)에 쌓여
+// 기기·선택과 무관하게 종료 본문 awayIntervals에 함께 실린다.
+//  · 통과가 확정하는 것: 터치·끔에서도 실린다 · 멈춘 채 종료는 지금까지를 닫아 싣는다 · 두 원장이 한 본문 · 실패·409·400 분기 ·
+//    새로고침·재조회(표기 차이)에도 멈춤 유지 · 멈춘 동안 자리 비움 없음(두 번 빼지 않음) · 화면 잠금 풀고 다시 잡음 ·
+//    필기 본문 포커스에서도 작동하고 편집기는 키를 못 받음 · 시트 열림이면 무시 · 다른 탭의 멈춤을 따름.
+//  · 실패가 배제하는 것: 원장을 자리 비움 게이트에 묶기 · watch 키의 canonicalIso 누락 · 캡처 단계가 아닌 리스너 · 겹친 차감.
+//  · jsdom은 글자 입력을 재현하지 못한다 — 「본문에 π·ㅔ가 안 들어갔다」는 여기서 단언하지 않는다(공허, U1~U4가 잰다).
+const altP = (target: EventTarget = window, o: KeyboardEventInit = {}) => {
+    const e = new KeyboardEvent('keydown', { code: 'KeyP', key: 'p', altKey: true, bubbles: true, cancelable: true, ...o });
+    target.dispatchEvent(e);
+    return e;
+};
+const pill = (w: ReturnType<typeof mount>) => w.find('[data-testid="focus-state"]').text();
+const pauseLedger = () => JSON.parse(localStorage.getItem(PAUSE_KEY) ?? 'null') as { intervals: unknown[]; pausedFrom: string | null } | null;
+const NOTE_BOOK = { id: 5, title: '헌법', author: null, coverUrl: null, isbn13: null, readCount: 0, purchaseLink: null, totalSeconds: 0, sessionGoalSeconds: null };
+
+describe('DashboardApp — 일시정지', () => {
+    afterEach(() => { delete (navigator as { wakeLock?: unknown }).wakeLock; });
+
+    test('REQ-03 · 터치 기기·자리 비움 끔이어도 2분 멈췄다 다시 시작한 구간이 종료 본문에 실린다', async () => {
+        vi.stubGlobal('matchMedia', () => ({ matches: false }));
+        localStorage.removeItem(AWAY_PREF_KEY);
+        const w = await mountDash();
+        const t0 = Date.now();
+        altP();
+        await flushPromises();
+        expect(pill(w)).toBe('일시정지');
+        vi.advanceTimersByTime(120_000);
+        altP();
+        await flushPromises();
+        expect(pill(w)).toBe('측정 중');
+        expect(localStorage.getItem(AWAY_KEY)).toBeNull();   // 대조 — 자리 비움 원장은 여전히 없다
+        await btnWith(w, '측정 종료').trigger('click');
+        await vi.waitFor(() => expect(stops).toHaveLength(1));
+        expect(sentIntervals()).toEqual([{ from: iso(t0), to: iso(t0 + 120_000) }]);
+    });
+
+    test('REQ-03 · 멈춘 채 종료하면 지금까지를 닫아 싣고, 성공하면 일시정지 원장을 지운다', async () => {
+        const w = await mountDash();
+        const t0 = Date.now();
+        altP();
+        vi.advanceTimersByTime(60_000);
+        const stopAt = Date.now();
+        await btnWith(w, '측정 종료').trigger('click');
+        await vi.waitFor(() => expect(stops).toHaveLength(1));
+        await flushPromises();
+        expect(sentIntervals()).toEqual([{ from: iso(t0), to: iso(stopAt) }]);
+        expect(localStorage.getItem(PAUSE_KEY)).toBeNull();
+    });
+
+    test('REQ-03 · 자리 비움 구간과 일시정지 구간이 한 본문에 함께 실린다', async () => {
+        const w = await mountDash();
+        const leftAt = await leaveFor(300_000);
+        const t0 = Date.now();
+        altP();
+        vi.advanceTimersByTime(60_000);
+        altP();
+        await btnWith(w, '측정 종료').trigger('click');
+        await vi.waitFor(() => expect(stops).toHaveLength(1));
+        expect(sentIntervals()).toHaveLength(2);
+        expect(sentIntervals()).toEqual(expect.arrayContaining([
+            { from: iso(leftAt), to: iso(leftAt + 300_000) },
+            { from: iso(t0), to: iso(t0 + 60_000) },
+        ]));
+    });
+
+    test('REQ-03 · 멈춘 채 종료가 네트워크 실패면 멈춘 채 남고, 409면 원장을 지운다', async () => {
+        stopMode = 'network';
+        const w = await mountDash();
+        altP();
+        vi.advanceTimersByTime(60_000);
+        await btnWith(w, '측정 종료').trigger('click');
+        await vi.waitFor(() => expect(stops).toHaveLength(1));
+        await flushPromises();
+        expect(pauseLedger()?.pausedFrom).not.toBeNull();
+        expect(pill(w)).toBe('일시정지');
+
+        stopMode = '409';
+        await btnWith(w, '측정 종료').trigger('click');
+        await vi.waitFor(() => expect(stops).toHaveLength(2));
+        expect(sentIntervals(1)).toHaveLength(1);
+        await flushPromises();
+        expect(localStorage.getItem(PAUSE_KEY)).toBeNull();
+    });
+
+    test('REQ-03 · 일시정지 구간을 실은 종료가 400이면 원장을 비우고 본문 없이 1회 다시 보낸다', async () => {
+        stopQueue.push(400, 200);
+        const w = await mountDash();
+        altP();
+        vi.advanceTimersByTime(60_000);
+        altP();
+        await btnWith(w, '측정 종료').trigger('click');
+        await vi.waitFor(() => expect(stops).toHaveLength(2));
+        await flushPromises();
+        expect(sentIntervals(0)).toHaveLength(1);
+        expect(stops[1].body).toBeUndefined();
+        expect(localStorage.getItem(PAUSE_KEY)).toBeNull();
+        await vi.waitFor(() => expect(w.find('[data-testid="focus-bar"]').exists()).toBe(false));
+    });
+
+    test('REQ-02 · 멈춘 채 새로고침(재마운트)해도 멈춘 순간 값에 서 있다', async () => {
+        const a = await mountDash();
+        altP();
+        await flushPromises();
+        expect(session(a)).toBe('10:00');
+        a.unmount(); mounted.splice(mounted.indexOf(a), 1);
+        vi.advanceTimersByTime(60_000);
+        const b = await mountDash();
+        await flushPromises();
+        expect(pill(b)).toBe('일시정지');
+        expect(session(b)).toBe('10:00');
+    });
+
+    test('REQ-02 · 시작 응답(100ns)과 복귀 재조회(µs) 표기가 달라도 멈춤이 풀리지 않는다(T-258)', async () => {
+        localStorage.setItem('booktimer.timerMode', 'study');
+        dash = { ...dash, study: STUDY_IDLE };
+        const w = await mountDash();
+        await btnWith(w, '공부 측정 시작').trigger('click');
+        await vi.waitFor(() => expect(w.find('[data-testid="focus-bar"]').exists()).toBe(true));
+        altP();
+        await flushPromises();
+        expect(pill(w)).toBe('일시정지');
+        const dashCalls = () => (fetch as unknown as { mock: { calls: unknown[][] } }).mock.calls
+            .filter(c => String(c[0]).includes('/api/dashboard')).length;
+        const before = dashCalls();
+        await leaveFor(300_000);
+        await flushPromises();
+        expect(dashCalls()).toBe(before + 1);   // 조건 성립 확인 — 재조회가 µs 표기를 실어 왔다
+        expect(pill(w)).toBe('일시정지');
+    });
+
+    test('REQ-06 · 멈춘 동안 5분 떠났다 와도 자리 비움 안내·구간이 없고, 시간을 두 번 빼지 않는다', async () => {
+        const w = await mountDash();
+        altP();
+        await flushPromises();
+        expect(session(w)).toBe('10:00');
+        await leaveFor(300_000);
+        expect(notice(w).exists()).toBe(false);
+        expect(awayLedger().intervals).toEqual([]);
+        altP();
+        await flushPromises();
+        expect(session(w)).toBe('10:00');   // 두 번 빼면 05:00
+        await vi.advanceTimersByTimeAsync(1_000);
+        expect(session(w)).toBe('10:01');
+    });
+
+    test('REQ-06 · 멈추면 화면 잠금을 풀고, 다시 시작하면 다시 잡는다', async () => {
+        const { request, locks } = installWakeLock();
+        await mountDash();
+        await flushPromises();
+        expect(request).toHaveBeenCalledTimes(1);
+        altP();
+        await flushPromises();
+        expect(locks[0].released).toBe(true);
+        altP();
+        await flushPromises();
+        expect(request).toHaveBeenCalledTimes(2);
+        expect(locks[1].released).toBe(false);
+    });
+
+    // 실 브라우저 실측(2026-10-20)에서 잡힌 결함 — 자리 비움 watch가 먼저 돌면 멈춤을 모른 채 잠금을 한 번 잡았다 곧 풀었다.
+    test('REQ-06 · 멈춘 채 새로고침하면 화면 잠금을 잡지 않는다(watch 순서)', async () => {
+        localStorage.setItem(PAUSE_KEY, JSON.stringify({ startedAt: iso(START), intervals: [], pausedFrom: iso(MOUNT_AT - 60_000) }));
+        const { request } = installWakeLock();
+        const w = await mountDash();
+        await flushPromises();
+        expect(pill(w)).toBe('일시정지');
+        expect(request).toHaveBeenCalledTimes(0);
+        altP();   // 양성 대조 — 다시 시작하면 잡는다
+        await flushPromises();
+        expect(request).toHaveBeenCalledTimes(1);
+    });
+
+    test('REQ-07 · 필기 본문에 포커스가 있어도 Alt+P로 멈추고, 편집기는 그 키를 받지 않는다', async () => {
+        dash = { ...dash, study: { ...STUDY_ACTIVE, activeBook: NOTE_BOOK, books: [NOTE_BOOK], recentBookId: 5 } };
+        const w = await mountDash();
+        await vi.waitFor(() => expect(w.find('.ProseMirror').exists()).toBe(true));
+        const editor = w.find('.ProseMirror').element as HTMLElement;
+        editor.focus();
+        const spy = vi.fn();
+        editor.addEventListener('keydown', spy);
+        // 양성 대조 — 다른 조합은 편집기에 닿는다(spy가 살아 있다)
+        altP(editor, { code: 'KeyO', key: 'o' });
+        expect(spy).toHaveBeenCalledTimes(1);
+
+        const e = altP(editor);
+        await flushPromises();
+        expect(pill(w)).toBe('일시정지');
+        expect(e.defaultPrevented).toBe(true);
+        expect(spy).toHaveBeenCalledTimes(1);
+    });
+
+    test('REQ-07 · 공부 책 시트가 열려 있으면 Alt+P가 상태를 바꾸지 않는다(닫으면 바뀐다 — 양성 대조)', async () => {
+        dash = { ...dash, study: { ...STUDY_ACTIVE, activeBook: NOTE_BOOK, books: [NOTE_BOOK], recentBookId: 5 } };
+        const w = await mountDash();
+        await btnWith(w, '책 바꾸기').trigger('click');
+        await vi.waitFor(() => expect(w.find('.book-sheet-overlay').exists()).toBe(true));
+        altP();
+        await flushPromises();
+        expect(pill(w)).toBe('측정 중');
+        await w.find('.book-sheet-overlay').trigger('click');
+        await vi.waitFor(() => expect(w.find('.book-sheet-overlay').exists()).toBe(false));
+        altP();
+        await flushPromises();
+        expect(pill(w)).toBe('일시정지');
+    });
+
+    test('REQ-09 · 다른 탭에서 멈추면(storage 이벤트) 이 탭도 「일시정지」로 선다', async () => {
+        const w = await mountDash();
+        expect(pill(w)).toBe('측정 중');
+        localStorage.setItem(PAUSE_KEY, JSON.stringify({ startedAt: iso(START), intervals: [], pausedFrom: iso(Date.now()) }));
+        window.dispatchEvent(new StorageEvent('storage', { key: PAUSE_KEY }));
+        await flushPromises();
+        expect(pill(w)).toBe('일시정지');
     });
 });

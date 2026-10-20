@@ -47,7 +47,7 @@ export function undo(l: AwayLedger, iv: AwayInterval): AwayLedger {
     return { ...l, intervals: l.intervals.filter(x => x.from !== iv.from || x.to !== iv.to) }
 }
 
-export function awaySeconds(l: AwayLedger | null): number {
+export function awaySeconds(l: { intervals: AwayInterval[] } | null): number {
     if (!l) return 0
     return l.intervals.reduce((s, iv) => s + Math.floor((Date.parse(iv.to) - Date.parse(iv.from)) / 1000), 0)
 }
