@@ -1157,7 +1157,7 @@ describe('필기 패널 — 본문을 다 비운 저장된 장', () => {
         vi.stubGlobal('confirm', vi.fn(() => true));
         vi.mocked(fetch).mockResolvedValueOnce(fail(500, ''));
         await wrapper.find('[data-testid="notes-delete"]').trigger('click');
-        await flushPromises();                     // 「지우기」가 실패했다 — 세대만 올랐다
+        await flushPromises();                     // 「지우기」가 실패했다 — 화면은 장 5 그대로
 
         removing.resolve(okJson({ deleted: true }));
         await flushPromises();
@@ -1248,6 +1248,8 @@ describe('필기 패널 — 저장 경합 후속', () => {
         await vi.advanceTimersByTimeAsync(1500);                 // 갱신이 날아가 있다
         vi.mocked(fetch).mockResolvedValueOnce(fail(500, ''));     // 「지우기」 실패
         await clickRemove(wrapper);
+        expect(wrapper.text(), '「지우기」 오류 줄 — 서버 문구 그대로').toContain('필기를 지우지 못했어요.');
+        expect(wrapper.text()).not.toContain('연결을 확인');
         updating.resolve(okJson(noteOf({ id: 5, body: 'A2', revision: 1 })));
         await flushPromises();
         expect(status(wrapper).text()).toContain('저장됨');
@@ -1315,6 +1317,41 @@ describe('필기 패널 — 저장 경합 후속', () => {
         expect(posts().filter((p) => p.url === '/api/study/notes'), '처음 생성 한 번뿐').toHaveLength(1);
         expect(bodyOf(wrapper)).toBe('');
         expect(wrapper.find('[data-testid="notes-delete"]').exists()).toBe(false);
+    });
+
+    test('「지우기」가 실패한 뒤의 갱신 404는 새 필기로 돌린다 — 울타리는 지우기가 끝나면 걷힌다', async () => {
+        const wrapper = await saved();
+        vi.mocked(fetch).mockResolvedValueOnce(fail(500, ''));
+        await clickRemove(wrapper);
+        vi.mocked(fetch).mockResolvedValueOnce(fail(404, '')).mockResolvedValueOnce(okJson(noteOf({ id: 6, body: 'AB', revision: 0 })));
+        await type(wrapper, 'AB');
+        await settle();
+        expect(posts().slice(1).map((p) => p.url)).toEqual(['/api/study/notes/5/delete', '/api/study/notes/5', '/api/study/notes']);
+    });
+
+    test('폴백은 세대 대조 뒤다 — 다른 장을 여는 사이 끝난 옛 장 갱신의 404는 새로 연 장을 끊지 않는다', async () => {
+        const wrapper = await mountPanel({}, [rowOf(6, '나')]);
+        vi.mocked(fetch).mockResolvedValueOnce(okJson(noteOf({ id: 5, body: 'A', revision: 0 })));
+        await type(wrapper, 'A');
+        await settle();
+
+        const opening = deferred();
+        const updating = deferred();
+        vi.mocked(fetch).mockReturnValueOnce(opening.promise);    // 장 6 조회
+        vi.mocked(fetch).mockReturnValueOnce(updating.promise);   // 장 5 갱신
+        await openMenu(wrapper);
+        await wrapper.findAll('[data-testid="notes-item"]').find((b) => b.text().startsWith('나'))!.trigger('click');
+        await flushPromises();
+        await type(wrapper, 'A2');                                // 조회 중 화면은 아직 장 5다
+        await vi.advanceTimersByTimeAsync(1500);
+        opening.resolve(okJson(noteOf({ id: 6, body: 'B6', revision: 3 })));
+        await flushPromises();
+        updating.resolve(fail(404, ''));                          // 옛 장 5의 갱신 404 — 이미 장 6으로 갈아탔다
+        await settle();
+
+        expect(posts().map((p) => p.url), '생성이 다시 나가지 않는다').toEqual(['/api/study/notes', '/api/study/notes/5']);
+        expect(wrapper.find('[data-testid="notes-delete"]').exists(), '장 6의 짝이 그대로다').toBe(true);
+        expect(bodyOf(wrapper)).toBe('B6');
     });
 
     test('REQ-35 · 연결 오류는 영어 브라우저 문구 대신 한국어로 알린다 — 상태줄(저장)과 「지우기」 오류 줄', async () => {

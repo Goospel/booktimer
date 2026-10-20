@@ -412,7 +412,8 @@ async function remove(): Promise<void> {
 /**
  * 편집기가 부르는 사진 올리기 — 줄여서 올리고 주소를 준다. 보낼 때의 세대(seq)를 들고 갔다가 돌아와 대조한다(sendOnce와 같은 규율):
  * 그 사이 다른 장·책으로 갈아탔으면 거절한다 — 안 그러면 사진이 새 장에 붙는다. 올라간 사진은 어디에도 안 쓰여 정리 배치가 치운다.
- * (주된 막이는 편집기 세대 — bumpSeq가 dropPendingImages를 부른다. 이 대조는 같은 규율의 두 번째 벨트로 남긴다.)
+ * (주된 막이는 편집기 세대 — bumpSeq가 dropPendingImages를 부른다. 이 대조는 같은 규율의 두 번째 벨트로 남긴다.
+ * 「지우기」 응답 전에는 seq가 안 오르므로 편집기 세대(docGen)만 막는다.)
  * 던지는 문구는 편집기 상태줄에 그대로 뜬다(잠김은 편집기가 삽입 자리에서 직접 본다).
  */
 async function uploadImage(file: File): Promise<string> {
