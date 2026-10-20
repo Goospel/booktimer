@@ -2839,6 +2839,10 @@ body .focus-stack.is-merged > .dash-card.is-study { border: 0; border-radius: 0;
 .focus-actions { display: flex; align-items: center; gap: 14px; margin-left: auto; }
 .focus-bar .dash-btn-outline { width: auto; margin: 0; padding: 9px 20px; font-size: 15px; }
 .focus-bar .dash-bookless { align-self: auto; }
+/* 측정 시작·종료 단축키 힌트 — 버튼 안 작은 보조 글자(글자 바닥 13px, editorialTheme REQ-24). 색은 버튼 글자를 물려받아 흐리게:
+   토큰 색을 박으면 검정 알약 위에서 대비가 무너진다. 폰(639px 이하)엔 외장 키보드가 드물어 숨긴다. */
+.focus-kbd { margin-left: 8px; font: inherit; font-size: 13px; opacity: .7; }
+@media (max-width: 639px) { .focus-kbd { display: none; } }
 .focus-top .dash-goal-edit { flex-basis: 100%; justify-content: flex-start; margin-top: 10px; }
 /* 탭을 떠나 멈춘 안내 — 폼과 같은 자리(막대 아래 한 줄)의 조용한 문장. 움직임 없음(정적 표현이 기본값, T-176). */
 .focus-away { flex-basis: 100%; margin: 10px 0 0; font-size: 13px; color: var(--muted); }

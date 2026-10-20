@@ -566,6 +566,8 @@ describe('StudyTimerCard — 에디토리얼 검정 알약(PR-2)', () => {
         // 양성 대조 — 폼이 실제로 열렸고 그 안에 「저장」이 있다.
         expect(w.find('form.dash-goal-edit').exists()).toBe(true);
         expect(w.findAll('form.dash-goal-edit button').some((b) => b.text().includes('저장'))).toBe(true);
-        expect(w.findAll('.btn-primary, .dash-btn-fill, .auth-btn-primary').map((b) => b.text())).toEqual(['공부 측정 시작']);
+        const fills = w.findAll('.btn-primary, .dash-btn-fill, .auth-btn-primary');
+        expect(fills).toHaveLength(1);   // 검정 알약은 하나 — 글자 뒤에 단축키 힌트가 붙는다(설계 2026-10-20-study-timer-start-stop-shortcut)
+        expect(fills[0].text()).toContain('공부 측정 시작');
     });
 });

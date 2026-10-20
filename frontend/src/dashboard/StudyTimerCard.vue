@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, watch, computed, nextTick, onUnmounted, useId } from 'vue'
+import { ref, watch, computed, nextTick, onMounted, onUnmounted, useId } from 'vue'
 import { useReadingTimer } from './useReadingTimer'
 import { fmtMSS, goalLabel } from './timerProgress'
 import { sessionGoalView, minutesToSessionGoal } from './sessionGoal'
@@ -9,6 +9,7 @@ import type { StudyBookRow } from '../study/api'
 import type { AwayInterval } from './studyAway'
 import { AWAY_GRACE_MS } from './studyAway'
 import ClockDigits from '../shared/ClockDigits.vue'
+import { isStudyShortcut, studyShortcutLabel } from './studyShortcut'
 
 const props = withDefaults(defineProps<{
     /** 오늘 공부한 초(완료 세션 합) — 측정 중 몫은 elapsed로 얹는다(독서와 같은 분업). */
@@ -37,7 +38,9 @@ const props = withDefaults(defineProps<{
     awayAvailable?: boolean
     /** 이 기기의 자리 비움 선택(기본 꺼짐). */
     awayOn?: boolean
-}>(), { books: () => [], recentBookId: null, pickedBook: null, activeBook: null, awaySeconds: 0, awayNotice: null, awayAvailable: false, awayOn: false })
+    /** 책 시트가 열려 있으면 true — 딤 뒤의 버튼처럼 단축키도 무시한다(조합은 삼킨다). */
+    shortcutLocked?: boolean
+}>(), { books: () => [], recentBookId: null, pickedBook: null, activeBook: null, awaySeconds: 0, awayNotice: null, awayAvailable: false, awayOn: false, shortcutLocked: false })
 
 const emit = defineEmits<{
     start: [bookId: number | null]; stop: []
@@ -51,6 +54,20 @@ const emit = defineEmits<{
 // 홈 필기 카드도 같은 함수를 본다(DashboardApp) — 각자 계산하면 「칩엔 A, 필기엔 B」로 갈린다.
 const defaultBook = computed<StudyBookRow | null>(() =>
     defaultStudyBookOf(props.books, props.recentBookId, props.pickedBook))
+
+// ── 측정 시작·종료 단축키 ──
+const shortcutLabel = studyShortcutLabel(navigator.platform)
+// 창 캡처 단계 — 편집기(ProseMirror)보다 먼저 받아 삼킨다. 버튼과 같은 emit을 낸다. 카드는 공부 모드에서만 마운트된다.
+function onShortcut(e: KeyboardEvent) {
+    if (!isStudyShortcut(e)) return
+    e.preventDefault()      // 맥·아이패드 Option+P의 π 입력까지 막는다
+    e.stopPropagation()     // 편집기 키맵에 넘기지 않는다
+    if (e.repeat || props.starting || props.stopping || props.shortcutLocked) return
+    if (props.hasActiveSession) emit('stop')
+    else emit('start', defaultBook.value?.id ?? null)   // 주 버튼과 같은 책 — 서재가 비면 null
+}
+onMounted(() => window.addEventListener('keydown', onShortcut, true))
+onUnmounted(() => window.removeEventListener('keydown', onShortcut, true))
 
 
 // props를 ref로 래핑해 composable에 전달(TimerCard와 같은 3줄). 공부엔 부채가 없어 base는 0 —
@@ -145,8 +162,8 @@ defineExpose({ closeEdit })
                 <button type="button" class="dash-btn-link dash-bookless" :disabled="changing" @click="emit('changeBook')">
                     책 바꾸기
                 </button>
-                <button type="button" class="dash-btn-outline" :disabled="stopping" @click="emit('stop')">
-                    {{ stopping ? '종료하는 중…' : '측정 종료' }}
+                <button type="button" class="dash-btn-outline" :disabled="stopping" aria-keyshortcuts="Alt+P" @click="emit('stop')">
+                    {{ stopping ? '종료하는 중…' : '측정 종료' }}<kbd class="focus-kbd" aria-hidden="true">{{ shortcutLabel }}</kbd>
                 </button>
             </div>
         </div>
@@ -208,8 +225,8 @@ defineExpose({ closeEdit })
                 <!-- 서재가 비어도 시작을 막지 않는다 — 담으러 가는 문은 링크 하나로 곁에 둔다. -->
                 <template v-else>
                     <span class="dash-idle-label">지금 공부를 시작할까요?</span>
-                    <button type="button" class="dash-btn-fill" :disabled="starting" @click="emit('start', null)">
-                        {{ starting ? '시작하는 중…' : '공부 측정 시작' }}
+                    <button type="button" class="dash-btn-fill" :disabled="starting" aria-keyshortcuts="Alt+P" @click="emit('start', null)">
+                        {{ starting ? '시작하는 중…' : '공부 측정 시작' }}<kbd class="focus-kbd" aria-hidden="true">{{ shortcutLabel }}</kbd>
                     </button>
                     <a class="dash-btn-link dash-bookless" href="/study/books">공부 서재에 책 담기</a>
                 </template>
@@ -235,8 +252,8 @@ defineExpose({ closeEdit })
 
                 <!-- 대기·책 있음의 시작 버튼 둘은 폼 **뒤**에 둔다(폼이 손잡이와 시작 사이에 끼도록). -->
                 <template v-if="defaultBook">
-                    <button type="button" class="dash-btn-fill" :disabled="starting" @click="emit('start', defaultBook.id)">
-                        {{ starting ? '시작하는 중…' : '공부 측정 시작' }}
+                    <button type="button" class="dash-btn-fill" :disabled="starting" aria-keyshortcuts="Alt+P" @click="emit('start', defaultBook.id)">
+                        {{ starting ? '시작하는 중…' : '공부 측정 시작' }}<kbd class="focus-kbd" aria-hidden="true">{{ shortcutLabel }}</kbd>
                     </button>
                     <button type="button" class="dash-btn-link dash-bookless" :disabled="starting" @click="emit('start', null)">책 없이 시작</button>
                 </template>

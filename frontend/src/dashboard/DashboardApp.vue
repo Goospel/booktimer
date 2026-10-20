@@ -375,7 +375,8 @@ async function handleStudyStart(bookId: number | null) {
             // 책 없이 시작했으면 비우지 않는다 — 비우면 시작 순간 칩이 recent로 바뀌어 필기가 튄다.
             if (bookId !== null) pickedStudyBook.value = null
         })
-        if (finePointer()) notesCard.value?.focusEnd()
+        // 이미 필기 본문·제목에서 쓰고 있었으면(단축키로 시작) 그 자리를 지킨다 — 글 끝으로 옮기면 쓰던 자리를 잃는다(설계 REQ-06).
+        if (finePointer() && !document.activeElement?.closest('.focus-body .ProseMirror, .focus-body input')) notesCard.value?.focusEnd()
     } catch {
         actionError.value = '네트워크 오류가 발생했습니다'
     } finally {
@@ -696,6 +697,7 @@ function onSheetAdded(book: { id: number; title: string; status: string }) {
                 @dismiss-away="awayNotice = null"
                 :away-available="finePointer()"
                 :away-on="awayOn"
+                :shortcut-locked="studySheet !== null"
                 @set-away-on="setAwayOn"
                 @start="handleStudyStart"
                 @stop="handleStudyStop"
