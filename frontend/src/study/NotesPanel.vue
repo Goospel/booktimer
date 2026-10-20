@@ -273,14 +273,32 @@ async function sendOnce(keepalive: boolean): Promise<void> {
     if (next.kind !== 'saving') return;
     const mine = seq;
     const { id, bookId: book, title, body, revision } = draft.value;
+    const empty = body.trim().length === 0;
     // 빈 초안은 서버에 행을 만들지 않는다 — 「새 필기」를 눌러만 두고 떠나면 아무 일도 없어야 한다.
-    if (book === null || body.trim().length === 0) {
+    if (book === null || (empty && id === null)) {
         state.value = { kind: 'idle' };
         return;
     }
 
     state.value = next;
     try {
+        if (empty && id !== null) {
+            // 저장된 장을 다 비웠다 — 본문이 빈 필기는 남기지 않는다(위 새 초안과 같은 판정식, 설계 2026-10-19 note-empty-body-save).
+            // retarget이 아니다: 화면(제목·본문·되돌리기 기록)과 세대(seq)는 그대로 두고 서버의 짝(id·revision)만 끊는다 —
+            // 세대를 올리면 비운 장에 올리던 사진이 버려진다. 이어 쓰면 새 장으로 생긴다.
+            // revision을 싣는다(다른 곳에서 고쳐진 장이면 서버가 409). 404는 이미 없다는 뜻이라 바라던 끝이다.
+            await deleteNote(id, revision, keepalive).catch((e: unknown) => {
+                if (!(e instanceof ApiError && e.status === 404)) throw e;
+            });
+            notes.value = notes.value.filter((n) => n.id !== id);
+            // 세대가 아니라 id로 판정한다 — 「지우기」가 실패하면 세대만 오르고 화면은 아직 이 장이라, 세대로 버리면
+            // 서버에서 이미 지운 id를 쥔 채 「저장 중…」에 굳는다(리뷰 m-1). 다른 장으로 갈아탔으면 id가 달라 손대지 않는다.
+            if (draft.value.id !== id) return;
+            draft.value.id = null;
+            draft.value.revision = 0;
+            state.value = nextSaveState(state.value, { type: 'emptied' });
+            return;
+        }
         const saved: Note = id === null
             ? await createNote({ bookId: book, title, body }, keepalive)
             // imageAware — 「이 편집기는 사진 노드를 켰다(:upload-image)」. 둘이 이 파일 안에서 같이 움직인다.
@@ -357,11 +375,15 @@ async function remove(): Promise<void> {
     bumpSeq();
     try {
         await deleteNote(id);
-        notes.value = notes.value.filter((n) => n.id !== id);
-        retarget(blank());
     } catch (e) {
-        listError.value = e instanceof Error && e.message ? e.message : '필기를 지우지 못했어요.';
+        // 404 = 이미 없다(자동 삭제와 엇갈림 · 다른 곳에서 지움) — 지우려던 끝이 이미 와 있다.
+        if (!(e instanceof ApiError && e.status === 404)) {
+            listError.value = e instanceof Error && e.message ? e.message : '필기를 지우지 못했어요.';
+            return;
+        }
     }
+    notes.value = notes.value.filter((n) => n.id !== id);
+    retarget(blank());
 }
 
 /**
@@ -489,9 +511,10 @@ async function uploadImage(file: File): Promise<string> {
             </RecallEditor>
 
             <!-- 상태줄이 저장 버튼을 대신한다 — 「지금 저장됐나」를 사용자가 물을 곳이 여기뿐이다. -->
-            <p class="status-line study-notes-status" :class="{ 'study-error': state.kind !== 'saving' && state.kind !== 'saved' }" data-testid="notes-status">
+            <p class="status-line study-notes-status" :class="{ 'study-error': state.kind !== 'saving' && state.kind !== 'saved' && state.kind !== 'emptied' }" data-testid="notes-status">
                 <template v-if="state.kind === 'saving'">저장 중…</template>
                 <template v-else-if="state.kind === 'saved'">저장됨 · {{ savedAtLabel(state.at) }}</template>
+                <template v-else-if="state.kind === 'emptied'">본문이 빈 필기는 남기지 않아요 — 이어 쓰면 새로 저장돼요</template>
                 <template v-else-if="state.kind === 'conflict' || state.kind === 'invalid' || state.kind === 'error'">{{ state.message }}</template>
             </p>
 

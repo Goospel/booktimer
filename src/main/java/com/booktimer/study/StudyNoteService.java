@@ -37,6 +37,9 @@ public class StudyNoteService {
 
     static final String OUTDATED_EDITOR = "필기 화면이 새로 바뀌었어요 — 브라우저에서 이 페이지를 새로고침(F5)한 뒤 이어서 써 주세요";
 
+    /** 판이 낡은 갱신·자동 삭제의 409 사유 — 화면 상태줄에 그대로 뜬다. */
+    static final String STALE_NOTE = "다른 곳에서 고쳐진 필기예요 — 새로고침한 뒤 이어서 써 주세요";
+
     private final StudyNoteRepository noteRepository;
     private final StudyNoteImageRepository imageRepository;
     private final RateLimitService rateLimitService;
@@ -121,8 +124,7 @@ public class StudyNoteService {
         try {
             note.edit(title, body, revision);
         } catch (StudyNote.StaleNoteException e) {
-            throw new ResponseStatusException(HttpStatus.CONFLICT,
-                    "다른 곳에서 고쳐진 필기예요 — 새로고침한 뒤 이어서 써 주세요");
+            throw new ResponseStatusException(HttpStatus.CONFLICT, STALE_NOTE);
         }
         return noteRepository.save(note);
     }
@@ -181,9 +183,27 @@ public class StudyNoteService {
         }
     }
 
-    /** @throws ResponseStatusException 404 — 없거나 남의 필기(존재 비노출) */
-    public void delete(User user, Long id) {
-        noteRepository.delete(owned(user, id));
+    /**
+     * 내 필기를 지운다.
+     *
+     * <p>{@code revision}은 <b>자동 삭제</b>(화면이 저장된 장의 본문을 다 비웠다 — 설계 2026-10-19 note-empty-body-save)만 싣는다.
+     * 그 사이 다른 곳(다른 탭·기기)에서 고쳐졌으면 409로 거절하고 <b>지우지 않는다</b> — 확인창이 없는 삭제라 갱신과 같은 규율이 필요하다.
+     * 확인창을 거치는 「지우기」 버튼과 열린 옛 번들은 싣지 않는다(null — 지금처럼 지운다).
+     *
+     * <p>순서: 소유(404) → 판 대조(409) → 삭제. 뒤집으면 409/404 차이로 남의 필기 존재를 캐낼 수 있다({@link #update}와 같다).
+     *
+     * @throws ResponseStatusException 404 — 없거나 남의 필기(존재 비노출) / 409 — revision이 낡았다(지우지 않는다)
+     */
+    public void delete(User user, Long id, Integer revision) {
+        StudyNote note = owned(user, id);
+        if (revision != null) {
+            try {
+                note.requireRevision(revision);
+            } catch (StudyNote.StaleNoteException e) {
+                throw new ResponseStatusException(HttpStatus.CONFLICT, STALE_NOTE);
+            }
+        }
+        noteRepository.delete(note);
     }
 
     /**

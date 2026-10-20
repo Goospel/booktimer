@@ -133,6 +133,13 @@ function rowOf(id: number, title: string | null, preview = '') {
     return { id, title, chars: 1, preview, updatedAt: AT };
 }
 
+const PHOTO_FILE = new File([new Uint8Array([1])], '내 사진 원본.png', { type: 'image/png' });
+
+/** 패널이 편집기에 넘긴 「사진 올리기」 — 편집기 대역의 prop으로 꺼낸다. */
+function uploadOf(wrapper: VueWrapper): ((f: File) => Promise<string>) | undefined {
+    return wrapper.findComponent({ name: 'RecallEditorStub' }).props('uploadImage') as ((f: File) => Promise<string>) | undefined;
+}
+
 beforeEach(() => {
     focusEndSpy.mockClear();
     dropSpy.mockClear();
@@ -231,6 +238,8 @@ describe('필기 패널 — 자동저장', () => {
     test('빈 초안은 서버에 행을 만들지 않는다', async () => {
         const wrapper = await mountPanel();
         await wrapper.find('[data-testid="notes-new"]').trigger('click');
+        // newNote의 flush → retarget이 끝난 뒤에 친다 — 안 기다리면 retarget이 친 공백을 지워 판정식이 무엇이든 통과한다(리뷰 I-1).
+        await flushPromises();
         await type(wrapper, '   \n  ');
         await settle(5000);
 
@@ -665,7 +674,7 @@ describe('필기 패널 — 이어 쓰기 칩', () => {
         expect(chips(wrapper)).toHaveLength(3);
     });
 
-    // 저장돼 id가 붙은 장은 「새 필기」가 아니다 — 본문을 다 지워도 그 장을 쓰는 중이다.
+    // 저장돼 id가 붙은 장은 「새 필기」가 아니다 — 디바운스 전까지는 그 장을 쓰는 중이다(1.5초 뒤엔 지워져 빈 새 필기 — 설계 2026-10-19 note-empty-body-save REQ-10).
     test('저장된 장에서 본문을 지워도 칩이 안 뜬다', async () => {
         const wrapper = await mountPanel({}, FOUR);
         vi.mocked(fetch).mockResolvedValueOnce(okJson(noteOf({ id: 12, body: 'ㄱ' })));
@@ -896,12 +905,6 @@ describe('필기 패널 — ?note= 핸드오프', () => {
 
 // 필기 사진(설계 2026-10-19 T12) — 패널이 편집기에 「올리기」를 넘기고, 장·책을 갈아 끼울 때 편집기의 대기 사진을 버린다.
 describe('필기 패널 — 사진', () => {
-    const PHOTO_FILE = new File([new Uint8Array([1])], '내 사진 원본.png', { type: 'image/png' });
-
-    function uploadOf(wrapper: VueWrapper): ((f: File) => Promise<string>) | undefined {
-        return wrapper.findComponent({ name: 'RecallEditorStub' }).props('uploadImage') as ((f: File) => Promise<string>) | undefined;
-    }
-
     test('REQ-16 · 필기 편집기에 uploadImage가 넘어간다 — 빠지면 사진 노드가 꺼져 imageAware:true인 채로 사진이 지워진다', async () => {
         const wrapper = await mountPanel();
         expect(typeof uploadOf(wrapper)).toBe('function');
@@ -986,5 +989,228 @@ describe('필기 패널 — 사진', () => {
 
         vi.mocked(fetch).mockResolvedValueOnce(fail(404, ''));
         await expect(upload(PHOTO_FILE)).rejects.toThrow('사진을 올리지 못했어요 — 잠시 뒤 다시 해 주세요.');
+    });
+});
+
+// 설계 2026-10-19 note-empty-body-save — 저장된 장의 본문을 다 비우면 그 장을 지운다. REQ는 그 문서의 지역 번호(위 사진 describe의 REQ-16과 다른 문서).
+describe('필기 패널 — 본문을 다 비운 저장된 장', () => {
+    const EMPTIED = '본문이 빈 필기는 남기지 않아요 — 이어 쓰면 새로 저장돼요';
+    const status = (w: VueWrapper) => w.find('[data-testid="notes-status"]');
+
+    /** 저장된 장(id 5 · revision 0 · 본문 'A')까지 만든다. 제목을 주면 먼저 친다. */
+    async function saved(rows: unknown[] = [], title = ''): Promise<VueWrapper> {
+        const wrapper = await mountPanel({}, rows);
+        if (title) await wrapper.find('[data-testid="notes-title"]').setValue(title);
+        vi.mocked(fetch).mockResolvedValueOnce(okJson(noteOf({ id: 5, title: title || null, body: 'A', revision: 0 })));
+        await type(wrapper, 'A');
+        await settle();
+        return wrapper;
+    }
+
+    /** 장 5의 삭제 요청들 — 「무엇을 실었나」(본문·keepalive)까지 본다. */
+    function delCalls(): RequestInit[] {
+        return vi.mocked(fetch).mock.calls
+            .filter((c) => String(c[0]) === '/api/study/notes/5/delete')
+            .map((c) => c[1] as RequestInit);
+    }
+
+    test('REQ-02 · 저장된 장의 본문을 다 지우면 1.5초 뒤 그 장의 삭제가 revision과 함께 나간다 — 빈 본문 갱신이 아니다', async () => {
+        const wrapper = await saved();
+        vi.mocked(fetch).mockResolvedValueOnce(okJson({ deleted: true }));
+        await type(wrapper, '');
+        await settle();
+
+        // 정확히 비교한다 — 삭제가 나갔다는 것뿐 아니라 빈 본문 갱신이 함께 나가지 않았다는 것까지.
+        expect(posts().slice(1)).toEqual([{ url: '/api/study/notes/5/delete', body: { revision: 0 } }]);
+        expect(status(wrapper).text()).toBe(EMPTIED);
+        expect(status(wrapper).classes()).not.toContain('study-error');
+        expect(wrapper.find('[data-testid="notes-delete"]').exists()).toBe(false);
+    });
+
+    test('REQ-02 · 비운 직후 새로고침(pagehide)이면 keepalive 삭제가 나간다 — 사용자가 겪은 재현 그대로', async () => {
+        // 전역 pagehide를 쏘지 않는다 — 이 파일은 패널을 언마운트하지 않아 앞선 테스트의 패널들이 리스너를 쥔 채 살아 있다.
+        // 이 패널의 처리기만 잡아 직접 부른다(「사라질 때 document 리스너를 남기지 않는다」의 스파이 선례).
+        const added = vi.spyOn(window, 'addEventListener');
+        const wrapper = await saved();
+        const onPageHide = added.mock.calls.find(([t]) => t === 'pagehide')?.[1] as (() => void) | undefined;
+        added.mockRestore();
+        expect(onPageHide).toBeTypeOf('function');
+
+        vi.mocked(fetch).mockResolvedValueOnce(okJson({ deleted: true }));
+        await type(wrapper, '');
+        onPageHide!();
+        await flushPromises();
+
+        expect(delCalls()).toHaveLength(1);
+        expect(delCalls()[0].keepalive).toBe(true);
+        expect(JSON.parse(String(delCalls()[0].body))).toEqual({ revision: 0 });
+    });
+
+    test('REQ-03 · 지운 뒤에도 화면의 제목은 그대로이고, 이어 쓰면 그 제목으로 새 필기가 생긴다', async () => {
+        const wrapper = await saved([], '3장');
+        vi.mocked(fetch).mockResolvedValueOnce(okJson({ deleted: true }));
+        await type(wrapper, '');
+        await settle();
+        expect((wrapper.find('[data-testid="notes-title"]').element as HTMLInputElement).value).toBe('3장');
+
+        vi.mocked(fetch).mockResolvedValueOnce(okJson(noteOf({ id: 6, title: '3장', body: 'B', revision: 0 })));
+        await type(wrapper, 'B');
+        await settle();
+        expect(posts().at(-1)).toEqual({ url: '/api/study/notes', body: { bookId: 7, title: '3장', body: 'B' } });
+        expect(status(wrapper).text()).toContain('저장됨');
+    });
+
+    test('REQ-03 · 지워도 세대를 올리지 않는다 — 비운 장에 올리던 사진이 버려지지 않는다', async () => {
+        const wrapper = await saved();
+        dropSpy.mockClear();
+        // 목 순서가 요점이다 — 업로드 fetch가 먼저 나가므로 업로드 응답을 먼저, 삭제 응답을 그다음에 등록한다.
+        const uploading = deferred();
+        vi.mocked(fetch).mockReturnValueOnce(uploading.promise);
+        vi.mocked(fetch).mockResolvedValueOnce(okJson({ deleted: true }));
+
+        await type(wrapper, '');
+        const result = uploadOf(wrapper)!(PHOTO_FILE);
+        await flushPromises();   // 업로드가 첫 목을 잡게
+        await settle();
+        expect(delCalls(), '전제 — 삭제가 실제로 났다').toHaveLength(1);
+
+        uploading.resolve(okJson({ src: '/api/study/notes/images/40' }));
+        await expect(result).resolves.toBe('/api/study/notes/images/40');
+        expect(dropSpy).not.toHaveBeenCalled();
+    });
+
+    test('REQ-04 · 다른 곳에서 고쳐진 장이면(409) 지우지 않은 채 잠근다', async () => {
+        const wrapper = await saved();
+        vi.mocked(fetch).mockResolvedValueOnce(fail(409, '다른 곳에서 고쳐진 필기예요 — 새로고침한 뒤 이어서 써 주세요'));
+        await type(wrapper, '');
+        await settle();
+
+        expect(status(wrapper).text()).toContain('다른 곳에서 고쳐진');
+        expect(wrapper.find('[data-testid="notes-reload"]').exists()).toBe(true);
+        expect(wrapper.find('[data-testid="recall-body"]').attributes('disabled')).toBeDefined();
+        expect(wrapper.find('[data-testid="notes-delete"]').exists(), '아직 그 장이다').toBe(true);
+    });
+
+    test('REQ-07 · 이미 없는 장(404)이면 지운 것으로 보고, 이어 쓴 글은 새 필기로 생긴다', async () => {
+        const wrapper = await saved();
+        vi.mocked(fetch).mockResolvedValueOnce(fail(404, ''));
+        await type(wrapper, '');
+        await settle();
+        expect(status(wrapper).text()).toBe(EMPTIED);
+
+        vi.mocked(fetch).mockResolvedValueOnce(okJson(noteOf({ id: 6, body: 'B', revision: 0 })));
+        await type(wrapper, 'B');
+        await settle();
+        expect(posts().at(-1)?.url).toBe('/api/study/notes');
+    });
+
+    test('REQ-08 · 5xx면 「필기를 지우지 못했어요」로 그 장을 붙든 채, 「다시 저장」에서 다시 지운다', async () => {
+        const wrapper = await saved();
+        vi.mocked(fetch).mockResolvedValueOnce(fail(500, ''));
+        await type(wrapper, '');
+        await settle();
+        expect(status(wrapper).text()).toContain('필기를 지우지 못했어요');
+        expect(wrapper.find('[data-testid="notes-delete"]').exists(), '아직 그 장이다').toBe(true);
+
+        vi.mocked(fetch).mockResolvedValueOnce(okJson({ deleted: true }));
+        await wrapper.find('[data-testid="notes-retry"]').trigger('click');
+        await flushPromises();
+        expect(delCalls()).toHaveLength(2);
+        expect(status(wrapper).text()).toBe(EMPTIED);
+    });
+
+    test('REQ-09 · 지우는 사이 친 글자는 안내에 덮이지 않고 새 필기로 생긴다', async () => {
+        const wrapper = await saved();
+        const removing = deferred();
+        vi.mocked(fetch).mockReturnValueOnce(removing.promise);
+        await type(wrapper, '');
+        await vi.advanceTimersByTimeAsync(1500);   // 삭제가 날아가 있다
+        await type(wrapper, 'C');
+
+        vi.mocked(fetch).mockResolvedValueOnce(okJson(noteOf({ id: 6, body: 'C', revision: 0 })));
+        removing.resolve(okJson({ deleted: true }));
+        await flushPromises();
+
+        expect(posts().at(-1)).toEqual({ url: '/api/study/notes', body: { bookId: 7, title: '', body: 'C' } });
+        expect(status(wrapper).text()).toContain('저장됨');
+    });
+
+    test('REQ-10 · 지운 장은 「최근 필기」에서 빠지고, 제목이 비었으면 이어 쓰기 칩이 뜬다', async () => {
+        const wrapper = await saved([rowOf(6, '나')]);
+        vi.mocked(fetch).mockResolvedValueOnce(okJson({ deleted: true }));
+        await type(wrapper, '');
+        await settle();
+
+        await openMenu(wrapper);
+        expect(wrapper.findAll('[data-testid="notes-item"]').map((b) => b.text().charAt(0))).toEqual(['나']);
+        expect(wrapper.findAll('[data-testid="editor-empty-slot"] [data-testid="notes-continue"]').map((b) => b.text().charAt(0)))
+            .toEqual(['나']);
+    });
+
+    test('REQ-12 · 「지우기」가 404를 받으면 이미 없는 것으로 보고 빈 새 필기로 넘어간다', async () => {
+        const wrapper = await saved();
+        vi.stubGlobal('confirm', vi.fn(() => true));
+        vi.mocked(fetch).mockResolvedValueOnce(fail(404, ''));
+        await wrapper.find('[data-testid="notes-delete"]').trigger('click');
+        await flushPromises();
+
+        expect(wrapper.text()).not.toContain('책을 찾을 수 없어요');
+        expect(wrapper.find('[data-testid="notes-delete"]').exists()).toBe(false);
+        expect((wrapper.find('[data-testid="recall-body"]').element as HTMLTextAreaElement).value).toBe('');
+        // 「지우기」는 사람이 확인창에서 고른 삭제라 판 대조를 싣지 않는다(설계 비목표 — 리뷰 m-3).
+        expect(delCalls()[0].body).toBeUndefined();
+    });
+
+    test('REQ-13 · 자동 삭제가 날아가 있는 중 「지우기」가 5xx여도, 자동 삭제가 끝나면 그 장과 끊긴다 — 「저장 중…」에 굳지 않는다', async () => {
+        const wrapper = await saved();
+        const removing = deferred();
+        vi.mocked(fetch).mockReturnValueOnce(removing.promise);
+        await type(wrapper, '');
+        await vi.advanceTimersByTimeAsync(1500);   // 자동 삭제가 날아가 있다
+
+        vi.stubGlobal('confirm', vi.fn(() => true));
+        vi.mocked(fetch).mockResolvedValueOnce(fail(500, ''));
+        await wrapper.find('[data-testid="notes-delete"]').trigger('click');
+        await flushPromises();                     // 「지우기」가 실패했다 — 세대만 올랐다
+
+        removing.resolve(okJson({ deleted: true }));
+        await flushPromises();
+        expect(status(wrapper).text()).not.toContain('저장 중');
+        expect(wrapper.find('[data-testid="notes-delete"]').exists(), '서버에서 이미 지운 장이다').toBe(false);
+
+        vi.mocked(fetch).mockResolvedValueOnce(okJson(noteOf({ id: 6, body: 'B', revision: 0 })));
+        await type(wrapper, 'B');
+        await settle();
+        expect(posts().at(-1)?.url, '지운 장 갱신(404)이 아니라 새 생성').toBe('/api/study/notes');
+    });
+
+    test('REQ-14 · 다른 장을 여는 사이 끝난 자동 삭제는 새로 연 장을 끊지 않고, 목록에서 지운 장만 뺀다', async () => {
+        const wrapper = await mountPanel({}, [rowOf(6, '나')]);
+        vi.mocked(fetch).mockResolvedValueOnce(okJson(noteOf({ id: 5, body: 'A', revision: 0 })));
+        await type(wrapper, 'A');
+        await settle();
+
+        const opening = deferred();
+        const removing = deferred();
+        vi.mocked(fetch).mockReturnValueOnce(opening.promise);    // 장 6 조회
+        vi.mocked(fetch).mockReturnValueOnce(removing.promise);   // 장 5 자동 삭제
+        await openMenu(wrapper);
+        await wrapper.findAll('[data-testid="notes-item"]').find((b) => b.text().startsWith('나'))!.trigger('click');
+        await flushPromises();
+        await type(wrapper, '');                                  // 조회 중 화면은 아직 장 5다
+        await vi.advanceTimersByTimeAsync(1500);
+        opening.resolve(okJson(noteOf({ id: 6, body: 'B6', revision: 3 })));
+        await flushPromises();
+        removing.resolve(okJson({ deleted: true }));
+        await flushPromises();
+
+        expect(wrapper.find('[data-testid="notes-delete"]').exists(), '장 6은 그대로 서버의 장이다').toBe(true);
+        await openMenu(wrapper);
+        expect(wrapper.findAll('[data-testid="notes-item"]').map((b) => b.text().charAt(0))).toEqual(['나']);
+
+        vi.mocked(fetch).mockResolvedValueOnce(okJson(noteOf({ id: 6, body: 'B6x', revision: 4 })));
+        await type(wrapper, 'B6x');
+        await settle();
+        expect(posts().at(-1)).toEqual({ url: '/api/study/notes/6', body: { title: '', body: 'B6x', revision: 3, imageAware: true } });
     });
 });
