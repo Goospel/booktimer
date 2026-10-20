@@ -741,7 +741,7 @@ describe('DashboardApp — 일시정지', () => {
     });
 
     // 실 브라우저 실측(2026-10-20)에서 잡힌 결함 — 자리 비움 watch가 먼저 돌면 멈춤을 모른 채 잠금을 한 번 잡았다 곧 풀었다.
-    test('REQ-06 · 멈춘 채 새로고침하면 화면 잠금을 잡지 않는다(watch 순서)', async () => {
+    test('REQ-06 · 멈춘 채 새로고침하면 화면 잠금을 잡지 않는다', async () => {
         localStorage.setItem(PAUSE_KEY, JSON.stringify({ startedAt: iso(START), intervals: [], pausedFrom: iso(MOUNT_AT - 60_000) }));
         const { request } = installWakeLock();
         const w = await mountDash();

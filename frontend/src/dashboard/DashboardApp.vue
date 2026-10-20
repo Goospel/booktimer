@@ -91,7 +91,8 @@ const finePointer = () => window.matchMedia?.('(hover: hover) and (pointer: fine
 const away = ref<AwayLedger | null>(null)
 const awayNotice = ref<AwayInterval | null>(null)
 const awaySec = computed(() => awaySeconds(away.value))
-// 원장이 바뀌는 모든 자리(시작·종료·떠남·복귀·되돌리기·409·400·탭 간 변경)가 여길 지나므로 화면 잠금도 여기서 맞춘다.
+// 이벤트로 원장을 바꾸는 자리(떠남·복귀·되돌리기·409·400)는 여길 지나며 화면 잠금도 맞춘다. 측정 세션이 바뀔 때(시작·종료·
+// 다른 기기·탭 간 선택 변경)는 아래 세션 watch가 두 원장을 직접 쓰고 잠금을 한 번만 맞춘다(리뷰 F4) — 여기에 부수효과를 더하면 그쪽에도.
 function setAway(l: AwayLedger | null) { away.value = l; saveLedger(l); syncScreenLock() }
 
 // ── 화면 켜 두기(설계 §9.4-7) ── 윈도 크롬은 모니터가 꺼지면 창을 가려진 것으로 쳐 탭을 hidden으로 만든다
