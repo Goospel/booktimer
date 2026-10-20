@@ -11,6 +11,8 @@ import { withViewTransition } from './viewTransition'
 import { defaultBookOf, defaultStudyBookOf } from './defaultBook'
 import type { AwayInterval, AwayLedger } from './studyAway'
 import { ledgerFor, markHidden, markVisible, clearPending, undo, awaySeconds, loadLedger, saveLedger, AWAY_PREF_KEY, loadAwayOn, saveAwayOn, canonicalIso } from './studyAway'
+import type { PauseLedger } from './studyPause'
+import { PAUSE_KEY, pauseFor, togglePause, pauseIntervalsAt, loadPause, savePause } from './studyPause'
 import TimerCard from './TimerCard.vue'
 import StudyTimerCard from './StudyTimerCard.vue'
 import ModeToggle from './ModeToggle.vue'
@@ -89,7 +91,8 @@ const finePointer = () => window.matchMedia?.('(hover: hover) and (pointer: fine
 const away = ref<AwayLedger | null>(null)
 const awayNotice = ref<AwayInterval | null>(null)
 const awaySec = computed(() => awaySeconds(away.value))
-// 원장이 바뀌는 모든 자리(시작·종료·떠남·복귀·되돌리기·409·400·탭 간 변경)가 여길 지나므로 화면 잠금도 여기서 맞춘다.
+// 이벤트로 원장을 바꾸는 자리(떠남·복귀·되돌리기·409·400)는 여길 지나며 화면 잠금도 맞춘다. 측정 세션이 바뀔 때(시작·종료·
+// 다른 기기·탭 간 선택 변경)는 아래 세션 watch가 두 원장을 직접 쓰고 잠금을 한 번만 맞춘다(리뷰 F4) — 여기에 부수효과를 더하면 그쪽에도.
 function setAway(l: AwayLedger | null) { away.value = l; saveLedger(l); syncScreenLock() }
 
 // ── 화면 켜 두기(설계 §9.4-7) ── 윈도 크롬은 모니터가 꺼지면 창을 가려진 것으로 쳐 탭을 hidden으로 만든다
@@ -98,7 +101,8 @@ function setAway(l: AwayLedger | null) { away.value = l; saveLedger(l); syncScre
 // 브라우저는 탭이 hidden이 되면 스스로 푼다 — 돌아와 원장을 다시 쓸 때(setAway) 다시 잡는다.
 let screenLock: Promise<WakeLockSentinel | null> | null = null
 function syncScreenLock() {
-    const want = away.value !== null && document.visibilityState === 'visible'
+    // 멈춘 동안은 풀어 둔다 — 다시 시작하면 setPause가 다시 잡는다(일시정지 설계 REQ-06).
+    const want = away.value !== null && !paused.value && document.visibilityState === 'visible'
     if (want === (screenLock !== null)) return
     if (!want) { releaseScreen(); return }
     // 거절·미지원은 null — 추적은 그대로 간다(REQ-07). 다음 hidden→visible에서 다시 시도한다.
@@ -119,21 +123,52 @@ const awayOn = ref(loadAwayOn())
 // 다시 켰을 때 버렸어야 할 옛 구간이 되살아나 전송된다(저장소는 탭끼리 공유된다, 리뷰 Minor-1).
 function setAwayOn(on: boolean) { saveAwayOn(on); if (!on) saveLedger(null); awayOn.value = on }
 // 다른 탭의 변경을 따른다(key null = 다른 탭의 clear) — 안 따르면 한 기기 안에서 탭마다 선택이 갈린다(REQ-05).
-const onAwayPref = (e: StorageEvent) => { if (e.key === AWAY_PREF_KEY || e.key === null) awayOn.value = loadAwayOn() }
-// 측정 세션이 바뀌는 순간(시작·종료·다른 기기) 원장을 갈아끼운다. sync — 응답을 얹은 바로 다음 줄이 새 원장을 봐야 한다.
-// 선택이 꺼지면 null → 이번 측정의 멈춘 구간을 버리고, 켜지면 그 순간부터 센다(§9.4-5).
+// 다른 탭의 일시정지도 따른다 — 낡은 탭에서 누른 키가 기대와 반대로 돌지 않게(일시정지 설계 REQ-09).
+const onStorage = (e: StorageEvent) => {
+    if (e.key === AWAY_PREF_KEY || e.key === null) awayOn.value = loadAwayOn()
+    if ((e.key === PAUSE_KEY || e.key === null) && pauseL.value) {
+        pauseL.value = pauseFor(loadPause(), pauseL.value.startedAt)
+        syncScreenLock()
+    }
+}
+// ── 일시정지(설계 2026-10-20-study-timer-keyboard-shortcut) ──────────────────────────────
+// 멈춘 구간은 자리 비움과 따로 이 기기에 쌓았다가 종료 본문 awayIntervals에 함께 보낸다(서버가 겹침을 합쳐 뺀다).
+// 자리 비움과 달리 기기·선택을 가리지 않는다 — 아이패드에서 필기하는 사람도 멈출 수 있어야 한다.
+const pauseL = ref<PauseLedger | null>(null)
+const paused = computed(() => pauseL.value?.pausedFrom != null)
+const pausedSec = computed(() => awaySeconds(pauseL.value))
+function setPause(l: PauseLedger | null) { pauseL.value = l; savePause(l); syncScreenLock() }
+const currentPause = () => pauseL.value && pauseFor(loadPause() ?? pauseL.value, pauseL.value.startedAt)
+function onTogglePause() {
+    const l = currentPause()
+    // 시트가 열려 있으면 무시 — 딤 뒤에서 시계가 몰래 바뀌지 않게(버튼도 딤에 가려 못 누른다).
+    if (!l || starting.value || stopping.value || studySheet.value !== null) return
+    setPause(togglePause(l, Date.now()))
+}
+
+// 측정 세션이 바뀌는 순간(시작·종료·다른 기기) 두 원장을 갈아끼운다. sync — 응답을 얹은 바로 다음 줄이 새 원장을 봐야 한다.
+// 일시정지는 측정 세션에만 묶이고(기기·선택 무관), 자리 비움은 컴퓨터·켠 사람만이다 — 선택이 꺼지면 null → 이번 측정의
+// 멈춘 구간을 버리고, 켜지면 그 순간부터 센다(§9.4-5).
 // 식별자는 정규 표기로 — 시작 응답과 재조회가 같은 순간을 다른 정밀도로 줘서, 원문 그대로면 재조회가 watch를
-// 발화시켜 방금 닫은 첫 이탈 구간을 지웠다(실 브라우저 결함). 원장 startedAt도 이 값으로 저장된다.
-watch(() => finePointer() && awayOn.value && study.value.hasActiveSession && study.value.activeStartedAt
-    ? canonicalIso(study.value.activeStartedAt) : null, startedAt => {
-    awayNotice.value = null
-    setAway(startedAt ? ledgerFor(loadLedger(), startedAt) : null)
+// 발화시켜 방금 닫은 구간·멈춤을 지웠다(실 브라우저 결함, T-258). 원장 startedAt도 이 값으로 저장된다.
+// 한 watch에서 둘을 다 바꾼 **뒤** 화면 잠금을 한 번만 맞춘다 — 따로 맞추면 한쪽만 바뀐 중간 상태에서 잠금을 잡았다 곧 풀었다(리뷰 F4).
+const sessionKey = () => study.value.hasActiveSession && study.value.activeStartedAt ? canonicalIso(study.value.activeStartedAt) : null
+watch([sessionKey, () => finePointer() && awayOn.value ? sessionKey() : null], ([pauseKey, awayKey], [oldPauseKey, oldAwayKey]) => {
+    if (pauseKey !== oldPauseKey) { pauseL.value = pauseKey ? pauseFor(loadPause(), pauseKey) : null; savePause(pauseL.value) }
+    if (awayKey !== oldAwayKey) { awayNotice.value = null; away.value = awayKey ? ledgerFor(loadLedger(), awayKey) : null; saveLedger(away.value) }
+    syncScreenLock()
 }, { flush: 'sync' })
 // 떠나는 페이지 — Chromium은 같은 탭 이동·닫기·새로고침에서 pagehide(아직 visible)를 hidden보다 **먼저** 쏜다(153 실측).
 // 그 뒤의 hidden이 대기 구간을 다시 쓰지 않게 막고, bfcache 복귀(pageshow)에서 푼다.
 let leaving = false
 function onAwayVisibility() {
     if (leaving) return
+    // 멈춘 동안은 자리 비움을 세지 않는다 — 같은 시간을 두 번 빼지 않게(일시정지 설계 REQ-06). 멈춘 채 돌아왔으면 그 전에 열린
+    // 대기 구간도 버린다 — 남기면 다시 시작한 뒤 다음 이탈 때 옛 시각부터 닫혀 그 사이 공부까지 빠졌다(리뷰 F2).
+    if (paused.value) {
+        if (document.visibilityState === 'visible') { const l = currentAway(); if (l?.pendingFrom) setAway(clearPending(l)) }
+        return
+    }
     const l = currentAway()
     if (!l) return
     if (document.visibilityState === 'hidden') { setAway(markHidden(l, Date.now())); return }
@@ -277,7 +312,7 @@ onMounted(() => {
     document.addEventListener('visibilitychange', onAwayVisibility)
     window.addEventListener('pagehide', onAwayPageHide)
     window.addEventListener('pageshow', onAwayPageShow)
-    window.addEventListener('storage', onAwayPref)
+    window.addEventListener('storage', onStorage)
 })
 onUnmounted(() => {
     document.removeEventListener('visibilitychange', onReturn)
@@ -285,7 +320,7 @@ onUnmounted(() => {
     document.removeEventListener('visibilitychange', onAwayVisibility)
     window.removeEventListener('pagehide', onAwayPageHide)
     window.removeEventListener('pageshow', onAwayPageShow)
-    window.removeEventListener('storage', onAwayPref)
+    window.removeEventListener('storage', onStorage)
     releaseScreen()
 })
 
@@ -401,12 +436,18 @@ async function handleStudyStop() {
     stopping.value = true
     try {
         // 멈춘 구간을 함께 보낸다 — 서버가 자정 분할 조각마다 겹친 만큼 뺀다. 네트워크 실패면 원장이 남아 재시도 때 다시 간다.
-        // ponytail: 한 측정에 200회 초과 이탈이면 오래된 구간은 차감 안 함 — 서버 상한을 올리면 해소
-        const intervals = currentAway()?.intervals.slice(-200) ?? []
+        // 손으로 멈춘 구간도 같은 본문에 싣는다 — 멈춘 채 끝내면 지금까지를 닫아 붙인다(원장은 그대로, 실패하면 멈춘 채 남는다).
+        // ponytail: 자리 비움 + 일시정지가 한 측정에 200개를 넘으면 앞쪽(오래된 자리 비움)부터 빠진다 — 서버 상한을 올리면 해소
+        // 멈춘 구간이 있으면 먼저 서버 진실을 받는다 — 다른 기기가 이 측정을 끝내고 새로 시작했으면 watch가 원장을 새 측정 것으로
+        // 갈아끼워, 낡은 멈춤 구간이 새 측정을 깎지 않는다(리뷰 F1). 측정이 없어졌으면 아래 409 경로로 간다.
+        // ponytail: 재조회와 종료 사이에도 다른 기기가 끝낼 수 있다 — stop 본문에 측정 식별자를 싣고 서버가 대조하면 닫힌다(서버 변경)
+        if (pauseIntervalsAt(currentPause(), Date.now()).length > 0) await refresh(true)
+        const intervals = [...(currentAway()?.intervals ?? []), ...pauseIntervalsAt(currentPause(), Date.now())].slice(-200)
         let res = await postStudyStop(intervals)
         // 400 = 서버가 구간을 거절 — 원장이 남아 있으면 재시도해도 영영 못 끈다. 구간을 버리고 본문 없이 한 번만 다시.
-        if (res.status === 400 && intervals.length > 0) { setAway(null); res = await postStudyStop(null) }
-        if (res.status === 409) { setAway(null); await conflict('진행 중인 측정이 없어요 — 화면을 최신으로 맞췄어요'); return }
+        // 일시정지는 같은 측정의 빈 원장으로 — null로 두면 재시도가 실패해 측정이 계속될 때 Alt+P·버튼이 죽는다(리뷰 F3).
+        if (res.status === 400 && intervals.length > 0) { setAway(null); setPause(pauseL.value && pauseFor(null, pauseL.value.startedAt)); res = await postStudyStop(null) }
+        if (res.status === 409) { setAway(null); setPause(null); await conflict('진행 중인 측정이 없어요 — 화면을 최신으로 맞췄어요'); return }
         if (!res.ok) { actionError.value = '측정을 종료할 수 없습니다'; return }
         const s = studyStateOf(await res.json())
         // 한 장이 둘로 갈라지는 전환 — 시트는 전환이 **끝난 뒤** 올린다(스냅숏에 찍혀 뚝 나타나지 않게).
@@ -691,6 +732,9 @@ function onSheetAdded(book: { id: number; title: string; status: string }) {
                 :saving-session-goal="savingSessionGoal"
                 :changing="tagging"
                 :away-seconds="awaySec"
+                :paused-from="pauseL?.pausedFrom ?? null"
+                :paused-seconds="pausedSec"
+                @toggle-pause="onTogglePause"
                 :away-notice="awayNotice"
                 @undo-away="undoAway"
                 @dismiss-away="awayNotice = null"
