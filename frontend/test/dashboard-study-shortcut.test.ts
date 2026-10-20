@@ -230,4 +230,20 @@ describe('DashboardApp — Alt+P는 쓰던 자리를 지킨다', () => {
         await vi.waitFor(() => expect(document.activeElement).toBe(pm));
         expect(editor.state.selection.from).toBe(editor.state.doc.content.size - 1);
     });
+
+    // 위 양성 대조의 짝 — 같은 흐름에서 finePointer()만 거짓. 캐럿 줄의 finePointer() 가드를 지우면 이 케이스만 깨진다(리뷰 keys-2).
+    test('REQ-06 · 마우스·트랙패드가 없는 기기(아이패드)는 포커스 없이 Alt+P로 시작해도 필기로 포커스를 옮기지 않는다', async () => {
+        vi.stubGlobal('matchMedia', () => ({ matches: false }));
+        const w = await mountStudy();
+        const pm = w.find('.ProseMirror').element as HTMLElement;
+        (document.activeElement as HTMLElement | null)?.blur();
+        expect(document.activeElement).not.toBe(pm);
+
+        altP();
+        await vi.waitFor(() => expect(sent('/api/study/start')).toHaveLength(1));
+        await vi.waitFor(() => expect(merged(w)).toBe(true));
+        await flushPromises();
+        await flushPromises();
+        expect(document.activeElement).not.toBe(pm);
+    });
 });
