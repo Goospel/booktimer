@@ -59,14 +59,16 @@ async function json<T>(res: Response, fallback?: string): Promise<T> {
 /**
  * @param keepalive 탭이 닫히는 중에도 요청을 마저 보낸다(`pagehide`의 마지막 플러시). 브라우저 재량이라
  *                  100%가 아니다 — 1차 방어는 디바운스와 즉시 플러시이고 이건 마지막 보험이다.
+ * @param signal 거둘 수 있는 요청 — 「지우기」가 응답을 한도까지만 기다린다(NotesPanel REMOVE_TIMEOUT_MS).
  */
-function post(url: string, body?: unknown, keepalive = false): Promise<Response> {
+function post(url: string, body?: unknown, keepalive = false, signal?: AbortSignal): Promise<Response> {
     return fetch(url, {
         method: 'POST',
         credentials: 'same-origin',
         headers: { 'Content-Type': 'application/json', 'X-CSRF-TOKEN': getCsrfToken() },
         body: body === undefined ? undefined : JSON.stringify(body),
         keepalive,
+        signal,
     });
 }
 
@@ -391,10 +393,11 @@ export async function updateNote(
  * @param revision 자동 삭제(저장된 장의 본문을 다 비움)만 싣는다 — 그 사이 다른 곳에서 고쳐졌으면 서버가 409로 거절하고 지우지 않는다.
  *                 확인창을 거치는 「지우기」 버튼은 싣지 않는다.
  * @param keepalive 탭이 닫히는 중의 마지막 플러시 — 새로고침 직전에 비운 장이 여기서 지워진다(갱신과 같은 이유).
+ * @param signal 거두면(시간 초과) fetch가 AbortError로 끝난다 — 「지우기」 버튼만 넘긴다.
  */
-export async function deleteNote(id: number, revision?: number, keepalive = false): Promise<void> {
+export async function deleteNote(id: number, revision?: number, keepalive = false, signal?: AbortSignal): Promise<void> {
     await json<unknown>(
-        await post(`/api/study/notes/${id}/delete`, revision === undefined ? undefined : { revision }, keepalive),
+        await post(`/api/study/notes/${id}/delete`, revision === undefined ? undefined : { revision }, keepalive, signal),
         '필기를 지우지 못했어요.');
 }
 

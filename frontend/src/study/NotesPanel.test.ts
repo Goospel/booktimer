@@ -1573,18 +1573,6 @@ describe('필기 패널 — 저장 경합 후속', () => {
         expect(wrapper.find('[data-testid="notes-delete"]').exists()).toBe(true);
     });
 
-    test('REQ-38 · 그 장에는 끝까지 쓴다 — 같은 장을 두 번 지워 뒤 「지우기」가 먼저 끝나도, 늦게 끊긴 앞 「지우기」가 「지우지 못했어요」를 띄우지 않는다', async () => {
-        const wrapper = await saved();
-        const first = await removeWhileUpdating(wrapper, fail(404, ''));
-        vi.mocked(fetch).mockResolvedValueOnce(fail(404, ''));                // 다시 누른 「지우기」 — 서버엔 이미 없다
-        await clickRemove(wrapper);
-        expect(bodyOf(wrapper), '전제 — 뒤 「지우기」로 지워졌다').toBe('');
-        first.reject(new TypeError('Failed to fetch'));
-        await flushPromises();
-
-        expect(wrapper.text()).not.toContain('필기를 지우지 못했어요');
-    });
-
     test('REQ-40 · 「지우기」를 다시 눌러 지우면 앞선 「지우지 못했어요」가 남지 않는다 — 확인창을 취소했을 때는 그대로 둔다', async () => {
         const wrapper = await saved();
         vi.mocked(fetch).mockRejectedValueOnce(new TypeError('Failed to fetch'));
@@ -1600,5 +1588,314 @@ describe('필기 패널 — 저장 경합 후속', () => {
         await clickRemove(wrapper);
         expect(bodyOf(wrapper)).toBe('');
         expect(wrapper.text()).not.toContain('필기를 지우지 못했어요');
+    });
+
+    // 설계 2026-10-20 note-remove-in-flight — 「지우기」가 날아가 있는 동안의 화면. REQ-41~49는 그 문서의 지역 번호.
+
+    /** 「지우기」를 눌러 두고 응답을 붙든다 — 돌려받은 왕복으로 부르는 쪽이 끝낸다. */
+    async function removeHeld(w: VueWrapper): Promise<ReturnType<typeof deferred>> {
+        const removing = deferred();
+        vi.mocked(fetch).mockReturnValueOnce(removing.promise);
+        await clickRemove(w);
+        return removing;
+    }
+
+    test('REQ-41 · 「지우기」가 끝나도 그 사이 「새 필기」로 옮겨 쓴 글은 걷지 않는다 — 날아가 있던 생성의 응답도 받는다', async () => {
+        const wrapper = await saved();
+        const removing = await removeHeld(wrapper);
+        await wrapper.find('[data-testid="notes-new"]').trigger('click');
+        await flushPromises();
+        const creating = deferred();
+        vi.mocked(fetch).mockReturnValueOnce(creating.promise);
+        await type(wrapper, 'B');
+        await vi.advanceTimersByTimeAsync(1500);                 // 새 장의 생성이 날아가 있다
+        removing.resolve(okJson({ deleted: true }));
+        await flushPromises();
+        expect(bodyOf(wrapper), '옮겨 쓴 글이 그대로다').toBe('B');
+
+        creating.resolve(okJson(noteOf({ id: 6, body: 'B', revision: 0 })));
+        await flushPromises();
+        expect(status(wrapper).text(), '생성 응답을 버리지 않았다').toContain('저장됨');
+        vi.mocked(fetch).mockResolvedValueOnce(okJson(noteOf({ id: 6, body: 'B2', revision: 1 })));
+        await type(wrapper, 'B2');
+        await settle();
+        expect(posts().at(-1), '새 장 6의 갱신 — 같은 글로 두 번째 생성이 아니다').toEqual({ url: '/api/study/notes/6', body: { title: '', body: 'B2', revision: 0, imageAware: true } });
+    });
+
+    test('REQ-41 · 그 사이 연 다른 장도 그대로다 — 디바운스 중이던 글이 그 장에 저장된다', async () => {
+        const wrapper = await saved([rowOf(6, '나')]);
+        const removing = await removeHeld(wrapper);
+        vi.mocked(fetch).mockResolvedValueOnce(okJson(noteOf({ id: 6, body: 'B6', revision: 3 })));
+        await pickRow(wrapper, '나');
+        await type(wrapper, 'B6x');                               // 디바운스 중 — 아직 안 나갔다
+        removing.resolve(okJson({ deleted: true }));
+        await flushPromises();
+        expect(bodyOf(wrapper)).toBe('B6x');
+
+        vi.mocked(fetch).mockResolvedValueOnce(okJson(noteOf({ id: 6, body: 'B6x', revision: 4 })));
+        await settle();
+        expect(posts().at(-1)).toEqual({ url: '/api/study/notes/6', body: { title: '', body: 'B6x', revision: 3, imageAware: true } });
+    });
+
+    test('REQ-41 · 그 사이 책이 바뀌어 새 책에 쓴 글도 그대로다', async () => {
+        const wrapper = await saved();
+        const removing = await removeHeld(wrapper);
+        vi.mocked(fetch).mockResolvedValueOnce(okJson({ notes: [] }));   // 책 9의 목록
+        await wrapper.setProps({ defaultBookId: 9 });
+        await flushPromises();
+        expect(bookOf(wrapper), '전제 — 책 9로 옮겼다').toBe('9');
+        await type(wrapper, '토익');
+        removing.resolve(okJson({ deleted: true }));
+        await flushPromises();
+        expect(bodyOf(wrapper)).toBe('토익');
+
+        vi.mocked(fetch).mockResolvedValueOnce(okJson(noteOf({ id: 8, bookId: 9, body: '토익', revision: 0 })));
+        await settle();
+        expect(posts().at(-1)).toEqual({ url: '/api/study/notes', body: { bookId: 9, title: '', body: '토익' } });
+    });
+
+    test('REQ-41 · 그 사이 옮긴 화면에서 올리던 사진도 그대로 들어간다 — 「지우기」가 끝나며 버리지 않는다', async () => {
+        const wrapper = await saved();
+        const removing = await removeHeld(wrapper);
+        await wrapper.find('[data-testid="notes-new"]').trigger('click');
+        await flushPromises();
+        dropSpy.mockClear();
+        const uploading = deferred();
+        vi.mocked(fetch).mockReturnValueOnce(uploading.promise);
+        const result = uploadOf(wrapper)!(PHOTO_FILE);
+        await flushPromises();                                    // 새 필기에서 사진이 올라가는 중
+        removing.resolve(okJson({ deleted: true }));
+        await flushPromises();
+        expect(dropSpy, '옮긴 화면의 대기 사진을 버리지 않는다').not.toHaveBeenCalled();
+
+        uploading.resolve(okJson({ src: '/api/study/notes/images/31' }));
+        await expect(result).resolves.toBe('/api/study/notes/images/31');
+    });
+
+    test('REQ-42 · 지우는 동안 상태줄은 「지우는 중…」이고 「지우기」가 없다 — 실패하면 「지우기」가 포커스와 함께 돌아온다', async () => {
+        const wrapper = await saved();
+        (wrapper.find('[data-testid="notes-delete"]').element as HTMLButtonElement).focus();
+        const removing = await removeHeld(wrapper);
+        expect(status(wrapper).text()).toBe('지우는 중…');
+        expect(wrapper.find('[data-testid="notes-delete"]').exists(), '다시 누를 「지우기」가 없다').toBe(false);
+
+        removing.reject(new TypeError('Failed to fetch'));
+        await flushPromises();
+        expect(wrapper.text()).toContain(NET_REMOVE);
+        expect(status(wrapper).text(), '그 장의 저장 상태로 돌아온다').toContain('저장됨');
+        expect(wrapper.find('[data-testid="notes-delete"]').exists()).toBe(true);
+        expect(document.activeElement, '숨었다 돌아온 「지우기」에 포커스가 돌아온다').toBe(wrapper.find('[data-testid="notes-delete"]').element);
+    });
+
+    test('REQ-42 · 지우는 동안엔 「다시 저장」·「새로고침」도 숨고 상태줄이 빨갛지 않다 — 「지우기」가 실패하면 돌아온다', async () => {
+        const wrapper = await saved();
+        vi.mocked(fetch).mockResolvedValueOnce(fail(500, ''));
+        await type(wrapper, 'A2');
+        await settle();
+        let removing = await removeHeld(wrapper);
+        expect(wrapper.find('[data-testid="notes-retry"]').exists(), '「다시 저장」').toBe(false);
+        expect(status(wrapper).classes(), '그 장은 저장 오류였지만 지우는 동안은 빨간 글씨가 아니다').not.toContain('study-error');
+        removing.resolve(fail(500, ''));
+        await flushPromises();
+        expect(wrapper.find('[data-testid="notes-retry"]').exists()).toBe(true);
+
+        vi.mocked(fetch).mockResolvedValueOnce(fail(409, '다른 곳에서 고쳐진 필기예요 — 새로고침한 뒤 이어서 써 주세요'));
+        await wrapper.find('[data-testid="notes-retry"]').trigger('click');
+        await flushPromises();
+        expect(wrapper.find('[data-testid="notes-reload"]').exists(), '전제 — 409로 잠겼다').toBe(true);
+        removing = await removeHeld(wrapper);
+        expect(wrapper.find('[data-testid="notes-reload"]').exists(), '「새로고침」').toBe(false);
+        removing.resolve(fail(500, ''));
+        await flushPromises();
+        expect(wrapper.find('[data-testid="notes-reload"]').exists()).toBe(true);
+    });
+
+    test('REQ-42 · 다른 장의 「지우기」가 먼저 끝난 뒤 지우는 중인 장을 다시 열어도 「지우는 중…」이다 — 같은 장을 두 번 지울 길이 없다', async () => {
+        const wrapper = await saved([rowOf(6, '나')]);
+        const first = await removeHeld(wrapper);                              // 장 5를 지우는 중
+        vi.mocked(fetch).mockResolvedValueOnce(okJson(noteOf({ id: 6, body: 'B6', revision: 3 })));
+        await pickRow(wrapper, '나');
+        const second = await removeHeld(wrapper);                             // 장 6도 지운다 — 겹침
+        second.resolve(okJson({ deleted: true }));                            // 6이 먼저 끝난다 → 빈 새 필기
+        await flushPromises();
+        vi.mocked(fetch).mockResolvedValueOnce(okJson(noteOf({ id: 5, body: 'A', revision: 0 })));   // 서버는 아직 5를 안 지웠다
+        await pickRow(wrapper, 'A');
+        expect(bodyOf(wrapper), '전제 — 장 5를 다시 열었다').toBe('A');
+        expect(status(wrapper).text()).toBe('지우는 중…');
+        expect(wrapper.find('[data-testid="notes-delete"]').exists(), '같은 장을 두 번 지울 「지우기」가 없다').toBe(false);
+
+        first.resolve(okJson({ deleted: true }));
+        await flushPromises();
+        expect(bodyOf(wrapper)).toBe('');
+    });
+
+    test('REQ-42 · 디바운스 중에 누른 「지우기」가 실패하면 그 사이 친 글을 보낸다 — 「지우기」가 끊은 저장이 돌아온다', async () => {
+        const wrapper = await saved();
+        await type(wrapper, 'A2');                                 // 디바운스 중 — 아직 안 나갔다
+        vi.mocked(fetch)
+            .mockRejectedValueOnce(new TypeError('Failed to fetch'))                          // 「지우기」 — 끊김
+            .mockResolvedValueOnce(okJson(noteOf({ id: 5, body: 'A2', revision: 1 })));   // 그 뒤 나가는 갱신
+        await clickRemove(wrapper);
+        await settle();
+
+        expect(wrapper.text()).toContain(NET_REMOVE);
+        expect(posts().at(-1)).toEqual({ url: '/api/study/notes/5', body: { title: '', body: 'A2', revision: 0, imageAware: true } });
+        expect(status(wrapper).text()).toContain('저장됨');
+    });
+
+    test('REQ-42 · 앞서 지우던 다른 장의 「지우기」가 먼저 끝나도 지금 화면에서 지우는 장은 「지우는 중…」 그대로다 — 끝난 「지우기」는 제 장의 울타리만 걷는다', async () => {
+        const wrapper = await saved([rowOf(6, '나')]);
+        const first = await removeHeld(wrapper);                              // 장 5를 지우는 중
+        vi.mocked(fetch).mockResolvedValueOnce(okJson(noteOf({ id: 6, body: 'B6', revision: 3 })));
+        await pickRow(wrapper, '나');
+        await removeHeld(wrapper);                                            // 장 6도 지운다 — 겹침
+        first.resolve(okJson({ deleted: true }));                             // 이번엔 5가 먼저 끝난다(REQ-42 ③의 반대 순서)
+        await flushPromises();
+        expect(bodyOf(wrapper), '전제 — 화면은 장 6 그대로').toBe('B6');
+        expect(status(wrapper).text()).toBe('지우는 중…');
+        expect(wrapper.find('[data-testid="notes-delete"]').exists(), '장 6을 두 번 지울 「지우기」가 없다').toBe(false);
+    });
+
+    test('REQ-43 · 지우는 동안 그 장의 제목·본문이 잠긴다 — 「지우기」가 실패하면 풀린다', async () => {
+        const wrapper = await saved();
+        const removing = await removeHeld(wrapper);
+        expect(wrapper.find('[data-testid="recall-body"]').attributes('disabled'), '본문').toBeDefined();
+        expect(wrapper.find('[data-testid="notes-title"]').attributes('disabled'), '제목').toBeDefined();
+
+        removing.reject(new TypeError('Failed to fetch'));
+        await flushPromises();
+        expect(wrapper.find('[data-testid="recall-body"]').attributes('disabled')).toBeUndefined();
+        expect(wrapper.find('[data-testid="notes-title"]').attributes('disabled')).toBeUndefined();
+    });
+
+    test('REQ-44 · 지우는 사이 그 장의 갱신이 404를 받아도 상태줄은 「지우는 중…」이다 — 다른 장 열기가 실패해 그 장에 남아도 같다', async () => {
+        const wrapper = await saved([rowOf(6, '나')]);
+        const removing = await removeWhileUpdating(wrapper, fail(404, ''));
+        expect(status(wrapper).text()).toBe('지우는 중…');
+        expect(status(wrapper).classes()).not.toContain('study-error');
+        expect(wrapper.text()).not.toContain('다른 곳에서');
+
+        vi.mocked(fetch).mockRejectedValueOnce(new TypeError('Failed to fetch'));   // 장 6 조회가 끊겼다 — 세대만 오르고 화면은 장 5다
+        await pickRow(wrapper, '나');
+        expect(status(wrapper).text(), '세대가 올라도 화면이 그 장이면 「지우는 중…」').toBe('지우는 중…');
+        expect(wrapper.find('[data-testid="notes-delete"]').exists()).toBe(false);
+
+        removing.resolve(okJson({ deleted: true }));
+        await flushPromises();
+        expect(status(wrapper).text(), '지운 뒤엔 빈 새 필기의 빈 상태줄').toBe('');
+    });
+
+    /**
+     * 제목 「3장」 · 본문 'A'인 장 5를 저장하고, 본문을 비워 자동 삭제가 날아가 있는 채로 「지우기」를 누른 뒤 자동 삭제를 `autoWith`로 끝낸다.
+     * 「지우기」는 아직 날아가 있다 — 돌려받은 왕복으로 부르는 쪽이 끝낸다.
+     */
+    async function removeWhileAutoDeleting(autoWith: Response): Promise<{ wrapper: VueWrapper; removing: ReturnType<typeof deferred> }> {
+        const wrapper = await mountPanel();
+        await wrapper.find('[data-testid="notes-title"]').setValue('3장');
+        vi.mocked(fetch).mockResolvedValueOnce(okJson(noteOf({ id: 5, title: '3장', body: 'A', revision: 0 })));
+        await type(wrapper, 'A');
+        await settle();
+        const autoDelete = deferred();
+        vi.mocked(fetch).mockReturnValueOnce(autoDelete.promise);
+        await type(wrapper, '');
+        await vi.advanceTimersByTimeAsync(1500);                 // 자동 삭제가 날아가 있다
+        const removing = await removeHeld(wrapper);
+        autoDelete.resolve(autoWith);
+        await flushPromises();
+        return { wrapper, removing };
+    }
+    const titleOf = (w: VueWrapper) => (w.find('[data-testid="notes-title"]').element as HTMLInputElement).value;
+
+    test('REQ-45 · 「지우기」 중에 자동 삭제가 먼저 끝나면(서버는 지웠다) 「지우기」의 응답이 끊겨도 지운 것으로 끝난다 — 제목까지 빈 새 필기, 「지우지 못했어요」 없음', async () => {
+        const { wrapper, removing } = await removeWhileAutoDeleting(okJson({ deleted: true }));
+        removing.reject(new TypeError('Failed to fetch'));
+        await flushPromises();
+
+        expect(titleOf(wrapper)).toBe('');
+        expect(wrapper.text()).not.toContain('필기를 지우지 못했어요');
+        expect(status(wrapper).text()).toBe('');
+    });
+
+    test('REQ-45 · 「지우기」가 성공해도 같다 — 자동 삭제가 먼저 끝났어도 제목까지 비운다', async () => {
+        const { wrapper, removing } = await removeWhileAutoDeleting(fail(404, ''));   // 서버가 「지우기」를 먼저 처리했다
+        removing.resolve(okJson({ deleted: true }));
+        await flushPromises();
+
+        expect(titleOf(wrapper)).toBe('');
+        expect(status(wrapper).text()).toBe('');
+    });
+
+    test('REQ-45 · 자동 삭제가 증거를 남긴 뒤엔 그 장을 더 보내지 않는다 — 「지우기」를 기다리는 사이 「새 필기」로 옮겨도 같은 삭제가 또 나가지 않는다', async () => {
+        const { wrapper, removing } = await removeWhileAutoDeleting(okJson({ deleted: true }));
+        await wrapper.find('[data-testid="notes-new"]').trigger('click');
+        await flushPromises();
+        expect(posts().filter((p) => p.url === '/api/study/notes/5/delete'), '자동 삭제 · 「지우기」 한 번씩').toHaveLength(2);
+
+        removing.resolve(okJson({ deleted: true }));
+        await flushPromises();
+        expect(titleOf(wrapper), '옮긴 새 필기 그대로').toBe('');
+    });
+
+    test('REQ-47 · 지우는 장을 다시 연 조회가 「지우기」 응답 뒤에 와도 지운 장을 화면에 다시 띄우지 않는다 — 이어 쓴 글은 새 필기다', async () => {
+        const wrapper = await saved();
+        const removing = await removeHeld(wrapper);
+        await wrapper.find('[data-testid="notes-new"]').trigger('click');
+        await flushPromises();
+        const reopening = deferred();
+        vi.mocked(fetch).mockReturnValueOnce(reopening.promise);
+        await pickRow(wrapper, 'A');                              // 지우는 장 5를 다시 고른다 — 조회는 서버가 지우기 전에 읽었다
+        removing.resolve(okJson({ deleted: true }));
+        await flushPromises();
+        reopening.resolve(okJson(noteOf({ id: 5, body: 'A', revision: 0 })));
+        await flushPromises();
+        expect(bodyOf(wrapper), '지운 장이 화면에 다시 뜨지 않는다').toBe('');
+        expect(wrapper.find('[data-testid="notes-delete"]').exists()).toBe(false);
+
+        vi.mocked(fetch).mockResolvedValueOnce(okJson(noteOf({ id: 8, body: 'A+', revision: 0 })));
+        await type(wrapper, 'A+');
+        await settle();
+        expect(posts().at(-1), '지운 장 5의 갱신(→ 404 폴백으로 되살림)이 아니다').toEqual({ url: '/api/study/notes', body: { bookId: 7, title: '', body: 'A+' } });
+    });
+
+    test('REQ-47 · 겹친 「지우기」 둘이 각자 「이미 지워졌다」를 봤으면 앞 「지우기」의 응답이 끊겨도 지운 것으로 끝난다 — 뒤 것의 증거가 앞 것을 덮지 않는다', async () => {
+        const wrapper = await saved([rowOf(6, '나')]);
+        const first = await removeWhileUpdating(wrapper, fail(404, ''));    // 장 5의 증거 — 그 「지우기」는 아직 날아가 있다
+        vi.mocked(fetch).mockResolvedValueOnce(okJson(noteOf({ id: 6, body: 'B6', revision: 3 })));
+        await pickRow(wrapper, '나');
+        await removeWhileUpdating(wrapper, fail(404, ''));                  // 장 6의 증거 — 그 「지우기」도 날아가 있다
+        first.reject(new TypeError('Failed to fetch'));
+        await flushPromises();
+
+        expect(wrapper.text(), '장 5는 지운 것으로 끝났다 — 서버엔 이미 없다').not.toContain('지우지 못했어요');
+    });
+
+    test('REQ-48 · 「지우기」 응답이 20초 안에 오지 않으면 그만 기다린다 — 「지우지 못했어요」와 함께 풀리고 다시 지울 수 있다', async () => {
+        const wrapper = await saved();
+        // 응답이 오지 않는 연결 — 요청을 거두면(abort) 브라우저처럼 AbortError로 끝난다
+        vi.mocked(fetch).mockImplementationOnce((_url, init) => new Promise<Response>((_resolve, reject) => {
+            init?.signal?.addEventListener('abort', () => reject(new DOMException('The operation was aborted.', 'AbortError')));
+        }));
+        await clickRemove(wrapper);
+        await vi.advanceTimersByTimeAsync(19_999);
+        expect(status(wrapper).text(), '20초 전엔 기다린다').toBe('지우는 중…');
+
+        await vi.advanceTimersByTimeAsync(1);
+        await flushPromises();
+        expect(wrapper.text()).toContain(NET_REMOVE);
+        expect(wrapper.find('[data-testid="notes-delete"]').exists(), '다시 지울 수 있다').toBe(true);
+        expect(wrapper.find('[data-testid="recall-body"]').attributes('disabled'), '잠금이 풀린다').toBeUndefined();
+    });
+
+    test('REQ-49 · 「지우기」가 실패했을 때 이미 다른 필기로 옮겨 있으면 지금 화면의 「지우기」를 가리키지 않는 문구를 띄운다', async () => {
+        const wrapper = await saved([rowOf(6, '나')]);
+        const removing = await removeHeld(wrapper);
+        vi.mocked(fetch).mockResolvedValueOnce(okJson(noteOf({ id: 6, body: 'B6', revision: 3 })));
+        await pickRow(wrapper, '나');
+        removing.reject(new TypeError('Failed to fetch'));
+        await flushPromises();
+
+        expect(wrapper.text()).toContain('지우려던 필기를 지우지 못했어요 — 열어서 다시 지워 주세요.');
+        expect(wrapper.text(), '「다시 해 주세요」가 지금 화면(장 6)의 「지우기」를 가리키지 않는다').not.toContain(NET_REMOVE);
+        expect(bodyOf(wrapper)).toBe('B6');
     });
 });
