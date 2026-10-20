@@ -89,5 +89,8 @@ export default defineConfig({
     // 타임존을 고정한다 — `aiStatusLine`의 「M월 D일 신청」이 ISO 시각을 브라우저 로컬 tz로 옮겨
     // 찍으므로, 이게 없으면 같은 테스트가 기계·CI의 tz에 따라 하루 어긋나 깨진다.
     env: { TZ: 'Asia/Seoul' },
+    // 기본 forks 풀은 자식 프로세스가 60초 안에 응답해야 하는데(vitest 하드코딩), 이 PC가 붐비고 파일 캐시가 차가우면
+    // jsdom 테스트에서 넘겨 「Failed to start forks worker」로 테스트가 0건 돈다. 같은 조건에서 threads는 통과했다(T-270).
+    pool: 'threads',
   },
 });
