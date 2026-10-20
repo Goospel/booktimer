@@ -68,6 +68,11 @@ let inflightP: Promise<void> | null = null;
  * 돌아온 응답이 <b>새 장에 옛 장의 id·revision</b>을 붙여, 이어 쓴 글이 앞 장을 덮어쓴다.
  */
 let seq = 0;
+/**
+ * 「지우기」가 지우는 중인 장의 id — 그 사이 돌아온 갱신 404가 그 장을 새 필기로 되살리지 않게 하는 울타리(sendOnce의 404 폴백).
+ * 세대를 미리 올려 막지 않는 이유는 remove() 주석에 있다.
+ */
+let removing: number | null = null;
 
 function blank(): Draft {
     return { id: null, bookId: bookId.value, title: '', body: '', revision: 0 };
@@ -75,8 +80,9 @@ function blank(): Draft {
 
 /**
  * 세대를 올린다 — 날아가 있던 저장 응답과, <b>편집기에 쌓여 있던 사진</b>이 새 장에 닿지 않게. seq를 올리는 자리는 전부 이것을 부른다:
- * retarget(새 필기·책 전환·?note=·조회 완료) · openNote의 조회 전 선올림 · remove의 선올림. retarget만 부르면 openNote의 조회 틈에
+ * retarget(새 필기·책 전환·?note=·조회 완료·「지우기」 성공) · openNote의 조회 전 선올림. retarget만 부르면 openNote의 조회 틈에
  * 끝난 사진이 옛 장 화면에 들어갔다가 저장되지 않고 사라진다(설계 §4-8 실측).
+ * 「지우기」는 응답 전에 세대를 올리지 않고 사진만 버린다 — 실패하면 그 장에 그대로 남기 때문이다(remove 주석).
  */
 function bumpSeq(): void {
     seq += 1;
@@ -291,8 +297,7 @@ async function sendOnce(keepalive: boolean): Promise<void> {
                 if (!(e instanceof ApiError && e.status === 404)) throw e;
             });
             notes.value = notes.value.filter((n) => n.id !== id);
-            // 세대가 아니라 id로 판정한다 — 「지우기」가 실패하면 세대만 오르고 화면은 아직 이 장이라, 세대로 버리면
-            // 서버에서 이미 지운 id를 쥔 채 「저장 중…」에 굳는다(리뷰 m-1). 다른 장으로 갈아탔으면 id가 달라 손대지 않는다.
+            // id로 판정한다 — 다른 장으로 갈아탔으면 id가 달라 손대지 않는다(REQ-14).
             if (draft.value.id !== id) return;
             draft.value.id = null;
             draft.value.revision = 0;
@@ -314,8 +319,20 @@ async function sendOnce(keepalive: boolean): Promise<void> {
     } catch (e) {
         // 상태 없는 실패(네트워크 끊김)는 0 — 5xx와 같은 갈래(재시도 대상)로 떨어진다.
         const status = e instanceof ApiError ? e.status : 0;
-        const message = e instanceof Error && e.message ? e.message : '필기를 저장하지 못했어요.';
+        // 서버가 준 문구(ApiError)는 그대로, 그 밖(fetch의 연결 실패 — 크롬 「Failed to fetch」·사파리 「Load failed」)은 바꾼다(사진 올리기와 같은 규칙).
+        const message = e instanceof ApiError ? e.message : '필기를 저장하지 못했어요 — 연결을 확인하고 다시 해 주세요.';
         if (mine !== seq) return;
+        if (status === 404 && id !== null && id !== removing) {
+            // 갱신이 404 = 서버엔 이 장이 이제 없다(자동 삭제의 응답만 끊겼거나 · 다른 곳에서 지웠다). 화면의 글은 서버 어디에도 없으니
+            // 그 장과 끊고 새 필기로 만든다 — 큐가 한 번 더 돌아 생성으로 나간다(자동 삭제 뒤 이어 쓰기와 같은 길, 설계 2026-10-20).
+            // retarget이 아니다: 세대를 올리면 올리던 사진이 버려진다. 남의 필기 404와 구분되지 않지만 생성이 책 소유를 다시 확인한다.
+            // 이 탭이 「지우기」하는 중인 장이면 되살리지 않는다(removing). 자동 삭제의 404는 위에서 성공으로 삼켰다 — 여기 오는 id 있는 404는 갱신이다.
+            draft.value.id = null;
+            draft.value.revision = 0;
+            notes.value = notes.value.filter((n) => n.id !== id);
+            state.value = { kind: 'dirty' };
+            return;
+        }
         state.value = nextSaveState(state.value, { type: 'fail', status, message });
     }
 }
@@ -370,17 +387,23 @@ async function remove(): Promise<void> {
     const id = draft.value.id;
     if (id === null || !window.confirm('이 필기를 지울까요? 되돌릴 수 없어요.')) return;
     clearTimer();
-    // 지우기는 플러시하지 않는다(지울 글을 먼저 저장할 이유가 없다) — 대신 세대를 올려, 날아가 있던
-    // 저장이 돌아와 **지운 장의 id**를 새 초안에 붙이는 것을 막는다.
-    bumpSeq();
+    // 지우기는 플러시하지 않는다(지울 글을 먼저 저장할 이유가 없다). 지울 장에 사진이 들어가지 않게 대기 사진만 응답 전에 버리고,
+    // 세대는 <b>지워진 뒤</b> retarget이 올린다 — 미리 올리면 「지우기」가 실패했을 때 날아가 있던 저장의 응답까지 버려져
+    // 판 번호가 낡고(→ 다음 저장이 거짓 409로 잠김) 실패도 버려져 「저장 중…」에 굳는다(설계 2026-10-20 note-save-race-followups).
+    // 지우는 동안 돌아온 응답은 아직 이 장의 것이라 그대로 받는다 — 갱신 404만 울타리(removing)가 새 필기로 되살리지 못하게 막는다.
+    editorRef.value?.dropPendingImages();
+    removing = id;
     try {
         await deleteNote(id);
     } catch (e) {
         // 404 = 이미 없다(자동 삭제와 엇갈림 · 다른 곳에서 지움) — 지우려던 끝이 이미 와 있다.
         if (!(e instanceof ApiError && e.status === 404)) {
-            listError.value = e instanceof Error && e.message ? e.message : '필기를 지우지 못했어요.';
+            // 서버 문구는 그대로, fetch의 연결 실패(영어)는 바꾼다 — sendOnce와 같은 규칙.
+            listError.value = e instanceof ApiError ? e.message : '필기를 지우지 못했어요 — 연결을 확인하고 다시 해 주세요.';
             return;
         }
+    } finally {
+        if (removing === id) removing = null;   // 겹친 「지우기」(다른 장)가 남의 울타리를 걷지 않게
     }
     notes.value = notes.value.filter((n) => n.id !== id);
     retarget(blank());
@@ -389,7 +412,8 @@ async function remove(): Promise<void> {
 /**
  * 편집기가 부르는 사진 올리기 — 줄여서 올리고 주소를 준다. 보낼 때의 세대(seq)를 들고 갔다가 돌아와 대조한다(sendOnce와 같은 규율):
  * 그 사이 다른 장·책으로 갈아탔으면 거절한다 — 안 그러면 사진이 새 장에 붙는다. 올라간 사진은 어디에도 안 쓰여 정리 배치가 치운다.
- * (주된 막이는 편집기 세대 — bumpSeq가 dropPendingImages를 부른다. 이 대조는 같은 규율의 두 번째 벨트로 남긴다.)
+ * (주된 막이는 편집기 세대 — bumpSeq가 dropPendingImages를 부른다. 이 대조는 같은 규율의 두 번째 벨트로 남긴다.
+ * 「지우기」 응답 전에는 seq가 안 오르므로 편집기 세대(docGen)만 막는다.)
  * 던지는 문구는 편집기 상태줄에 그대로 뜬다(잠김은 편집기가 삽입 자리에서 직접 본다).
  */
 async function uploadImage(file: File): Promise<string> {
