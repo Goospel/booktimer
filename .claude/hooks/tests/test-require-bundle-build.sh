@@ -174,4 +174,45 @@ REPO_MATCH=$(make_dep_repo 3.5.42); W_MATCH=$(to_win "$REPO_MATCH")
 got=$(run_cmd "git commit -m \"feat: dep match\"" "$W_MATCH")
 check "(fixture) installed dep == lock → exit 0" 0 "$got"
 
+# ── Self-staging command whose own add has not run yet (T-249) ───────────────
+# `git add ... && git commit` reaches this PreToolUse gate BEFORE its own add runs, so a bundle the
+# developer already rebuilt is still an unstaged diff. Blocking stays (fail-safe) -- but the message
+# must name the cause: "Bundle is stale" sends people into a rebuild loop that never ends.
+# Cases 10/11 run the same command and differ only in whether the worktree bundle already matched
+# the build output -- so each one is the other's control.
+make_selfstage_repo() {  # $1 = garden.js in the worktree before the commit command
+    local r; r=$(make_repo)
+    mkdir -p "$r/src/main/resources/static/garden" "$r/frontend/src"
+    printf 'old content\n' > "$r/src/main/resources/static/garden/garden.js"
+    cp "$REPO_STALE/frontend/build-fixture.js" "$r/frontend/build-fixture.js"   # writes 'new content'
+    printf '{"scripts":{"build":"node build-fixture.js"}}' > "$r/frontend/package.json"
+    printf 'export const x = 1;\n' > "$r/frontend/src/index.ts"
+    git -C "$r" add . >/dev/null 2>&1
+    git -C "$r" commit -m "init" >/dev/null 2>&1
+    printf 'export const x = 2;\n' > "$r/frontend/src/index.ts"            # unstaged source change
+    printf '%s\n' "$1" > "$r/src/main/resources/static/garden/garden.js"
+    echo "$r"
+}
+run_err() {  # stderr of the hook; exit code via $?
+    printf '{"tool_input":{"command":"%s"},"cwd":"%s"}' "$(json_esc "$1")" "$(json_esc "$2")" \
+        | powershell.exe -NoProfile -File "$HOOK" 2>&1 >/dev/null
+}
+SELF_CMD="git add frontend src/main/resources/static && git commit -F .commit-msg-tmp"
+
+# Case 10: bundle already rebuilt, same-command add pending → exit 2 with the add-order message
+REPO_PEND=$(make_selfstage_repo 'new content'); W_PEND=$(to_win "$REPO_PEND")
+err=$(run_err "$SELF_CMD" "$W_PEND"); got=$?
+check "(fixture) same-command add, bundle already rebuilt → exit 2" 2 "$got"
+if [[ "$err" == *"has not run yet"* && "$err" != *"Bundle is stale"* ]]; then echo "PASS: (fixture) message names the same-command add, not a stale build"
+else echo "FAIL: (fixture) message names the same-command add, not a stale build — got: $err"; FAILED=1; fi
+
+# Case 11: same command, the unstaged bundle is an OLDER build (source changed after it), so the
+# hook's rebuild changes it → exit 2, old message. Pre-existing drift on purpose: an empty drift
+# would pass even if the fingerprint comparison were dropped.
+REPO_REAL=$(make_selfstage_repo 'previous build'); W_REAL=$(to_win "$REPO_REAL")
+err=$(run_err "$SELF_CMD" "$W_REAL"); got=$?
+check "(fixture) same-command add, bundle really stale → exit 2" 2 "$got"
+if [[ "$err" == *"Bundle is stale"* && "$err" != *"has not run yet"* ]]; then echo "PASS: (fixture) really stale bundle keeps the stale message"
+else echo "FAIL: (fixture) really stale bundle keeps the stale message — got: $err"; FAILED=1; fi
+
 exit $FAILED
