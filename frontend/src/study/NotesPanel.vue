@@ -88,9 +88,9 @@ function blank(): Draft {
 
 /**
  * 세대를 올린다 — 날아가 있던 저장 응답과, <b>편집기에 쌓여 있던 사진</b>이 새 장에 닿지 않게. seq를 올리는 자리는 전부 이것을 부른다:
- * retarget(새 필기·책 전환·?note=·조회 완료·「지우기」 성공) · openNote의 조회 전 선올림. retarget만 부르면 openNote의 조회 틈에
+ * retarget(새 필기·책 전환·?note=·조회 완료·「지우기」 성공 — 「이미 지워졌다」 증거가 있는 실패 포함) · openNote의 조회 전 선올림. retarget만 부르면 openNote의 조회 틈에
  * 끝난 사진이 옛 장 화면에 들어갔다가 저장되지 않고 사라진다(설계 §4-8 실측).
- * 「지우기」는 응답 전에 세대를 올리지 않고 사진만 버린다 — 실패하면 그 장에 그대로 남기 때문이다(remove 주석).
+ * 「지우기」는 응답 전에 세대를 올리지 않고 사진만 버린다 — 증거 없이 실패하면 그 장에 그대로 남기 때문이다(remove 주석 · goneWhileRemoving).
  */
 function bumpSeq(): void {
     seq += 1;
