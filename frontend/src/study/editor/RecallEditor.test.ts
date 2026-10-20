@@ -742,3 +742,15 @@ describe('다 지운 편집기가 내보내는 값', () => {
         expect(lastEmitted(wrapper)).toBe(IMG(1));
     });
 });
+
+// 설계 2026-10-20 note-remove-in-flight 리뷰 F1 — 필기 패널은 「지우는 중…」 동안 편집기를 잠근다. 잠그고 푸는 것은 글을 고친
+// 것이 아니다: 여기서 값을 내보내면 패널이 dirty로 보고 지우는 장에 갱신을 보내, 서버가 지운 글을 새 필기로 되살릴 수 있다.
+describe('잠금 토글은 글을 고치지 않는다', () => {
+    test('disabled를 켜고 꺼도 update:modelValue를 내보내지 않는다', async () => {
+        const wrapper = await mountEditor('A');
+        await wrapper.setProps({ disabled: true });
+        await wrapper.setProps({ disabled: false });
+        expect(wrapper.emitted('update:modelValue')).toBeUndefined();
+        expect(editorOf(wrapper).isEditable, '전제 — 잠금은 실제로 풀렸다').toBe(true);
+    });
+});

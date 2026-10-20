@@ -1687,6 +1687,18 @@ describe('필기 패널 — 저장 경합 후속', () => {
         expect(document.activeElement, '숨었다 돌아온 「지우기」에 포커스가 돌아온다').toBe(wrapper.find('[data-testid="notes-delete"]').element);
     });
 
+    // 리뷰 F2 — 위 테스트는 「포커스가 아무 데도 없을 때」만 잰다. 사용자가 둔 포커스를 실패가 빼앗지 않는다.
+    test('REQ-42 · 「지우기」가 실패해도 그 사이 사용자가 다른 곳에 둔 포커스는 빼앗지 않는다', async () => {
+        const wrapper = await saved();
+        const removing = await removeHeld(wrapper);
+        const recent = wrapper.find('[data-testid="notes-recent"]').element as HTMLButtonElement;
+        recent.focus();
+        removing.reject(new TypeError('Failed to fetch'));
+        await flushPromises();
+        expect(wrapper.find('[data-testid="notes-delete"]').exists(), '전제 — 「지우기」는 돌아왔다').toBe(true);
+        expect(document.activeElement).toBe(recent);
+    });
+
     test('REQ-42 · 지우는 동안엔 「다시 저장」·「새로고침」도 숨고 상태줄이 빨갛지 않다 — 「지우기」가 실패하면 돌아온다', async () => {
         const wrapper = await saved();
         vi.mocked(fetch).mockResolvedValueOnce(fail(500, ''));
@@ -1897,5 +1909,7 @@ describe('필기 패널 — 저장 경합 후속', () => {
         expect(wrapper.text()).toContain('지우려던 필기를 지우지 못했어요 — 열어서 다시 지워 주세요.');
         expect(wrapper.text(), '「다시 해 주세요」가 지금 화면(장 6)의 「지우기」를 가리키지 않는다').not.toContain(NET_REMOVE);
         expect(bodyOf(wrapper)).toBe('B6');
+        // 리뷰 F2 — 옮긴 화면이면 포커스를 주지 않는다: 지금 보고 있는 장 6의 「지우기」에 가면 Enter 한 번이 그 장의 삭제 확인창이다.
+        expect(document.activeElement).not.toBe(wrapper.find('[data-testid="notes-delete"]').element);
     });
 });
