@@ -2839,15 +2839,11 @@ body .focus-stack.is-merged > .dash-card.is-study { border: 0; border-radius: 0;
 .focus-actions { display: flex; align-items: center; gap: 14px; margin-left: auto; }
 .focus-bar .dash-btn-outline { width: auto; margin: 0; padding: 9px 20px; font-size: 15px; }
 .focus-bar .dash-bookless { align-self: auto; }
-/* 일시정지 단축키 힌트 — 버튼 안 작은 보조 글자(글자 바닥 13px, editorialTheme REQ-24). 폰(639px 이하)엔 외장 키보드가 드물어
-   숨긴다. 색은 토큰만(darkTokens 래칫). */
-.focus-kbd { margin-left: 8px; font: inherit; font-size: 13px; color: var(--muted); }
+/* 측정 시작·종료 단축키 힌트 — 버튼 안 작은 보조 글자(글자 바닥 13px, editorialTheme REQ-24). 색은 버튼 글자를 물려받아 흐리게:
+   토큰 색을 박으면 검정 알약 위에서 대비가 무너진다. 폰(639px 이하)엔 외장 키보드가 드물어 숨긴다.
+   흐리기는 .8이 바닥 — 가장 어두운 조합(다크 공부 파랑 #8FA9BE 위 #1C1A17)이 .8에서 4.92:1, .7이면 3.98:1로 AA 4.5 미달이었다. */
+.focus-kbd { margin-left: 8px; font: inherit; font-size: 13px; opacity: .8; }
 @media (max-width: 639px) { .focus-kbd { display: none; } }
-/* 버튼이 넷이 되면서 768·390에서 한 줄에 안 든다 — 버튼 글자는 한 줄로 두고 줄을 접는다(접기 전 실측: 글자가 두세 줄로
-   눌려 버튼 높이 66~115px). 일시정지·측정 종료는 .focus-primary로 묶여 함께 다음 줄로 간다. */
-.focus-actions { flex-wrap: wrap; justify-content: flex-end; row-gap: 10px; }
-.focus-actions button { white-space: nowrap; }
-.focus-primary { display: flex; gap: 14px; }
 .focus-top .dash-goal-edit { flex-basis: 100%; justify-content: flex-start; margin-top: 10px; }
 /* 탭을 떠나 멈춘 안내 — 폼과 같은 자리(막대 아래 한 줄)의 조용한 문장. 움직임 없음(정적 표현이 기본값, T-176). */
 .focus-away { flex-basis: 100%; margin: 10px 0 0; font-size: 13px; color: var(--muted); }
