@@ -32,13 +32,17 @@ export type SaveState =
      * 요청이 나가고, 특히 429는 자동저장이 1.5초마다 <b>스스로 레이트리밋을 때린다</b>.
      */
     | { kind: 'invalid'; message: string; permanent?: boolean }
-    | { kind: 'conflict'; message: string };
+    | { kind: 'conflict'; message: string }
+    /** 저장된 장의 본문을 다 비워 서버에서 그 장을 지웠다 — 화면은 빈 새 초안과 같고 상태줄만 그 사실을 말한다(설계 2026-10-19 note-empty-body-save D-3). */
+    | { kind: 'emptied' };
 
 export type SaveEvent =
     | { type: 'edit' }
     /** 디바운스 만료 · 즉시 플러시 · 「다시 저장」 — 보내려는 순간. */
     | { type: 'flush' }
     | { type: 'ok'; at: string }
+    /** 자동 삭제가 끝났다(200, 또는 이미 없음 404). */
+    | { type: 'emptied' }
     | { type: 'fail'; status: number; message: string };
 
 export function nextSaveState(state: SaveState, event: SaveEvent): SaveState {
@@ -56,6 +60,9 @@ export function nextSaveState(state: SaveState, event: SaveEvent): SaveState {
         case 'ok':
             // 저장 중에 또 고쳤으면(dirty) 그 사실을 지우지 않는다 — 큐가 한 번 더 돈다.
             return state.kind === 'saving' ? { kind: 'saved', at: event.at } : state;
+        case 'emptied':
+            // 지우는 사이 또 고쳤으면(dirty) 그 사실을 지우지 않는다 — 큐가 한 번 더 돌아 그 글이 새 장으로 생긴다('ok'와 같은 규율).
+            return state.kind === 'saving' ? { kind: 'emptied' } : state;
         case 'fail':
             if (event.status === 409) return { kind: 'conflict', message: event.message };
             if (event.status === 400) return { kind: 'invalid', message: event.message };

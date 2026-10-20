@@ -721,3 +721,24 @@ describe('필기 사진 CSS', () => {
         expect('a { border: 1px solid var(--border); }').toMatch(/(^|[;\s])border(?!-radius)(-[a-z-]+)?\s*:/);   // 양성 대조 — 정규식이 테를 잡는다
     });
 });
+
+// 설계 2026-10-19 note-empty-body-save — 필기 패널은 본문이 「trim 뒤 빈 문자열」이면 저장된 장을 지운다. 그 판정이
+// 실제 편집기에서 서려면 사진을 다 지운 편집기가 정확히 빈 문자열을 내보내야 한다. REQ는 그 문서의 지역 번호(위 사진 REQ-12~15·19와 다른 문서).
+describe('다 지운 편집기가 내보내는 값', () => {
+    // Red 없음 — 스파이크 S-1(2026-10-19)로 초록 확인한 전제. 깨지는 날은 빈 문서가 &nbsp; 같은 비공백으로 나가기 시작한 날이고,
+    // 그러면 자동 삭제가 조용히 안 일어나 「사진을 지워도 저장 안 됨」 버그가 돌아온다.
+    test('REQ-01 · 사진 하나뿐인 문서에서 사진을 지우면 ""를 내보내고, 되돌리면 사진 표식이 돌아온다', async () => {
+        const wrapper = await mountEditor(IMG(1), withPhotos());
+        const e = editorOf(wrapper);
+        let photoPos = -1;
+        e.state.doc.descendants((n: AnyEditor, pos: number) => { if (n.type.name === 'noteImage') photoPos = pos; });
+        expect(photoPos, '전제 — 사진 노드가 있다').toBeGreaterThanOrEqual(0);
+
+        e.commands.setNodeSelection(photoPos);
+        e.commands.deleteSelection();
+        expect(lastEmitted(wrapper)).toBe('');
+
+        e.commands.undo();
+        expect(lastEmitted(wrapper)).toBe(IMG(1));
+    });
+});

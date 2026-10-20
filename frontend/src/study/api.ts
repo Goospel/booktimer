@@ -387,8 +387,15 @@ export async function updateNote(
     return json(await post(`/api/study/notes/${id}`, input, keepalive), '필기를 저장하지 못했어요.');
 }
 
-export async function deleteNote(id: number): Promise<void> {
-    await json<unknown>(await post(`/api/study/notes/${id}/delete`), '필기를 지우지 못했어요.');
+/**
+ * @param revision 자동 삭제(저장된 장의 본문을 다 비움)만 싣는다 — 그 사이 다른 곳에서 고쳐졌으면 서버가 409로 거절하고 지우지 않는다.
+ *                 확인창을 거치는 「지우기」 버튼은 싣지 않는다.
+ * @param keepalive 탭이 닫히는 중의 마지막 플러시 — 새로고침 직전에 비운 장이 여기서 지워진다(갱신과 같은 이유).
+ */
+export async function deleteNote(id: number, revision?: number, keepalive = false): Promise<void> {
+    await json<unknown>(
+        await post(`/api/study/notes/${id}/delete`, revision === undefined ? undefined : { revision }, keepalive),
+        '필기를 지우지 못했어요.');
 }
 
 /**
