@@ -65,6 +65,7 @@ check "REQ-02 · every reify verb/alias is blocked (not blocked:${bad:- none})" 
 check "REQ-02 · install --force (moves target entries away) -> blocked" 2 "$(run 'npm --prefix frontend install --force' "$WT")"
 check "REQ-02 · audit fix -> blocked" 2 "$(run 'npm --prefix frontend audit fix' "$WT")"
 check "REQ-02 · audit (report only) -> passes" 0 "$(run 'npm --prefix frontend audit' "$WT")"
+check "REQ-02 · rebuild (keeps the junction, measured harmless) -> passes" 0 "$(run 'npm --prefix frontend rebuild' "$WT")"
 
 # --- REQ-03 · the folder npm actually runs in ---
 check "REQ-03 · cd frontend && npm ci -> blocked" 2 "$(run 'cd frontend && npm ci' "$WT")"
@@ -75,6 +76,11 @@ check "REQ-03 · PowerShell: Set-Location frontend; npm.cmd ci -> blocked" 2 "$(
 check "REQ-03 · /c/... absolute --prefix from another cwd -> blocked" 2 "$(run "npm --prefix \"$(drive_posix "$T/wt")/frontend\" ci" "$OTHER")"
 check "REQ-03 · first npm is run, second npm is ci -> blocked" 2 "$(run 'npm --prefix frontend run build && npm --prefix frontend ci' "$WT")"
 check "REQ-03 · cd inside an open subshell -> blocked" 2 "$(run '(cd frontend && npm ci)' "$WT")"
+check "REQ-03 · reify over a real folder first, then over the junction -> blocked" 2 "$(run 'npm --prefix miniapp ci && npm --prefix frontend ci' "$WT")"
+check "REQ-03 · VAR=value prefix -> blocked" 2 "$(run 'CI=1 npm --prefix frontend ci' "$WT")"
+check "REQ-03 · npm after then -> blocked" 2 "$(run 'if true; then npm --prefix frontend ci; fi' "$WT")"
+check "REQ-03 · PowerShell multi-line (npm at line start) -> blocked" 2 "$(run 'Set-Location frontend
+npm ci' "$WT")"
 
 # --- REQ-04 · target node_modules is not a junction -> passes ---
 check "REQ-04 · real node_modules (miniapp) -> passes" 0 "$(run 'npm --prefix miniapp ci' "$WT")"
@@ -82,7 +88,7 @@ check "REQ-04 · main checkout (real folder) -> passes" 0 "$(run 'npm --prefix f
 check "REQ-04 · no node_modules -> passes" 0 "$(run 'npm --prefix plain ci' "$WT")"
 check "REQ-04 · repo root without package.json -> passes" 0 "$(run 'npm ci' "$WT")"
 check "REQ-04 · another repo's real folder by absolute path -> passes" 0 "$(run "npm --prefix \"$(cygpath -m "$T/other")/frontend\" ci" "$WT")"
-check "REQ-04 · cd inside a closed subshell does not leak -> passes" 0 "$(run '(cd frontend && npm run build) && npm --prefix miniapp ci' "$WT")"
+check "REQ-04 · cd inside a closed subshell does not leak -> passes" 0 "$(run '(cd frontend && npm run build) && npm ci' "$WT")"
 
 # --- REQ-05 · non-reify npm commands pass ---
 check "REQ-05 · run build -> passes" 0 "$(run 'npm --prefix frontend run build' "$WT")"

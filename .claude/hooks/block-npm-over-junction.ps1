@@ -12,6 +12,7 @@
 #
 # 알려진 한계(테스트로 잠그지 않음): 래퍼 속 npm(bash -c "…"·cmd /c …·스크립트 파일 안) · 따옴표로 감싼 npm 전체 경로 ·
 #   npm 접두 약어(install-cl)·camelCase(cleanInstall) · 동사 앞의 다른 값 옵션(--loglevel warn) · --prefix="공백 경로" ·
+#   줄 이음(Bash `\`+개행 · PowerShell 백틱+개행으로 동사를 다음 줄에 쓴 npm) ·
 #   따옴표 문자열 속 `; npm ci`(산문을 명령으로 읽음 — 오탐 쪽) · 없는 --prefix 폴더면 세션 cwd 로 판정.
 # 같은 명령에서 정션을 끊고 이어서 npm 을 돌리면 끊기 전 상태를 보고 막는다 — 의도다(PreToolUse 시점).
 # 우회: 명령에 ALLOW_NPM_OVER_JUNCTION — 사용자가 명시적으로 지시한 경우에만.
