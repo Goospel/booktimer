@@ -129,6 +129,12 @@ describe('nextSaveState — 자동저장 상태기계', () => {
         const saved: SaveState = { kind: 'saved', at: 'T' };
         expect(nextSaveState(saved, { type: 'flush' })).toBe(saved);
     });
+
+    // 설계 2026-10-19 note-empty-body-save — 저장된 장의 본문을 다 비우면 그 장을 지운다(REQ는 그 문서의 지역 번호 · 아래 사진 REQ-17과 다른 문서).
+    test('REQ-09 · 지우는 중(saving)에 끝나면 emptied — 그 사이 고쳤으면(dirty) 그대로 둬 큐가 새 장을 만든다', () => {
+        expect(nextSaveState({ kind: 'saving' }, { type: 'emptied' })).toEqual({ kind: 'emptied' });
+        expect(nextSaveState({ kind: 'dirty' }, { type: 'emptied' })).toEqual({ kind: 'dirty' });
+    });
 });
 
 // PR-3 — 서버 `StudyNote.preview()`의 클라 판. 저장 직후의 목록 행만 이걸로 만든다(저장마다 목록을
