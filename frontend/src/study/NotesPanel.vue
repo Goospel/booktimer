@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, ref, useId, watch } from 'vue';
+import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, useId, watch } from 'vue';
 
 import {
     ApiError, createNote, deleteNote, fetchNote, fetchNotes, updateNote, uploadNoteImage,
@@ -38,6 +38,11 @@ defineExpose({ focusEnd: () => editorRef.value?.focusEnd() });
 
 /** 마지막 타이핑에서 저장까지의 틈. 잃을 수 있는 최대치가 이만큼이다. */
 const DEBOUNCE_MS = 1500;
+/**
+ * 「지우기」 응답을 기다리는 한도 — 넘기면 그만 기다리고 「지우지 못했어요」로 푼다(설계 2026-10-20 note-remove-in-flight D-4).
+ * 그동안 그 장은 「지우는 중…」으로 잠기니 끝이 정해져 있어야 한다. 자동저장 왕복엔 한도가 없다(그 설계 §15-1).
+ */
+const REMOVE_TIMEOUT_MS = 20_000;
 /** 「최근 필기 ▾」 팝오버와 빈 필기의 「이어 쓰기」 칩에 올리는 장 수(설계 D5). 전부는 필기 화면에 있다. */
 const RECENT_MENU = 5;
 const RECENT_CHIPS = 3;
@@ -69,18 +74,19 @@ let inflightP: Promise<void> | null = null;
  */
 let seq = 0;
 /**
- * 「지우기」가 지우는 중인 장의 id — 그 사이 돌아온 갱신 404가 그 장을 새 필기로 되살리지 않게 하는 울타리(sendOnce의 404 폴백).
+ * 「지우기」가 지우는 중인 장들 — 그 사이 돌아온 갱신 404가 그 장을 새 필기로 되살리지 않게 하는 울타리(sendOnce의 404 폴백)이자,
+ * 화면이 그 장을 「지우는 중…」으로 잠그는 근거다(deleting) — 그래서 반응형이다.
+ * 집합이다 — 5를 지우는 중 6도 지우면(겹침) 한 칸은 6이 5를 덮고 먼저 걷혀, 5를 다시 열면 「지우기」가 다시 보였다(같은 장 두 번 지우기).
  * 세대를 미리 올려 막지 않는 이유는 remove() 주석에 있다.
- * 울타리 안에서 받은 404는 버리지 않고 증거로 남긴다(goneWhileRemoving) — 그 「지우기」가 실패로 끝나도 막히지 않게.
  */
-let removing: number | null = null;
+const removing = reactive(new Set<number>());
 /**
- * 「지우기」하는 중에 그 장의 갱신이 404를 받았다 — 서버엔 그 장이 이미 없다는 증거다(울타리 안의 404, sendOnce).
- * 그 장의 「지우기」 응답이 실패(연결 끊김·5xx)로 와도 지워진 것으로 본다(remove). 증거는 404뿐이다 — 5xx·409로는 서버에 있는지 모른다.
- * id로 둔다 — 다른 장의 「지우기」가 남의 증거를 쓰지 않게. 한 칸이라, 겹친 「지우기」가 덮으면 앞 장은 지금처럼 「지우지 못했어요」로 돌아간다.
- * 걷지 않는다 — 지운 장은 서버에 다시 생기지 않아(id 자동 증가) 「그 장은 없다」가 끝까지 참이다. 같은 장을 두 번 지워 앞 것이 늦게 실패해도 같은 증거를 쓴다.
+ * 서버엔 이제 없다고 이 탭이 확인한 장들 — 「지우기」 중 받은 그 장의 갱신 404(울타리 안) · 「지우기」 중 끝난 그 장의 자동 삭제(200·404) · 끝난 「지우기」.
+ * 「지우기」 응답이 실패(연결 끊김·5xx·시간 초과)로 와도 여기 있으면 지운 것으로 끝낸다(remove). 늦게 온 조회가 지운 장을 다시 띄우지 않게도 쓴다(openNote).
+ * 갱신 5xx·409로는 서버에 있는지 모른다 — 넣지 않는다. 집합이다 — 겹친 「지우기」 둘이 서로의 증거를 덮지 않게.
+ * 걷지 않는다 — 지운 장은 서버에 다시 생기지 않아(id 자동 증가) 「그 장은 없다」가 끝까지 참이다.
  */
-let goneWhileRemoving: number | null = null;
+const removed = new Set<number>();
 
 function blank(): Draft {
     return { id: null, bookId: bookId.value, title: '', body: '', revision: 0 };
@@ -88,9 +94,9 @@ function blank(): Draft {
 
 /**
  * 세대를 올린다 — 날아가 있던 저장 응답과, <b>편집기에 쌓여 있던 사진</b>이 새 장에 닿지 않게. seq를 올리는 자리는 전부 이것을 부른다:
- * retarget(새 필기·책 전환·?note=·조회 완료·「지우기」 성공 — 「이미 지워졌다」 증거가 있는 실패 포함) · openNote의 조회 전 선올림. retarget만 부르면 openNote의 조회 틈에
+ * retarget(새 필기·책 전환·?note=·조회 완료·「지우기」가 끝났을 때 화면이 아직 그 장이면 — 「이미 지워졌다」 증거가 있는 실패 포함) · openNote의 조회 전 선올림. retarget만 부르면 openNote의 조회 틈에
  * 끝난 사진이 옛 장 화면에 들어갔다가 저장되지 않고 사라진다(설계 §4-8 실측).
- * 「지우기」는 응답 전에 세대를 올리지 않고 사진만 버린다 — 증거 없이 실패하면 그 장에 그대로 남기 때문이다(remove 주석 · goneWhileRemoving).
+ * 「지우기」는 응답 전에 세대를 올리지 않고 사진만 버린다 — 증거 없이 실패하면 그 장에 그대로 남기 때문이다(remove 주석 · removed).
  */
 function bumpSeq(): void {
     seq += 1;
@@ -105,8 +111,15 @@ function retarget(next: Draft): void {
 }
 
 const hasBooks = computed(() => props.books.length > 0);
-/** 409 뒤엔 잠근다 — 더 쓰게 두면 새로고침할 때 그만큼을 버리게 된다. */
-const locked = computed(() => state.value.kind === 'conflict');
+/**
+ * 지금 화면의 장을 「지우기」하는 중이다 — 상태줄은 「지우는 중…」, 「지우기」·「다시 저장」·「새로고침」은 숨고(같은 장을 두 번 지우지 않게) 제목·본문은 잠긴다(locked).
+ * 화면의 장(id)으로 판정한다 — 지우는 사이 「새 필기」·다른 장·다른 책으로 옮기면 그 화면은 평소대로고, 그 장을 다시 열면 다시 「지우는 중…」이다.
+ */
+const deleting = computed(() => draft.value.id !== null && removing.has(draft.value.id));
+/** 409 뒤엔 잠근다 — 더 쓰게 두면 새로고침할 때 그만큼을 버리게 된다. 지우는 중인 장도 잠근다 — 지워지면 함께 사라질 글이다(설계 2026-10-20 note-remove-in-flight D-1). */
+const locked = computed(() => state.value.kind === 'conflict' || deleting.value);
+/** 「지우기」 버튼 — 지우는 동안 숨었다가 실패로 돌아오면 포커스를 돌려받는다(remove). */
+const deleteButton = ref<HTMLButtonElement | null>(null);
 
 onMounted(async () => {
     if (!hasBooks.value) return;
@@ -307,6 +320,14 @@ async function sendOnce(keepalive: boolean): Promise<void> {
             notes.value = notes.value.filter((n) => n.id !== id);
             // id로 판정한다 — 다른 장으로 갈아탔으면 id가 달라 손대지 않는다(REQ-14).
             if (draft.value.id !== id) return;
+            // 이 탭이 「지우기」하는 중인 장이다 — 서버엔 이제 없으니 「이미 지워졌다」 증거로 남기고(그 「지우기」가 실패해도 지운 것으로 끝난다)
+            // 짝은 끊지 않는다: 화면(제목까지)은 그 「지우기」가 끝나며 비운다. 끊으면 화면이 그 장이 아니게 돼 「지우는 중…」 잠금이 풀리고, 그 사이 친 글을 「지우기」가 걷는다.
+            // idle — 지운 장에 더 보낼 것이 없다(saving으로 두면 그 사이 플러시가 같은 삭제를 또 보낸다).
+            if (removing.has(id)) {
+                removed.add(id);
+                state.value = { kind: 'idle' };
+                return;
+            }
             draft.value.id = null;
             draft.value.revision = 0;
             state.value = nextSaveState(state.value, { type: 'emptied' });
@@ -331,8 +352,8 @@ async function sendOnce(keepalive: boolean): Promise<void> {
         const message = e instanceof ApiError ? e.message : '필기를 저장하지 못했어요 — 연결을 확인하고 다시 해 주세요.';
         if (mine !== seq) return;
         // 이 탭이 「지우기」하는 중인 장의 갱신 404 — 되살리지 않고(아래 폴백을 건너뛰어 fail로) 「이미 지워졌다」의 증거로 남긴다.
-        if (status === 404 && id !== null && id === removing) goneWhileRemoving = id;
-        if (status === 404 && id !== null && id !== removing) {
+        if (status === 404 && id !== null && removing.has(id)) removed.add(id);
+        if (status === 404 && id !== null && !removing.has(id)) {
             // 갱신이 404 = 서버엔 이 장이 이제 없다(자동 삭제의 응답만 끊겼거나 · 다른 곳에서 지웠다). 화면의 글은 서버 어디에도 없으니
             // 그 장과 끊고 새 필기로 만든다 — 큐가 한 번 더 돌아 생성으로 나간다(자동 삭제 뒤 이어 쓰기와 같은 길, 설계 2026-10-20).
             // retarget이 아니다: 세대를 올리면 올리던 사진이 버려진다. 남의 필기 404와 구분되지 않지만 생성이 책 소유를 다시 확인한다.
@@ -370,7 +391,8 @@ async function openNote(id: number): Promise<void> {
     const mine = seq;
     try {
         const found = await fetchNote(id);
-        if (mine !== seq) return;
+        // 지운 장은 띄우지 않는다 — 서버가 지우기 전에 읽힌 조회가 「지우기」보다 늦게 오면 지운 장이 다시 뜨고, 거기 이어 쓰면 404 폴백이 새 필기로 되살린다(설계 2026-10-20 note-remove-in-flight).
+        if (mine !== seq || removed.has(id)) return;
         retarget({
             id: found.id, bookId: found.bookId, title: found.title ?? '',
             body: found.body, revision: found.revision,
@@ -398,36 +420,43 @@ async function remove(): Promise<void> {
     if (id === null || !window.confirm('이 필기를 지울까요? 되돌릴 수 없어요.')) return;
     listError.value = '';   // 다시 지운다 — 앞선 「지우지 못했어요」를 걷는다(이번 결과가 다시 말한다). 취소면 한 것이 없으니 그대로 둔다(D-3).
     clearTimer();
-    // 지우기는 플러시하지 않는다(지울 글을 먼저 저장할 이유가 없다). 지울 장에 사진이 들어가지 않게 대기 사진만 응답 전에 버리고,
+    // 지우기는 플러시하지 않는다(지울 글을 먼저 저장할 이유가 없다 — 실패하면 아래 실패 갈래가 보낸다). 지울 장에 사진이 들어가지 않게 대기 사진만 응답 전에 버리고,
     // 세대는 <b>지워진 뒤</b> retarget이 올린다 — 미리 올리면 「지우기」가 실패했을 때 날아가 있던 저장의 응답까지 버려져
     // 판 번호가 낡고(→ 다음 저장이 거짓 409로 잠김) 실패도 버려져 「저장 중…」에 굳는다(설계 2026-10-20 note-save-race-followups).
-    // 지우는 동안 돌아온 응답은 아직 이 장의 것이라 그대로 받는다 — 갱신 404만 울타리(removing)가 새 필기로 되살리지 못하게 막고,
-    // 「이미 지워졌다」의 증거로 남긴다(goneWhileRemoving — 그러면 이 「지우기」가 실패로 끝나도 지운 것으로 넘어간다, 설계 2026-10-20 note-fence-404).
+    // 지우는 동안 돌아온 응답은 아직 이 장의 것이라 그대로 받는다 — 갱신 404만 울타리(removing)가 새 필기로 되살리지 못하게 막고
+    // 「이미 지워졌다」의 증거로 남긴다(removed — 그러면 이 「지우기」가 실패로 끝나도 지운 것으로 넘어간다, 설계 2026-10-20 note-fence-404).
+    // 지우는 동안 화면이 이 장이면 「지우는 중…」으로 잠근다(deleting). 그 사이 옮겨 간 화면은 잠그지 않고, 끝나도 걷지 않는다(아래 꼬리, note-remove-in-flight).
     editorRef.value?.dropPendingImages();
-    removing = id;
+    // 응답은 REMOVE_TIMEOUT_MS까지만 기다린다 — 그 장의 「지우는 중…」 잠금에 끝이 있게(D-4). 울타리보다 먼저 만든다 — 여기서 던지면 울타리가 걷히지 않고 남는다.
+    const quit = new AbortController();
+    const timeout = setTimeout(() => quit.abort(), REMOVE_TIMEOUT_MS);
+    removing.add(id);
     try {
-        await deleteNote(id);
+        await deleteNote(id, undefined, false, quit.signal);
     } catch (e) {
         // 404 = 이미 없다(자동 삭제와 엇갈림 · 다른 곳에서 지움) — 지우려던 끝이 이미 와 있다.
-        if (!(e instanceof ApiError && e.status === 404)) {
-            if (goneWhileRemoving !== id) {
-                // 서버 문구는 그대로, fetch의 연결 실패(영어)는 바꾼다 — sendOnce와 같은 규칙.
-                listError.value = e instanceof ApiError ? e.message : '필기를 지우지 못했어요 — 연결을 확인하고 다시 해 주세요.';
-                return;
-            }
-            // 지우는 사이 그 장의 갱신이 404를 받았다 — 서버엔 이미 없으니 이 실패(연결 끊김·5xx)는 응답을 못 받은 것뿐이다. 지운 것으로 끝낸다.
-            // 다만 그 사이 다른 장·새 필기·다른 책으로 옮겼으면 그 화면은 걷지 않는다 — 같은 끊김에 그 화면의 저장도 실패하고 있을 수 있다.
-            // 판정은 세대(seq)가 아니라 지금 화면의 장이다 — 다른 장 열기가 실패하면 세대만 오르고 화면은 지우던 장에 남는다.
-            if (draft.value.id !== id) {
-                notes.value = notes.value.filter((n) => n.id !== id);
-                return;
-            }
+        // 그 밖의 실패(연결 끊김·5xx·시간 초과)라도 그 장이 서버에 없다는 것을 봤으면(removed) 응답을 못 받은 것뿐이다 — 지운 것으로 끝낸다.
+        if (!(e instanceof ApiError && e.status === 404) && !removed.has(id)) {
+            const here = draft.value.id === id;
+            // 서버 문구는 그대로, fetch의 연결 실패·시간 초과(영어)는 바꾼다 — sendOnce와 같은 규칙.
+            // 그 사이 다른 필기로 옮겼으면 지금 화면의 「지우기」를 가리키지 않는다 — 누르면 보고 있는 다른 장이 지워진다(D-5).
+            listError.value = !here
+                ? '지우려던 필기를 지우지 못했어요 — 열어서 다시 지워 주세요.'
+                : e instanceof ApiError ? e.message : '필기를 지우지 못했어요 — 연결을 확인하고 다시 해 주세요.';
+            if (here && state.value.kind === 'dirty') void flush();   // 위에서 끊은 디바운스 몫 — 그 장은 남았으니 보낸다
+            // 숨었다 돌아온 「지우기」에 포커스를 돌려준다 — 포커스가 아무 데도 없을 때만(그 사이 다른 곳을 눌렀으면 뺏지 않는다).
+            if (here) void nextTick(() => { if (document.activeElement === document.body) deleteButton.value?.focus(); });
+            return;
         }
     } finally {
-        if (removing === id) removing = null;   // 겹친 「지우기」(다른 장)가 남의 울타리를 걷지 않게
+        clearTimeout(timeout);
+        removing.delete(id);   // 그 장만 걷는다 — 겹친 「지우기」(다른 장)의 울타리·「지우는 중…」은 그대로
     }
+    removed.add(id);   // 늦게 온 조회가 지운 장을 다시 띄우지 않게(openNote)
     notes.value = notes.value.filter((n) => n.id !== id);
-    retarget(blank());
+    // 화면이 아직 그 장일 때만 비운다 — 지우는 사이 「새 필기」·다른 장·다른 책으로 옮긴 화면(쓰던 글·날아가 있는 저장·올리던 사진)은 그대로 둔다.
+    // 판정은 세대(seq)가 아니라 지금 화면의 장이다 — 다른 장 열기가 실패하면 세대만 오르고 화면은 지우던 장에 남는다.
+    if (draft.value.id === id) retarget(blank());
 }
 
 /**
@@ -555,31 +584,35 @@ async function uploadImage(file: File): Promise<string> {
                 </template>
             </RecallEditor>
 
-            <!-- 상태줄이 저장 버튼을 대신한다 — 「지금 저장됐나」를 사용자가 물을 곳이 여기뿐이다. -->
-            <p class="status-line study-notes-status" :class="{ 'study-error': state.kind !== 'saving' && state.kind !== 'saved' && state.kind !== 'emptied' }" data-testid="notes-status">
-                <template v-if="state.kind === 'saving'">저장 중…</template>
+            <!-- 상태줄이 저장 버튼을 대신한다 — 「지금 저장됐나」를 사용자가 물을 곳이 여기뿐이다.
+                 지우는 동안엔 그 장의 저장 상태 대신 「지우는 중…」만 말한다 — 그 사이 받은 갱신 404의 「다른 곳에서 지워졌을 수 있어요」는 사실 이 탭의 「지우기」다. -->
+            <p class="status-line study-notes-status" :class="{ 'study-error': !deleting && state.kind !== 'saving' && state.kind !== 'saved' && state.kind !== 'emptied' }" data-testid="notes-status">
+                <template v-if="deleting">지우는 중…</template>
+                <template v-else-if="state.kind === 'saving'">저장 중…</template>
                 <template v-else-if="state.kind === 'saved'">저장됨 · {{ savedAtLabel(state.at) }}</template>
                 <template v-else-if="state.kind === 'emptied'">본문이 빈 필기는 남기지 않아요 — 이어 쓰면 새로 저장돼요</template>
                 <template v-else-if="state.kind === 'conflict' || state.kind === 'invalid' || state.kind === 'error'">{{ state.message }}</template>
             </p>
 
+            <!-- 지우는 동안엔 셋 다 숨긴다 — 같은 장을 두 번 지우지 않게, 지울 장을 다시 저장·새로고침하지 않게(상태줄이 「지우는 중…」을 말한다). 실패해 돌아오면 「지우기」가 포커스를 돌려받는다(remove). -->
             <div class="study-recall-actions">
                 <button
-                    v-if="state.kind === 'conflict'"
+                    v-if="state.kind === 'conflict' && !deleting"
                     type="button"
                     class="btn btn-small"
                     data-testid="notes-reload"
                     @click="reload"
                 >새로고침</button>
                 <button
-                    v-if="state.kind === 'error'"
+                    v-if="state.kind === 'error' && !deleting"
                     type="button"
                     class="btn btn-ghost btn-small"
                     data-testid="notes-retry"
                     @click="flush()"
                 >다시 저장</button>
                 <button
-                    v-if="draft.id !== null"
+                    v-if="draft.id !== null && !deleting"
+                    ref="deleteButton"
                     type="button"
                     class="btn btn-ghost btn-small"
                     data-testid="notes-delete"

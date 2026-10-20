@@ -188,7 +188,9 @@ watch(() => props.modelValue, (value) => {
     e.commands.setContent(value, { contentType: 'markdown', emitUpdate: false });
 });
 
-watch(() => props.disabled, (off) => editor.value?.setEditable(!off));
+// 잠그고 푸는 것은 글을 고친 것이 아니다 — Tiptap의 setEditable은 기본으로 update를 내보내, 필기 패널이 지우는 장을 dirty로 보고
+// 다시 저장했다(설계 2026-10-20 note-remove-in-flight 리뷰 F1). 그래서 emitUpdate=false.
+watch(() => props.disabled, (off) => editor.value?.setEditable(!off, false));
 
 // 팝업이 떠 있다는 사실을 글 상자 자신이 말한다 — 스크린리더는 아래 <ul>을 못 보고 있을 수 있다.
 watch(() => !!slash.value, (open) => editor.value?.view.dom.setAttribute('aria-expanded', String(open)));
