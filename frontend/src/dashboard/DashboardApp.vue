@@ -137,10 +137,6 @@ const pauseL = ref<PauseLedger | null>(null)
 const paused = computed(() => pauseL.value?.pausedFrom != null)
 const pausedSec = computed(() => awaySeconds(pauseL.value))
 function setPause(l: PauseLedger | null) { pauseL.value = l; savePause(l); syncScreenLock() }
-// 측정 세션에 묶는다. 자리 비움 watch보다 **먼저** 선언한다 — 같은 변경에 sync watch는 선언 순서로 돌아서, 뒤에 두면
-// 멈춘 채 새로고침할 때 자리 비움 쪽이 멈춤을 모른 채 화면 잠금을 한 번 잡았다 곧 푼다(실 브라우저 실측). 키는 자리 비움 watch와 같은 정규 표기(T-258) — 빼면 복귀 재조회마다 멈춤이 풀린다.
-watch(() => study.value.hasActiveSession && study.value.activeStartedAt ? canonicalIso(study.value.activeStartedAt) : null,
-    startedAt => setPause(startedAt ? pauseFor(loadPause(), startedAt) : null), { flush: 'sync' })
 const currentPause = () => pauseL.value && pauseFor(loadPause() ?? pauseL.value, pauseL.value.startedAt)
 function onTogglePause() {
     const l = currentPause()
@@ -149,21 +145,29 @@ function onTogglePause() {
     setPause(togglePause(l, Date.now()))
 }
 
-// 측정 세션이 바뀌는 순간(시작·종료·다른 기기) 원장을 갈아끼운다. sync — 응답을 얹은 바로 다음 줄이 새 원장을 봐야 한다.
-// 선택이 꺼지면 null → 이번 측정의 멈춘 구간을 버리고, 켜지면 그 순간부터 센다(§9.4-5).
+// 측정 세션이 바뀌는 순간(시작·종료·다른 기기) 두 원장을 갈아끼운다. sync — 응답을 얹은 바로 다음 줄이 새 원장을 봐야 한다.
+// 일시정지는 측정 세션에만 묶이고(기기·선택 무관), 자리 비움은 컴퓨터·켠 사람만이다 — 선택이 꺼지면 null → 이번 측정의
+// 멈춘 구간을 버리고, 켜지면 그 순간부터 센다(§9.4-5).
 // 식별자는 정규 표기로 — 시작 응답과 재조회가 같은 순간을 다른 정밀도로 줘서, 원문 그대로면 재조회가 watch를
-// 발화시켜 방금 닫은 첫 이탈 구간을 지웠다(실 브라우저 결함). 원장 startedAt도 이 값으로 저장된다.
-watch(() => finePointer() && awayOn.value && study.value.hasActiveSession && study.value.activeStartedAt
-    ? canonicalIso(study.value.activeStartedAt) : null, startedAt => {
-    awayNotice.value = null
-    setAway(startedAt ? ledgerFor(loadLedger(), startedAt) : null)
+// 발화시켜 방금 닫은 구간·멈춤을 지웠다(실 브라우저 결함, T-258). 원장 startedAt도 이 값으로 저장된다.
+// 한 watch에서 둘을 다 바꾼 **뒤** 화면 잠금을 한 번만 맞춘다 — 따로 맞추면 한쪽만 바뀐 중간 상태에서 잠금을 잡았다 곧 풀었다(리뷰 F4).
+const sessionKey = () => study.value.hasActiveSession && study.value.activeStartedAt ? canonicalIso(study.value.activeStartedAt) : null
+watch([sessionKey, () => finePointer() && awayOn.value ? sessionKey() : null], ([pauseKey, awayKey], [oldPauseKey, oldAwayKey]) => {
+    if (pauseKey !== oldPauseKey) { pauseL.value = pauseKey ? pauseFor(loadPause(), pauseKey) : null; savePause(pauseL.value) }
+    if (awayKey !== oldAwayKey) { awayNotice.value = null; away.value = awayKey ? ledgerFor(loadLedger(), awayKey) : null; saveLedger(away.value) }
+    syncScreenLock()
 }, { flush: 'sync' })
 // 떠나는 페이지 — Chromium은 같은 탭 이동·닫기·새로고침에서 pagehide(아직 visible)를 hidden보다 **먼저** 쏜다(153 실측).
 // 그 뒤의 hidden이 대기 구간을 다시 쓰지 않게 막고, bfcache 복귀(pageshow)에서 푼다.
 let leaving = false
 function onAwayVisibility() {
-    // 멈춘 동안은 자리 비움을 세지 않는다 — 같은 시간을 두 번 빼지 않게(일시정지 설계 REQ-06).
-    if (leaving || paused.value) return
+    if (leaving) return
+    // 멈춘 동안은 자리 비움을 세지 않는다 — 같은 시간을 두 번 빼지 않게(일시정지 설계 REQ-06). 멈춘 채 돌아왔으면 그 전에 열린
+    // 대기 구간도 버린다 — 남기면 다시 시작한 뒤 다음 이탈 때 옛 시각부터 닫혀 그 사이 공부까지 빠졌다(리뷰 F2).
+    if (paused.value) {
+        if (document.visibilityState === 'visible') { const l = currentAway(); if (l?.pendingFrom) setAway(clearPending(l)) }
+        return
+    }
     const l = currentAway()
     if (!l) return
     if (document.visibilityState === 'hidden') { setAway(markHidden(l, Date.now())); return }
@@ -433,10 +437,15 @@ async function handleStudyStop() {
         // 멈춘 구간을 함께 보낸다 — 서버가 자정 분할 조각마다 겹친 만큼 뺀다. 네트워크 실패면 원장이 남아 재시도 때 다시 간다.
         // 손으로 멈춘 구간도 같은 본문에 싣는다 — 멈춘 채 끝내면 지금까지를 닫아 붙인다(원장은 그대로, 실패하면 멈춘 채 남는다).
         // ponytail: 자리 비움 + 일시정지가 한 측정에 200개를 넘으면 앞쪽(오래된 자리 비움)부터 빠진다 — 서버 상한을 올리면 해소
+        // 멈춘 구간이 있으면 먼저 서버 진실을 받는다 — 다른 기기가 이 측정을 끝내고 새로 시작했으면 watch가 원장을 새 측정 것으로
+        // 갈아끼워, 낡은 멈춤 구간이 새 측정을 깎지 않는다(리뷰 F1). 측정이 없어졌으면 아래 409 경로로 간다.
+        // ponytail: 재조회와 종료 사이에도 다른 기기가 끝낼 수 있다 — stop 본문에 측정 식별자를 싣고 서버가 대조하면 닫힌다(서버 변경)
+        if (pauseIntervalsAt(currentPause(), Date.now()).length > 0) await refresh(true)
         const intervals = [...(currentAway()?.intervals ?? []), ...pauseIntervalsAt(currentPause(), Date.now())].slice(-200)
         let res = await postStudyStop(intervals)
         // 400 = 서버가 구간을 거절 — 원장이 남아 있으면 재시도해도 영영 못 끈다. 구간을 버리고 본문 없이 한 번만 다시.
-        if (res.status === 400 && intervals.length > 0) { setAway(null); setPause(null); res = await postStudyStop(null) }
+        // 일시정지는 같은 측정의 빈 원장으로 — null로 두면 재시도가 실패해 측정이 계속될 때 Alt+P·버튼이 죽는다(리뷰 F3).
+        if (res.status === 400 && intervals.length > 0) { setAway(null); setPause(pauseL.value && pauseFor(null, pauseL.value.startedAt)); res = await postStudyStop(null) }
         if (res.status === 409) { setAway(null); setPause(null); await conflict('진행 중인 측정이 없어요 — 화면을 최신으로 맞췄어요'); return }
         if (!res.ok) { actionError.value = '측정을 종료할 수 없습니다'; return }
         const s = studyStateOf(await res.json())

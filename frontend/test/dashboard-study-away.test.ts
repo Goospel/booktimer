@@ -796,3 +796,187 @@ describe('DashboardApp — 일시정지', () => {
         expect(pill(w)).toBe('일시정지');
     });
 });
+
+// PR #1293 리뷰 반영(F1~F6) — 각 테스트는 리뷰가 재현한 실패 시나리오이거나, 지우면 아무 테스트도 안 깨지던 제품 줄을 잠근다.
+//  · 통과가 확정하는 것: 낡은 탭의 멈춤 구간이 다른 기기의 새 측정을 깎지 않는다(F1) · 멈춘 동안 돌아오면 자리 비움 대기 구간이
+//    버려진다(F2) · 400 뒤 재시도가 실패해도 일시정지가 살아 있다(F3) · 멈춘 채 끝내도 화면 잠금을 다시 잡지 않는다(F4) ·
+//    키 입력 순간 저장소를 다시 읽고, 저장소가 막히면 메모리로 간다(F5) · 다른 탭의 멈춤이 이 탭의 화면 잠금도 푼다(F6).
+//  · 실패가 배제하는 것: 종료 전 재조회 누락 · 멈춘 동안 pendingFrom 방치 · 400 분기의 null 원장 · 원장 둘 중 하나만 바뀐 채 잠금 판정 ·
+//    currentPause의 두 안전장치 삭제 · onStorage의 syncScreenLock 삭제.
+// 서버가 S2 범위로 잘라 겹침을 합쳐 빼는 계산(StudySessionService.excludedSeconds)을 옮겨, 기록될 초를 사용자 말로 단언한다.
+const recordedSeconds = (startMs: number, endMs: number, ivs: { from: string; to: string }[]) => {
+    const clipped = ivs.map(i => [Math.max(startMs, Date.parse(i.from)), Math.min(endMs, Date.parse(i.to))])
+        .filter(([a, b]) => a < b).sort((x, y) => x[0] - y[0]);
+    let excluded = 0, reach = -Infinity;
+    for (const [a, b] of clipped) { const from = Math.max(a, reach); if (b > from) { excluded += b - from; reach = b; } }
+    return Math.floor((endMs - startMs - excluded) / 1000);
+};
+const dashFetchCount = () => (fetch as unknown as { mock: { calls: unknown[][] } }).mock.calls
+    .filter(c => String(c[0]).includes('/api/dashboard')).length;
+
+describe('DashboardApp — 일시정지 · 리뷰 반영', () => {
+    afterEach(() => { delete (navigator as { wakeLock?: unknown }).wakeLock; vi.restoreAllMocks(); });
+
+    // F1 — 01:10 PC에서 멈춤 → 01:16 다른 기기가 S1을 끝내고 S2 시작(이 탭엔 이벤트 없음) → 20분 뒤 PC에서 종료.
+    async function otherDeviceStartsS2(w: ReturnType<typeof mount>) {
+        altP();
+        await flushPromises();
+        expect(pill(w)).toBe('일시정지');
+        vi.advanceTimersByTime(6 * 60_000);
+        const s2Start = Date.now();
+        dash = { ...dash, study: { ...STUDY_ACTIVE, activeStartedAt: iso(s2Start) } };
+        vi.advanceTimersByTime(20 * 60_000);
+        return s2Start;
+    }
+
+    test('F1 · 다른 기기가 새 측정을 시작한 뒤 낡은 탭에서 멈춘 채 끝내도, 새 측정 20분이 그대로 기록된다', async () => {
+        const w = await mountDash();
+        const s2Start = await otherDeviceStartsS2(w);
+        const before = dashFetchCount();
+        await btnWith(w, '측정 종료').trigger('click');
+        await vi.waitFor(() => expect(stops).toHaveLength(1));
+        expect(dashFetchCount()).toBe(before + 1);   // 종료 전에 서버 진실을 다시 받았다
+        expect(sentIntervals()).toEqual([]);
+        expect(recordedSeconds(s2Start, Date.now(), sentIntervals())).toBe(1200);
+    });
+
+    test('F1 · 낡은 탭에서 다시 시작해 30분 더 한 뒤 끝내도 새 측정 3000초가 다 기록된다', async () => {
+        const w = await mountDash();
+        const s2Start = await otherDeviceStartsS2(w);
+        altP();   // 이 탭은 아직 S1이 멈춘 줄 안다 — 다시 시작이 S1 구간을 닫는다
+        await flushPromises();
+        vi.advanceTimersByTime(30 * 60_000);
+        await btnWith(w, '측정 종료').trigger('click');
+        await vi.waitFor(() => expect(stops).toHaveLength(1));
+        expect(recordedSeconds(s2Start, Date.now(), sentIntervals())).toBe(3000);
+    });
+
+    test('F1 · 대조 — 종료 전에 창 포커스로 재조회되면 원래도 새 측정이 다 기록된다', async () => {
+        const w = await mountDash();
+        const s2Start = await otherDeviceStartsS2(w);
+        window.dispatchEvent(new Event('focus'));
+        await flushPromises();
+        await btnWith(w, '측정 종료').trigger('click');
+        await vi.waitFor(() => expect(stops).toHaveLength(1));
+        expect(recordedSeconds(s2Start, Date.now(), sentIntervals())).toBe(1200);
+    });
+
+    test('F2 · 다른 탭에서 멈춘 채 돌아오면 자리 비움 대기 구간을 버린다 — 다시 시작한 뒤 1분 비우면 그 1분만 빠진다', async () => {
+        const w = await mountDash();
+        setVisible('hidden');                 // 01:10 이 창이 가려짐 — 대기 구간 시작
+        await flushPromises();
+        expect(awayLedger().pendingFrom).not.toBeNull();
+        vi.advanceTimersByTime(60_000);       // 01:11 다른 창에서 멈춤
+        localStorage.setItem(PAUSE_KEY, JSON.stringify({ startedAt: iso(START), intervals: [], pausedFrom: iso(Date.now()) }));
+        window.dispatchEvent(new StorageEvent('storage', { key: PAUSE_KEY }));
+        vi.advanceTimersByTime(60_000);       // 01:12 이 창으로 돌아옴(멈춘 채)
+        setVisible('visible');
+        await flushPromises();
+        expect(pill(w)).toBe('일시정지');
+        expect(awayLedger().pendingFrom).toBeNull();
+        altP();                               // 다시 시작 → 30분 공부
+        await flushPromises();
+        vi.advanceTimersByTime(30 * 60_000);
+        const leftAt = await leaveFor(60_000); // 진짜 자리 비움 1분
+        expect(notice(w).text()).toContain('1분 자리를 비워');
+        expect(awayLedger().intervals).toEqual([{ from: iso(leftAt), to: iso(leftAt + 60_000) }]);
+    });
+
+    test('F3 · 400 뒤 본문 없는 재시도가 네트워크로 실패해도 같은 측정의 빈 원장이 남아 Alt+P가 동작한다', async () => {
+        stopQueue.push(400);
+        stopMode = 'network';
+        const w = await mountDash();
+        altP();
+        vi.advanceTimersByTime(60_000);
+        altP();
+        await flushPromises();
+        await btnWith(w, '측정 종료').trigger('click');
+        await vi.waitFor(() => expect(stops).toHaveLength(2));
+        await flushPromises();
+        expect(sentIntervals(0)).toHaveLength(1);
+        expect(stops[1].body).toBeUndefined();
+        expect(pauseLedger()).toEqual({ startedAt: iso(START), intervals: [], pausedFrom: null });
+        expect(w.find('[data-testid="focus-bar"]').exists()).toBe(true);   // 측정은 계속된다
+        altP();
+        await flushPromises();
+        expect(pill(w)).toBe('일시정지');
+    });
+
+    test('F4 · 멈춘 채 측정 종료해도 화면 잠금 요청은 늘지 않는다', async () => {
+        const { request, locks } = installWakeLock();
+        const w = await mountDash();
+        await flushPromises();
+        expect(request).toHaveBeenCalledTimes(1);
+        altP();
+        await flushPromises();
+        expect(locks[0].released).toBe(true);
+        await btnWith(w, '측정 종료').trigger('click');
+        await vi.waitFor(() => expect(stops).toHaveLength(1));
+        await flushPromises();
+        expect(w.find('[data-testid="focus-bar"]').exists()).toBe(false);
+        expect(request).toHaveBeenCalledTimes(1);
+    });
+
+    test('F4 · 멈춘 채 다른 기기 종료를 재조회로 알아도 화면 잠금 요청은 늘지 않는다', async () => {
+        const { request } = installWakeLock();
+        const w = await mountDash();
+        await flushPromises();
+        altP();
+        await flushPromises();
+        dash = { ...dash, study: STUDY_IDLE };
+        vi.advanceTimersByTime(70_000);
+        window.dispatchEvent(new Event('focus'));
+        await flushPromises();
+        expect(w.find('[data-testid="focus-bar"]').exists()).toBe(false);
+        expect(request).toHaveBeenCalledTimes(1);
+    });
+
+    test('F5 · storage 이벤트를 놓친 탭에서도 Alt+P가 다른 탭이 열어 둔 멈춤을 닫는다(키 입력 순간 저장소를 다시 읽는다)', async () => {
+        const w = await mountDash();
+        expect(pill(w)).toBe('측정 중');
+        const t0 = Date.now();
+        localStorage.setItem(PAUSE_KEY, JSON.stringify({ startedAt: iso(START), intervals: [], pausedFrom: iso(t0) }));   // 이벤트 없음
+        vi.advanceTimersByTime(60_000);
+        altP();
+        await flushPromises();
+        expect(pauseLedger()).toEqual({ startedAt: iso(START), intervals: [{ from: iso(t0), to: iso(t0 + 60_000) }], pausedFrom: null });
+    });
+
+    test('F5 · 저장소가 막혀도(읽기 null·쓰기 throw) 멈춤 → 다시 시작이 돌고 종료 본문에 그 구간이 실린다', async () => {
+        const getItem = Storage.prototype.getItem;
+        vi.spyOn(Storage.prototype, 'getItem').mockImplementation(function (this: Storage, k: string) { return k === PAUSE_KEY ? null : getItem.call(this, k); });
+        const setItem = Storage.prototype.setItem;
+        vi.spyOn(Storage.prototype, 'setItem').mockImplementation(function (this: Storage, k: string, v: string) { if (k === PAUSE_KEY) throw new Error('blocked'); setItem.call(this, k, v); });
+        const removeItem = Storage.prototype.removeItem;
+        vi.spyOn(Storage.prototype, 'removeItem').mockImplementation(function (this: Storage, k: string) { if (k === PAUSE_KEY) throw new Error('blocked'); removeItem.call(this, k); });
+        const w = await mountDash();
+        const t0 = Date.now();
+        altP();
+        await flushPromises();
+        expect(pill(w)).toBe('일시정지');
+        vi.advanceTimersByTime(60_000);
+        altP();
+        await flushPromises();
+        expect(pill(w)).toBe('측정 중');
+        await btnWith(w, '측정 종료').trigger('click');
+        await vi.waitFor(() => expect(stops).toHaveLength(1));
+        expect(sentIntervals()).toEqual([{ from: iso(t0), to: iso(t0 + 60_000) }]);
+    });
+
+    test('F6 · 다른 탭에서 멈추면 이 탭의 화면 잠금도 풀고, 다른 탭에서 다시 시작하면 다시 잡는다', async () => {
+        const { request, locks } = installWakeLock();
+        await mountDash();
+        await flushPromises();
+        expect(request).toHaveBeenCalledTimes(1);
+        const t0 = Date.now();
+        localStorage.setItem(PAUSE_KEY, JSON.stringify({ startedAt: iso(START), intervals: [], pausedFrom: iso(t0) }));
+        window.dispatchEvent(new StorageEvent('storage', { key: PAUSE_KEY }));
+        await flushPromises();
+        expect(locks[0].released).toBe(true);
+        localStorage.setItem(PAUSE_KEY, JSON.stringify({ startedAt: iso(START), intervals: [{ from: iso(t0), to: iso(t0 + 1_000) }], pausedFrom: null }));
+        window.dispatchEvent(new StorageEvent('storage', { key: PAUSE_KEY }));
+        await flushPromises();
+        expect(request).toHaveBeenCalledTimes(2);
+        expect(locks[1].released).toBe(false);
+    });
+});

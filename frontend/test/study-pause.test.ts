@@ -51,6 +51,8 @@ describe('studyPause 원장', () => {
         expect(localStorage.getItem(PAUSE_KEY)).toBeNull();
         localStorage.setItem(PAUSE_KEY, '{"startedAt":1}');
         expect(loadPause()).toBeNull();   // 모양이 틀리면 버린다
+        localStorage.setItem(PAUSE_KEY, JSON.stringify({ startedAt: S }));   // 같은 세션인데 intervals가 없다(리뷰 F7)
+        expect(loadPause()).toBeNull();
     });
 
     test('REQ-02 · 저장소가 던져도 죽지 않는다 — 읽기 null, 쓰기 무시', () => {
