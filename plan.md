@@ -4199,6 +4199,14 @@ package-private static이라 호출이 공짜였고, 복제하면 0초 조각 �
 
 ## 🧹 기술 부채 / 후속 정리
 
+### ✅ 정션 node_modules 위 npm ci·install 차단 — PreToolUse 가드 (2026-10-20, T-271)
+- ✅ 가드·테스트 — `.claude/hooks/block-npm-over-junction.ps1`: npm이 실제로 도는 폴더(--prefix·-C·cd·하위 폴더면 위로)의 node_modules가 정션이면 ci·install 계열(npm 11.9.0 별칭 전부 + audit fix)을 막고 「설치 필요 판정 → 정션만 끊기 → 확인 → 별도 명령」을 안내한다. 대상 폴더가 변수면 막는다(T-242 원칙). 테스트 `test-block-npm-over-junction.sh`(임시 가짜 정션 · 양성/음성 대조) · 돌연변이 14종 사살
+- ✅ 실러너 확인 — 이 워크트리 루트의 `claude -p`(.claude-b)로 가짜 정션 위 npm ci는 차단·대상 보존, 실폴더는 통과
+- ⏸ 프로젝트 SessionStart 출력으로 전역 「설치 없음 → npm ci」 안내 상쇄 — **왜 지금 안 하나**: 사고에서 모델은 링크가 찍힌 같은 명령 안에서 npm ci를 돌렸다(소프트 안내가 행동을 못 멈춤). 같은 교정을 가드 메시지가 행동 시점에 싣는다. 재개: 이 가드 차단이 새 워크트리 세션마다 반복될 때
+- ⏸ 전역(`~/.claude`) 안내 문구 보강(점검 훅 lock 불일치 갈래 · hookify `warn-node-modules-junction`) — **왜**: BookTimer는 프로젝트 가드로 충분하다(2026-10-20 사용자 결정). 재개: 정션 설계가 없는 다른 레포에서 링크 위 npm 사고가 날 때(그때 가드 전역 승격도 함께 본다)
+- ⏸ `rm -rf <정션>/`(끝 슬래시)도 대상을 비운다(실측) — **왜**: 전 프로젝트 기록에서 그렇게 쓴 명령 0건. 재개: 한 번이라도 관측되면 같은 훅에 추가
+- **다음 세션 시작점**: 이 절은 완료 — 이어서 할 일 없음. ⚠️ npm이 `[BLOCKED] npm … over a node_modules junction (T-271)`으로 막히면 우회하지 말고 메시지의 1) 판정부터 — 정션이면 의존성은 이미 메인 것을 쓴다
+
 ### ✅ 프로젝트 훅을 못 찾는 세션의 git 커밋·푸시 차단 — 전역 가드 (2026-10-12, T-262 2회차)
 - ✅ 가드·테스트 — 설정 레포 #166(머지 `83a23c2`): 전역 PreToolUse 훅 `~/.claude/hooks/block-projdir-mismatch.ps1`. git commit·push·rebase(`pull -r` 포함)를 찾으면 그 git이 돌 레포(입력 cwd → cd → `-C`)의 settings PreToolUse 훅이 `${CLAUDE_PROJECT_DIR}`로 가리키는 파일을 세션 폴더에서 `Test-Path`한다. 전부 없음 → 거부 A(새 세션 안내) · 세션 폴더 settings에 등록됐는데 파일이 없음 → 거부 B · 대상 브랜치가 새로 추가한 훅만 없음 → 통과(`new-hook-not-in-session`) · env 없음 → 거부 C. 우회 토큰 없음. 테스트 82건 · 돌연변이 13종 사살
 - ✅ hookify 러너 폴백(결정 3) — 세션 폴더에 `.claude\hookify`가 없으면 편집 파일·cwd 쪽 프로젝트 룰로 폴백한다(사고 세션에서 V98 DROP 경고 2종이 빠졌던 구멍). 러너 테스트 434건
