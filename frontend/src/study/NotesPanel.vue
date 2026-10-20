@@ -71,8 +71,16 @@ let seq = 0;
 /**
  * 「지우기」가 지우는 중인 장의 id — 그 사이 돌아온 갱신 404가 그 장을 새 필기로 되살리지 않게 하는 울타리(sendOnce의 404 폴백).
  * 세대를 미리 올려 막지 않는 이유는 remove() 주석에 있다.
+ * 울타리 안에서 받은 404는 버리지 않고 증거로 남긴다(goneWhileRemoving) — 그 「지우기」가 실패로 끝나도 막히지 않게.
  */
 let removing: number | null = null;
+/**
+ * 「지우기」하는 중에 그 장의 갱신이 404를 받았다 — 서버엔 그 장이 이미 없다는 증거다(울타리 안의 404, sendOnce).
+ * 그 장의 「지우기」 응답이 실패(연결 끊김·5xx)로 와도 지워진 것으로 본다(remove). 증거는 404뿐이다 — 5xx·409로는 서버에 있는지 모른다.
+ * id로 둔다 — 다른 장의 「지우기」가 남의 증거를 쓰지 않게. 한 칸이라, 겹친 「지우기」가 덮으면 앞 장은 지금처럼 「지우지 못했어요」로 돌아간다.
+ * 걷지 않는다 — 지운 장은 서버에 다시 생기지 않아(id 자동 증가) 「그 장은 없다」가 끝까지 참이다. 같은 장을 두 번 지워 앞 것이 늦게 실패해도 같은 증거를 쓴다.
+ */
+let goneWhileRemoving: number | null = null;
 
 function blank(): Draft {
     return { id: null, bookId: bookId.value, title: '', body: '', revision: 0 };
@@ -322,11 +330,13 @@ async function sendOnce(keepalive: boolean): Promise<void> {
         // 서버가 준 문구(ApiError)는 그대로, 그 밖(fetch의 연결 실패 — 크롬 「Failed to fetch」·사파리 「Load failed」)은 바꾼다(사진 올리기와 같은 규칙).
         const message = e instanceof ApiError ? e.message : '필기를 저장하지 못했어요 — 연결을 확인하고 다시 해 주세요.';
         if (mine !== seq) return;
+        // 이 탭이 「지우기」하는 중인 장의 갱신 404 — 되살리지 않고(아래 폴백을 건너뛰어 fail로) 「이미 지워졌다」의 증거로 남긴다.
+        if (status === 404 && id !== null && id === removing) goneWhileRemoving = id;
         if (status === 404 && id !== null && id !== removing) {
             // 갱신이 404 = 서버엔 이 장이 이제 없다(자동 삭제의 응답만 끊겼거나 · 다른 곳에서 지웠다). 화면의 글은 서버 어디에도 없으니
             // 그 장과 끊고 새 필기로 만든다 — 큐가 한 번 더 돌아 생성으로 나간다(자동 삭제 뒤 이어 쓰기와 같은 길, 설계 2026-10-20).
             // retarget이 아니다: 세대를 올리면 올리던 사진이 버려진다. 남의 필기 404와 구분되지 않지만 생성이 책 소유를 다시 확인한다.
-            // 이 탭이 「지우기」하는 중인 장이면 되살리지 않는다(removing). 자동 삭제의 404는 위에서 성공으로 삼켰다 — 여기 오는 id 있는 404는 갱신이다.
+            // 이 탭이 「지우기」하는 중인 장이면 되살리지 않는다(removing) — 그 404는 바로 위에서 증거로 남겼다. 자동 삭제의 404는 위에서 성공으로 삼켰다 — 여기 오는 id 있는 404는 갱신이다.
             draft.value.id = null;
             draft.value.revision = 0;
             notes.value = notes.value.filter((n) => n.id !== id);
@@ -386,11 +396,13 @@ async function reload(): Promise<void> {
 async function remove(): Promise<void> {
     const id = draft.value.id;
     if (id === null || !window.confirm('이 필기를 지울까요? 되돌릴 수 없어요.')) return;
+    listError.value = '';   // 다시 지운다 — 앞선 「지우지 못했어요」를 걷는다(이번 결과가 다시 말한다). 취소면 한 것이 없으니 그대로 둔다(D-3).
     clearTimer();
     // 지우기는 플러시하지 않는다(지울 글을 먼저 저장할 이유가 없다). 지울 장에 사진이 들어가지 않게 대기 사진만 응답 전에 버리고,
     // 세대는 <b>지워진 뒤</b> retarget이 올린다 — 미리 올리면 「지우기」가 실패했을 때 날아가 있던 저장의 응답까지 버려져
     // 판 번호가 낡고(→ 다음 저장이 거짓 409로 잠김) 실패도 버려져 「저장 중…」에 굳는다(설계 2026-10-20 note-save-race-followups).
-    // 지우는 동안 돌아온 응답은 아직 이 장의 것이라 그대로 받는다 — 갱신 404만 울타리(removing)가 새 필기로 되살리지 못하게 막는다.
+    // 지우는 동안 돌아온 응답은 아직 이 장의 것이라 그대로 받는다 — 갱신 404만 울타리(removing)가 새 필기로 되살리지 못하게 막고,
+    // 「이미 지워졌다」의 증거로 남긴다(goneWhileRemoving — 그러면 이 「지우기」가 실패로 끝나도 지운 것으로 넘어간다, 설계 2026-10-20 note-fence-404).
     editorRef.value?.dropPendingImages();
     removing = id;
     try {
@@ -398,9 +410,18 @@ async function remove(): Promise<void> {
     } catch (e) {
         // 404 = 이미 없다(자동 삭제와 엇갈림 · 다른 곳에서 지움) — 지우려던 끝이 이미 와 있다.
         if (!(e instanceof ApiError && e.status === 404)) {
-            // 서버 문구는 그대로, fetch의 연결 실패(영어)는 바꾼다 — sendOnce와 같은 규칙.
-            listError.value = e instanceof ApiError ? e.message : '필기를 지우지 못했어요 — 연결을 확인하고 다시 해 주세요.';
-            return;
+            if (goneWhileRemoving !== id) {
+                // 서버 문구는 그대로, fetch의 연결 실패(영어)는 바꾼다 — sendOnce와 같은 규칙.
+                listError.value = e instanceof ApiError ? e.message : '필기를 지우지 못했어요 — 연결을 확인하고 다시 해 주세요.';
+                return;
+            }
+            // 지우는 사이 그 장의 갱신이 404를 받았다 — 서버엔 이미 없으니 이 실패(연결 끊김·5xx)는 응답을 못 받은 것뿐이다. 지운 것으로 끝낸다.
+            // 다만 그 사이 다른 장·새 필기·다른 책으로 옮겼으면 그 화면은 걷지 않는다 — 같은 끊김에 그 화면의 저장도 실패하고 있을 수 있다.
+            // 판정은 세대(seq)가 아니라 지금 화면의 장이다 — 다른 장 열기가 실패하면 세대만 오르고 화면은 지우던 장에 남는다.
+            if (draft.value.id !== id) {
+                notes.value = notes.value.filter((n) => n.id !== id);
+                return;
+            }
         }
     } finally {
         if (removing === id) removing = null;   // 겹친 「지우기」(다른 장)가 남의 울타리를 걷지 않게
