@@ -1284,6 +1284,35 @@ describe('필기 패널 — 저장 경합 후속', () => {
         expect(posts().at(-1)?.url).toBe('/api/study/notes/7');
     });
 
+    test('REQ-33 · 폴백은 세대를 올리지 않는다 — 그 사이 올리던 사진이 새 필기에 들어간다', async () => {
+        const wrapper = await saved();
+        // 목 순서가 요점이다 — 업로드 fetch가 먼저 나가므로 업로드 응답을 먼저, 갱신·생성 응답을 그다음에 등록한다.
+        const uploading = deferred();
+        vi.mocked(fetch)
+            .mockReturnValueOnce(uploading.promise)
+            .mockResolvedValueOnce(fail(404, ''))
+            .mockResolvedValueOnce(okJson(noteOf({ id: 7, body: 'AB', revision: 0 })));
+        await type(wrapper, 'AB');
+        const result = uploadOf(wrapper)!(PHOTO_FILE);
+        await flushPromises();   // 업로드가 첫 목을 잡게
+        await settle();
+        expect(posts().slice(1).map((p) => p.url), '전제 — 폴백이 실제로 돌았다').toEqual(['/api/study/notes/5', '/api/study/notes']);
+
+        uploading.resolve(okJson({ src: '/api/study/notes/images/31' }));
+        await expect(result).resolves.toBe('/api/study/notes/images/31');
+    });
+
+    test('REQ-33 · 폴백의 새 필기는 화면의 제목을 싣는다', async () => {
+        const wrapper = await saved();
+        vi.mocked(fetch)
+            .mockResolvedValueOnce(fail(404, ''))
+            .mockResolvedValueOnce(okJson(noteOf({ id: 7, title: '제목X', body: 'AB', revision: 0 })));
+        await wrapper.find('[data-testid="notes-title"]').setValue('제목X');
+        await type(wrapper, 'AB');
+        await settle();
+        expect(posts().at(-1)).toEqual({ url: '/api/study/notes', body: { bookId: 7, title: '제목X', body: 'AB' } });
+    });
+
     test('REQ-33 · 자동 삭제의 응답이 끊겨도(서버는 지웠다) 이어 쓴 글은 새 필기로 저장된다 — 리뷰 m-2 재현', async () => {
         const wrapper = await saved();
         vi.mocked(fetch).mockRejectedValueOnce(new TypeError('Failed to fetch'));   // 서버는 지웠는데 응답이 끊겼다
@@ -1365,6 +1394,39 @@ describe('필기 패널 — 저장 경합 후속', () => {
         await clickRemove(wrapper);
         expect(wrapper.text(), '「지우기」 오류 줄').toContain(NET_REMOVE);
         expect(wrapper.text()).not.toContain('Failed to fetch');
+    });
+
+    test('REQ-35 · 연결 오류가 아닌 비-ApiError(응답 본문 해석 실패)도 한국어로 알린다 — 판정은 「ApiError가 아니면」이다', async () => {
+        const unparsable = () => ({
+            ok: true, status: 200, text: async () => '',
+            json: async () => { throw new SyntaxError('Unexpected token <'); },
+        } as unknown as Response);
+        const wrapper = await saved();
+        vi.mocked(fetch).mockResolvedValueOnce(unparsable());
+        await type(wrapper, 'A2');
+        await settle();
+        expect(status(wrapper).text(), '상태줄').toBe(NET_SAVE);
+
+        vi.mocked(fetch).mockResolvedValueOnce(unparsable());
+        await clickRemove(wrapper);
+        expect(wrapper.text(), '「지우기」 오류 줄').toContain(NET_REMOVE);
+        expect(wrapper.text()).not.toContain('Unexpected token');
+    });
+
+    test('「지우기」 확인창을 취소하면 울타리가 서지 않는다 — 그 뒤 갱신 404는 새 필기로 돌린다', async () => {
+        const wrapper = await saved();
+        vi.stubGlobal('confirm', vi.fn(() => false));
+        await wrapper.find('[data-testid="notes-delete"]').trigger('click');
+        await flushPromises();
+        expect(posts().map((p) => p.url), '전제 — 지우기가 나가지 않았다').toEqual(['/api/study/notes']);
+
+        vi.mocked(fetch)
+            .mockResolvedValueOnce(fail(404, ''))
+            .mockResolvedValueOnce(okJson(noteOf({ id: 6, body: 'AB', revision: 0 })));
+        await type(wrapper, 'AB');
+        await settle();
+        expect(posts().slice(1).map((p) => p.url)).toEqual(['/api/study/notes/5', '/api/study/notes']);
+        expect(status(wrapper).text()).toContain('저장됨');
     });
 
     test('REQ-36 · 새 필기로 만드는 왕복 중엔 「지우기」가 없고, 그 사이 「새 필기」를 눌러도 생성이 끝난 뒤 갈아탄다', async () => {
