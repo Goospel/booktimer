@@ -107,6 +107,23 @@ Then commit again. Or bypass:
     exit 2
 }
 
+# T-249: a self-staging command reaches this check before its own add runs, so a bundle the
+# developer already rebuilt still shows up as an unstaged diff below. Fingerprint that diff now;
+# if the rebuild leaves it unchanged, the cause is the add order, not a stale build.
+# $null = unknown (falls back to the stale message).
+function Get-BundleDrift {
+    $prev = $ErrorActionPreference
+    $ErrorActionPreference = 'Continue'
+    try {
+        $files = @(& git -C $cwd diff --relative --name-only -- src/main/resources/static 2>$null)
+        if ($files.Count -eq 0) { return '' }
+        $blobs = @(& git -C $cwd hash-object -- $files 2>$null)
+        if ($LASTEXITCODE -ne 0) { return $null }
+        return (($files + $blobs) -join "`n")
+    } catch { return $null } finally { $ErrorActionPreference = $prev }
+}
+$driftBefore = if ($selfStages) { Get-BundleDrift } else { $null }
+
 # Rebuild all frontend bundles.
 # stderr is suppressed via cmd.exe to avoid NativeCommandError under $ErrorActionPreference='Stop'
 # (same pattern as require-tests-before-commit.ps1).
@@ -137,6 +154,22 @@ $ErrorActionPreference = 'Continue'
 & git -C $cwd diff --exit-code -- src/main/resources/static >$null 2>$null
 $diffExit = $LASTEXITCODE
 $ErrorActionPreference = $prevEAP2
+
+if ($diffExit -ne 0 -and $driftBefore -and $driftBefore -eq (Get-BundleDrift)) {
+    $msg = @"
+[BLOCKED] Bundle is up to date but not staged yet (T-249).
+This hook runs BEFORE the whole command, so the staging in this same command
+(git add / commit -a) has not run yet. Rebuilding again will not help.
+
+Run the add on its own first (include src/main/resources/static):
+  git add <your files> src/main/resources/static
+
+Then run git commit alone (no git add in the same command). Or bypass:
+  include SKIP_BUNDLE_CHECK in the commit command.
+"@
+    [Console]::Error.WriteLine($msg)
+    exit 2
+}
 
 if ($diffExit -ne 0) {
     $msg = @"

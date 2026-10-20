@@ -45,7 +45,7 @@
 - [T-252](troubleshooting/T-252.md) · 토스 심사가 「미니앱 최초 접속 시간 20초 초과」로 반려했다 — 공개 체크리스트에 없는 기준이고, 이번 번들에서 첫 화면에 새로 생긴 동작은 「게스트 홈이 열리자마자 나가는 타임아웃 없는 요청」 하나였다
 - [T-251](troubleshooting/T-251.md) · 브라우저 실측에서 서비스워커가 옛 번들을 먹여 「고친 게 안 먹었다」는 거짓 판정을 만든다 — 차단은 첫 이동이 아니라 매 이동에 건다
 - [T-250](troubleshooting/T-250.md) · `document.fonts.check`는 구글 폰트 한글에서 로드됐는데도 `false`를 준다 — 웹폰트 실적용은 폭 실측 + 음성 대조군으로 판정한다 **→ skills/browser-verify/SKILL.md**
-- [T-249](troubleshooting/T-249.md) · `git add`와 `git commit`을 한 명령으로 붙이면 번들 게이트가 「Bundle is stale」로 오판 차단한다 — PreToolUse는 add 이전 상태만 본다
+- [T-249](troubleshooting/T-249.md) · `git add`와 `git commit`을 한 명령으로 붙이면 번들 게이트가 「Bundle is stale」로 오판 차단한다 — PreToolUse는 add 이전 상태만 본다 **→ 가드: `require-bundle-build.ps1`이 재빌드 전에 미스테이징 번들의 지문(경로+블롭)을 떠 두고, 재빌드가 그것을 바꾸지 않았으면 「Bundle is up to date but not staged yet (T-249)」로 원인(같은 명령의 add가 아직 안 돌았다 — add를 따로 실행하라)을 말한다. 막는 동작은 그대로다. 회귀 가드 `.claude/hooks/tests/test-require-bundle-build.sh` Case 10(이미 빌드됨 → 새 메시지) · Case 11(예전 빌드가 남은 진짜 낡은 번들 → 옛 메시지)**
 - [T-248](troubleshooting/T-248.md) · 쉘 리다이렉트 토큰이 git 위치 인자로 읽혀 fail-closed 게이트가 멀쩡한 명령을 막는다 — `2>&1`이 `<branch>` 자리에 앉았다
 - [T-247](troubleshooting/T-247.md) · 하위 스코프에서 토큰을 다시 깔아도 이미 계산된 값은 안 바뀐다 — 상속 프로퍼티(`color`)와 `var()` 별칭은 「선언된 요소」에서 한 번 계산돼 내려온다
 - [T-246](troubleshooting/T-246.md) · 워크트리의 `frontend/node_modules`가 dependabot 전 설치본이라, 대시보드 한 줄을 고치고 번들을 재빌드하니 웹 섬 11개가 전부 옛 vue로 다시 만들어졌다 — 커밋 훅의 「재빌드 diff 0」 검사는 이걸 원리상 못 잡는다 **→ hookify/warn-node-modules-junction.md**
