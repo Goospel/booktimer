@@ -103,8 +103,10 @@ public class BookApiController {
                                  @RequestParam(required = false, defaultValue = "1") int page,
                                  Principal principal) {
         User user = currentUserService.resolve(principal);
-        BookSearchType searchType = BookSearchType.from(type);
-        var result = bookService.search(q, searchType, page);
+        // "isbn"은 BookSearchType 값이 아니다 — from()이 모르는 값을 TITLE로 돌리는 기존 동작(미니앱)을 지키려고 여기서만 가로챈다.
+        var result = "isbn".equalsIgnoreCase(type)
+                ? bookService.searchByIsbn(q)
+                : bookService.search(q, BookSearchType.from(type), page);
         Set<String> myIsbns = bookService.myBooks(user).stream()
                 .map(Book::getIsbn13).filter(Objects::nonNull).collect(Collectors.toSet());
         List<SearchRow> rows = result.results().stream()
