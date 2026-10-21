@@ -10,6 +10,8 @@ public class AppleLinkConflictException extends RuntimeException {
     static final String SUB_TAKEN = "이 Apple ID는 이미 다른 책생글 계정에 연결돼 있어요";
     static final String ACCOUNT_LINKED =
             "이 웹 계정에는 이미 다른 Apple ID가 연결돼 있어요 — 웹 설정에서 연결을 해제한 뒤 다시 해 주세요";
+    /** 웹 설정 플래시 전용 — 토스 없이 로그인할 수 없는 계정은 앱 연결 코드를 받지 못한다(보안 리뷰 사소 4). */
+    public static final String TOSS_ONLY = "토스로 가입한 계정은 아직 아이폰 앱에 연결할 수 없어요.";
 
     AppleLinkConflictException(String message) {
         super(message);

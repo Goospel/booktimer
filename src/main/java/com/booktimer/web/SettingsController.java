@@ -118,7 +118,7 @@ public class SettingsController {
 
     /**
      * 아이폰 앱 「책생글」 연결 코드 발급(v1 REQ-06) — 토스 코드와 같은 플래시 1회 표시. 카드를 못 보는 사용자(허용 목록 밖)는
-     * 코드를 만들지 않고 설정으로 돌려보낸다(플래시 없음 — REQ-73). 이미 연결된 계정은 서비스가 거부한다.
+     * 코드를 만들지 않고 설정으로 돌려보낸다(플래시 없음 — REQ-73). 이미 연결된 계정·토스 없이 로그인할 수 없는 계정은 서비스가 거부한다.
      */
     @PostMapping("/settings/app-link-code")
     public String issueAppLinkCode(Principal principal, RedirectAttributes redirectAttributes) {
@@ -129,7 +129,9 @@ public class SettingsController {
         try {
             redirectAttributes.addFlashAttribute("appLinkCode", linkCodeService.issueAppLink(user));
         } catch (AppleLinkConflictException e) {
-            redirectAttributes.addFlashAttribute("error", "이미 아이폰 앱에 연결된 계정이에요.");
+            redirectAttributes.addFlashAttribute("error", user.getAppleSub() != null
+                    ? "이미 아이폰 앱에 연결된 계정이에요."
+                    : AppleLinkConflictException.TOSS_ONLY);
         }
         return "redirect:/settings";
     }

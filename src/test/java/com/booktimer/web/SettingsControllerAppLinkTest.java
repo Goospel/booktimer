@@ -1,6 +1,7 @@
 package com.booktimer.web;
 
 import com.booktimer.auth.ApiTokenService;
+import com.booktimer.user.AuthProvider;
 import com.booktimer.user.Role;
 import com.booktimer.user.TossLinkCode;
 import com.booktimer.user.TossLinkCodeRepository;
@@ -102,6 +103,22 @@ class SettingsControllerAppLinkTest {
         mockMvc.perform(post("/settings/app-link-code").with(user("linked@booktimer.com")).with(csrf()))
                 .andExpect(flash().attributeCount(1))
                 .andExpect(flash().attribute("error", "이미 아이폰 앱에 연결된 계정이에요."));
+        assertThat(appCodes(u)).isZero();
+    }
+
+    @Test
+    @DisplayName("REQ-06 · 토스 없이 로그인할 수 없는 계정(미인증 토스 가입)은 코드 대신 오류 플래시 — 앱 탈퇴가 막히는 계정을 만들지 않는다")
+    void tossOnlyAccountGetsErrorNotCode() throws Exception {
+        User u = registrationService.registerOAuth("toss-only@booktimer.com", "토스유저", "Asia/Seoul", AuthProvider.TOSS,
+                LocalDate.of(2026, 10, 21), false);
+        u.linkTossUserKey("uk-toss-only");
+        userRepository.saveAndFlush(u);
+        allow("*");
+
+        mockMvc.perform(post("/settings/app-link-code").with(user("toss-only@booktimer.com")).with(csrf()))
+                .andExpect(redirectedUrl("/settings"))
+                .andExpect(flash().attributeCount(1))
+                .andExpect(flash().attribute("error", "토스로 가입한 계정은 아직 아이폰 앱에 연결할 수 없어요."));
         assertThat(appCodes(u)).isZero();
     }
 

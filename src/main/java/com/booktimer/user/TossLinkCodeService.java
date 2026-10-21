@@ -68,11 +68,17 @@ public class TossLinkCodeService {
      * 아이폰 앱 연결 코드({@code LINK_APPLE})를 발급한다 — 앱 「웹에서 쓰던 계정이 있어요」에 입력하면 이 계정에 Apple 신원이
      * 붙는다(v1 REQ-06). 이미 Apple이 붙은 계정은 거부한다({@code apple_sub}는 once-set — 설정 화면이 버튼을 숨기지만 방어는 여기).
      *
-     * @throws AppleLinkConflictException 이미 Apple 신원이 붙어 있는 계정인 경우
+     * <p>토스 없이 로그인할 수 없는 계정({@link User#canSignInWithoutToss} = false)도 거부한다 — Apple이 붙은 뒤 토스 연결이
+     * 끊기면 SEVERED로 남아, 앱 탈퇴는 웹 계정이라 409로 막히고 웹 설정은 열 수단이 없는 계정이 된다.
+     *
+     * @throws AppleLinkConflictException 이미 Apple 신원이 붙어 있거나 토스 없이 로그인할 수 없는 계정인 경우
      */
     public String issueAppLink(User user) {
         if (user.getAppleSub() != null) {
             throw new AppleLinkConflictException(AppleLinkConflictException.ACCOUNT_LINKED);
+        }
+        if (!user.canSignInWithoutToss()) {
+            throw new AppleLinkConflictException(AppleLinkConflictException.TOSS_ONLY);
         }
         return issue(user, TossLinkCode.Purpose.LINK_APPLE);
     }
