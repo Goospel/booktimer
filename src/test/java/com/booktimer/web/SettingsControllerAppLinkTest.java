@@ -18,6 +18,7 @@ import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.MvcResult;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.Instant;
 import java.time.LocalDate;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -132,12 +133,16 @@ class SettingsControllerAppLinkTest {
         userRepository.saveAndFlush(u);
         String appToken = apiTokenService.issue(u);
         mockMvc.perform(get("/api/dashboard").header("Authorization", "Bearer " + appToken)).andExpect(status().isOk());
+        // apple_sub가 붙은 동안엔 LINK_APPLE이 발급되지 않으니, 남을 수 있는 미사용 코드는 LINK_TOSS다
+        linkCodeRepository.saveAndFlush(TossLinkCode.issue(u, "e".repeat(64), Instant.now().plusSeconds(300),
+                TossLinkCode.Purpose.LINK_TOSS));
 
         mockMvc.perform(post("/settings/app-unlink").with(user("unlink@booktimer.com")).with(csrf()))
                 .andExpect(redirectedUrl("/settings"))
                 .andExpect(flash().attribute("message", "아이폰 앱 「책생글」 연결을 끊었어요 — 그 기기는 다시 로그인해야 해요"));
 
         assertThat(userRepository.findById(u.getId()).orElseThrow().getAppleSub()).isNull();
+        assertThat(linkCodeRepository.findByUserAndUsedAtIsNull(u)).as("미사용 연결 코드도 지운다").isEmpty();
         mockMvc.perform(get("/api/dashboard").header("Authorization", "Bearer " + appToken)).andExpect(status().isUnauthorized());
     }
 

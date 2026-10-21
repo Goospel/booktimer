@@ -16,6 +16,7 @@ import org.springframework.security.oauth2.jwt.JwtException;
 import org.springframework.security.oauth2.jwt.JwtValidators;
 import org.springframework.security.oauth2.jwt.NimbusJwtDecoder;
 import org.springframework.stereotype.Component;
+import org.springframework.web.client.RestOperations;
 import org.springframework.web.client.RestTemplate;
 
 import java.time.Duration;
@@ -53,7 +54,7 @@ public class AppleIdentityVerifier {
         this(configured(bundleId) ? appleDecoder(bundleId.strip()) : null);
     }
 
-    /** 테스트 — 로컬 키로 만든 디코더(검증기는 {@link #validator}를 달아 운영과 같은 규칙으로). */
+    /** 테스트 — 디코더를 바꿔 끼운다(운영 조립을 재려면 {@link #appleDecoder(String, RestOperations)}로 만든다). */
     AppleIdentityVerifier(JwtDecoder decoder) {
         this.decoder = decoder;
     }
@@ -89,7 +90,7 @@ public class AppleIdentityVerifier {
     }
 
     /** 운영 디코더에 다는 검증기 — 기본(만료·nbf, 60초 허용) + 발급자 + 대상(번들 ID). */
-    static OAuth2TokenValidator<Jwt> validator(String bundleId) {
+    private static OAuth2TokenValidator<Jwt> validator(String bundleId) {
         OAuth2TokenValidator<Jwt> audience = new JwtClaimValidator<List<String>>(JwtClaimNames.AUD,
                 aud -> aud != null && aud.contains(bundleId));
         return new DelegatingOAuth2TokenValidator<>(JwtValidators.createDefaultWithIssuer(ISSUER), audience);
@@ -100,7 +101,12 @@ public class AppleIdentityVerifier {
         SimpleClientHttpRequestFactory factory = new SimpleClientHttpRequestFactory();
         factory.setConnectTimeout(Duration.ofSeconds(3));
         factory.setReadTimeout(Duration.ofSeconds(5));
-        NimbusJwtDecoder decoder = NimbusJwtDecoder.withJwkSetUri(JWKS_URI).restOperations(new RestTemplate(factory)).build();
+        return appleDecoder(bundleId, new RestTemplate(factory));
+    }
+
+    /** 운영 디코더 조립 — Apple JWKS 서명 + {@link #validator}. 테스트는 JWKS 응답만 바꿔 끼워 이 조립을 그대로 잰다. */
+    static JwtDecoder appleDecoder(String bundleId, RestOperations rest) {
+        NimbusJwtDecoder decoder = NimbusJwtDecoder.withJwkSetUri(JWKS_URI).restOperations(rest).build();
         decoder.setJwtValidator(validator(bundleId));
         return decoder;
     }

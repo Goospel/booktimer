@@ -3,13 +3,19 @@ package com.booktimer.auth;
 import com.nimbusds.jose.JWSAlgorithm;
 import com.nimbusds.jose.JWSHeader;
 import com.nimbusds.jose.crypto.RSASSASigner;
+import com.nimbusds.jose.jwk.JWKSet;
+import com.nimbusds.jose.jwk.RSAKey;
 import com.nimbusds.jwt.JWTClaimsSet;
 import com.nimbusds.jwt.SignedJWT;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import org.springframework.http.MediaType;
 import org.springframework.security.oauth2.jwt.JwtDecoder;
 import org.springframework.security.oauth2.jwt.JwtException;
-import org.springframework.security.oauth2.jwt.NimbusJwtDecoder;
+import org.springframework.test.web.client.ExpectedCount;
+import org.springframework.test.web.client.MockRestServiceServer;
+import org.springframework.web.client.RestOperations;
+import org.springframework.web.client.RestTemplate;
 
 import java.security.KeyPair;
 import java.security.KeyPairGenerator;
@@ -20,12 +26,14 @@ import java.util.Date;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.springframework.test.web.client.match.MockRestRequestMatchers.requestTo;
+import static org.springframework.test.web.client.response.MockRestResponseCreators.withSuccess;
 
 /**
  * Apple identity token 검증(v1 REQ-01) — 서명·발급자·대상·만료·sub 형식이 <b>모두</b> 맞아야 sub가 나온다.
  *
- * <p>Apple JWKS 대신 테스트 RSA 키로 서명하고, 운영과 <b>같은 검증기</b>({@link AppleIdentityVerifier#validator})를
- * 공개키 디코더에 단다 — 검증 규칙이 디코더 설정에 있으므로 그 설정을 그대로 재야 한다.
+ * <p>테스트 RSA 키로 서명하고, Apple JWKS 응답만 그 공개키로 바꿔 끼운 <b>운영 디코더 조립</b>을 그대로 잰다 — 검증 규칙이
+ * 디코더 설정(검증기 부착)에 있으므로 조립 한 줄이 빠져도 여기서 깨져야 한다.
  */
 class AppleIdentityVerifierTest {
 
@@ -47,16 +55,21 @@ class AppleIdentityVerifierTest {
         }
     }
 
+    /** 운영 조립({@link AppleIdentityVerifier#appleDecoder(String, RestOperations)}) 그대로 — JWKS 응답만 테스트 키로 바꿔 끼운다. */
     private static JwtDecoder decoderFor(RSAPublicKey key) {
-        NimbusJwtDecoder decoder = NimbusJwtDecoder.withPublicKey(key).build();
-        decoder.setJwtValidator(AppleIdentityVerifier.validator(BUNDLE));
-        return decoder;
+        RestTemplate rest = new RestTemplate();
+        String jwks = new JWKSet(new RSAKey.Builder(key).keyID("k1").build()).toString();
+        MockRestServiceServer.bindTo(rest).build()
+                .expect(ExpectedCount.manyTimes(), requestTo(AppleIdentityVerifier.JWKS_URI))
+                .andRespond(withSuccess(jwks, MediaType.APPLICATION_JSON));
+        return AppleIdentityVerifier.appleDecoder(BUNDLE, rest);
     }
 
     private static String token(KeyPair signer, String iss, String aud, Instant exp, String sub) {
         try {
             JWTClaimsSet.Builder claims = new JWTClaimsSet.Builder()
-                    .issuer(iss).audience(aud).issueTime(new Date()).expirationTime(Date.from(exp));
+                    // iat는 exp보다 앞에 — iat ≥ exp면 Jwt 생성 단언이 먼저 거부해 만료 사례가 타임스탬프 검증기를 안 잰다
+                    .issuer(iss).audience(aud).issueTime(Date.from(exp.minusSeconds(600))).expirationTime(Date.from(exp));
             if (sub != null) {
                 claims.subject(sub);
             }
