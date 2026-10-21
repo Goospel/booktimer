@@ -270,6 +270,15 @@ class PrivacyControllerTest {
         assertThat(html).contains("제11조 생성형 AI 기능 신설");
     }
 
+    @Test
+    @DisplayName("PR-A · GET /terms: 제2조에 아이폰 앱, 제3조 ②에 구글·Apple 로그인 계정 — 개정 이력에 즉시 시행으로")
+    void getTerms_appleAndGoogleAccounts() throws Exception {
+        String html = render("/terms");
+        assertThat(between(html, "<h2>제2조", "<h2>제3조")).contains("아이폰 앱");
+        assertThat(between(html, "<h2>제3조", "<h2>제4조")).contains("구글 로그인 계정").contains("Apple 로그인 계정(아이폰 앱)");
+        assertThat(html).contains("제3조 구글·Apple 로그인 계정(즉시)");
+    }
+
     /** 음성 판정 전용 — 지금도 초록이다. v1 설계의 예시 날짜를 문안에 베껴 넣는 회귀만 잡는다(REQ-74 수동 확인의 자동화). */
     @Test
     @DisplayName("REQ-74 · 처리방침·약관에 v1 예시 날짜 리터럴(2027-01-07 · 2026-12-08 · 1월 7일)이 없다")

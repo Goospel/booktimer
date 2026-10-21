@@ -168,6 +168,13 @@ public class User extends BaseTimeEntity {
     private String tossUserKey;
 
     /**
+     * 아이폰 앱 「책생글」의 Apple 로그인 신원(identity token의 {@code sub}). {@link #tossUserKey}와 같은 once-set 규칙이고,
+     * 해제는 웹 설정의 앱 연결 해제와 탈퇴만 한다. 한 신원이 두 계정에 붙지 않게 DB UNIQUE(uk_users_apple_sub, V100)가 최종 방어선이다.
+     */
+    @Column(name = "apple_sub", length = 64)
+    private String appleSub;
+
+    /**
      * 영리목적 광고성 정보(재참여 넛지 등 마케팅 메일) 수신에 동의했는지(이메일 인프라 2단계).
      * 정보통신망법 §50의 <b>사전 동의(opt-in)</b> 불변식 — 기본 {@code false}(미동의)이고, 가입 폼·설정의
      * 별도 선택 항목으로만 켜진다(필수 동의에 끼워팔지 않음 — 개인정보보호법). 미동의자에겐 넛지를 보내지 않는다.
@@ -771,16 +778,52 @@ public class User extends BaseTimeEntity {
 
     /**
      * 토스 없이 로그인할 수단이 있는가 — 토스 연결이 끊길 때 계정을 지울지(없음) 연결만 뗄지(있음)를 가른다.
-     * 비밀번호(LOCAL)·구글 가입·인증된 이메일(같은 주소의 구글 로그인이 이 계정으로 흡수된다 — OAuthUserProvisioningService).
+     * 비밀번호(LOCAL)·구글 가입·인증된 이메일(같은 주소의 구글 로그인이 이 계정으로 흡수된다 — OAuthUserProvisioningService)·
+     * Apple 로그인(아이폰 앱 — 지우면 앱에서 쓴 기록이 토스 쪽 동작 하나로 사라진다).
      * 인증된 이메일이 구글 주소가 아니면 실제 수단이 없을 수 있지만, 지우는 오판(웹 기록 소실)이 남기는 오판보다 무겁다.
      */
     public boolean canSignInWithoutToss() {
-        return isLocalAccount() || authProvider == AuthProvider.GOOGLE || emailVerified;
+        return isLocalAccount() || authProvider == AuthProvider.GOOGLE || emailVerified || appleSub != null;
     }
 
     /** 토스가 알려 온 연결 끊기 전용 — 토스 신원을 뗀다. 이후 그 신원은 이 계정을 못 찾고, 웹에서 다시 연결할 수 있다. */
     public void unlinkTossUserKey() {
         this.tossUserKey = null;
+    }
+
+    /**
+     * 이 계정에 Apple 신원을 붙인다 — {@link #linkTossUserKey}와 같은 once-set 규칙(이미 있으면 같은 값이든 아니든 거부).
+     * 다른 계정이 그 신원을 쓰는지는 서비스의 사전 확인과 DB UNIQUE가 맡는다.
+     *
+     * @throws IllegalStateException    이미 Apple 신원이 붙어 있는 경우
+     * @throws IllegalArgumentException sub가 null/공백인 경우
+     */
+    public void linkAppleSub(String sub) {
+        if (this.appleSub != null) {
+            throw new IllegalStateException("apple_sub is immutable and already set: id=" + id);
+        }
+        if (sub == null || sub.isBlank()) {
+            throw new IllegalArgumentException("apple sub must not be blank");
+        }
+        this.appleSub = sub.strip();
+    }
+
+    /** 웹 설정의 「앱 연결 해제」 전용 — Apple 신원을 뗀다. 이후 그 Apple ID는 이 계정을 못 찾는다. */
+    public void unlinkAppleSub() {
+        this.appleSub = null;
+    }
+
+    /** 연결된 Apple 신원(sub). 미연결이면 {@code null}. */
+    public String getAppleSub() {
+        return appleSub;
+    }
+
+    /**
+     * 원 가입 경로가 아이폰 앱(Apple)이 아닌가 — 웹·미니앱에서 만든 계정이다. 앱은 이런 계정을 앱 안에서 지우지 못하고
+     * 웹 설정 삭제로 보낸다: 연결 코드가 새 공격자 Apple ID가 붙어도 데이터 파괴까지는 못 가게 한다(v1 REQ-07).
+     */
+    public boolean isWebAccount() {
+        return authProvider != AuthProvider.APPLE;
     }
 
     /**

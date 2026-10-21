@@ -86,6 +86,18 @@ public enum RateLimitAction {
     TOSS_LINK(10, Duration.ofHours(1)),
 
     /**
+     * 아이폰 앱 Apple 로그인({@code /api/app/auth/apple})의 <b>클라이언트 IP</b>별 상한 — Apple 토큰을 검증하기 <b>전에</b> 센다.
+     * 이유와 한도는 {@link #TOSS_VERIFY}와 같다(permitAll 경로의 아웃바운드 폭주 상한 · CGNAT라 넉넉히).
+     */
+    APP_AUTH(60, Duration.ofMinutes(1)),
+
+    /**
+     * 아이폰 앱 웹 계정 연결 코드 검증. 키는 검증된 Apple sub이고 코드 소비 <b>전에</b> 센다 — {@link #TOSS_LINK}와 같은
+     * 8자 코드 브루트포스 방어 층이다.
+     */
+    APP_LINK(10, Duration.ofHours(1)),
+
+    /**
      * 회원가입({@code POST /signup})의 <b>클라이언트 IP</b>별 상한. 정상 사용자는 평생 1회다.
      *
      * <p>겨누는 것은 계정 양산 자체보다 <b>이 폼이 임의 주소로 메일을 내보내는 문</b>이라는 점이다 —

@@ -65,8 +65,22 @@ public class TossLinkCodeService {
     }
 
     /**
-     * 무효화 + 생성. 발급은 LINK_TOSS 하나다 — 토스 → 웹 로그인 코드({@code WEB_LOGIN}) 발급은 2026-10에
-     * 폐지했다(서비스 오픈 정책 §2-2). 무효화는 목적을 가리지 않아, 옛 {@code WEB_LOGIN} 미사용 행도 함께 닫는다.
+     * 아이폰 앱 연결 코드({@code LINK_APPLE})를 발급한다 — 앱 「웹에서 쓰던 계정이 있어요」에 입력하면 이 계정에 Apple 신원이
+     * 붙는다(v1 REQ-06). 이미 Apple이 붙은 계정은 거부한다({@code apple_sub}는 once-set — 설정 화면이 버튼을 숨기지만 방어는 여기).
+     *
+     * @throws AppleLinkConflictException 이미 Apple 신원이 붙어 있는 계정인 경우
+     */
+    public String issueAppLink(User user) {
+        if (user.getAppleSub() != null) {
+            throw new AppleLinkConflictException(AppleLinkConflictException.ACCOUNT_LINKED);
+        }
+        return issue(user, TossLinkCode.Purpose.LINK_APPLE);
+    }
+
+    /**
+     * 무효화 + 생성. 발급은 LINK_TOSS·LINK_APPLE 둘이다 — 토스 → 웹 로그인 코드({@code WEB_LOGIN}) 발급은 2026-10에
+     * 폐지했다(서비스 오픈 정책 §2-2). 무효화는 목적을 가리지 않아, 옛 {@code WEB_LOGIN} 미사용 행도 함께 닫는다 —
+     * 앱 연결 코드를 받으면 살아 있던 토스 연결 코드도 닫힌다(반대도 같다 — 설정 카드 안내 한 줄로 받아들인다, v1 §3.3-10).
      */
     private String issue(User user, TossLinkCode.Purpose purpose) {
         Instant now = clock.instant();

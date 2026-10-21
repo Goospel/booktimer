@@ -19,5 +19,10 @@ public enum AuthProvider {
      * 이 값은 "원 가입 경로"의 의미이고, 비밀번호 변경 가능 여부 같은 기존 규칙이 여기 걸려 있어
      * 바꾸면 회귀한다. "토스로 로그인 가능한가"는 toss_user_key 보유 여부가 답한다(설계 §2.2).
      */
-    TOSS
+    TOSS,
+    /**
+     * 아이폰 앱 「책생글」에서 Apple 로그인으로 시작한 계정 — 비밀번호 없음, 신원은 {@code users.apple_sub}.
+     * 웹 계정에 앱을 연결한 경우엔 TOSS와 같은 규칙으로 바꾸지 않는다 — "Apple로 로그인 가능한가"는 apple_sub가 답한다.
+     */
+    APPLE
 }

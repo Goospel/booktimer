@@ -49,6 +49,9 @@ public interface UserRepository extends JpaRepository<User, Long> {
      */
     Optional<User> findByTossUserKey(String tossUserKey);
 
+    /** Apple sub로 사용자 조회 — 아이폰 앱 로그인의 신원 키(UNIQUE, V100). 미연결 계정은 NULL이라 걸리지 않는다. */
+    Optional<User> findByAppleSub(String appleSub);
+
     boolean existsByEmail(String email);
 
     /** 정규화된 login_id가 이미 쓰이는지 — 온보딩에서 공개 핸들 확정 전 유니크 사전 확인(uk_users_login_id). */

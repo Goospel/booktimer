@@ -221,8 +221,36 @@
         <a th:if="${tossLinked == true or tossLinkCode != null}" class="set-btn-save" href="intoss://booktimer/">휴대폰에서 토스 앱 열기</a>
     </section>
 
+    <!--/* 아이폰 앱 「책생글」 연결 — 웹 계정을 앱에서 이어 쓰는 일회용 코드(v1 REQ-06) · 연결 해제(REQ-41).
+         허용 목록 또는 이미 연결된 계정만 본다(REQ-73 — 스토어에 없는 앱의 카드를 출시 전까지 숨긴다). `== true`인 이유는
+         위 토스 카드 주석과 같다(검증 실패 재렌더 경로엔 모델 값이 없어 null). 웹 에디토리얼 기존 부품만 쓴다(REQ-64).
+         파서 주석(렌더에서 빠진다)인 이유: 카드 유무를 렌더 결과로 재는 테스트가 주석 글자에 속지 않게. */-->
+    <section class="set-card" id="app-link" th:if="${appLinkCardVisible == true}">
+        <h2 class="set-card-title">아이폰 앱 연결</h2>
+        <p class="set-card-desc">아이폰 앱 「책생글」에서 이 계정의 책과 여백을 이어서 쓸 수 있어요. 코드를 받아 앱 로그인 화면의 「웹에서 쓰던 계정이 있어요」에 넣으세요.</p>
+
+        <div th:if="${appLinkCode}" class="set-alert set-alert-ok">
+            <span>연결 코드 <strong th:text="${appLinkCode}">ABCD2345</strong> — 5분 안에 한 번만 쓸 수 있어요. 이 코드를 누구에게도 알려 주지 마세요 — 코드를 넣은 iPhone이 이 계정을 열 수 있어요</span>
+        </div>
+
+        <th:block th:if="${appleLinked == true}">
+            <p class="set-card-desc"><strong>아이폰 앱에 연결됨</strong> — 본인이 연결하지 않았다면 지금 해제하세요. 해제하면 그 iPhone은 바로 로그아웃돼요.</p>
+            <form th:action="@{/settings/app-unlink}" method="post"
+                  data-confirm="아이폰 앱 연결을 해제할까요? 그 기기는 다시 로그인해야 해요.">
+                <button type="submit" class="set-btn-save">연결 해제</button>
+            </form>
+        </th:block>
+        <th:block th:unless="${appleLinked == true}">
+            <p class="set-card-desc">코드는 한 번에 하나만 살아 있어요 — 새로 받으면 앞서 받은 토스 앱 연결 코드도 쓸 수 없게 돼요.</p>
+            <form th:action="@{/settings/app-link-code}" method="post">
+                <button type="submit" class="set-btn-save">앱 연결 코드 받기</button>
+            </form>
+        </th:block>
+    </section>
+
     <!-- 회원 탈퇴 (위험 구역) -->
-    <section class="set-card set-card-danger">
+    <!--/* 앵커: 아이폰 앱이 웹에서 만든 계정의 삭제를 여기로 보낸다(/settings#delete, v1 REQ-07) */-->
+    <section class="set-card set-card-danger" id="delete">
         <h2 class="set-card-title set-card-title-danger">회원 탈퇴</h2>
         <p class="set-card-desc">계정과 모든 독서 기록이 영구 삭제됩니다. 되돌릴 수 없습니다.</p>
         <form th:action="@{/settings/delete}" method="post"

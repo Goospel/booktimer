@@ -327,6 +327,36 @@ class FlywayMigrationTest {
                 .isInstanceOf(DataIntegrityViolationException.class);
     }
 
+    // ── 아이폰 앱 Apple 로그인(V100) — users.apple_sub 유니크 + APPLE · LINK_APPLE 값이 실제 스키마에 담긴다 ──
+
+    @Test
+    @DisplayName("PR-A · V100: 한 Apple 신원은 두 계정에 붙지 못한다(uk_users_apple_sub) — 엔티티엔 없어 여기서만 보인다")
+    void apple_sub_unique_constraint_is_enforced() {
+        User first = userWithHandle("apple-a@example.com", "appleuka");
+        first.linkAppleSub("001.shared.sub");
+        userRepository.saveAndFlush(first);
+
+        User second = userWithHandle("apple-b@example.com", "appleukb");
+        second.linkAppleSub("001.shared.sub");
+
+        assertThatThrownBy(() -> userRepository.saveAndFlush(second))
+                .isInstanceOf(DataIntegrityViolationException.class);
+    }
+
+    @Test
+    @DisplayName("PR-A · V100: APPLE 가입 경로와 LINK_APPLE 코드가 Flyway 스키마에 그대로 담겨 돌아온다")
+    void apple_provider_and_link_purpose_persist_under_flyway_schema() {
+        User apple = userRepository.saveAndFlush(User.ofOAuth("apple-x.1@noreply.booktimer.app", "독자", "Asia/Seoul",
+                com.booktimer.user.Role.USER, com.booktimer.user.AuthProvider.APPLE));
+        var code = tossLinkCodeRepository.saveAndFlush(com.booktimer.user.TossLinkCode.issue(
+                apple, "d".repeat(64), Instant.parse("2026-11-05T00:00:00Z"), com.booktimer.user.TossLinkCode.Purpose.LINK_APPLE));
+
+        assertThat(jdbcTemplate.queryForObject("SELECT auth_provider FROM users WHERE id = ?", String.class, apple.getId()))
+                .isEqualTo("APPLE");
+        assertThat(jdbcTemplate.queryForObject("SELECT purpose FROM toss_link_code WHERE id = ?", String.class, code.getId()))
+                .isEqualTo("LINK_APPLE");
+    }
+
     @Test
     void api_token_and_link_code_tables_persist_under_flyway_schema() {
         User owner = userRepository.saveAndFlush(userWithHandle("toss-token@example.com", "tosstoken"));

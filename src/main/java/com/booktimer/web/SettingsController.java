@@ -5,6 +5,7 @@ import com.booktimer.security.SessionInvalidator;
 import com.booktimer.timer.ReadingTimer;
 import com.booktimer.timer.ReadingTimerRepository;
 import com.booktimer.user.AccountDeletionConfirmationException;
+import com.booktimer.user.AppleLinkConflictException;
 import com.booktimer.user.AccountService;
 import com.booktimer.user.InvalidPasswordException;
 import com.booktimer.user.LoginIdAlreadyExistsException;
@@ -16,6 +17,7 @@ import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import jakarta.servlet.http.HttpSession;
 import jakarta.validation.Valid;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.web.authentication.logout.SecurityContextLogoutHandler;
@@ -53,18 +55,23 @@ public class SettingsController {
     private final TossLinkCodeService linkCodeService;
     private final SessionInvalidator sessionInvalidator;
 
+    /** 「아이폰 앱 연결」 카드 허용 목록(v1 REQ-73 — {@link AppLinkCardPolicy}). final이 아닌 건 테스트가 바꿔 끼우기 때문이다(T-235). */
+    private String linkCardUsers;
+
     public SettingsController(CurrentUserService currentUserService,
                               ReadingTimerRepository timerRepository,
                               UserSettingsService settingsService,
                               AccountService accountService,
                               TossLinkCodeService linkCodeService,
-                              SessionInvalidator sessionInvalidator) {
+                              SessionInvalidator sessionInvalidator,
+                              @Value("${booktimer.app.link-card-users:none}") String linkCardUsers) {
         this.currentUserService = currentUserService;
         this.timerRepository = timerRepository;
         this.settingsService = settingsService;
         this.accountService = accountService;
         this.linkCodeService = linkCodeService;
         this.sessionInvalidator = sessionInvalidator;
+        this.linkCardUsers = linkCardUsers;
     }
 
     /** 타임존 드롭다운 후보 — GET 폼과 POST 검증 실패 재렌더 모두에 자동으로 실린다. */
@@ -103,7 +110,45 @@ public class SettingsController {
         model.addAttribute("marketingEmailConsent", user.isMarketingEmailConsent());
         // 토스 앱 연결 — 연결됐으면 상태만 보이고, 아니면 일회용 코드 발급 버튼을 낸다(설계 §2.2).
         model.addAttribute("tossLinked", user.getTossUserKey() != null);
+        // 아이폰 앱 연결 — 허용 목록 또는 이미 연결된 계정만 카드를 본다(v1 REQ-73). 연결됐으면 상태 + 해제 버튼.
+        model.addAttribute("appleLinked", user.getAppleSub() != null);
+        model.addAttribute("appLinkCardVisible", appLinkCardVisible(user));
         return "settings";
+    }
+
+    /**
+     * 아이폰 앱 「책생글」 연결 코드 발급(v1 REQ-06) — 토스 코드와 같은 플래시 1회 표시. 카드를 못 보는 사용자(허용 목록 밖)는
+     * 코드를 만들지 않고 설정으로 돌려보낸다(플래시 없음 — REQ-73). 이미 연결된 계정은 서비스가 거부한다.
+     */
+    @PostMapping("/settings/app-link-code")
+    public String issueAppLinkCode(Principal principal, RedirectAttributes redirectAttributes) {
+        User user = currentUser(principal);
+        if (!appLinkCardVisible(user)) {
+            return "redirect:/settings";
+        }
+        try {
+            redirectAttributes.addFlashAttribute("appLinkCode", linkCodeService.issueAppLink(user));
+        } catch (AppleLinkConflictException e) {
+            redirectAttributes.addFlashAttribute("error", "이미 아이폰 앱에 연결된 계정이에요.");
+        }
+        return "redirect:/settings";
+    }
+
+    /**
+     * 아이폰 앱 연결 해제(v1 REQ-41) — 연결 코드가 샜을 때의 복구 수단. 허용 목록 판정을 하지 않는다(해제를 숨기지 않는다).
+     * 토큰 전부·연결 코드를 지우고 Apple 신원을 뗀다 — 그 iPhone의 다음 요청은 401이다.
+     */
+    @PostMapping("/settings/app-unlink")
+    public String unlinkApp(Principal principal, RedirectAttributes redirectAttributes) {
+        boolean unlinked = accountService.unlinkApple(currentUser(principal));
+        redirectAttributes.addFlashAttribute("message", unlinked
+                ? "아이폰 앱 「책생글」 연결을 끊었어요 — 그 기기는 다시 로그인해야 해요"
+                : "연결된 아이폰 앱이 없어요.");
+        return "redirect:/settings";
+    }
+
+    private boolean appLinkCardVisible(User user) {
+        return AppLinkCardPolicy.visible(user.getId(), user.getAppleSub() != null, linkCardUsers);
     }
 
     /**

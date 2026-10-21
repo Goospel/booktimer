@@ -64,6 +64,15 @@ declare -A SECRET_MAP=(
   # 토스 로그인 연결 끊기 콜백의 Basic Auth 값(SecureString). 토스 콘솔 「연결 끊기 콜백 정보」와 같은 값이다.
   # 바꿀 땐 SSM과 콘솔을 함께 바꾸고 재배포한다 — 어긋나면 콜백이 전부 401(앱 로그 `toss-unlink auth-failed`).
   [TOSS_UNLINK_BASIC_AUTH]=BOOKTIMER_TOSS_UNLINK_BASIC_AUTH
+  # 아이폰 앱 「책생글」 Apple 로그인(2026-10 PR-A). 번들 ID는 com.goospel.chaeksaenggeul, 팀 ID는 Apple 개발자 팀.
+  # 키 ID·.p8은 Apple 개발자 콘솔의 Sign in with Apple 키 — .p8은 `base64 -w0` 한 줄(T-266). 키가 아직 없으면
+  # 값을 not-configured로 둔다(앱 탈퇴의 Apple 토큰 철회만 건너뛴다). 번들 ID가 not-configured면 앱 로그인이 503으로 닫힌다.
+  [APPLE_BUNDLE_ID]=BOOKTIMER_APPLE_BUNDLE_ID
+  [APPLE_TEAM_ID]=BOOKTIMER_APPLE_TEAM_ID
+  [APPLE_SIGNIN_KEY_ID]=BOOKTIMER_APPLE_SIGNIN_KEY_ID
+  [APPLE_SIGNIN_P8]=BOOKTIMER_APPLE_SIGNIN_P8
+  # 웹 설정 「아이폰 앱 연결」 카드 허용 목록 — 출시 전 17(본인), 출시 때 *(모두). 바꾸면 재배포(workflow_dispatch).
+  [APP_LINK_CARD_USERS]=BOOKTIMER_APP_LINK_CARD_USERS
 )
 
 # ── 평문 설정 (구 task-definition의 environment 블록) ──

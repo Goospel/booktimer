@@ -1,11 +1,14 @@
 package com.booktimer.testsupport;
 
+import com.booktimer.auth.AppleIdentityVerifier;
+import com.booktimer.auth.AppleTokenRevoker;
 import com.booktimer.auth.TossLoginClient;
 import com.booktimer.book.BookSearchClient;
 import com.booktimer.book.CoupangDeeplinkClient;
 import com.booktimer.book.CoupangLinkBuilder;
 import com.booktimer.book.KyoboLinkBuilder;
 import com.booktimer.book.Yes24LinkBuilder;
+import com.booktimer.email.AppLinkNotificationService;
 import com.booktimer.email.SignupNotificationService;
 import com.booktimer.personality.ReadingPersonalityNarrator;
 import com.booktimer.story.StoryRepository;
@@ -55,7 +58,12 @@ import java.lang.annotation.Target;
         GeminiStudyPlanner.class,
         ClaudeStudyAssistant.class,
         TossLoginClient.class,
-        SignupNotificationService.class
+        SignupNotificationService.class,
+        // 아이폰 앱 Apple 로그인(PR-A) — Apple JWKS·철회 API·연결 알림 메일. 목 기본값 isConfigured()=false는
+        // 실제 빈(테스트엔 키가 없다)과 같다 — 앱 신원 테스트는 true로 스텁한다. 실제 빈의 꺼짐은 AppSecurityChainTest가 잰다.
+        AppleIdentityVerifier.class,
+        AppleTokenRevoker.class,
+        AppLinkNotificationService.class
 })
 @MockitoSpyBean(types = {StoryRepository.class, StudyNoteRepository.class})
 public @interface MockedBoundaryTest {
