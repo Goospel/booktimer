@@ -51,7 +51,7 @@ public class AppleIdentityVerifier {
 
     @Autowired
     public AppleIdentityVerifier(@Value("${booktimer.apple.bundle-id:not-configured}") String bundleId) {
-        this(configured(bundleId) ? appleDecoder(bundleId.strip()) : null);
+        this(configured(bundleId) ? appleDecoder(bundleId.strip(), appleRest()) : null);
     }
 
     /** 테스트 — 디코더를 바꿔 끼운다(운영 조립을 재려면 {@link #appleDecoder(String, RestOperations)}로 만든다). */
@@ -97,11 +97,11 @@ public class AppleIdentityVerifier {
     }
 
     /** JWKS 조회는 연결 3초·읽기 5초 — permitAll 경로가 요청 스레드를 오래 붙잡지 않게. 키 목록은 디코더가 캐시한다. */
-    private static JwtDecoder appleDecoder(String bundleId) {
+    static RestTemplate appleRest() {
         SimpleClientHttpRequestFactory factory = new SimpleClientHttpRequestFactory();
         factory.setConnectTimeout(Duration.ofSeconds(3));
         factory.setReadTimeout(Duration.ofSeconds(5));
-        return appleDecoder(bundleId, new RestTemplate(factory));
+        return new RestTemplate(factory);
     }
 
     /** 운영 디코더 조립 — Apple JWKS 서명 + {@link #validator}. 테스트는 JWKS 응답만 바꿔 끼워 이 조립을 그대로 잰다. */

@@ -10,8 +10,10 @@ import com.nimbusds.jwt.SignedJWT;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.http.MediaType;
+import org.springframework.http.client.SimpleClientHttpRequestFactory;
 import org.springframework.security.oauth2.jwt.JwtDecoder;
 import org.springframework.security.oauth2.jwt.JwtException;
+import org.springframework.test.util.ReflectionTestUtils;
 import org.springframework.test.web.client.ExpectedCount;
 import org.springframework.test.web.client.MockRestServiceServer;
 import org.springframework.web.client.RestOperations;
@@ -60,7 +62,7 @@ class AppleIdentityVerifierTest {
         RestTemplate rest = new RestTemplate();
         String jwks = new JWKSet(new RSAKey.Builder(key).keyID("k1").build()).toString();
         MockRestServiceServer.bindTo(rest).build()
-                .expect(ExpectedCount.manyTimes(), requestTo(AppleIdentityVerifier.JWKS_URI))
+                .expect(ExpectedCount.manyTimes(), requestTo("https://appleid.apple.com/auth/keys")) // 상수 참조면 주소가 바뀌어도 초록이다
                 .andRespond(withSuccess(jwks, MediaType.APPLICATION_JSON));
         return AppleIdentityVerifier.appleDecoder(BUNDLE, rest);
     }
@@ -124,6 +126,15 @@ class AppleIdentityVerifierTest {
         });
         assertThatThrownBy(() -> broken.verify(token(APPLE, ISS, BUNDLE, later(), SUB)))
                 .isInstanceOf(AppleVerificationUnavailableException.class);
+    }
+
+    @Test
+    @DisplayName("운영 JWKS 조회는 연결 3초·읽기 5초 — permitAll 경로가 요청 스레드를 오래 붙잡지 않게")
+    void appleRestHasTimeouts() {
+        Object factory = AppleIdentityVerifier.appleRest().getRequestFactory();
+        assertThat(factory).isInstanceOf(SimpleClientHttpRequestFactory.class);
+        assertThat(ReflectionTestUtils.getField(factory, "connectTimeout")).isEqualTo(3000);
+        assertThat(ReflectionTestUtils.getField(factory, "readTimeout")).isEqualTo(5000);
     }
 
     @Test
