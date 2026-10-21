@@ -86,6 +86,22 @@ public class BookService {
     }
 
     /**
+     * 바코드로 읽은 ISBN 한 건 조회(알라딘 ItemLookUp) — 앱 서재의 「바코드 추가」용(v1 REQ-17).
+     *
+     * <p>정규화 뒤 숫자 13자리가 아니면 <b>부르기 전에</b> 빈 페이지다(외부 호출·500 없음). 정확한 단건이라
+     * {@link #search}의 기준 필드 거르기·세트 빼기를 거치지 않는다 — 스캔한 그 책을 그대로 돌려준다.
+     */
+    @Transactional(readOnly = true)
+    public BookSearchPage searchByIsbn(String query) {
+        String isbn13 = Isbn.normalize(query);
+        if (isbn13 == null || !isbn13.matches("\\d{13}")) {
+            return BookSearchPage.empty(1, 1);
+        }
+        List<BookSearchResult> found = searchClient.lookupByIsbn(isbn13).stream().toList();
+        return new BookSearchPage(found, 1, 1, found.size());
+    }
+
+    /**
      * 세트 상품(「전N권」·「세트」)을 뺀다 — 검색도 「이어 읽기」 추천도 <b>다음에 읽을 한 권</b>을
      * 고르는 자리라, 33권 묶음은 읽을 단위가 아니라 구매 단위다.
      *
