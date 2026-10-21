@@ -11,7 +11,10 @@ import com.booktimer.session.ReadingSessionRepository;
 import com.booktimer.story.Story;
 import com.booktimer.story.StoryRepository;
 import com.booktimer.testsupport.MockedBoundaryTest;
+import com.booktimer.user.AccountDeletionConfirmationException;
+import com.booktimer.user.AccountService;
 import com.booktimer.user.AppleUserProvisioningService;
+import com.booktimer.user.WebAccountDeletionException;
 import com.booktimer.user.AuthProvider;
 import com.booktimer.user.User;
 import com.booktimer.user.UserRegistrationService;
@@ -30,6 +33,7 @@ import java.time.LocalDate;
 import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -55,6 +59,7 @@ class AppAccountDeletionIntegrationTest {
     @Autowired AppleIdentityVerifier verifier;
     @Autowired AppleTokenRevoker revoker;
     @Autowired AppleUserProvisioningService appleUsers;
+    @Autowired AccountService accountService;
     @Autowired UserRegistrationService registrationService;
     @Autowired UserRepository userRepository;
     @Autowired ApiTokenService apiTokenService;
@@ -132,6 +137,22 @@ class AppAccountDeletionIntegrationTest {
         assertThat(userRepository.findById(web.getId())).isPresent();
         verify(revoker, never()).revoke(any());
         mockMvc.perform(get("/api/dashboard").header("Authorization", "Bearer " + token)).andExpect(status().isOk());
+    }
+
+    @Test
+    @DisplayName("REQ-07 · 서비스도 한 번 더 대조한다 — 웹 계정·다른 sub는 컨트롤러를 거치지 않아도 지우지 않는다")
+    void serviceDoubleChecks() {
+        User web = registrationService.registerOAuth("svc-web@booktimer.com", "구글러", "Asia/Seoul",
+                AuthProvider.GOOGLE, LocalDate.of(2026, 10, 21));
+        appleUsers.link(web, SUB);
+        User app = appleUsers.register("000888.app.0008");
+
+        assertThatThrownBy(() -> accountService.deleteAppleVerifiedAccount(web, SUB))
+                .isInstanceOf(WebAccountDeletionException.class);
+        assertThatThrownBy(() -> accountService.deleteAppleVerifiedAccount(app, "someone.else.1"))
+                .isInstanceOf(AccountDeletionConfirmationException.class);
+        assertThat(userRepository.findById(web.getId())).isPresent();
+        assertThat(userRepository.findById(app.getId())).isPresent();
     }
 
     @Test

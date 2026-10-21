@@ -63,9 +63,13 @@ class AppleTokenRevokerTest {
     }
 
     private static Rig rig(String p8) {
+        return rig(TEAM, p8);
+    }
+
+    private static Rig rig(String team, String p8) {
         RestClient.Builder builder = RestClient.builder();
         MockRestServiceServer server = MockRestServiceServer.bindTo(builder).build();
-        AppleTokenRevoker revoker = new AppleTokenRevoker(TEAM, KEY_ID, BUNDLE, p8, builder.build(),
+        AppleTokenRevoker revoker = new AppleTokenRevoker(team, KEY_ID, BUNDLE, p8, builder.build(),
                 Clock.fixed(NOW, ZoneOffset.UTC));
         return new Rig(revoker, server);
     }
@@ -128,6 +132,11 @@ class AppleTokenRevokerTest {
         Rig off = rig("not-configured");
         assertThat(off.revoker().revoke("code")).isFalse();
         off.server().verify(); // 기대한 요청 0 — 무엇이든 나갔으면 깨진다
+
+        // .p8은 멀쩡한데 팀 ID만 없다 — 서명은 되므로 이 칸을 안 보면 실제로 Apple을 부른다(위 .p8 없음은 키 해석에서 먼저 멈춘다)
+        Rig noTeam = rig("not-configured", p8Base64());
+        assertThat(noTeam.revoker().revoke("code")).isFalse();
+        noTeam.server().verify();
 
         Rig noCode = rig(p8Base64());
         assertThat(noCode.revoker().revoke(null)).isFalse();
