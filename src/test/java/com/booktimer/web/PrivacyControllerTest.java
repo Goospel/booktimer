@@ -7,6 +7,15 @@ import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.test.web.servlet.MockMvc;
 
+import java.nio.charset.StandardCharsets;
+import java.time.LocalDate;
+import java.time.temporal.ChronoUnit;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
+
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.hamcrest.Matchers.containsString;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
@@ -55,11 +64,12 @@ class PrivacyControllerTest {
 
     /** 정책 문서 §1 — 「대화」 조를 제10조로 넣고 문의를 제11조로 민다. 채널톡 제출물과 문구가 같아야 한다. */
     @Test
-    @DisplayName("GET /terms: 제10조 대화(맞팔·제재 사다리·자동 7일)와 제11조 문의")
+    @DisplayName("GET /terms: 제10조 대화(맞팔·제재 사다리·자동 7일)와 제12조 문의")
     void getTerms_hasChatArticleBeforeContact() throws Exception {
         mockMvc.perform(get("/terms"))
                 .andExpect(content().string(containsString("제10조 (대화)")))
-                .andExpect(content().string(containsString("제11조 (문의)")))
+                // PR-K — 제11조에 「생성형 AI 기능」이 들어와 문의는 제12조로 밀렸다
+                .andExpect(content().string(containsString("제12조 (문의)")))
                 .andExpect(content().string(containsString("서로 팔로우한 이용자 사이")))
                 .andExpect(content().string(containsString("경고 → 7일 정지 → 영구 정지")))
                 .andExpect(content().string(containsString("대화 기능이 7일간 자동으로 정지")))
@@ -155,5 +165,118 @@ class PrivacyControllerTest {
                 .andExpect(content().string(containsString("<strong>사진 전사로 올린 사진은 서비스 서버에 저장하지 않습니다</strong>")))
                 .andExpect(content().string(org.hamcrest.Matchers.not(
                         containsString("<strong>사진은 서비스 서버에 저장하지 않습니다</strong>"))));
+    }
+
+    /**
+     * 시행일 E — PR-K 머지일 = 개정 공지일(2026-10-21) + 33일(KST, 앞당김 설계 REQ-09 = v1 REQ-74 — 31일 이상).
+     * 공지일을 다시 바꾸면 두 문서의 「개정 공지」 날짜를 실제 머지일(KST)로 고치고, E − 머지일 &lt; 31이면 이 값과
+     * 두 문서의 E도 다시 센다 — {@code legalPages_noticeDateAndEffectiveDateAgree}가 놓친 자리를 잡는다.
+     * PR-B의 {@code AI_NOTICE_EFFECTIVE}도 이 날이다.
+     */
+    private static final String EFFECTIVE = "2026-11-23";
+
+    /** 앱 글쓰기 질문이 보내는 항목 — v1 §5.1 {@code SentItem.privacyLabel} 다섯 개(PR-C의 REQ-43 가드가 코드 쪽에서 다시 잰다). */
+    private static final List<String> SENT_ITEM_LABELS = List.of(
+            "책의 제목·저자", "여백(옮긴 문장·메모·작성일)", "지금 쓰는 글", "지금 답하는 질문", "이 글에서 앞서 받은 질문");
+
+    private String render(String path) throws Exception {
+        return mockMvc.perform(get(path)).andExpect(status().isOk())
+                .andReturn().getResponse().getContentAsString(StandardCharsets.UTF_8);
+    }
+
+    /** start부터 end 앞까지. 어느 한쪽이 없으면 빈 문자열이라 뒤따르는 contains 단언이 Red가 된다. */
+    private static String between(String s, String start, String end) {
+        int from = s.indexOf(start);
+        if (from < 0) return "";
+        int to = s.indexOf(end, from + start.length());
+        return to < 0 ? "" : s.substring(from, to);
+    }
+
+    @Test
+    @DisplayName("R-13 · GET /privacy: 6-3절이 앱 글쓰기 질문의 국외 이전을 다섯 항목·「그 밖의 이용 기록은 보내지 않습니다」·시행일 한 줄로 고지한다")
+    void getPrivacy_section63DisclosesAppWritingQuestions() throws Exception {
+        String s63 = between(render("/privacy"), "<h2>6-3. 개인정보의 국외 이전 (앱 글쓰기 질문)</h2>", "<h2>7.");
+        assertThat(s63).isNotEmpty();
+        for (String label : SENT_ITEM_LABELS) assertThat(s63).as(label).contains(label);
+        assertThat(s63).contains("그 밖의 이용 기록은 보내지 않습니다")
+                .contains("Anthropic PBC").contains("privacy@anthropic.com").contains("미국")
+                .contains("「질문 받기」").contains("「꼬리 질문」").contains("30일 이내에 자동 삭제")
+                // PR-B의 REQ-74 테스트가 읽는 꼴 — 절 안에 정확히 한 번
+                .contains("시행: " + EFFECTIVE);
+        assertThat(s63.split("시행: ", -1)).hasSize(2);
+    }
+
+    @Test
+    @DisplayName("R-13 · GET /privacy: 2절 Apple 로그인 식별자(즉시) · 5절 앱 글 보관(시행일) · 8절 위탁 표와 국외 이전 목록 · 개정 이력")
+    void getPrivacy_appleIdentifierAppWritingRetentionAndNotice() throws Exception {
+        String html = render("/privacy");
+        assertThat(between(html, "<h2>2.", "<h2>3.")).contains("<strong>Apple 로그인 식별자</strong>");
+        assertThat(between(html, "<h2>5.", "<h2>6.")).contains("앱에서 쓴 글과 받은 질문").contains(EFFECTIVE + " 시행");
+        assertThat(between(html, "<h2>8.", "<h2>9."))
+                .contains("Apple Inc.").contains("앱 글쓰기 질문").contains("<strong>6-3절</strong>");
+        assertThat(html).contains("6-3절 신설").contains(EFFECTIVE + " 시행");
+    }
+
+    @Test
+    @DisplayName("R-13 · GET /privacy: 5절·6-3이 보관·이전을 말하는 여백과 앱 글쓰기를 2절이 수집 항목으로, 3절이 이용 목적으로 고지한다")
+    void getPrivacy_collectsMarginsAndAppWriting() throws Exception {
+        String html = render("/privacy");
+        assertThat(between(html, "<h2>2.", "<h2>3."))
+                .contains("<strong>여백</strong>").contains("<strong>앱 글쓰기</strong>")
+                .contains("받은 AI 질문").contains("AI 질문 동의 여부와 그 시각").contains("(" + EFFECTIVE + " 시행)");
+        assertThat(between(html, "<h2>3.", "<h2>4.")).contains("아이폰 앱을 쓰는 경우 글쓰기").contains("AI 질문 생성")
+                .contains("(" + EFFECTIVE + "부터)");
+    }
+
+    private static final Pattern DATE = Pattern.compile("\\d{4}-\\d{2}-\\d{2}");
+    private static final Pattern NOTICE = Pattern.compile("(\\d{4}-\\d{2}-\\d{2}) 개정 공지");
+    private static final Pattern KOREAN_DATE = Pattern.compile("\\d+월 \\d+일");
+
+    /**
+     * 머지일이 밀려 E를 다시 셀 때 ISO 날짜(YYYY-MM-DD) 한 자리라도 놓치면 Red. 두 문서의 개정 공지일이 하나로 같고,
+     * 공지일과 E 사이가 31일 이상이며(13절 「시행일 30일 전부터」), 공지일보다 뒤의 날짜는 전부 E다.
+     * 「N월 N일」 꼴은 이 검사가 못 보므로 두 문서에 0건임을 함께 못 박는다.
+     */
+    @Test
+    @DisplayName("R-17 · 처리방침·약관: 개정 공지일이 같고 E까지 31일 이상이며, 공지일 뒤의 날짜는 전부 시행일 E다")
+    void legalPages_noticeDateAndEffectiveDateAgree() throws Exception {
+        LocalDate effective = LocalDate.parse(EFFECTIVE);
+        List<LocalDate> notices = new ArrayList<>();
+        for (String path : List.of("/privacy", "/terms")) {
+            String html = render(path);
+            Matcher n = NOTICE.matcher(html);
+            assertThat(n.find()).as(path + " 개정 공지일").isTrue();
+            LocalDate notice = LocalDate.parse(n.group(1));
+            assertThat(n.find()).as(path + " 개정 공지일은 하나").isFalse();
+            notices.add(notice);
+            assertThat(KOREAN_DATE.matcher(html).find()).as(path + " 「N월 N일」 꼴 날짜").isFalse();
+            Matcher d = DATE.matcher(html);
+            while (d.find()) {
+                LocalDate date = LocalDate.parse(d.group());
+                if (date.isAfter(notice)) assertThat(date).as(path + " 공지일 뒤 날짜").isEqualTo(effective);
+            }
+        }
+        assertThat(notices.get(1)).as("두 문서의 개정 공지일").isEqualTo(notices.get(0));
+        assertThat(ChronoUnit.DAYS.between(notices.get(0), effective)).as("E − 공지일").isGreaterThanOrEqualTo(31);
+    }
+
+    @Test
+    @DisplayName("R-11 · GET /terms: 제11조 생성형 AI 기능 — 사전 고지·질문만·글은 이용자의 것·시행일, AI의 일로 구성·교정·다듬을 적지 않는다")
+    void getTerms_generativeAiArticle() throws Exception {
+        String html = render("/terms");
+        String article = between(html, "<h2>제11조 (생성형 AI 기능)</h2>", "<h2>제12조");
+        assertThat(article).contains("생성형 AI").contains("질문만").contains("이용자의 것").contains(EFFECTIVE + " 시행")
+                .doesNotContain("구성").doesNotContain("교정").doesNotContain("다듬");
+        assertThat(html).contains("제11조 생성형 AI 기능 신설");
+    }
+
+    /** 음성 판정 전용 — 지금도 초록이다. v1 설계의 예시 날짜를 문안에 베껴 넣는 회귀만 잡는다(REQ-74 수동 확인의 자동화). */
+    @Test
+    @DisplayName("REQ-74 · 처리방침·약관에 v1 예시 날짜 리터럴(2027-01-07 · 2026-12-08 · 1월 7일)이 없다")
+    void legalPages_haveNoExampleDateLiterals() throws Exception {
+        for (String path : List.of("/privacy", "/terms")) {
+            assertThat(render(path)).as(path)
+                    .doesNotContain("2027-01-07").doesNotContain("2026-12-08").doesNotContain("1월 7일");
+        }
     }
 }
