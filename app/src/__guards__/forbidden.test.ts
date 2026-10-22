@@ -33,8 +33,8 @@ function files(dir: string): string[] {
 
 const ALL = files(APP_SRC).map((p) => ({ rel: p.slice(APP_SRC.length + 1), text: readFileSync(p, 'utf8') }));
 
-function hits(row: Row): string[] {
-  return ALL.filter((f) => !f.rel.startsWith(SELF) && !row.skip.some((s) => f.rel.startsWith(s)))
+function hits(row: Row, all = ALL): string[] {
+  return all.filter((f) => !f.rel.startsWith(SELF) && !row.skip.some((s) => f.rel.startsWith(s)))
     .filter((f) => row.pattern.test(f.text))
     .map((f) => f.rel);
 }
@@ -43,8 +43,9 @@ test('금지 표 · 검사할 소스 파일을 실제로 읽는다(빈 집합이
   expect(ALL.filter((f) => !f.rel.startsWith(SELF)).length).toBeGreaterThanOrEqual(3);
 });
 
-test.each(ROWS)('$id · 심은 픽스처는 잡힌다(양성 대조)', (row) => {
-  expect(row.pattern.test(row.planted)).toBe(true);
+// 같은 스캐너에 심은 파일을 넣는다 — 스캐너가 망가져 늘 0을 내면 여기서 깨진다(범위 보충 §6.1).
+test.each(ROWS)('$id · 심은 픽스처는 같은 스캐너에서 잡힌다(양성 대조)', (row) => {
+  expect(hits(row, [{ rel: join('app', 'planted.tsx'), text: row.planted }])).toHaveLength(1);
 });
 
 test('REQ-107 · 화면 코드에 밤 토큰 사용이 없다(위젯·테마 제외 — 심은 픽스처는 잡힌다)', () => {

@@ -160,6 +160,11 @@ function sourceFiles(dir: string, skip: (path: string) => boolean): string[] {
   });
 }
 
+/** 내용에 날 색이 있는 파일 경로 — 실제 소스와 심은 파일이 같은 이 함수를 지난다. */
+function rawColorHits(files: { path: string; text: string }[]): string[] {
+  return files.filter((f) => RAW_COLOR.test(f.text)).map((f) => f.path);
+}
+
 describe('날 색(REQ-54)', () => {
   test("REQ-54 · 날 색 탐지기는 '#123456'·'rgba(0,0,0,1)'을 심은 문자열을 잡는다", () => {
     expect(RAW_COLOR.test("const a = '#123456';")).toBe(true);
@@ -167,11 +172,14 @@ describe('날 색(REQ-54)', () => {
     expect(RAW_COLOR.test("const c = color.ink; // '#delete' 앵커는 색이 아니다")).toBe(false);
   });
 
+  test("REQ-54 · 심은 '#ABCDEF' 파일은 같은 스캐너에서 잡힌다(양성 대조)", () => {
+    expect(rawColorHits([{ path: join(APP_SRC, 'planted.tsx'), text: "const a = '#ABCDEF';" }])).toHaveLength(1);
+  });
+
   test('REQ-54 · app/src의 theme/ 밖 .ts·.tsx에 날 색이 0개다', () => {
     const files = sourceFiles(APP_SRC, (p) => p === join(APP_SRC, 'theme'));
     expect(files.length).toBeGreaterThanOrEqual(3); // 빈 집합끼리 늘 초록인 상태를 막는다
-    const hits = files.filter((f) => RAW_COLOR.test(readFileSync(f, 'utf8')));
-    expect(hits).toEqual([]);
+    expect(rawColorHits(files.map((f) => ({ path: f, text: readFileSync(f, 'utf8') })))).toEqual([]);
   });
 });
 

@@ -48,6 +48,17 @@ describe('REQ-30 · request', () => {
     const html = await request<never>('/api/x').catch((e: ApiError) => e);
     expect(html.message).toBe('요청에 실패했어요 (500)');
   });
+
+  test('REQ-30 · 로그인 요청(anonymous)의 401은 서버 문구 그대로 ApiError, 세션은 그대로', async () => {
+    await session.save({ token: 'tok', userId: 17, webAccount: false });
+    fetchMock.mockResolvedValueOnce(reply(401, 'Apple 신원 확인 실패(서버 문구)'));
+    const err = await request<never>('/api/app/auth/apple', { body: {}, anonymous: true }).catch((e: ApiError) => e);
+    expect(err).toBeInstanceOf(ApiError);
+    expect(err.message).toBe('Apple 신원 확인 실패(서버 문구)');
+    expect(err.status).toBe(401);
+    expect(mockStore.get('booktimer.token')).toBe('tok');
+    expect(fetchMock.mock.calls[0][1].headers.Authorization).toBeUndefined();
+  });
 });
 
 describe('Apple 로그인 흐름(v1 §4.3 — LOGIN 먼저, 없으면 같은 토큰으로 REGISTER/LINK)', () => {

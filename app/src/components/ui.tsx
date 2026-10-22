@@ -175,7 +175,7 @@ export function Field({ label, error, style, ...rest }: TextInputProps & { label
   }, [error]);
   return (
     <View style={{ gap: space[1] }}>
-      <Txt v="L1" style={{ color: color.text }} importantForAccessibility="no">
+      <Txt v="L1" style={{ color: color.text }} accessible={false} importantForAccessibility="no">
         {label}
       </Txt>
       <TextInput
