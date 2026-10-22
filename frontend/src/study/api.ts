@@ -284,8 +284,8 @@ export async function addStudyBook(input: {
 /**
  * 바로가기 링크를 바꾸거나 해제한다(null = 해제).
  *
- * <p>편집 문이 따로 있는 이유: 강의 URL은 개편·수강 만료로 죽는데 「지우고 다시 담기」는 그 책의 누적 시간이 끊기고(세션의 책 참조가 풀린다)
- * 필기가 붙은 책은 삭제 자체가 409다.
+ * <p>편집 문이 따로 있는 이유: 강의 URL은 개편·수강 만료로 죽는데 「지우고 다시 담기」는 그 책의 누적 시간이 끊기고
+ * (세션의 책 참조가 풀린다) 필기가 붙은 책은 삭제 자체가 409다.
  */
 export async function setStudyLink(id: number, linkUrl: string | null): Promise<StudyBookRow> {
     return json(await post(`/api/study/books/${id}/link`, { linkUrl }), '링크를 바꾸지 못했어요.');
