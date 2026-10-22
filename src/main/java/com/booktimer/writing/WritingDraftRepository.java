@@ -29,6 +29,9 @@ public interface WritingDraftRepository extends JpaRepository<WritingDraft, Long
     @Query("update WritingDraft d set d.book = null where d.book = :book")
     int unlinkBook(@Param("book") Book book);
 
-    /** 탈퇴 정리(FK: writing_draft.user_id → users) — book보다 앞에 불려도 뒤에 불려도 된다(book_id는 nullable). */
+    /**
+     * 탈퇴 정리 — {@code writing_draft.book_id}·{@code user_id} FK 때문에 {@code bookRepository.deleteByUser}와 users 삭제보다
+     * 앞이어야 한다({@code AccountService.purge} 순서 · {@code AccountServiceTest} inOrder가 잠근다).
+     */
     void deleteByUser(User user);
 }

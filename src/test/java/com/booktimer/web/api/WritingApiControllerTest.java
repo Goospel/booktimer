@@ -192,7 +192,62 @@ class WritingApiControllerTest {
                 .andExpect(jsonPath("$[1].bookTitle").value("남길 책"));
     }
 
+    @Test
+    @DisplayName("REQ-10 · 목록에 남의 글이 없다")
+    void listExcludesOthersDrafts() throws Exception {
+        User owner = register("wlistowner", Role.USER);
+        User me = register("wlistme", Role.USER);
+        String myToken = apiTokenService.issue(me);
+        createDraft(apiTokenService.issue(owner), book(owner, "주인의 책").getId());
+        Long mine = createDraft(myToken, book(me, "내 책").getId());
+
+        call(get("/api/app/drafts"), myToken)
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.length()").value(1))
+                .andExpect(jsonPath("$[0].id").value(mine));
+    }
+
+    @Test
+    @DisplayName("REQ-10 · 남의 책 id로 글을 만들면 404")
+    void createOnOthersBookIs404() throws Exception {
+        User owner = register("wcreateowner", Role.USER);
+        User thief = register("wcreatethief", Role.USER);
+        Book book = book(owner, "주인의 비공개 책");
+
+        json(post("/api/app/drafts"), apiTokenService.issue(thief), "{\"bookId\":" + book.getId() + "}")
+                .andExpect(status().isNotFound())
+                .andExpect(content().string(org.hamcrest.Matchers.not(org.hamcrest.Matchers.containsString("주인의 비공개 책"))));
+        assertThat(draftRepository.findTop20ByUserOrderByUpdatedAtDesc(thief)).isEmpty();
+        // 양성 대조 — 주인은 같은 요청으로 만든다(위 404가 「생성이 아예 안 되는」 구현으로 통과하지 않게).
+        json(post("/api/app/drafts"), apiTokenService.issue(owner), "{\"bookId\":" + book.getId() + "}")
+                .andExpect(status().isCreated());
+    }
+
     // ── REQ-11 재료는 소셜 경로를 타지 않는다 ─────────────────────────────────────
+
+    @Test
+    @DisplayName("REQ-12 · materials는 그 책의 여백·글만 최근순으로 싣는다")
+    void materialsAreThisBookRecentFirst() throws Exception {
+        User me = register("wmatorder", Role.USER);
+        String token = apiTokenService.issue(me);
+        Book a = book(me, "책 A");
+        Book b = book(me, "책 B");
+        margin(me, a, null, "먼저 쓴 여백");
+        margin(me, a, null, "나중 쓴 여백"); // createdAt이 같아도 id 내림차순으로 순서가 정해진다
+        margin(me, b, null, "다른 책 여백");
+        Long draftA = createDraft(token, a.getId());
+        createDraft(token, b.getId());
+
+        call(get("/api/app/books/" + a.getId() + "/materials"), token)
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.margins.length()").value(2))
+                .andExpect(jsonPath("$.margins[0].text").value("나중 쓴 여백"))
+                .andExpect(jsonPath("$.margins[1].text").value("먼저 쓴 여백"))
+                .andExpect(content().string(org.hamcrest.Matchers.not(org.hamcrest.Matchers.containsString("다른 책 여백"))))
+                .andExpect(jsonPath("$.aiIncluded").value(2))
+                .andExpect(jsonPath("$.drafts.length()").value(1))
+                .andExpect(jsonPath("$.drafts[0].id").value(draftA));
+    }
 
     @Test
     @DisplayName("REQ-11 · ADMIN 본인도 자기 책 재료를 받는다")
