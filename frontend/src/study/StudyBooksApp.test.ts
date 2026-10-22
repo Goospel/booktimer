@@ -14,7 +14,6 @@ vi.mock('./api', () => ({
     fetchStudyShelf: vi.fn(),
     addStudyBook: vi.fn(),
     setStudyLink: vi.fn(),
-    setStudyReadCount: vi.fn(),
     deleteStudyBook: vi.fn(),
     searchBooks: vi.fn(),
 }));

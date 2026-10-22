@@ -219,8 +219,7 @@ export async function applyPlan(input: ApplyPlanInput): Promise<{ applied: numbe
 /**
  * 서버 {@code StudyBookApiController.StudyBookRow} 그대로.
  *
- * <p>{@code totalSeconds} 0은 「아직 그 책으로 안 쟀다」는 <b>부재</b>라 화면이 칩을 안 그린다 —
- * 0독이 「상태」인 {@code readCount}와 반대다.
+ * <p>{@code totalSeconds} 0은 「아직 그 책으로 안 쟀다」는 <b>부재</b>라 화면이 칩을 안 그린다(독서 서재와 같은 규약).
  */
 export interface StudyBookRow {
     id: number;
@@ -228,6 +227,7 @@ export interface StudyBookRow {
     author: string | null;
     coverUrl: string | null;
     isbn13: string | null;
+    /** 휴면 — 웹은 안 읽는다(2026-10-22부터 책의 양은 누적 시간). 서버가 동결된 미니앱 호환으로 계속 싣는다. */
     readCount: number;
     purchaseLink: string | null;
     totalSeconds: number;
@@ -271,7 +271,7 @@ export async function searchBooks(q: string): Promise<SearchRow[]> {
     return data.results ?? [];
 }
 
-/** 담기 — {@code status}가 없는 것이 독서 {@code /api/books}와의 차이다(회독은 언제나 0독에서 시작). */
+/** 담기 — {@code status}가 없는 것이 독서 {@code /api/books}와의 차이다. */
 export async function addStudyBook(input: {
     title: string; author: string | null; isbn13: string | null;
     coverUrl: string | null; publisher: string | null; purchaseLink: string | null;
@@ -284,16 +284,11 @@ export async function addStudyBook(input: {
 /**
  * 바로가기 링크를 바꾸거나 해제한다(null = 해제).
  *
- * <p>편집 문이 따로 있는 이유: 강의 URL은 개편·수강 만료로 죽는데 「지우고 다시 담기」는 회독 수를 잃고
+ * <p>편집 문이 따로 있는 이유: 강의 URL은 개편·수강 만료로 죽는데 「지우고 다시 담기」는 그 책의 누적 시간이 끊기고(세션의 책 참조가 풀린다)
  * 필기가 붙은 책은 삭제 자체가 409다.
  */
 export async function setStudyLink(id: number, linkUrl: string | null): Promise<StudyBookRow> {
     return json(await post(`/api/study/books/${id}/link`, { linkUrl }), '링크를 바꾸지 못했어요.');
-}
-
-/** 회독 수를 <b>절대값으로</b> 설정한다(클라가 현재값 ±1을 보낸다) — 멱등이라 연타·재시도에 안전하다. */
-export async function setStudyReadCount(id: number, readCount: number): Promise<StudyBookRow> {
-    return json(await post(`/api/study/books/${id}/read-count`, { readCount }), '회독 수를 바꾸지 못했어요.');
 }
 
 export async function deleteStudyBook(id: number): Promise<void> {

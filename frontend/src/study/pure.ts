@@ -317,11 +317,6 @@ export function studyOwned(myIsbns: ReadonlySet<string>, isbn13: string | null):
     return isbn13 !== null && myIsbns.has(isbn13);
 }
 
-/** 「N독」 — 0독도 그린다(「아직 안 돌았다」는 빈칸이 아니라 정보다. 0초 누적 시간이 부재인 것과 반대). */
-export function readCountLabel(readCount: number): string {
-    return `${readCount}독`;
-}
-
 /**
  * 같은 제목이 이미 서재에 있는가 — 「담기 전에 한 번 묻는다」의 판정.
  *

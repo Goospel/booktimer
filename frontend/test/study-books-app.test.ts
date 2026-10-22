@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-// 공부 서재(/study/books) — 분류 축이 「회독 수」 하나인 서재. 독서 서재(BooksApp)와 파일을 나눈 이유는
+// 공부 서재(/study/books) — 책의 양을 누적 공부 시간으로 말하는 서재. 독서 서재(BooksApp)와 파일을 나눈 이유는
 // 상태 3종·공개여부·인기도·책방 링크가 여기 없어서다(미니앱 StudyLibrary와 같은 판단).
 //
 // 이 파일의 계측 규칙 둘:
@@ -11,12 +11,13 @@ import { mount } from '@vue/test-utils';
 import StudyBooksApp from '../src/study/StudyBooksApp.vue';
 
 // 서버 StudyBookApiController.StudyShelfResponse 그대로.
-// 민법총칙 = isbn 있음·2독·5400초 / 헌법 = isbn 없음(직접 추가분)·0독·0초 — 칩 규칙 두 갈래의 대조군.
+// 민법총칙 = isbn 있음·5400초 / 헌법 = isbn 없음(직접 추가분)·0초 — 시간 칩 두 갈래의 대조군.
+// 둘 다 회독 값(2·1)을 싣는다 — 서버는 휴면 필드를 계속 보내고, 화면이 그것을 「시간 대신」 그리면 잡힌다.
 const SHELF = {
     searchEnabled: true,
     books: [
         { id: 1, title: '민법총칙', author: 'A', coverUrl: null, isbn13: 'i1', readCount: 2, purchaseLink: null, totalSeconds: 5400 },
-        { id: 2, title: '헌법', author: null, coverUrl: null, isbn13: null, readCount: 0, purchaseLink: null, totalSeconds: 0 },
+        { id: 2, title: '헌법', author: null, coverUrl: null, isbn13: null, readCount: 1, purchaseLink: null, totalSeconds: 0 },
     ],
 };
 
@@ -37,9 +38,6 @@ function fetchImpl(url: string, init?: RequestInit) {
         if (init?.method === 'POST') return Promise.resolve({ ok: true, status: 200, json: async () => SHELF.books[0] });
         return Promise.resolve({ ok: shelfOk, status: shelfOk ? 200 : 500, text: async () => '', json: async () => shelf });
     }
-    if (/\/api\/study\/books\/\d+\/read-count$/.test(url)) {
-        return Promise.resolve({ ok: true, status: 200, json: async () => SHELF.books[0] });
-    }
     if (/\/api\/study\/books\/\d+\/link$/.test(url)) {
         return Promise.resolve({ ok: true, status: 200, json: async () => SHELF.books[0] });
     }
@@ -55,8 +53,6 @@ function fetchImpl(url: string, init?: RequestInit) {
 const urls = () => calls.map((c) => c.url);
 const countOf = (pred: (u: string) => boolean) => urls().filter(pred).length;
 const bodyOf = (pred: (u: string) => boolean) => calls.find((c) => pred(c.url))?.body;
-/** 같은 URL을 두 번 두드리는 흐름(＋ 누른 뒤 − 누르기)에선 첫 매치가 아니라 마지막 매치를 봐야 한다. */
-const lastBodyOf = (pred: (u: string) => boolean) => calls.filter((c) => pred(c.url)).at(-1)?.body;
 
 beforeEach(() => {
     shelf = SHELF;
@@ -85,35 +81,37 @@ describe('공부 서재 — 목록', () => {
         expect(countOf((u) => u.includes('/api/dashboard'))).toBe(0);
     });
 
-    test('(b) 회독 칩은 언제나, 누적 시간 칩은 0초면 안 그린다 (부재는 부재로 둔다)', async () => {
+    test('REQ-01 · 책 행은 누적 시간으로만 말한다 — 회독 값이 있어도 「N독」이 없고, 0초면 시간 칩도 없다', async () => {
         const w = await mountApp();
         const rows = w.findAll('.shelf-list .book-row');
         expect(rows).toHaveLength(2);
         expect(flat(rows[0].text())).toContain('민법총칙');
-        expect(flat(rows[0].text())).toContain('2독');
         expect(flat(rows[0].text())).toContain('1시간 30분 공부');
+        expect(flat(rows[0].text())).not.toMatch(/\d독/);
         expect(flat(rows[1].text())).toContain('헌법');
-        expect(flat(rows[1].text())).toContain('0독');          // 0독은 「상태」라 그린다
+        expect(flat(rows[1].text())).not.toMatch(/\d독/);          // 0초여도 회독을 대신 그리지 않는다
         expect(rows[1].find('.book-time').exists()).toBe(false); // 0초는 「부재」라 안 그린다
     });
 
-    test('(c) 회독은 절대값으로 보내고, 뮤테이션 뒤 목록을 다시 받는다', async () => {
+    test('REQ-02 · 회독 손잡이가 없다 — 행 손잡이는 「링크」·「삭제」뿐', async () => {
         const w = await mountApp();
         const rows = w.findAll('.shelf-list .book-row');
-        // 양성·음성 쌍: 0독 행의 「−」는 잠기고(서버 400을 문 앞에서 막는다), 2독 행의 「−」는 열려 있다
-        expect(rows[1].find('.study-count-minus').attributes('disabled')).toBeDefined();
-        expect(rows[0].find('.study-count-minus').attributes('disabled')).toBeUndefined();
+        expect(rows[0].findAll('.book-actions button').map((b) => b.text())).toEqual(['링크', '삭제']);
+    });
 
-        await rows[0].find('.study-count-plus').trigger('click');
-        await new Promise((r) => setTimeout(r, 0));
-        expect(bodyOf((u) => u.includes('/read-count'))).toEqual({ readCount: 3 }); // 2 + 1, 절대값
-        expect(countOf((u) => u.endsWith('/api/study/books') && !u.includes('read-count'))).toBe(2); // 마운트 + 재조회
+    test('REQ-03 · 화면과 삭제 확인에 「회독」이 없다 — 확인은 잰 시간이 「책 없이」 기록으로 남는다고 말한다', async () => {
+        const w = await mountApp();
+        expect(w.text()).toContain('내 공부 책');
+        expect(w.text()).not.toContain('회독');
 
-        // 방향의 양성·음성 쌍 — 「＋」만 재면 부호를 뒤집어도(readCount - 1 → + 1) 안 죽는다.
-        // 사용자에겐 「빼기를 눌렀는데 회독이 오른다」인 고장이라 방향 자체를 못 박는다.
-        await rows[0].find('.study-count-minus').trigger('click');
+        const ask = vi.fn((_msg: string) => true);
+        vi.stubGlobal('confirm', ask);
+        await w.findAll('.shelf-list .book-row')[0].find('.book-actions .btn-danger').trigger('click');
         await new Promise((r) => setTimeout(r, 0));
-        expect(lastBodyOf((u) => u.includes('/read-count'))).toEqual({ readCount: 1 }); // 2 − 1
+        const msg = String(ask.mock.calls[0][0]);
+        expect(msg).toContain('민법총칙');
+        expect(msg).toContain('기록으로 남아요');
+        expect(msg).not.toContain('회독');
     });
 
     test('(f) 삭제는 confirm을 통과해야만 나간다', async () => {
