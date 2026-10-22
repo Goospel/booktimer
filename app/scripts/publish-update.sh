@@ -16,6 +16,11 @@ if compgen -G 'app/.env*' >/dev/null; then
   echo "app/.env* 파일이 있어요 — 로컬 주소가 섞일 수 있어 게시하지 않습니다: $(ls app/.env*)" >&2
   exit 1
 fi
+# 셸에 export된 EXPO_PUBLIC_*도 .env처럼 번들에 실린다.
+if env | grep -q '^EXPO_PUBLIC_'; then
+  echo "셸에 EXPO_PUBLIC_* 환경변수가 있어요 — 번들에 섞일 수 있어 게시하지 않습니다: $(env | grep '^EXPO_PUBLIC_' | cut -d= -f1 | tr '\n' ' ')" >&2
+  exit 1
+fi
 if [ -n "$(git status --porcelain)" ]; then
   echo "작업 트리가 깨끗하지 않아요 — 게시할 화면은 커밋돼 있어야 합니다" >&2
   exit 1
@@ -30,6 +35,15 @@ elif [ "$(git rev-parse HEAD)" != "$(git rev-parse origin/main)" ]; then
   echo "HEAD가 origin/main과 달라요 — production 게시는 머지된 main에서만 합니다(미리보기는 PREVIEW=1)" >&2
   exit 1
 fi
+
+# 게시 직전 지문을 다시 잰다 — 설치된 node_modules가 lock과 어긋나면 바이너리와 맞지 않는 JS가 TestFlight 앱에 간다.
+base_args=()
+if git cat-file -e origin/main:app/fingerprint.lock.json 2>/dev/null; then
+  base_lock="$(mktemp)"
+  git show origin/main:app/fingerprint.lock.json > "$base_lock"
+  base_args=(--base "$base_lock")
+fi
+node app/scripts/check-fingerprint.js ${base_args[@]+"${base_args[@]}"}
 
 cd app
 npx --yes eas-cli@24.11.0 update --channel production --environment production --platform ios \
