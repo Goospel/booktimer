@@ -16,7 +16,6 @@ import {
     prevDay,
     recallScopePrefill,
     recallSubjectPrefill,
-    readCountLabel,
     recallDateParam,
     sameTitleExists,
     studyOwned,
@@ -204,13 +203,6 @@ describe('studyOwned', () => {
 
     it('집합 밖 isbn은 false', () => {
         expect(studyOwned(new Set<string>(), 'i1')).toBe(false);
-    });
-});
-
-describe('readCountLabel', () => {
-    it('0독도 그린다 — 「아직 안 돌았다」는 빈칸이 아니라 정보다', () => {
-        expect(readCountLabel(0)).toBe('0독');
-        expect(readCountLabel(3)).toBe('3독');
     });
 });
 

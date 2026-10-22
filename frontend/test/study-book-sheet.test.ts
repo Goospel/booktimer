@@ -15,7 +15,7 @@ import StudyBookSheet from '../src/dashboard/StudyBookSheet.vue';
 
 const BOOKS = [
     { id: 1, title: '헌법', author: '홍길동', coverUrl: null, isbn13: null, readCount: 2, purchaseLink: null, totalSeconds: 120 },
-    { id: 2, title: '형법', author: null, coverUrl: null, isbn13: null, readCount: 0, purchaseLink: null, totalSeconds: 0 },
+    { id: 2, title: '형법', author: null, coverUrl: null, isbn13: null, readCount: 1, purchaseLink: null, totalSeconds: 0 },
 ];
 
 beforeEach(() => {
@@ -28,20 +28,29 @@ function mountSheet(props: Record<string, unknown>) {
 }
 
 describe('StudyBookSheet — start', () => {
-    test('props의 책을 그리고(회독 칩 포함) 고르면 그 책 id를 pick으로 낸다 — fetch는 0건', async () => {
+    test('props의 책을 그리고 고르면 그 책 id를 pick으로 낸다 — fetch는 0건', async () => {
         const w = mountSheet({ mode: 'start' });
 
         expect(w.find('.book-sheet-title').text()).toBe('공부할 책을 고르세요');
         const rows = w.findAll('.book-sheet-book');
         expect(rows).toHaveLength(2);
         expect(rows[0].text()).toContain('헌법');
-        expect(rows[0].text()).toContain('2독');
-        expect(rows[1].text()).toContain('0독');   // 0독도 그린다(부재가 아니라 상태)
 
         await rows[1].trigger('click');
         // 고른 책을 통째로 낸다(부모가 칩에 올려야 해서) — 값은 인덱스(1)가 아니라 그 책이다.
         expect(w.emitted('pick')).toEqual([[BOOKS[1]]]);
         expect(fetch).not.toHaveBeenCalled();
+    });
+
+    test('REQ-04 · 시트 행에 회독 배지가 없다 — 회독 값이 있어도 제목·저자만 선다', async () => {
+        // 행 템플릿에 모드 분기가 없어 한 모드로 4모드(start·tag·change·assign)를 덮는다.
+        const w = mountSheet({ mode: 'start' });
+        const rows = w.findAll('.book-sheet-book');
+        expect(rows).toHaveLength(2);
+        expect(rows[0].text()).toContain('헌법');
+        expect(rows[0].text()).toContain('홍길동');
+        expect(w.findAll('.book-sheet-badge')).toHaveLength(0);
+        expect(w.find('.book-sheet-panel').text()).not.toMatch(/\d독/);
     });
 
     test('하단 CTA는 「책 없이 측정하기」 → none', async () => {

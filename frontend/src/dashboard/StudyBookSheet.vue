@@ -43,7 +43,7 @@ onMounted(() => overlayEl.value?.focus())
 
 <template>
     <div ref="overlayEl" class="book-sheet-overlay" @click.self="emit('close')" @keydown.esc="emit('close')" tabindex="-1">
-        <!-- is-study — 토큰 스왑이 hover·회독 칩까지 파랑으로 끌고 온다(리터럴 0줄). -->
+        <!-- is-study — 토큰 스왑이 hover까지 파랑으로 끌고 온다(리터럴 0줄). -->
         <div class="book-sheet-panel is-study" role="dialog" aria-modal="true" aria-labelledby="study-sheet-title">
             <div class="sheet-handle" aria-hidden="true"></div>
             <div class="book-sheet-head">
@@ -64,7 +64,6 @@ onMounted(() => overlayEl.value?.focus())
                             <span class="book-sheet-book-title">{{ b.title }}</span>
                             <span v-if="b.author" class="book-sheet-byline">{{ b.author }}</span>
                         </span>
-                        <span class="book-sheet-badge study-read-chip">{{ b.readCount }}독</span>
                     </button>
                 </li>
             </ul>

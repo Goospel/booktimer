@@ -1,6 +1,7 @@
 <script setup lang="ts">
-// 공부 서재(/study/books) — 미니앱 StudyLibrary의 웹판. 분류 축은 「회독 수」 하나다: 상태 탭·공개여부·
-// 인기도·책방 링크가 없다. 그래서 독서 서재(BooksApp.vue 408줄)를 재사용하지 않고 books/pure.ts의 순수
+// 공부 서재(/study/books) — 미니앱 StudyLibrary의 웹판. 책의 양은 누적 공부 시간 하나로 말한다(2026-10-22 회독 →
+// 시간, 독서 서재와 같은 규약 — 0초는 안 그린다. 미니앱은 동결이라 아직 회독을 그린다). 상태 탭·공개여부·인기도·
+// 책방 링크가 없다. 그래서 독서 서재(BooksApp.vue)를 재사용하지 않고 books/pure.ts의 순수
 // 헬퍼와 CSS 클래스만 빌린다(미니앱이 StudyLibrary.tsx를 따로 둔 것과 같은 판단).
 //
 // 구매 링크는 일부러 없다 — 공부 책엔 /books/{id}/buy 같은 클릭 추적 라우트가 없어서, 직링크로 열면
@@ -18,11 +19,10 @@ import {
     fetchStudyShelf,
     searchBooks,
     setStudyLink,
-    setStudyReadCount,
     type SearchRow,
     type StudyBookRow,
 } from './api';
-import { readCountLabel, sameTitleExists, studyOwned } from './pure';
+import { sameTitleExists, studyOwned } from './pure';
 
 const books = ref<StudyBookRow[] | null>(null);   // null = 아직 못 받음(로딩 또는 실패)
 const searchEnabled = ref(false);
@@ -57,8 +57,8 @@ async function load() {
 }
 
 /**
- * 뮤테이션 뒤엔 목록을 다시 받는다(미니앱과 같다) — 담기·삭제는 목록 자체가 흔들리고, 회독만 바뀌어도
- * 한 왕복이 화면과 서버를 맞춘다. busy 동안 버튼을 전부 잠가 「옛 값으로 같은 절대값을 다시 보내는」 창을 없앤다.
+ * 뮤테이션 뒤엔 목록을 다시 받는다(미니앱과 같다) — 담기·삭제는 목록 자체가 흔들리고, 링크만 바뀌어도
+ * 한 왕복이 화면과 서버를 맞춘다. busy 동안 버튼을 전부 잠가 「연타가 같은 요청을 두 번 보내는」 창을 없앤다.
  */
 async function run(action: Promise<unknown>) {
     busy.value = true;
@@ -124,12 +124,8 @@ function editLink(b: StudyBookRow) {
     run(setStudyLink(b.id, next.trim() || null));
 }
 
-function setCount(b: StudyBookRow, next: number) {
-    return run(setStudyReadCount(b.id, next));
-}
-
 function remove(b: StudyBookRow) {
-    if (!confirm(`「${b.title}」을(를) 공부 서재에서 뺄까요? 이 책의 회독 수도 함께 사라져요.`)) return;
+    if (!confirm(`「${b.title}」을(를) 공부 서재에서 뺄까요? 이 책으로 잰 시간은 「책 없이」 기록으로 남아요.`)) return;
     run(deleteStudyBook(b.id));
 }
 
@@ -145,7 +141,7 @@ onMounted(load);
     <div class="page-stack">
         <header class="history-greeting">
             <h1>공부 서재</h1>
-            <p>회독 수로 세는 책장이에요. 공부 측정에 책을 걸면 누적 시간이 쌓여요.</p>
+            <p>공부 측정에 책을 걸면 그 책에 공부 시간이 쌓여요.</p>
         </header>
 
         <div v-if="error" class="alert alert-error">
@@ -205,20 +201,14 @@ onMounted(load);
                     <div class="book-meta">
                         <span class="book-title">{{ b.title }}</span>
                         <span v-if="b.author" class="book-author">{{ b.author }}</span>
-                        <span class="study-read-chip">{{ readCountLabel(b.readCount) }}</span>
-                        <!-- 0초는 「아직 그 책으로 안 쟀다」는 부재 — 칩을 안 그린다(0독과 반대). -->
+                        <!-- 0초는 「아직 그 책으로 안 쟀다」는 부재 — 칩을 안 그린다(독서 서재와 같은 규약). -->
                         <span v-if="b.totalSeconds > 0" class="book-time mono">{{ formatTime(b.totalSeconds) }} 공부</span>
                     </div>
-                    <div class="book-actions study-count-actions">
+                    <div class="book-actions">
                         <!-- 제휴가 아니라 사용자 바로가기라 직링크로 연다. rel은 새 탭에 opener를 안 넘기려는 것. -->
                         <a v-if="b.linkUrl" class="btn-ghost" :href="b.linkUrl"
                            target="_blank" rel="noopener noreferrer">강의 열기</a>
                         <button type="button" class="btn-ghost" :disabled="busy" @click="editLink(b)">링크</button>
-                        <!-- 「−」는 U+2212 — ASCII 하이픈은 좁은 폭에서 점처럼 보인다. -->
-                        <button type="button" class="btn-ghost study-count-minus" :disabled="busy || b.readCount === 0"
-                                aria-label="회독 하나 빼기" @click="setCount(b, b.readCount - 1)">−</button>
-                        <button type="button" class="btn-ghost study-count-plus" :disabled="busy"
-                                aria-label="회독 하나 더하기" @click="setCount(b, b.readCount + 1)">회독 +1</button>
                         <button type="button" class="btn-danger" :disabled="busy" @click="remove(b)">삭제</button>
                     </div>
                 </li>

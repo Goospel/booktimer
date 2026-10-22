@@ -2961,16 +2961,6 @@ body.has-rails { padding-bottom: calc(100px + env(safe-area-inset-bottom, 0px));
     --grass-1: #B8C3D1; --grass-2: #8598B0; --grass-3: #4F6A8B; --grass-4: #2B4A6F;
 }
 
-/* 공부 서재(/study/books) — 회독 칩은 토큰만 쓰므로 .is-study 카드 안에서 저절로 파랑이다(리터럴 없음).
-   ± 버튼은 .book-actions 규칙(padding·width:auto)을 그대로 받고, 여기선 가로 정렬만 얹는다 —
-   .book-actions보다 뒤에 오므로 같은 특이성에서도 이 줄이 이긴다. */
-.study-read-chip {
-    display: inline-block; width: fit-content;
-    padding: 2px 9px; border-radius: 999px; font-size: 13px;
-    background: transparent; color: var(--text); border: 1px solid var(--border);
-}
-.study-count-actions { display: flex; gap: 6px; align-items: center; }
-
 /* 공부 책별 회당 시간 — 히어로 인라인 편집(2026-09-13, 하루 목표 대체). 전부 공부 카드 안 클래스라 독서엔 0줄이다.
    전역 button{width:100%; padding:12px 18px; 잉크 테}보다 특이성이 한 단 위(0,1,0 / 0,2,0)라
    여기 선언이 이긴다 — .dash-mode-toggle button이 쓰는 것과 같은 관용구(font:inherit 뒤에 font-size). */
