@@ -3,7 +3,7 @@
 > 이 파일은 글로벌 `~/.claude/CLAUDE.md` 와 **합쳐서** 적용된다.
 > 글로벌은 사용자 메타 시스템(PKM 등), 이 파일은 BookTimer 고유 규칙.
 
-프로젝트 개요·도메인 규칙은 [README.md](README.md), 로드맵·설계는 [plan.md](plan.md), 갱신 이력(변경 일지)은 [claude-docs/changelog.md](claude-docs/changelog.md), 트러블슈팅은 [claude-docs/troubleshooting.md](claude-docs/troubleshooting.md) 참고.
+프로젝트 개요·도메인 규칙은 [README.md](README.md), 로드맵·설계는 [plan.md](plan.md), 갱신 이력(변경 일지)은 [claude-docs/changelog.md](claude-docs/changelog.md), 트러블슈팅은 [claude-docs/troubleshooting.md](claude-docs/troubleshooting.md), 경쟁사는 [claude-docs/competitors/](claude-docs/competitors/README.md) 참고.
 옛 학습 노트 [claude-docs/learning-notes.md](claude-docs/learning-notes.md)는 **아카이브**다 — 읽는 건 유용하나 새로 쓰지 않는다(2026-08-18 폐기, 「🧯 트러블슈팅 활용」 절).
 
 ⚠️ **이 EC2에는 BookTimer 말고 하나가 더 산다** — 다른 미니앱 **facefit**의 API 서버(`facefit-api` 컨테이너)가 같은 인스턴스·같은 MySQL에 얹혀 있다. **서버 자원(특히 메모리)·MySQL·Caddy 문제를 볼 때 먼저 읽는다**: [claude-docs/facefit-tenant.md](claude-docs/facefit-tenant.md) — 자원 몫 · 증상별 감별 · `docker stop facefit-api`로 facefit만 끄는 법.
@@ -41,6 +41,11 @@
   못 채운 항목은 지우지 말고 `ABANDON: <id> <이유>`로 남겨 PR body에 드러낸다(조용한 범위 축소 금지 — 보이는 포기가 정직하다).
   ⚠️ `EXPECT:`는 **성공에서만 나오는 문자열**로 잡는다 — 「완료」처럼 실패해도 찍히는 말은 게이트가 아니다.
   배경: T-176은 「이 애니메이션은 목 모드에서 판단」이 **설계에 적혀 있었는데도** 건너뛰고 머지됐다 — 산문은 게이트가 아니었다.
+- **경쟁사 대조 — 사용자에게 보이는 변경이면 (필수, 2026-10-22~)** — 화면·기능·스토어 문구·온보딩·수익화를 추가·개선하는
+  계획은 [claude-docs/competitors/](claude-docs/competitors/README.md)를 읽고 세 줄을 담는다: ① 경쟁사에 같은 게 있나
+  (문서 대조표의 행 id로 — 있음·없음·다른 방식) ② 이 변경이 우리 차별점을 키우나 흐리나 ③ 경쟁사를 따라가는 변경이면 그 근거
+  (사용자 요구·실측 — 「경쟁사에 있으니까」는 근거가 아니다). 인프라·훅·문서·동작이 안 바뀌는 리팩터·버그 수정이면
+  `경쟁사 대조: 해당 없음` 한 줄 — **빈칸으로 두지 않는다**(모호 기준은 0으로 수렴한다). 경쟁사 새 소식을 알게 되면 그 문서부터 고친다.
 - **규모·리스크** — 작업량 가늠과 회귀 위험.
 
 ### 어떻게
