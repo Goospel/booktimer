@@ -177,11 +177,13 @@ public class StudyBookApiController {
 
     /**
      * 공부 서재 한 행. 독서 {@code MyBookSummary}보다 <b>훨씬 좁다</b> — 상태·공개범위·여백 글 수는
-     * 공부 화면에 소비처가 없다. 대신 이 화면의 유일한 분류 축인 {@code readCount}가 있다.
+     * 공부 화면에 소비처가 없다. {@code readCount}는 <b>휴면 필드</b>다 — 웹은 안 읽고(누적 시간으로 본다,
+     * 2026-10-22) 동결된 미니앱만 읽는다. 응답에서 빼면 라이브 미니앱이 「undefined독」을 그리니 그 번들이
+     * 사라질 때까지 싣는다({@code StudyApiController.StudyState} 주석의 「필드를 빼는 것은…」 규약).
      *
      * @param totalSeconds 그 책으로 잰 누적 공부 시간(초) — <b>맨 뒤에</b> 붙였다(하위호환).
      *                     0은 「아직 그 책으로 안 쟀다」는 <b>부재</b>라 화면이 칩을 그리지 않는다
-     *                     (0독이 「상태」인 {@code readCount}와 반대다).
+     *                     (독서 서재와 같은 규약).
      * @param sessionGoalSeconds 회당 시간(초, null = 안 정함) — 역시 <b>맨 뒤</b>(옛 미니앱 번들은 무시한다).
      * @param linkUrl 바로가기 링크(인강 페이지 등, null 가능) — <b>{@code purchaseLink}와 다른 필드</b>다.
      *                그쪽은 제휴 구매 링크라 미니앱이 「알라딘에서 구매」 + 수수료 고지를 그린다(§D2).
