@@ -55,6 +55,28 @@ jobs:
         run: npm --prefix miniapp ci
       - name: Run miniapp tests
         run: npm --prefix miniapp test
+      # 책생글 앱(Expo SDK 58) — react-native 0.88 · metro가 Node 22+를 요구해 따로 올린다(위 20은 frontend·miniapp 몫).
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: app/package-lock.json
+      - name: Install app deps
+        run: npm --prefix app ci
+      - name: Run app tests
+        run: npm --prefix app test
+      # 런타임 규칙(REQ-69) — 지금 iOS 지문 · version을 잠금과, 잠금을 main의 잠금과 대조한다.
+      # 지문이 바뀐 JS가 EAS Update로 맞지 않는 바이너리(TF#1 · 0.1.0)에 게시되는 것을 막는다.
+      # --base는 main에 잠금 파일이 없을 때만 뺀다(스크립트가 「main 대조 건너뜀」을 찍는다). fetch 실패는 스텝 실패.
+      - name: Verify app fingerprint lock
+        run: |
+          git fetch --depth=1 origin main
+          if git cat-file -e FETCH_HEAD:app/fingerprint.lock.json 2>/dev/null; then
+            git show FETCH_HEAD:app/fingerprint.lock.json > "$RUNNER_TEMP/base-lock.json"
+            node app/scripts/check-fingerprint.js --base "$RUNNER_TEMP/base-lock.json"
+          else
+            node app/scripts/check-fingerprint.js
+          fi
       - uses: actions/setup-java@v6
         with:
           distribution: temurin
