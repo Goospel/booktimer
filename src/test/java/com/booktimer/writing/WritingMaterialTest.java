@@ -56,7 +56,9 @@ class WritingMaterialTest {
         MaterialItem big1 = item("2026-10-20", null, "가".repeat(400));
         MaterialItem big2 = item("2026-10-19", null, "나".repeat(400));
         MaterialItem tiny = item("2026-10-18", null, "다");
-        int max = WritingMaterial.select(List.of(big1), Integer.MAX_VALUE).chars() + 10; // big1 하나만 들어가는 상한
+        // big1 + tiny가 딱 들어가는 상한 — big2는 넘친다. 끼워 넣는 구현이면 tiny가 들어와 여기서 떨어진다.
+        int max = WritingMaterial.select(List.of(big1), Integer.MAX_VALUE).chars()
+                + WritingMaterial.select(List.of(tiny), Integer.MAX_VALUE).chars();
 
         WritingMaterial material = WritingMaterial.select(List.of(big1, big2, tiny), max);
 
