@@ -253,6 +253,13 @@ public class User extends BaseTimeEntity {
     @Column(name = "reading_reminder_sent_at")
     private java.time.Instant readingReminderSentAt;
 
+    /**
+     * 앱 글쓰기 AI 질문의 국외 전송 동의 시각(v1 REQ-15 · V101) — 철회하면 {@code null}. 유효 판정(처리방침 6-3절 시행일 이후인가)은
+     * {@code WritingService}가 한다 — 시행일 전에 박힌 시각은 동의 없음이다.
+     */
+    @Column(name = "ai_consent_at")
+    private java.time.Instant aiConsentAt;
+
     protected User() {
         // JPA
     }
@@ -426,6 +433,20 @@ public class User extends BaseTimeEntity {
     /** 마지막으로 마케팅 수신에 동의한 시각(철회해도 보존). 한 번도 동의 안 했으면 {@code null}. */
     public java.time.Instant getMarketingConsentAt() {
         return marketingConsentAt;
+    }
+
+    /** 앱 글쓰기 AI 전송 동의 — 그 시각을 박는다(다시 동의하면 새 시각). */
+    public void consentToAi(java.time.Instant now) {
+        this.aiConsentAt = now;
+    }
+
+    /** 앱 글쓰기 AI 전송 동의 철회 — 시각을 지운다. */
+    public void withdrawAiConsent() {
+        this.aiConsentAt = null;
+    }
+
+    public java.time.Instant getAiConsentAt() {
+        return aiConsentAt;
     }
 
     /**
