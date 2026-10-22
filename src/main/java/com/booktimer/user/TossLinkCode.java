@@ -60,7 +60,7 @@ public class TossLinkCode extends BaseTimeEntity {
     @Column(name = "purpose", nullable = false, length = 16)
     private Purpose purpose;
 
-    /** 코드의 방향. 지금 발급되는 것은 {@link #LINK_TOSS} 하나다. */
+    /** 코드의 방향. 지금 발급되는 것은 {@link #LINK_TOSS}·{@link #LINK_APPLE} 둘이다(열이 varchar(16)이라 마이그레이션 없음). */
     public enum Purpose {
         /** 웹 → 토스: 웹에 로그인한 사람이 발급 → 미니앱에 입력해 그 계정에 토스 신원을 붙인다. */
         LINK_TOSS,
@@ -69,7 +69,9 @@ public class TossLinkCode extends BaseTimeEntity {
          * 발급은 2026-10 폐지(서비스 오픈 정책 §2-2). 옛 행을 읽으려고만 남긴다 — 지우면 {@code deleteByUser}(탈퇴)가
          * enum 매핑에서 깨진다(REQ-11, {@code AccountDeletionIntegrationTest}).
          */
-        WEB_LOGIN
+        WEB_LOGIN,
+        /** 웹 → 아이폰 앱: 웹에서 발급 → 앱 「웹에서 쓰던 계정이 있어요」에 입력해 그 계정에 Apple 신원을 붙인다. */
+        LINK_APPLE
     }
 
     protected TossLinkCode() {

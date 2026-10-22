@@ -50,7 +50,9 @@ case "\$*" in
                  TOSS_DM_MESSAGE_ENABLED TOSS_DM_MESSAGE_TEMPLATE_CODE \\
                  TOSS_READING_REMINDER_ENABLED TOSS_READING_REMINDER_DAILY_TEMPLATE_CODE \\
                  TOSS_READING_REMINDER_REST_TEMPLATE_CODE \\
-                 TOSS_UNLINK_BASIC_AUTH; do
+                 TOSS_UNLINK_BASIC_AUTH \\
+                 APPLE_BUNDLE_ID APPLE_TEAM_ID APPLE_SIGNIN_KEY_ID APPLE_SIGNIN_P8 \\
+                 APP_LINK_CARD_USERS; do
             printf '/booktimer/%s\tvalue-of-%s\n' "\$n" "\$n"
         done
         # 여러 줄 SecureString(PEM)도 같은 /booktimer 경로에 살아 이 목록에 함께 나온다.
@@ -146,6 +148,14 @@ assert_has "  .env 에 독서 알림 매일 템플릿 코드" "$env_out" "BOOKTI
 assert_has "  .env 에 독서 알림 3일 템플릿 코드" "$env_out" "BOOKTIMER_TOSS_READING_REMINDER_REST_TEMPLATE_CODE=value-of-TOSS_READING_REMINDER_REST_TEMPLATE_CODE"
 # 토스 로그인 연결 끊기 콜백 Basic 값 — 빠지면 앱 값이 비어 콜백이 전부 401(fail-closed)이 되고 82·83이 다시 열린다.
 assert_has "  .env 에 토스 연결 끊기 콜백 시크릿" "$env_out" "BOOKTIMER_TOSS_UNLINK_BASIC_AUTH=value-of-TOSS_UNLINK_BASIC_AUTH"
+# 아이폰 앱 Apple 로그인(PR-A) — 번들 ID가 빠지면 앱이 not-configured로 떠서 /api/app/auth/apple이 503으로 닫힌다.
+# 팀·키 ID·.p8이 빠지면 탈퇴의 Apple 토큰 철회만 조용히 건너뛴다(WARN 한 줄) — 둘 다 화면엔 안 보이는 장애다.
+assert_has "  .env 에 Apple 번들 ID" "$env_out" "BOOKTIMER_APPLE_BUNDLE_ID=value-of-APPLE_BUNDLE_ID"
+assert_has "  .env 에 Apple 팀 ID" "$env_out" "BOOKTIMER_APPLE_TEAM_ID=value-of-APPLE_TEAM_ID"
+assert_has "  .env 에 Apple 로그인 키 ID" "$env_out" "BOOKTIMER_APPLE_SIGNIN_KEY_ID=value-of-APPLE_SIGNIN_KEY_ID"
+assert_has "  .env 에 Apple 로그인 .p8" "$env_out" "BOOKTIMER_APPLE_SIGNIN_P8=value-of-APPLE_SIGNIN_P8"
+# 웹 「앱 연결」 카드 허용 목록(v1 REQ-73) — 빠지면 기본값 none이라 본인(17)에게도 카드가 안 보인다.
+assert_has "  .env 에 앱 연결 카드 허용 목록" "$env_out" "BOOKTIMER_APP_LINK_CARD_USERS=value-of-APP_LINK_CARD_USERS"
 
 # ── Case 2: 인증서 누락 → 배포 실패, 파일도 안 남는다 ──
 r="$(run TOSS_MTLS_CERT)"; rc="${r%%$'\n'*}"; out="${r#*$'\n'}"

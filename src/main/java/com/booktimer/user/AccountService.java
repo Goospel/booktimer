@@ -234,6 +234,44 @@ public class AccountService {
         purge(user);
     }
 
+    /**
+     * Apple 재인증으로 신원이 확인된 계정을 삭제한다 — 아이폰 앱 탈퇴 경로(v1 REQ-07). 본체는 {@link #purge} 그대로다.
+     *
+     * <p>게이트는 둘이고 <b>어느 쪽이든 걸리면 아무것도 지우지 않는다</b>: ① 방금 받은 sub가 본인 {@code apple_sub}와 같아야 하고
+     * (null이면 무조건 불일치) ② 원 가입이 아이폰 앱이어야 한다 — 웹에서 만든 계정은 웹 설정에서 지운다. 연결 코드가 새
+     * 공격자 Apple ID가 붙었어도 ②가 데이터 파괴를 막는다(공격자에겐 웹 로그인이 없다).
+     *
+     * @throws AccountDeletionConfirmationException sub 불일치·미보유
+     * @throws WebAccountDeletionException          웹·미니앱에서 만든 계정
+     */
+    public void deleteAppleVerifiedAccount(User user, String verifiedSub) {
+        if (user.getAppleSub() == null || !user.getAppleSub().equals(verifiedSub)) {
+            throw new AccountDeletionConfirmationException();
+        }
+        if (user.isWebAccount()) {
+            throw new WebAccountDeletionException();
+        }
+        purge(user);
+    }
+
+    /**
+     * 웹 설정 「아이폰 앱 연결 해제」(v1 REQ-41) — 연결 코드가 샜을 때의 복구 수단이다. 그 사용자의 API 토큰 전부(앱·미니앱 —
+     * 토큰에 채널 열이 없다, §3.3-14)와 연결 코드를 지운 뒤 Apple 신원을 뗀다. 다음 앱 요청은 401이다. 웹 세션은 그대로 둔다
+     * (공격자가 쥔 것은 Bearer뿐이고, 지금 해제를 누른 사람은 웹에 로그인한 본인이다).
+     *
+     * @return 연결돼 있어서 끊었으면 true, 원래 연결이 없었으면 false(이때 아무것도 바꾸지 않는다 — 미니앱 토큰도 그대로)
+     */
+    public boolean unlinkApple(User user) {
+        if (user.getAppleSub() == null) {
+            return false;
+        }
+        apiTokenRepository.deleteByUser(user);
+        tossLinkCodeRepository.deleteByUser(user);
+        user.unlinkAppleSub();
+        userRepository.save(user);
+        return true;
+    }
+
     /** 토스 연결 끊기 콜백의 처리 결과 — 컨트롤러가 로그 한 줄로 남긴다. */
     public enum TossUnlinkOutcome { PURGED, SEVERED, NOT_FOUND }
 

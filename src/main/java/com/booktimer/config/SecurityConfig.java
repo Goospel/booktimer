@@ -92,6 +92,9 @@ public class SecurityConfig {
                         .requestMatchers("/api/toss/unlink-callback").permitAll()
                         // 익명 공개 계약 — 로그인 전 게스트도 읽는다(사용자 입력과 무관한 것만 둔다).
                         .requestMatchers("/api/public/**").permitAll()
+                        // 아이폰 앱 Apple 로그인 — 토큰을 받기 전 단계. 매 요청이 Apple identity token으로 신원을 다시 증명하고
+                        // (서버에 pending 상태 없음), 검증 전 IP 상한(APP_AUTH)이 남용을 막는다.
+                        .requestMatchers("/api/app/auth/apple").permitAll()
                         .anyRequest().authenticated())
                 .addFilterBefore(new BearerTokenFilter(apiTokenService),
                         UsernamePasswordAuthenticationFilter.class)
@@ -102,7 +105,11 @@ public class SecurityConfig {
         return http.build();
     }
 
-    /** 이 요청을 미니앱 체인이 맡는가 — {@code /api/toss/**}·{@code /api/public/**} 전부, 그 외 {@code /api/**}는 Bearer·프리플라이트일 때만. */
+    /**
+     * 이 요청을 미니앱 체인이 맡는가 — {@code /api/toss/**}·{@code /api/public/**}·{@code /api/app/**} 전부, 그 외 {@code /api/**}는
+     * Bearer·프리플라이트일 때만. {@code /api/app/**}를 접두째 넣는 이유: 토큰 없는 앱 요청이 웹 체인으로 가면 401이 아니라
+     * {@code /login} 302가 나고, RN fetch가 리다이렉트를 따라가 로그인 HTML을 200으로 받는다(앱이 「성공」으로 오해한다).
+     */
     private static boolean isMiniappApiRequest(HttpServletRequest request) {
         String path = request.getRequestURI().substring(request.getContextPath().length());
         if (!path.startsWith("/api/")) {
@@ -110,6 +117,7 @@ public class SecurityConfig {
         }
         return path.startsWith("/api/toss/")
                 || path.startsWith("/api/public/")
+                || path.startsWith("/api/app/")
                 || BearerTokenFilter.extractToken(request) != null
                 || CorsUtils.isPreFlightRequest(request);
     }

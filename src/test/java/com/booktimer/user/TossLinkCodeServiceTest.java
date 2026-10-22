@@ -96,6 +96,20 @@ class TossLinkCodeServiceTest {
     }
 
     @Test
+    @DisplayName("토스 없이 로그인할 수 없는 계정(미인증 토스 가입)엔 앱 연결 코드를 내주지 않는다 — 비밀번호 계정은 받는다(양성 대조)")
+    void tossOnlyUser_appLinkRejected() {
+        User toss = User.ofOAuth("toss-only@booktimer.com", "토스유저", "Asia/Seoul", Role.USER, AuthProvider.TOSS);
+        toss.linkTossUserKey("uk-toss-only");
+        userRepository.save(toss);
+        User local = user("local-app@booktimer.com");
+        TossLinkCodeService service = serviceAt(NOW);
+
+        assertThatThrownBy(() -> service.issueAppLink(toss)).isInstanceOf(AppleLinkConflictException.class);
+        assertThat(codeRepository.findByUserAndUsedAtIsNull(toss)).isEmpty();
+        assertThat(service.issueAppLink(local)).hasSize(8);
+    }
+
+    @Test
     @DisplayName("재발급하면 직전 코드는 무효화된다 (항상 하나만 유효 — EmailTokenService와 동일)")
     void reissue_invalidatesPrevious() {
         User u = user("link-reissue@booktimer.com");
