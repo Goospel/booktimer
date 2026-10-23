@@ -183,7 +183,8 @@ class SettingsControllerTest {
     @DisplayName("GET /settings: 미검증이어도 합성 주소(@noreply) 계정엔 재발송 배너를 숨긴다 — 보낼 데가 없다")
     void getSettings_syntheticEmail_hidesVerifyBanner() throws Exception {
         String synthetic = "toss-uk9" + User.SYNTHETIC_EMAIL_DOMAIN;
-        register(synthetic); // 미검증 + 합성 주소
+        // 미검증 + 합성 주소 — 실제로 그런 계정을 만드는 토스 가입 경로로(웹 이메일 가입은 합성 주소를 거절한다 — REQ-113)
+        registrationService.registerOAuth(synthetic, "토스유저", SEOUL, AuthProvider.TOSS, today(), false);
 
         mockMvc.perform(get("/settings").with(user(synthetic)))
                 .andExpect(status().isOk())

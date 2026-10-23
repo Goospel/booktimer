@@ -115,6 +115,23 @@ class UserRegistrationServiceTest {
     }
 
     @Test
+    @DisplayName("REQ-113 · 합성 도메인 주소의 이메일 가입은 거절한다")
+    void register_syntheticDomainEmail_rejectedAsTaken() {
+        // 남이 kakao-{sub}@… · apple-{sub}@…를 LOCAL로 먼저 차지하면 그 회원번호의 앱 가입이 uk_users_email로 막힌다.
+        // 두 가입 갈래 모두, 대문자 꼴도 기존 「이미 쓰는 이메일」 오류로 거절한다 — 존재 검사가 거짓이어도.
+        when(passwordEncoder.encode(any())).thenReturn("$2a$10$ENCODED"); // 해싱은 거절 전에도 1회(타이밍 오라클)
+        assertThatThrownBy(() -> service.register(
+                "kakao-123@noreply.booktimer.app", "rawpw1234", "reader_k", "책벌레", "Asia/Seoul", Role.USER, DAY0))
+                .isInstanceOf(EmailAlreadyExistsException.class);
+        assertThatThrownBy(() -> service.register(
+                "APPLE-001.X@NOREPLY.BOOKTIMER.APP", "rawpw1234", "책벌레", "Asia/Seoul", Role.USER, DAY0))
+                .isInstanceOf(EmailAlreadyExistsException.class);
+
+        verify(userRepository, never()).save(any());
+        verify(timerRepository, never()).save(any());
+    }
+
+    @Test
     @DisplayName("보안(타이밍 오라클): 이미 가입된 이메일이어도 BCrypt 해싱은 똑같이 1회 지불한다 — 해싱을 존재 검사 뒤에 두면 기존 이메일 경로만 BCrypt 1회(≈50~100ms)만큼 빨라져, 본문을 같게 만든 열거 완화가 시간 채널에서 무효가 된다")
     void register_whenEmailExists_stillPaysHashingCost() {
         when(userRepository.existsByEmail("dup-timing@booktimer.com")).thenReturn(true);

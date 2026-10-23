@@ -358,6 +358,22 @@ class FlywayMigrationTest {
     }
 
     @Test
+    @DisplayName("PR-M · V102: 한 구글·카카오 신원은 두 계정에 붙지 못한다(uk_users_google_sub · uk_users_kakao_sub) — 마이그레이션에만 있다")
+    void google_and_kakao_sub_unique_constraints_are_enforced() {
+        Long a = userRepository.saveAndFlush(userWithHandle("sub-a@example.com", "subuniqa")).getId();
+        Long b = userRepository.saveAndFlush(userWithHandle("sub-b@example.com", "subuniqb")).getId();
+
+        // 양성 대조 — 각자 다른 값은 들어간다(열이 있고 쓰기가 되는 것).
+        jdbcTemplate.update("UPDATE users SET google_sub = ?, kakao_sub = ? WHERE id = ?", "g-sub-a", "4001", a);
+
+        assertThatThrownBy(() -> jdbcTemplate.update("UPDATE users SET google_sub = ? WHERE id = ?", "g-sub-a", b))
+                .isInstanceOf(DataIntegrityViolationException.class);
+        assertThatThrownBy(() -> jdbcTemplate.update("UPDATE users SET kakao_sub = ? WHERE id = ?", "4001", b))
+                .isInstanceOf(DataIntegrityViolationException.class);
+        assertThat(userRepository.pinGoogleSubIfEmpty(b, "g-sub-b")).isEqualTo(1); // 빈 행 고정은 그대로 된다
+    }
+
+    @Test
     void api_token_and_link_code_tables_persist_under_flyway_schema() {
         User owner = userRepository.saveAndFlush(userWithHandle("toss-token@example.com", "tosstoken"));
         Instant expiresAt = Instant.parse("2026-11-05T00:00:00Z");
