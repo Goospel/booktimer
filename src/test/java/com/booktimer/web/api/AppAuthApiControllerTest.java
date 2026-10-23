@@ -27,7 +27,11 @@ import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.util.ReflectionTestUtils;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.ResultActions;
+import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionTemplate;
+import com.booktimer.timer.ReadingTimerRepository;
 
 import java.time.Instant;
 import java.time.LocalDate;
@@ -69,6 +73,8 @@ class AppAuthApiControllerTest {
     @Autowired TossLinkCodeRepository linkCodeRepository;
     @Autowired IdTokenVerifier idTokens;
     @Autowired JdbcTemplate jdbcTemplate;
+    @Autowired PlatformTransactionManager txManager;
+    @Autowired ReadingTimerRepository timerRepository;
     @jakarta.persistence.PersistenceContext jakarta.persistence.EntityManager entityManager;
 
     @BeforeEach
@@ -333,6 +339,29 @@ class AppAuthApiControllerTest {
                 .andExpect(jsonPath("$.userId").value(created.getId()));
         callAt("kakao", login()).andExpect(jsonPath("$.registered").value(true))
                 .andExpect(jsonPath("$.userId").value(created.getId()));
+    }
+
+    @Test
+    @Transactional(propagation = Propagation.NOT_SUPPORTED) // 운영처럼 REGISTER 트랜잭션이 실제로 롤백돼야 다시 읽기가 재현된다
+    @DisplayName("REQ-81 · 카카오 REGISTER가 이메일 유니크 위반을 만나면 500이 아니라 409 평문이고 행이 늘지 않는다")
+    void kakaoRegisterEmailConflictIs409() throws Exception {
+        // 경합(같은 신원 동시 REGISTER)과 같은 예외 경로를 결정적으로 — 그 합성 주소를 kakao_sub 없이 먼저 쥔 행
+        User holder = registrationService.registerOAuth("kakao-" + KAKAO_SUB + User.SYNTHETIC_EMAIL_DOMAIN, "토스유저",
+                "Asia/Seoul", AuthProvider.TOSS, LocalDate.of(2026, 10, 21), false); // NOT_SUPPORTED라 바로 커밋된다
+        try {
+            kakaoSays(KAKAO_SUB);
+            long before = userRepository.count();
+
+            callAt("kakao", register(true)).andExpect(status().isConflict())
+                    .andExpect(content().string("이미 쓰는 이메일이라 가입할 수 없어요"));
+            assertThat(userRepository.count()).isEqualTo(before);
+            assertThat(userRepository.findByKakaoSub(KAKAO_SUB)).isEmpty();
+        } finally {
+            new TransactionTemplate(txManager).executeWithoutResult(s -> { // 공유 세계에 커밋된 행을 남기지 않는다
+                timerRepository.deleteByUser(holder);
+                userRepository.deleteById(holder.getId());
+            });
+        }
     }
 
     @Test

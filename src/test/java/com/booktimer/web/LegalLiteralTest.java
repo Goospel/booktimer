@@ -60,11 +60,14 @@ class LegalLiteralTest {
             new Rule("terms 제3조 ④ · 구글로 다시 확인", false, s -> article3Item(s, 4), "구글로 다시 확인", true),
             new Rule("terms 제3조 ④ · 구글 워크스페이스 주소", false, s -> article3Item(s, 4), "구글 워크스페이스 주소", true),
             // 지키는 줄 — 11/23 시행 공지와 그 조각들은 이 PR이 한 글자도 바꾸지 않는다
-            new Rule("지키는 줄 · privacy 6-3절 시행일", true, s -> between(s, "<h2>6-3.", "<h2>7."), "시행: 2026-11-23", true),
+            new Rule("지키는 줄 · privacy 6-3절 시행일", true, s -> between(s, "<h2>6-3.", "<h2>6-4."), "시행: 2026-11-23", true),
             new Rule("지키는 줄 · privacy 10-21 개정 공지", true, s -> s,
-                    "시행일: 2026-06-03 · 2026-10-21 개정 공지 — 2절 Apple 로그인 식별자·여백·앱 글쓰기(즉시, 그중 AI 질문은 2026-11-23 시행) ·", true),
+                    "<p class=\"legal-date\">시행일: 2026-06-03 · 2026-10-21 개정 공지 — 2절 Apple 로그인 식별자·여백·앱 글쓰기(즉시, 그중 AI 질문은 2026-11-23 시행) ·"
+                            + " 3절 여백·앱 글쓰기 이용 목적 · 6-3절 신설 · 5절 앱 글 보관(즉시, 받은 질문은 2026-11-23 시행) ·"
+                            + " 8절 위탁 표에 Apple 로그인 인증(즉시)과 Anthropic의 앱 글쓰기 질문(2026-11-23 시행) 추가</p>", true),
             new Rule("지키는 줄 · terms 10-21 개정 공지", false, s -> s,
-                    "시행일: 2026-08-09 · 2026-10-21 개정 공지 — 제11조 생성형 AI 기능 신설(2026-11-23 시행), 문의를 제12조로 이동,", true),
+                    "<p class=\"legal-date\">시행일: 2026-08-09 · 2026-10-21 개정 공지 — 제11조 생성형 AI 기능 신설(2026-11-23 시행), 문의를 제12조로 이동,"
+                            + " 제2조 아이폰 앱·제3조 구글·Apple 로그인 계정(즉시)</p>", true),
             new Rule("지키는 줄 · privacy 2절 AI 질문", true, privacy2(), "(2026-11-23 시행) 그 글에 대해 받은 AI 질문", true),
             new Rule("지키는 줄 · privacy 8절 6-3절", true, s -> between(s, "<h2>8.", "<h2>9."), "2026-11-23부터는 <strong>6-3절</strong>", true));
 
@@ -110,5 +113,14 @@ class LegalLiteralTest {
         // ④ — 지키는 줄을 건드린 픽스처
         assertThat(violations(privacy, terms.replace("2026-10-21 개정 공지 — 제11조", "2026-10-23 개정 공지 — 제11조")))
                 .containsExactly("지키는 줄 · terms 10-21 개정 공지");
+        // ⑤ — 지키는 공지 문단의 꼬리(둘째 줄 이후)만 바꾼 픽스처
+        assertThat(violations(privacy, terms.replace("제3조 구글·Apple 로그인 계정(즉시)", "제3조 구글·Apple·카카오 로그인 계정(즉시)")))
+                .containsExactly("지키는 줄 · terms 10-21 개정 공지");
+        assertThat(violations(privacy.replace("Anthropic의 앱 글쓰기 질문(2026-11-23 시행) 추가", "Anthropic의 앱 글쓰기 질문·카카오(2026-11-23 시행) 추가"), terms))
+                .containsExactly("지키는 줄 · privacy 10-21 개정 공지");
+        // ⑥ — 6-3절 구간은 6-4절 머리에서 끝난다: 시행일이 6-4절로 옮겨 가면 잡는다
+        String shifted = squash(privacy).replace("시행: 2026-11-23", "시행: 곧");
+        shifted = shifted.replace("<h2>7.", "<p>시행: 2026-11-23</p><h2>7.");
+        assertThat(violations(shifted, terms)).containsExactly("지키는 줄 · privacy 6-3절 시행일");
     }
 }

@@ -415,6 +415,13 @@ class AppAccountDeletionIntegrationTest {
                 new VerifiedIdentity(KAKAO_SUB, null, null)))
                 .as("카카오 신원 없음").isInstanceOf(AccountDeletionConfirmationException.class);
         assertThat(userRepository.findById(victim.getId())).isPresent();
+
+        // 컨트롤러 게이트를 건너뛴 서비스 단독 대조 — 다른 카카오 회원번호면 지우지 않는다
+        User kakaoMe = kakaoUsers.register(KAKAO_SUB);
+        assertThatThrownBy(() -> accountService.deleteProviderVerifiedAccount(kakaoMe, AuthProvider.KAKAO,
+                new VerifiedIdentity("4099999999", null, null)))
+                .as("다른 카카오 회원번호").isInstanceOf(AccountDeletionConfirmationException.class);
+        assertThat(userRepository.findById(kakaoMe.getId())).isPresent();
     }
 
     @Test

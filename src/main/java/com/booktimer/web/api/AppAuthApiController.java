@@ -20,6 +20,7 @@ import com.booktimer.user.User;
 import jakarta.servlet.http.HttpServletRequest;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
@@ -86,6 +87,7 @@ public class AppAuthApiController {
 
     static final String GOOGLE_MISMATCH = "이 이메일의 계정은 처음 로그인한 구글 계정으로만 열려요 — 그 구글 계정으로 다시 해 주세요";
     private static final String NO_LINK = "이 로그인 방식은 웹 계정 연결을 지원하지 않아요";
+    private static final String EMAIL_TAKEN = "이미 쓰는 이메일이라 가입할 수 없어요";
 
     /**
      * 구글 로그인(REQ-79) — LOGIN은 판정이 여는 계정만 주고(빈 고정을 채우는 것이 유일한 쓰기), REGISTER는 웹 구글 로그인과
@@ -114,7 +116,8 @@ public class AppAuthApiController {
                     GoogleLookup found = googleUsers.lookup(id.sub(), id.email(), id.hd());
                     yield found.user() != null
                             ? issued(found.user(), false)
-                            : issued(googleUsers.provision(id.sub(), id.email(), id.hd(), id.name(), true), true);
+                            : created(() -> googleUsers.provision(id.sub(), id.email(), id.hd(), id.name(), true),
+                                    () -> Optional.ofNullable(googleUsers.lookup(id.sub(), id.email(), id.hd()).user()));
                 }
                 case LINK -> throw new ResponseStatusException(HttpStatus.BAD_REQUEST, NO_LINK);
             };
@@ -143,7 +146,9 @@ public class AppAuthApiController {
             case REGISTER -> {
                 requireAge(request.ageConfirmed());
                 Optional<User> existing = kakaoUsers.login(sub);
-                yield issued(existing.orElseGet(() -> kakaoUsers.register(sub)), existing.isEmpty());
+                yield existing.isPresent()
+                        ? issued(existing.get(), false)
+                        : created(() -> kakaoUsers.register(sub), () -> kakaoUsers.login(sub));
             }
             case LINK -> throw new ResponseStatusException(HttpStatus.BAD_REQUEST, NO_LINK);
         };
@@ -172,6 +177,19 @@ public class AppAuthApiController {
     private static void requireAge(Boolean ageConfirmed) {
         if (!Boolean.TRUE.equals(ageConfirmed)) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "만 14세 이상인지 먼저 확인해 주세요");
+        }
+    }
+
+    /**
+     * REGISTER의 만들기 — 이메일 유니크 위반(같은 신원의 동시 REGISTER 등)이면 500 대신 커밋된 행을 다시 찾아 그 계정을 주고,
+     * 없으면 409 평문이다. 만든 쪽 트랜잭션은 이미 롤백됐다.
+     */
+    private AppAuthResponse created(Supplier<User> create, Supplier<Optional<User>> reread) {
+        try {
+            return issued(create.get(), true);
+        } catch (DataIntegrityViolationException e) {
+            return reread.get().map(user -> issued(user, false))
+                    .orElseThrow(() -> new ResponseStatusException(HttpStatus.CONFLICT, EMAIL_TAKEN));
         }
     }
 

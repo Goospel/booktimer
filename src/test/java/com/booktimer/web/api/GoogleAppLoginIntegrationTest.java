@@ -113,6 +113,38 @@ class GoogleAppLoginIntegrationTest {
     }
 
     @Test
+    @DisplayName("REQ-79 · 같은 이메일의 미검증 TOSS 계정은 LOGIN으로 열리지 않고, REGISTER는 그 이메일만 비키고 새 구글 계정을 만든다(정책 ②)")
+    void unverifiedTossIsNeverOpenedByGoogle() throws Exception {
+        User toss = User.ofOAuth("tosssq@gmail.com", "토스유저", "Asia/Seoul", Role.USER, AuthProvider.TOSS);
+        toss.linkTossUserKey("UKtoss-01");
+        userRepository.saveAndFlush(toss); // 미검증 그대로
+        Map<String, Object> before = row(toss.getId());
+        long count = userRepository.count();
+        googleSays("tosssq@gmail.com", null);
+
+        call("LOGIN", null).andExpect(status().isOk())
+                .andExpect(jsonPath("$.registered").value(false))
+                .andExpect(jsonPath("$.token").doesNotExist())
+                .andExpect(jsonPath("$.unverifiedWebAccount").value(false));
+        assertThat(row(toss.getId())).isEqualTo(before);
+        assertThat(userRepository.count()).isEqualTo(count);
+
+        // 양성 대조 — REGISTER는 토스 계정을 건네지 않고 새 GOOGLE 계정을 만든다
+        call("REGISTER", true).andExpect(status().isOk())
+                .andExpect(jsonPath("$.created").value(true))
+                .andExpect(jsonPath("$.authProvider").value("GOOGLE"))
+                .andExpect(jsonPath("$.googleLinked").value(true));
+        String tossEmail = jdbcTemplate.queryForObject("select email from users where id = ?", String.class, toss.getId());
+        assertThat(User.isSyntheticEmailAddress(tossEmail)).isTrue(); // 합성 주소로 비켜남
+        assertThat(jdbcTemplate.queryForObject("select toss_user_key from users where id = ?", String.class, toss.getId()))
+                .isEqualTo("UKtoss-01");
+        assertThat(googleSubOf(toss.getId())).isNull();
+        Long createdId = jdbcTemplate.queryForObject("select id from users where email = ?", Long.class, "tosssq@gmail.com");
+        assertThat(createdId).isNotEqualTo(toss.getId());
+        assertThat(googleSubOf(createdId)).isEqualTo(SUB);
+    }
+
+    @Test
     @DisplayName("REQ-79 · LOGIN은 열 계정의 빈 google_sub만 채우고 다른 열은 바꾸지 않는다")
     void loginPinsOnlyGoogleSub() throws Exception {
         User google = verified("me@booktimer.com", AuthProvider.GOOGLE);
