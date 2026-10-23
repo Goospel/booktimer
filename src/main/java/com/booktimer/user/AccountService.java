@@ -25,6 +25,7 @@ import com.booktimer.study.StudyPlanItemRepository;
 import com.booktimer.study.StudyRecallRepository;
 import com.booktimer.timer.ReadingGoalChangeRepository;
 import com.booktimer.timer.ReadingTimerRepository;
+import com.booktimer.writing.WritingDraftRepository;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -70,6 +71,7 @@ public class AccountService {
     private final TossLinkCodeRepository tossLinkCodeRepository;
     private final ChatMessageRepository chatMessageRepository;
     private final ChatRoomRepository chatRoomRepository;
+    private final WritingDraftRepository writingDraftRepository;
     private final SessionInvalidator sessionInvalidator;
     private final PasswordEncoder passwordEncoder;
 
@@ -99,6 +101,7 @@ public class AccountService {
                           TossLinkCodeRepository tossLinkCodeRepository,
                           ChatMessageRepository chatMessageRepository,
                           ChatRoomRepository chatRoomRepository,
+                          WritingDraftRepository writingDraftRepository,
                           SessionInvalidator sessionInvalidator,
                           PasswordEncoder passwordEncoder) {
         this.userRepository = userRepository;
@@ -127,6 +130,7 @@ public class AccountService {
         this.tossLinkCodeRepository = tossLinkCodeRepository;
         this.chatMessageRepository = chatMessageRepository;
         this.chatRoomRepository = chatRoomRepository;
+        this.writingDraftRepository = writingDraftRepository;
         this.sessionInvalidator = sessionInvalidator;
         this.passwordEncoder = passwordEncoder;
     }
@@ -382,6 +386,7 @@ public class AccountService {
         storyLikeRepository.deleteByUser(user);         // 내가 남에게 누른 좋아요 (story_like.user_id FK)
         storyLikeRepository.deleteByStoryUser(user);    // 내 글에 달린 남의 좋아요 — 내 글보다 앞
         storyRepository.deleteByUser(user);            // 내가 여백에 남긴 글 — story.book_id 때문에 책보다 앞
+        writingDraftRepository.deleteByUser(user);     // 앱 글 원장 — writing_draft.book_id·user_id FK 때문에 책·유저보다 앞
         bookRepository.deleteByUser(user);
         studyBookRepository.deleteByUser(user);  // FK: study_book.user_id → users (공부 서재 — book과 별개 테이블)
         personalityCacheRepository.deleteByUser(user);       // 책BTI 캐시도 user_id FK 참조 → 유저 전에 정리

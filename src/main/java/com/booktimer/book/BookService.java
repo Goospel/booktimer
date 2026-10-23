@@ -4,6 +4,7 @@ import com.booktimer.session.ReadingSessionRepository;
 import com.booktimer.story.StoryLikeRepository;
 import com.booktimer.story.StoryRepository;
 import com.booktimer.user.User;
+import com.booktimer.writing.WritingDraftRepository;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -31,6 +32,7 @@ public class BookService {
     private final Yes24LinkBuilder yes24LinkBuilder;
     private final KyoboLinkBuilder kyoboLinkBuilder;
     private final FinishCelebrationService finishCelebrationService;
+    private final WritingDraftRepository writingDraftRepository;
     private final Clock clock;
 
     public BookService(BookRepository bookRepository, BookSearchClient searchClient,
@@ -42,6 +44,7 @@ public class BookService {
                        Yes24LinkBuilder yes24LinkBuilder,
                        KyoboLinkBuilder kyoboLinkBuilder,
                        FinishCelebrationService finishCelebrationService,
+                       WritingDraftRepository writingDraftRepository,
                        Clock clock) {
         this.bookRepository = bookRepository;
         this.searchClient = searchClient;
@@ -53,6 +56,7 @@ public class BookService {
         this.yes24LinkBuilder = yes24LinkBuilder;
         this.kyoboLinkBuilder = kyoboLinkBuilder;
         this.finishCelebrationService = finishCelebrationService;
+        this.writingDraftRepository = writingDraftRepository;
         this.clock = clock;
     }
 
@@ -251,6 +255,7 @@ public class BookService {
     public void delete(User user, Long bookId) {
         Book book = ownedBook(user, bookId);
         sessionRepository.unlinkBook(book);
+        writingDraftRepository.unlinkBook(book); // 앱에서 쓴 글은 남고 연결만 풀린다 (writing_draft.book_id FK — REQ-13)
         storyLikeRepository.deleteByStoryBook(book); // 글에 달린 좋아요가 먼저 (story_like.story_id FK)
         storyRepository.deleteByBook(book); // 여백의 글은 책과 함께 사라진다 (story.book_id FK)
         bookRepository.delete(book);
