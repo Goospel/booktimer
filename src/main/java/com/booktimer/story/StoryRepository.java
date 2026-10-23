@@ -182,7 +182,8 @@ public interface StoryRepository extends JpaRepository<Story, Long> {
      * 책축(isbn13) 목록 — 같은 책을 보는 <b>누구에게나</b> 열린 글(「함께 걸기」). 최신순, 동시각 tie는 id로.
      *
      * <p><b>{@code StoryService.assertVisible}의 미러가 아니다 — 의도적으로 더 좁다</b>(2026-08-22
-     * 개정). 열람 권한은 책 PUBLIC 하나이고 그것이 {@code assertVisible}의 전부인데, 이 목록은 거기에
+     * 개정). 열람 권한은 책 PUBLIC 하나이고 그것이 {@code assertVisible}의 주 판정인데(생각 빈 여백 404는
+     * 별도 — 여기선 REQ-94가 {@code shared = true}로 미리 막는다), 이 목록은 거기에
      * {@code s.shared = true}를 <b>더</b> 진다: 「모두의 여백」에는 <b>올린 글만</b> 실리기 때문이다
      * (안 올린 글도 읽히기는 한다 — 사람축 목록으로 도달한다). <b>미러로 착각해 이 술어를 걷으면
      * 올리지 않은 글이 통째로 여기 실린다.</b> 옛 주석이 「미러다, 둘은 같이 고친다」라고 지시했는데,

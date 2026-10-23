@@ -322,11 +322,13 @@ public class StoryService {
      * <p>핸들 없는 주인({@code loginId == null})은 {@code resolveVisibleTarget}이 걸러 낸다 —
      * 그들의 글은 애초에 어느 목록에도 실리지 않는다(N-055).
      *
-     * <p><b>책 게이트가 마지막이자 유일한 방어</b>다(2026-08-22 팔로우 축 제거). 예전엔 그 뒤에
+     * <p><b>책 게이트가 비공개 메모를 막는 유일한 방어</b>다(2026-08-22 팔로우 축 제거). 그 뒤의
+     * 생각 빈 여백 404(REQ-95)는 다른 것을 막는 별도 판정이라 이 방어를 대신하지 않는다. 예전엔 그 뒤에
      * 「팔로워이거나 shared이거나」가 한 겹 더 있었는데, 둘 다 게이트에서 걷었다 — 팔로우는 열람
      * 권한이 아니고({@code marginOf} 참조), {@code shared}는 책축 목록에 실을지를 정하는 배치 값이다.
      * 이중 방어가 사라졌으므로 <b>이 공개 검사를 지우면 곧바로 비공개 메모가 샌다</b>({@link Story}
-     * 불변식). 목록 쪽 미러는 {@link StoryRepository#sharedByIsbn}이고, 둘은 같이 고친다.
+     * 불변식). 책축 목록 {@link StoryRepository#sharedByIsbn}은 미러가 아니다 — 의도적으로 더 좁다
+     * (그 javadoc 참조).
      */
     private void assertVisible(User viewer, Story story) {
         User owner = story.getUser();
