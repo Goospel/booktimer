@@ -1,5 +1,6 @@
 package com.booktimer.session;
 
+import com.booktimer.timer.GoalSchedule;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
@@ -316,6 +317,75 @@ class ContributionGraphBuilderTest {
         ContributionGraph graph = ContributionGraphBuilder.build(data, TODAY, GOAL);
 
         assertThat(graph.currentStreak()).isEqualTo(5);
+    }
+
+    // ── 목표 연속(REQ-88) — 「채운 날」 = 잔디 4단계(초 > 0 ∧ 초 ≥ 그날 목표)가 이어진 수 ──────────
+
+    private static final long MIN = 60L;
+
+    private static int goalStreak(Map<LocalDate, Long> data, GoalSchedule schedule) {
+        return ContributionGraphBuilder.currentGoalStreak(data, TODAY, schedule::goalFor);
+    }
+
+    @Test
+    @DisplayName("REQ-88 · 목표를 채운 날만 이어진다")
+    void goalStreak_onlyMetDaysContinue() {
+        // 30분 목표에 어제 29분 — 읽었지만 못 채운 날이 연속을 끊는다(1초 연속이면 3).
+        Map<LocalDate, Long> data = Map.of(TODAY, 40 * MIN, TODAY.minusDays(1), 29 * MIN, TODAY.minusDays(2), 40 * MIN);
+        GoalSchedule thirty = GoalSchedule.of(Map.of(), 30 * MIN);
+
+        assertThat(goalStreak(data, thirty)).isEqualTo(1);
+        assertThat(ContributionGraphBuilder.currentStreak(data, TODAY)).isEqualTo(3); // 대조: 1초 연속은 그대로
+    }
+
+    @Test
+    @DisplayName("REQ-88 · 오늘 아직이면 어제부터 센다")
+    void goalStreak_todayNotYetMet_countsFromYesterday() {
+        // 오늘 10분(읽었지만 30분 미달) — 오늘을 끊긴 날로 보지 않고 어제부터 센다.
+        Map<LocalDate, Long> data = Map.of(TODAY, 10 * MIN, TODAY.minusDays(1), 40 * MIN, TODAY.minusDays(2), 40 * MIN);
+        GoalSchedule thirty = GoalSchedule.of(Map.of(), 30 * MIN);
+
+        assertThat(goalStreak(data, thirty)).isEqualTo(2);
+        assertThat(goalStreak(Map.of(TODAY.minusDays(2), 40 * MIN), thirty)).isZero(); // 어제도 비면 끊긴다
+    }
+
+    @Test
+    @DisplayName("REQ-88 · 목표 0이면 읽은 날이 채운 날이다")
+    void goalStreak_zeroGoal_readDaysCount() {
+        Map<LocalDate, Long> data = Map.of(TODAY.minusDays(1), 1L, TODAY.minusDays(2), 10L, TODAY.minusDays(4), 10L);
+        GoalSchedule none = GoalSchedule.of(Map.of(), 0L);
+
+        assertThat(goalStreak(data, none)).isEqualTo(2); // 0초인 그끄제(-3)에서 끊긴다
+    }
+
+    @Test
+    @DisplayName("REQ-88 · 목표를 바꿔도 지난날은 그날 목표로 본다")
+    void goalStreak_raisedGoal_pastDaysKeepTheirGoal() {
+        // 사흘 전 30분 → 오늘 60분으로 올림. 어제·그제 40분은 그날 목표(30분)로 채운 날이다(소급 없음).
+        Map<LocalDate, Long> data = Map.of(TODAY.minusDays(1), 40 * MIN, TODAY.minusDays(2), 40 * MIN);
+        GoalSchedule raised = GoalSchedule.of(Map.of(TODAY.minusDays(3), 30 * MIN, TODAY, 60 * MIN), 60 * MIN);
+
+        assertThat(goalStreak(data, raised)).isEqualTo(2);
+    }
+
+    @Test
+    @DisplayName("REQ-88 · 오늘 목표를 내리면 오늘이 채운 날이 된다")
+    void goalStreak_loweredTodayGoal_todayBecomesMet() {
+        // 어제까지 60분, 오늘 30분으로 내림(upsert). 오늘 40분은 새 목표로 채운 날이다.
+        Map<LocalDate, Long> data = Map.of(TODAY, 40 * MIN, TODAY.minusDays(1), 70 * MIN);
+        GoalSchedule lowered = GoalSchedule.of(Map.of(TODAY.minusDays(5), 60 * MIN, TODAY, 30 * MIN), 30 * MIN);
+
+        assertThat(goalStreak(data, lowered)).isEqualTo(2);
+    }
+
+    @Test
+    @DisplayName("REQ-88 · 첫 목표 변경 전 날은 지금 목표로 본다")
+    void goalStreak_beforeFirstChange_usesFallbackGoal() {
+        // 이력은 어제(30분)부터. 그제 40분은 폴백(지금 목표 60분)으로 보아 못 채운 날 — 「읽은 날이면 채움」이 아니다.
+        Map<LocalDate, Long> data = Map.of(TODAY.minusDays(1), 40 * MIN, TODAY.minusDays(2), 40 * MIN);
+        GoalSchedule history = GoalSchedule.of(Map.of(TODAY.minusDays(1), 30 * MIN), 60 * MIN);
+
+        assertThat(goalStreak(data, history)).isEqualTo(1);
     }
 
     private static ContributionDay findCell(ContributionGraph graph, LocalDate date) {

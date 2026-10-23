@@ -9,6 +9,8 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Clock;
+import java.time.Duration;
+import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneId;
 import java.util.LinkedHashMap;
@@ -40,25 +42,33 @@ public class ReadingContributionService {
     private final ReadingHistoryService historyService;
     private final ReadingTimerRepository timerRepository;
     private final ReadingGoalChangeRepository goalChangeRepository;
+    private final ReadingSessionRepository sessionRepository;
     private final Clock clock;
 
     public ReadingContributionService(ReadingHistoryService historyService,
                                       ReadingTimerRepository timerRepository,
                                       ReadingGoalChangeRepository goalChangeRepository,
+                                      ReadingSessionRepository sessionRepository,
                                       Clock clock) {
         this.historyService = historyService;
         this.timerRepository = timerRepository;
         this.goalChangeRepository = goalChangeRepository;
+        this.sessionRepository = sessionRepository;
         this.clock = clock;
     }
 
     /** 본인이 보는 전체 잔디 — 모든 완료 세션을 합산한다. */
     public ContributionGraph contributionGraph(User user) {
+        return readingGraph(user).graph();
+    }
+
+    /** 잔디 + 목표 연속(REQ-88) — 같은 집계·같은 날짜별 목표로 한 번에 만든다(대시보드 GET·stop). */
+    public ReadingGraph readingGraph(User user) {
         return graphFrom(user, historyService.dailyHistory(user));
     }
 
-    /** 일자별 집계를 받아 유저 타임존 "오늘"·하루 목표로 잔디 그리드를 만든다(가시성 필터는 호출자가 끝낸 상태). */
-    private ContributionGraph graphFrom(User user, List<DailyReadingRecord> history) {
+    /** 일자별 집계를 받아 유저 타임존 "오늘"·하루 목표로 잔디 그리드와 목표 연속을 만든다(가시성 필터는 호출자가 끝낸 상태). */
+    private ReadingGraph graphFrom(User user, List<DailyReadingRecord> history) {
         ZoneId zone = ZoneId.of(user.getTimezone());
         LocalDate today = LocalDate.ofInstant(clock.instant(), zone);
 
@@ -74,7 +84,35 @@ public class ReadingContributionService {
         // 각 칸을 그날 목표로 색칠(소급 재채색 차단, N-059).
         GoalSchedule schedule = goalSchedule(user);
 
-        return ContributionGraphBuilder.build(secondsByDate, today, schedule::goalFor, manualDates);
+        return new ReadingGraph(
+                ContributionGraphBuilder.build(secondsByDate, today, schedule::goalFor, manualDates),
+                ContributionGraphBuilder.currentGoalStreak(withActiveBeforeToday(user, secondsByDate, zone, today),
+                        today, schedule::goalFor));
+    }
+
+    /**
+     * 연속 판정용 복사본 — 자정 전에 시작해 아직 도는 측정의 <b>오늘보다 이른 날</b> 몫을 그날에 더한다.
+     * 정지 전엔 집계가 진행 중 세션을 빼서, 자정을 넘겨 읽는 동안 어제 채움이 사라졌다 정지 때 되살아났다.
+     * 오늘 몫은 더하지 않는다 — 앱이 진행 중 몫을 얹는 규칙(lib/goalProgress)과 겹치지 않게. 잔디 칸은 끝난 몫 그대로다.
+     */
+    private Map<LocalDate, Long> withActiveBeforeToday(User user, Map<LocalDate, Long> secondsByDate,
+                                                       ZoneId zone, LocalDate today) {
+        return sessionRepository.findByUserAndEndedAtIsNull(user).map(active -> {
+            Instant start = active.getStartedAt();
+            Instant cap = start.plus(ReadingSessionService.MAX_SESSION_DURATION);
+            Instant now = clock.instant();
+            Map<LocalDate, Long> copy = new LinkedHashMap<>(secondsByDate);
+            if (!now.isAfter(start)) {
+                return copy;
+            }
+            for (ReadingSessionService.Segment s : ReadingSessionService.splitByMidnight(start, now.isAfter(cap) ? cap : now, zone)) {
+                LocalDate date = LocalDate.ofInstant(s.start(), zone);
+                if (date.isBefore(today)) {
+                    copy.merge(date, Duration.between(s.start(), s.end()).getSeconds(), Long::sum);
+                }
+            }
+            return copy;
+        }).orElse(secondsByDate);
     }
 
     /**

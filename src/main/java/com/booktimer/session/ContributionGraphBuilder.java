@@ -114,6 +114,30 @@ public final class ContributionGraphBuilder {
         return streak;
     }
 
+    /**
+     * 현재 목표 연속 일수 — 「채운 날」(잔디 4단계: 초 &gt; 0 그리고 초 ≥ 그날 목표)이 오늘부터 거꾸로 이어진 수(REQ-88).
+     *
+     * <p>{@link #currentStreak}과 같은 유예: 오늘 아직 못 채웠으면 어제부터 센다. 목표 0인 날은 읽기만 하면 채운 날이다.
+     * 날짜별 목표는 {@code goalForDate}({@link com.booktimer.timer.GoalSchedule#goalFor})가 정한다 — 지난날은 그날 목표로
+     * 굳어 있고(소급 없음), 첫 목표 변경보다 이른 날은 잔디처럼 폴백(지금 목표)으로 본다.
+     */
+    static int currentGoalStreak(Map<LocalDate, Long> secondsByDate, LocalDate today,
+                                 ToLongFunction<LocalDate> goalForDate) {
+        LocalDate cursor = metGoal(secondsByDate, today, goalForDate) ? today : today.minusDays(1);
+        int streak = 0;
+        while (metGoal(secondsByDate, cursor, goalForDate)) {
+            streak++;
+            cursor = cursor.minusDays(1);
+        }
+        return streak;
+    }
+
+    /** 그날 목표를 채웠는지 — 잔디 4단계와 같은 판정이라 잔디와 연속이 같은 날을 다르게 말하지 않는다. */
+    private static boolean metGoal(Map<LocalDate, Long> secondsByDate, LocalDate date,
+                                   ToLongFunction<LocalDate> goalForDate) {
+        return levelFor(secondsByDate.getOrDefault(date, 0L), goalForDate.applyAsLong(date)) == 4;
+    }
+
     /** 그날 읽었는지(초 &gt; 0). null/음수는 안 읽음. */
     private static boolean hasReading(Map<LocalDate, Long> secondsByDate, LocalDate date) {
         return secondsByDate.getOrDefault(date, 0L) > 0L;

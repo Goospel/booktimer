@@ -54,9 +54,33 @@ class MiniappGoalApiControllerTest {
     }
 
     private org.springframework.test.web.servlet.ResultActions setGoal(String token, String body) throws Exception {
-        return mockMvc.perform(post("/api/miniapp/goal")
+        return setGoal("/api/miniapp/goal", token, body);
+    }
+
+    private org.springframework.test.web.servlet.ResultActions setGoal(String path, String token, String body) throws Exception {
+        return mockMvc.perform(post(path)
                 .header("Authorization", "Bearer " + token)
                 .contentType(MediaType.APPLICATION_JSON).content(body));
+    }
+
+    @Test
+    @DisplayName("REQ-109 · /api/app/goal은 /api/miniapp/goal과 같이 목표를 바꾼다")
+    void appGoalAlias_sameAsMiniappPath() throws Exception {
+        User viaApp = tossUser("app-goal@noreply.booktimer.app");
+        User viaMiniapp = tossUser("app-goal-old@noreply.booktimer.app");
+
+        setGoal("/api/app/goal", apiTokenService.issue(viaApp), "{\"dailyIncrementSeconds\":1800}")
+                .andExpect(status().isOk());
+        setGoal("/api/miniapp/goal", apiTokenService.issue(viaMiniapp), "{\"dailyIncrementSeconds\":1800}")
+                .andExpect(status().isOk()); // 양성 대조 — 옛 경로가 같은 값을 남긴다
+
+        for (User u : new User[]{viaApp, viaMiniapp}) {
+            assertThat(timerRepository.findByUser(u).orElseThrow().getDailyIncrementSeconds()).isEqualTo(1800);
+            assertThat(goalRepository.findByUserOrderByEffectiveDateAsc(u))
+                    .singleElement()
+                    .satisfies(change -> assertThat(change.getGoalSeconds()).isEqualTo(1800));
+        }
+        setGoal("/api/app/goal", "지어낸토큰", "{\"dailyIncrementSeconds\":600}").andExpect(status().isUnauthorized());
     }
 
     @Test
