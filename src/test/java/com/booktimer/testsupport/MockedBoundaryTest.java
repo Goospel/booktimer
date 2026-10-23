@@ -16,6 +16,7 @@ import com.booktimer.story.StoryRepository;
 import com.booktimer.study.ClaudeStudyAssistant;
 import com.booktimer.study.GeminiStudyPlanner;
 import com.booktimer.study.StudyNoteRepository;
+import com.booktimer.writing.ClaudeWritingAssistant;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
@@ -67,7 +68,10 @@ import java.lang.annotation.Target;
         AppLinkNotificationService.class,
         // 구글·카카오 앱 로그인(PR-M) — 구글·카카오 JWKS. 목 기본값 isGoogleConfigured()·isKakaoConfigured()=false ·
         // verify*()=빈 값은 실제 빈(테스트엔 설정값이 없다)과 같다. 실제 빈의 꺼짐은 AppSecurityChainTest가 잰다.
-        IdTokenVerifier.class
+        IdTokenVerifier.class,
+        // 앱 글쓰기 AI(PR-C) — Claude API. 목 기본값 isEnabled()=false는 실제 빈(테스트엔 키가 없다)과 같다 — AI 단계 테스트는
+        // true로 스텁한다. 실제 빈의 SDK 동작은 ClaudeWritingAssistantTest가 로컬 스텁 HTTP 서버로 잰다.
+        ClaudeWritingAssistant.class
 })
 @MockitoSpyBean(types = {StoryRepository.class, StudyNoteRepository.class})
 public @interface MockedBoundaryTest {

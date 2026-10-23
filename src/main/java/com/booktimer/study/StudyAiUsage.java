@@ -43,7 +43,9 @@ public class StudyAiUsage extends BaseTimeEntity {
     public enum Kind {
         PLAN(3),
         TRANSCRIBE(3),
-        ANALYZE(1);
+        ANALYZE(1),
+        /** 앱 글쓰기 AI 질문·꼬리 질문 공유(책생글 PR-C · v1 REQ-21) — 한 글 최대 8번이라 하루 약 2편. */
+        WRITE(20);
 
         private final int max;
 

@@ -18,6 +18,10 @@ public interface WritingDraftRepository extends JpaRepository<WritingDraft, Long
     /** 본인 글만 — 남의 id는 빈 값(→ 404, 존재 비노출). */
     Optional<WritingDraft> findByIdAndUser(Long id, User user);
 
+    /** 본인 글 + 책을 한 번에 — AI 단계는 트랜잭션 밖에서 돌아(외부 호출) 지연 로딩할 수 없다(WritingAiService). */
+    @Query("select d from WritingDraft d left join fetch d.book where d.id = :id and d.user = :user")
+    Optional<WritingDraft> findWithBook(@Param("id") Long id, @Param("user") User user);
+
     /** 한 책의 글 — 재료 화면의 「이 책으로 쓴 글」. */
     List<WritingDraft> findByUserAndBookOrderByUpdatedAtDesc(User user, Book book);
 
