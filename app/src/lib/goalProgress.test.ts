@@ -1,4 +1,4 @@
-import { goalProgress } from './goalProgress';
+import { goalProgress, isStaleDay, nextMidnightOf } from './goalProgress';
 
 // 범위 보충 §3.4 · REQ-90 — 오늘 초 = 끝난 몫 + 진행 중 몫(기기 자정부터 · 6시간 상한).
 // 시각은 기기 시간대의 날짜로 만든다(테스트가 어느 시간대에서 돌아도 같은 뜻).
@@ -55,4 +55,14 @@ test('REQ-90 · 목표 0이면 읽은 날이 채운 날이고 reachAt은 없다'
   expect(read.filled).toBe(true);
   expect(read.streak).toBe(3);
   expect(read.reachAt).toBeNull();
+});
+
+test('REQ-90 · 전날 23:59에 읽은 대시보드는 00:00:01에 낡았다', () => {
+  const loaded = nextMidnightOf(at(23, 59, 22));
+  expect(isStaleDay(loaded, at(0, 0) + 1000)).toBe(true);
+});
+
+test('REQ-90 · 같은 날 안에서는 대시보드가 낡지 않았다', () => {
+  const loaded = nextMidnightOf(at(0, 1));
+  expect(isStaleDay(loaded, at(23, 59))).toBe(false);
 });

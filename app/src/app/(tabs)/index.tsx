@@ -10,9 +10,10 @@ import type { BookOption, Dashboard } from '../../api/types';
 import { Sheet } from '../../components/Sheet';
 import { Button, Notice, Row, Screen, Txt } from '../../components/ui';
 import { clockLabel, dateLabel, durationLabel } from '../../lib/format';
-import { goalProgress, nextMidnightOf, SESSION_CAP_MS } from '../../lib/goalProgress';
+import { goalProgress, isStaleDay, nextMidnightOf, SESSION_CAP_MS } from '../../lib/goalProgress';
 import { HOME_VARIANT, homeButtons } from '../../lib/homeVariant';
 import { startReading } from '../../lib/measureStart';
+import { type DraftRow, recentDrafts } from '../../lib/recentDrafts';
 import { syncSurfaces } from '../../lib/surfaces';
 import { coverColor, initialOf } from '../../theme/cover';
 import { color, cover, layout, space } from '../../theme/tokens';
@@ -29,13 +30,18 @@ export default function Home() {
   const [goalOpen, setGoalOpen] = useState(false);
   const [pickedId, setPickedId] = useState<number | null>(null);
   const [now, setNow] = useState(Date.now());
+  const [loadedMidnight, setLoadedMidnight] = useState(0);
+  const [drafts, setDrafts] = useState<DraftRow[] | null>(null);
 
   const load = useCallback(async () => {
+    // 글 목록은 따로 읽는다 — 실패해도 홈이 불러오기 오류로 막히지 않는다(못 읽으면 빈 상태 문구도 띄우지 않는다).
+    void reading.drafts().then((list) => setDrafts(recentDrafts(list)), () => undefined);
     try {
       const d = await reading.dashboard();
       setDash(d);
       setLoadError(null);
       setNow(Date.now());
+      setLoadedMidnight(nextMidnightOf(Date.now()));
       void syncSurfaces(d);
     } catch (e) {
       setLoadError(e instanceof Error ? e.message : String(e));
@@ -55,6 +61,17 @@ export default function Home() {
     return () => clearInterval(id);
   }, [measuring]);
 
+  // 자정을 넘기면 다시 읽는다 — 끝난 몫 · 연속이 전날 값이다. 측정 중엔 1초 틱이, 측정 전엔 자정 예약이 깨운다.
+  const staleDay = dash !== null && isStaleDay(loadedMidnight, now);
+  useEffect(() => {
+    if (staleDay) void load();
+  }, [staleDay, load]);
+  useEffect(() => {
+    if (measuring || !dash) return;
+    const id = setTimeout(() => void load(), nextMidnightOf(Date.now()) - Date.now() + 1000);
+    return () => clearTimeout(id);
+  }, [measuring, dash, load]);
+
   const startedAt = measuring && dash?.activeStartedAt ? Date.parse(dash.activeStartedAt) : null;
   const progress = dash
     ? goalProgress({
@@ -68,12 +85,17 @@ export default function Home() {
     : null;
 
   // 달성 순간 — 앱이 앞에 있을 때 흐름 안 Notice(모달 · 축하 효과 없음). 처음 읽은 값이 이미 채움이면 알리지 않는다.
+  // 낡은 날(전날 끝난 몫 + 자정부터의 몫)로는 판정하지 않는다 — 새날 첫 값은 다시 「처음 읽은 값」이다.
   const wasFilled = useRef<boolean | null>(null);
   useEffect(() => {
     if (!progress) return;
+    if (staleDay) {
+      wasFilled.current = null;
+      return;
+    }
     if (wasFilled.current === false && progress.filled) setNotice({ message: `오늘 목표를 채웠어요 · ${progress.streak}일째` });
     wasFilled.current = progress.filled;
-  }, [progress?.filled, progress?.streak]);
+  }, [progress?.filled, progress?.streak, staleDay]);
 
   async function start(bookId: number | null) {
     if (busy) return;
@@ -174,7 +196,7 @@ export default function Home() {
           v="D1"
           numberOfLines={1}
           adjustsFontSizeToFit
-          accessibilityLabel={`읽은 시간 ${durationLabel(elapsed)}`}
+          accessibilityLabel={`측정 중, ${durationLabel(elapsed)}`}
           style={{ fontVariant: ['tabular-nums'], marginVertical: space[4] }}
         >
           {clockLabel(elapsed)}
@@ -242,14 +264,27 @@ export default function Home() {
       {noticeBand}
       <View style={{ gap: space[3] }}>{kinds.start === 'ink' ? [begin, write] : [write, begin]}</View>
       <View style={{ gap: space[2], marginTop: space[4] }}>
-        <Txt v={kinds.writingStage}>이어 쓰기</Txt>
-        <Txt v="L1" style={{ color: color.text }}>
-          아직 쓴 글이 없어요 — 여백이 있는 책에서 「이 책으로 글쓰기」를 눌러 보세요
+        <Txt v={kinds.writingStage} accessibilityRole="header">
+          이어 쓰기
         </Txt>
+        {drafts && drafts.length > 0 ? (
+          <View>
+            {/* 글쓰기 화면(draft/[id])은 PR-H가 맡는다 — 지금은 서재 탭으로 간다 */}
+            {drafts.map((d) => (
+              <Row key={d.id} title={d.title} meta={d.meta} onPress={() => router.navigate('/library')} />
+            ))}
+          </View>
+        ) : drafts ? (
+          <Txt v="L1" style={{ color: color.text }}>
+            아직 쓴 글이 없어요 — 여백이 있는 책에서 「이 책으로 글쓰기」를 눌러 보세요
+          </Txt>
+        ) : null}
       </View>
       {others.length > 0 ? (
         <View style={{ marginTop: space[4] }}>
-          <Txt v="H3">다른 책</Txt>
+          <Txt v="H3" accessibilityRole="header">
+            다른 책
+          </Txt>
           {others.map((b) => (
             <Row key={b.id} title={b.title} meta={b.author ?? undefined} accessibilityHint="이 책으로 바꿔요" onPress={() => setPickedId(b.id)} />
           ))}

@@ -53,7 +53,7 @@ class ReadingContributionServiceTest {
         ReadingGoalChangeRepository goalChanges = mock(ReadingGoalChangeRepository.class);
         when(goalChanges.findByUserOrderByEffectiveDateAsc(any())).thenReturn(List.of());
         Clock fixed = Clock.fixed(INSTANT, ZoneOffset.UTC);
-        ReadingContributionService service = new ReadingContributionService(history, timers, goalChanges, fixed);
+        ReadingContributionService service = new ReadingContributionService(history, timers, goalChanges, mock(ReadingSessionRepository.class), fixed);
 
         User seoul = User.of("s@booktimer.com", "h", "서울", "Asia/Seoul", Role.USER);
         User utc = User.of("u@booktimer.com", "h", "UTC", "UTC", Role.USER);
@@ -76,7 +76,7 @@ class ReadingContributionServiceTest {
         ReadingGoalChangeRepository goalChanges = mock(ReadingGoalChangeRepository.class);
         when(goalChanges.findByUserOrderByEffectiveDateAsc(user)).thenReturn(List.of()); // 이력 없음 → 타이머 목표 폴백
         Clock fixed = Clock.fixed(INSTANT, ZoneOffset.UTC);
-        ReadingContributionService service = new ReadingContributionService(history, timers, goalChanges, fixed);
+        ReadingContributionService service = new ReadingContributionService(history, timers, goalChanges, mock(ReadingSessionRepository.class), fixed);
 
         // 목표 1시간 → 30분은 50% → lv2
         when(timers.findByUser(user)).thenReturn(Optional.of(ReadingTimer.of(3600L)));
@@ -105,7 +105,7 @@ class ReadingContributionServiceTest {
                 ReadingGoalChange.of(user, metDay.minusDays(1), 1800L),
                 ReadingGoalChange.of(user, LocalDate.of(2026, 6, 1), 3600L)));
         ReadingContributionService service =
-                new ReadingContributionService(history, timers, goalChanges, Clock.fixed(INSTANT, ZoneOffset.UTC));
+                new ReadingContributionService(history, timers, goalChanges, mock(ReadingSessionRepository.class), Clock.fixed(INSTANT, ZoneOffset.UTC));
 
         // 현재 목표(3600)로 일괄 판정했다면 30분=50%→lv2였겠지만, 그날 목표(1800)로 보면 100%→lv4.
         assertThat(levelOf(service.contributionGraph(user), metDay)).isEqualTo(4);
@@ -126,7 +126,7 @@ class ReadingContributionServiceTest {
         ReadingGoalChangeRepository goalChanges = mock(ReadingGoalChangeRepository.class);
         when(goalChanges.findByUserOrderByEffectiveDateAsc(user)).thenReturn(List.of());
         ReadingContributionService service =
-                new ReadingContributionService(history, timers, goalChanges, Clock.fixed(INSTANT, ZoneOffset.UTC));
+                new ReadingContributionService(history, timers, goalChanges, mock(ReadingSessionRepository.class), Clock.fixed(INSTANT, ZoneOffset.UTC));
 
         ContributionDay cell = cellOf(service.contributionGraph(user), filled);
         assertThat(cell.manual()).isTrue();
@@ -145,7 +145,7 @@ class ReadingContributionServiceTest {
                 ReadingGoalChange.of(user, LocalDate.of(2026, 5, 19), 1800L),
                 ReadingGoalChange.of(user, LocalDate.of(2026, 6, 1), 3600L)));
         ReadingContributionService service =
-                new ReadingContributionService(history, timers, goalChanges, Clock.fixed(INSTANT, ZoneOffset.UTC));
+                new ReadingContributionService(history, timers, goalChanges, mock(ReadingSessionRepository.class), Clock.fixed(INSTANT, ZoneOffset.UTC));
 
         GoalSchedule schedule = service.goalSchedule(user);
 
@@ -167,7 +167,7 @@ class ReadingContributionServiceTest {
         ReadingGoalChangeRepository goalChanges = mock(ReadingGoalChangeRepository.class);
         when(goalChanges.findByUserOrderByEffectiveDateAsc(any())).thenReturn(List.of());
         ReadingContributionService service =
-                new ReadingContributionService(history, timers, goalChanges, Clock.fixed(INSTANT, ZoneOffset.UTC));
+                new ReadingContributionService(history, timers, goalChanges, mock(ReadingSessionRepository.class), Clock.fixed(INSTANT, ZoneOffset.UTC));
 
         User seoul = User.of("gs@booktimer.com", "h", "서울", "Asia/Seoul", Role.USER);
         User utc = User.of("gu@booktimer.com", "h", "UTC", "UTC", Role.USER);
@@ -175,6 +175,54 @@ class ReadingContributionServiceTest {
         assertThat(service.readingGraph(seoul).goalStreak()).isZero();
         assertThat(service.readingGraph(utc).goalStreak()).isEqualTo(1);
         assertThat(latestDate(service.readingGraph(seoul).graph())).isEqualTo(LocalDate.of(2026, 6, 3)); // 같은 잔디
+    }
+
+    @Test
+    @DisplayName("REQ-88 · 어제 시작해 진행 중인 측정의 자정 전 몫은 어제 채움에 든다")
+    void readingGraph_goalStreak_activeSessionBeforeMidnightCountsForYesterday() {
+        // 오늘 6/2 00:40(UTC). 어제 6/1 끝난 몫 10분 + 23:30에 시작해 아직 도는 측정의 자정 전 30분 = 40분 ≥ 30분.
+        LocalDate today = LocalDate.of(2026, 6, 2);
+        User user = User.of("ga@booktimer.com", "h", "진행중", "UTC", Role.USER);
+        ReadingHistoryService history = mock(ReadingHistoryService.class);
+        when(history.dailyHistory(user)).thenReturn(List.of(
+                new DailyReadingRecord(today.minusDays(1), 10 * 60L, List.of(new BookRead("책", null, 10 * 60L))),
+                new DailyReadingRecord(today.minusDays(2), 30 * 60L, List.of(new BookRead("책", null, 30 * 60L)))));
+        ReadingTimerRepository timers = mock(ReadingTimerRepository.class);
+        when(timers.findByUser(user)).thenReturn(Optional.of(ReadingTimer.of(1800L)));
+        ReadingGoalChangeRepository goalChanges = mock(ReadingGoalChangeRepository.class);
+        when(goalChanges.findByUserOrderByEffectiveDateAsc(user)).thenReturn(List.of());
+        ReadingSessionRepository sessions = mock(ReadingSessionRepository.class);
+        when(sessions.findByUserAndEndedAtIsNull(user))
+                .thenReturn(Optional.of(ReadingSession.start(user, Instant.parse("2026-06-01T23:30:00Z"))));
+        ReadingContributionService service = new ReadingContributionService(history, timers, goalChanges, sessions,
+                Clock.fixed(Instant.parse("2026-06-02T00:40:00Z"), ZoneOffset.UTC));
+
+        ReadingGraph graph = service.readingGraph(user);
+
+        assertThat(graph.goalStreak()).isEqualTo(2); // 어제(10+30) · 그제(30) — 오늘 진행 중 10분은 앱이 얹는다
+        assertThat(cellOf(graph.graph(), today.minusDays(1)).totalSeconds()).isEqualTo(10 * 60L); // 잔디 칸은 끝난 몫 그대로
+    }
+
+    @Test
+    @DisplayName("REQ-88 · 목표 연속은 지난날을 그날 목표로 판정한다(서비스 배선)")
+    void readingGraph_goalStreak_pastDaysJudgedByTheirOwnGoal() {
+        // 오늘 6/2(UTC). 사흘 전 30분 → 오늘 60분으로 올림. 어제·그제 40분은 그날 목표(30분)로 채운 날이다.
+        LocalDate today = LocalDate.of(2026, 6, 2);
+        User user = User.of("gh@booktimer.com", "h", "이력", "UTC", Role.USER);
+        ReadingHistoryService history = mock(ReadingHistoryService.class);
+        when(history.dailyHistory(user)).thenReturn(List.of(
+                new DailyReadingRecord(today.minusDays(1), 2400L, List.of(new BookRead("책", null, 2400L))),
+                new DailyReadingRecord(today.minusDays(2), 2400L, List.of(new BookRead("책", null, 2400L)))));
+        ReadingTimerRepository timers = mock(ReadingTimerRepository.class);
+        when(timers.findByUser(user)).thenReturn(Optional.of(ReadingTimer.of(3600L)));
+        ReadingGoalChangeRepository goalChanges = mock(ReadingGoalChangeRepository.class);
+        when(goalChanges.findByUserOrderByEffectiveDateAsc(user)).thenReturn(List.of(
+                ReadingGoalChange.of(user, today.minusDays(3), 1800L),
+                ReadingGoalChange.of(user, today, 3600L)));
+        ReadingContributionService service = new ReadingContributionService(history, timers, goalChanges,
+                mock(ReadingSessionRepository.class), Clock.fixed(INSTANT, ZoneOffset.UTC));
+
+        assertThat(service.readingGraph(user).goalStreak()).isEqualTo(2);
     }
 
     private static ContributionDay cellOf(ContributionGraph graph, LocalDate date) {

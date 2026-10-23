@@ -2,7 +2,7 @@
 // 주소는 설정에 두지 않는다(지문) — JS 기본값이 TestFlight·업데이트 모두의 주소다(앞당김 §6.6).
 import * as SecureStore from 'expo-secure-store';
 
-import type { AppAuthResponse, AppleIntent, Dashboard } from './types';
+import type { AppAuthResponse, AppleIntent, Dashboard, DraftSummary } from './types';
 
 const BASE_URL = process.env.EXPO_PUBLIC_API_BASE_URL ?? 'https://booktimer.app';
 
@@ -122,4 +122,6 @@ export const reading = {
   start: (bookId: number | null) => request<unknown>('/api/sessions/start', { body: { bookId } }),
   stop: () => request<unknown>('/api/sessions/stop', { method: 'POST' }),
   setGoal: (seconds: number) => request<void>('/api/app/goal', { body: { dailyIncrementSeconds: seconds } }),
+  /** 최근 고친 글 20편(본문 없음) — 홈 「이어 쓰기」 */
+  drafts: () => request<DraftSummary[]>('/api/app/drafts'),
 };

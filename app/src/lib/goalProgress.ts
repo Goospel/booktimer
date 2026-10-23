@@ -52,6 +52,11 @@ export function goalProgress(p: GoalInput): GoalProgress {
   return { todaySeconds, filled, streak, reachAt };
 }
 
+/** 대시보드를 읽은 뒤 자정을 넘겼는가 — 끝난 몫 · 연속이 전날 값이라 다시 읽어야 한다. */
+export function isStaleDay(loadedMidnight: number, now: number): boolean {
+  return nextMidnightOf(now) !== loadedMidnight;
+}
+
 /** 기기 시간대의 다음 자정(ms). */
 export function nextMidnightOf(now: number): number {
   const d = new Date(now);

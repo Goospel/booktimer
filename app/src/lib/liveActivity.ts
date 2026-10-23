@@ -18,6 +18,12 @@ export interface LocalActivity {
 
 export type ActivityAction = 'start' | 'end' | 'restart' | 'none';
 
+/** 이 기기의 활동 값 — 활동이 없으면 null. 값을 모르는 활동(기록 없음 · 둘 이상)은 낡은 것으로 보아 다시 띄우거나 끝낸다. */
+export function knownActivity(saved: string | null, count: number): LocalActivity | null {
+  if (count === 0) return null;
+  return saved && count === 1 ? (JSON.parse(saved) as LocalActivity) : { startedAt: -1, bookTitle: null };
+}
+
 export function liveActivityAction(server: ServerReading, local: LocalActivity | null): ActivityAction {
   if (!server.active || server.startedAt === null) return local ? 'end' : 'none';
   if (!local) return 'start';

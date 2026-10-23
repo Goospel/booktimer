@@ -7,7 +7,7 @@ import { Platform } from 'react-native';
 import ReadingActivity from '../../widgets/ReadingActivity';
 import ReadingWidget from '../../widgets/ReadingWidget';
 import type { Dashboard } from '../api/types';
-import { activityTimes, liveActivityAction, type LocalActivity } from './liveActivity';
+import { activityTimes, knownActivity, liveActivityAction, type LocalActivity } from './liveActivity';
 import { widgetPayload } from './widgetPayload';
 
 const KEY = 'booktimer.liveActivity';
@@ -21,12 +21,7 @@ export async function syncSurfaces(d: Dashboard, now = new Date()): Promise<void
   }
   try {
     const instances = ReadingActivity.getInstances();
-    let local: LocalActivity | null = null;
-    if (instances.length > 0) {
-      const saved = await AsyncStorage.getItem(KEY);
-      // 값을 모르는 활동(기록 없음 · 둘 이상)은 낡은 것으로 보고 다시 띄운다.
-      local = saved && instances.length === 1 ? (JSON.parse(saved) as LocalActivity) : { startedAt: -1, bookTitle: null };
-    }
+    const local = knownActivity(instances.length > 0 ? await AsyncStorage.getItem(KEY) : null, instances.length);
     const startedAt = d.hasActiveSession && d.activeStartedAt ? Date.parse(d.activeStartedAt) : null;
     const action = liveActivityAction({ active: startedAt !== null, startedAt, bookTitle: d.activeBookTitle }, local);
     if (action === 'end' || action === 'restart') {

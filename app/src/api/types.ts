@@ -37,3 +37,16 @@ export interface Dashboard {
   /** 목표를 채운 날의 연속(REQ-89 — 서버 PR-F). 옛 서버엔 없다. */
   graph: { goalStreak?: number };
 }
+
+/** `WritingApiController.DraftSummary` — 책이 풀린 글이면 bookId · bookTitle이 null, 제목은 비어 있을 수 있다. */
+export interface DraftSummary {
+  id: number;
+  bookId: number | null;
+  bookTitle: string | null;
+  title: string | null;
+  /** 첫 비공백 줄 80자 */
+  preview: string;
+  chars: number;
+  updatedAt: string;
+  exported: boolean;
+}
