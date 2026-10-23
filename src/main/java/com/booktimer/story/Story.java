@@ -25,15 +25,20 @@ import java.util.Set;
  * <p>2026-08-16까지는 사람에게 딸린 24시간짜리 「스토리」였다 — 시간 만료도, 사람 단위 스트립도 함께
  * 폐기됐다. 클래스·테이블 이름은 {@code Story}로 남았다: 어휘만 바꾸고 스키마는 두는 게 싸다.
  *
- * <p>글은 <b>두 층</b>이다(2026-08-20): 책에서 옮긴 {@code quote}(선택)와 그에 다는 {@code text}(필수).
+ * <p>글은 <b>두 층</b>이다(2026-08-20): 책에서 옮긴 {@code quote}(선택)와 그에 다는 {@code text}.
  * 위계는 뒤집지 않는다 — 인용이 主가 되면 여백이 「내 독서 기록」이 아니라 명언 카드가 되고, 정당한
- * 인용의 요건(내 글이 主·인용이 從)에서도 멀어진다. 그래서 인용만 있고 주석이 빈 글은 만들 수 없다.
+ * 인용의 요건(내 글이 主·인용이 從)에서도 멀어진다. 그래서 <b>인용만 남긴 글은 나만 보는 여백이다</b>
+ * (2026-10-22 개정, 책생글 REQ-93~95): 생각({@code text})이 {@code ""}인 글은 만들 수 있지만
+ * 「모두의 여백」에 올릴 수 없고({@code StoryService.create}·{@code setShared}), 남의 읽기 경로
+ * ({@code feedRecent}·남이 보는 {@code recentByUser}·{@code marginOf}·{@code assertVisible})에서
+ * 빠진다. 남에게 명언 카드로 보이지 않는다는 목적은 그대로다.
  *
  * <p>책은 <b>본인 소유만</b> — 공개 여부는 묻지 않는다(2026-08-16 결정 2). 비공개 책의 여백은
  * 「나만 보는 메모」라서 쓰기를 막을 이유가 없다.
  *
  * <p><b>가시성 불변식</b>(2026-08-22 팔로우 축 제거로 재정의): 가시성은 <b>읽기 시점</b>에 판정하며,
- * <b>노출 = {@code book.isPublic()}. 그게 전부다.</b> 쓰기 시점엔 아무것도 검사하지 않는다 — 비공개
+ * <b>노출 = {@code book.isPublic()}</b> — 단 생각 빈 여백(인용만)은 본인에게만(REQ-95, 위 2026-08-20
+ * 문단). 쓰기 시점엔 아무것도 검사하지 않는다 — 비공개
  * 책에도 글을 남길 수 있고(결정 2), 그 글은 책이 공개되는 순간부터 보인다.
  * <b>공개 검사를 지우거나 우회하는 코드는 이 불변식 위반이다</b> — 예전엔 팔로우 게이트가 한 겹 더
  * 받쳤지만 지금은 이것이 <b>유일한 방어</b>라, 뚫리면 곧바로 비공개 메모가 낯선 사람에게 샌다.
@@ -128,22 +133,26 @@ public class Story extends BaseTimeEntity {
     }
 
     /**
-     * 여백에 글을 남긴다. 문장은 1~500자 비공백, 책은 <b>필수</b>이고 작성자 소유만(공개 여부 무관),
+     * 여백에 글을 남긴다. 문장은 최대 500자, 책은 <b>필수</b>이고 작성자 소유만(공개 여부 무관),
      * 배경은 닫힌 팔레트 코드만, 인용은 선택이고 최대 200자.
      *
-     * <p><b>주석({@code text})은 인용이 있어도 필수</b>다 — 인용만 남기는 글은 이 검사에 걸린다.
+     * <p><b>생각({@code text})은 인용이 있을 때만 비울 수 있다</b>(REQ-93) — 공백뿐이면 {@code ""}로
+     * 저장한다. 그런 글은 나만 보는 여백이다(클래스 javadoc).
      *
-     * @throws IllegalArgumentException author/문장/책이 없거나, 501자 초과, 남의 책, 팔레트 밖 bgCode,
-     *                                  201자 초과 인용
+     * @throws IllegalArgumentException author/책이 없거나, 생각·인용이 둘 다 비었거나, 501자 초과, 남의 책,
+     *                                  팔레트 밖 bgCode, 201자 초과 인용
      */
     public static Story of(User author, String text, Book book, String bgCode, String quote) {
         if (author == null) {
             throw new IllegalArgumentException("author must not be null");
         }
-        if (text == null || text.isBlank()) {
+        // 공백뿐인 생각은 "" — 인용이 있을 때만 통과한다(REQ-93). 공백 그대로 두지 않는 건 남의 읽기
+        // 경로가 「생각 빈 여백」을 s.text <> '' 하나로 거르기 때문이다
+        boolean hasQuote = quote != null && !quote.isBlank();
+        if ((text == null || text.isBlank()) && !hasQuote) {
             throw new IllegalArgumentException("text must not be blank");
         }
-        String stripped = text.strip();
+        String stripped = text == null ? "" : text.strip();
         if (stripped.length() > MAX_TEXT_LENGTH) {
             throw new IllegalArgumentException("text must be at most " + MAX_TEXT_LENGTH + " chars");
         }
@@ -185,6 +194,11 @@ public class Story extends BaseTimeEntity {
 
     public String getText() {
         return text;
+    }
+
+    /** 생각 빈 여백(인용만 남긴 글)인가 — 나만 보는 여백이다(REQ-93~95, 클래스 javadoc). */
+    public boolean isQuoteOnly() {
+        return text.isEmpty();
     }
 
     /** 책에서 옮긴 문장 — 인용 없이 남긴 글이면 {@code null}. */

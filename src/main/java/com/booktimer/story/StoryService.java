@@ -79,6 +79,7 @@ public class StoryService {
      *
      * <p>{@code shared}(「함께 걸기」)는 <b>기본 꺼짐</b>이고 켜도 여기서는 아무것도 검사하지 않는다 —
      * 비공개 책에서 켜 두는 것도 유효하고, 그 글은 책이 공개되는 순간부터만 보인다({@link Story} 불변식).
+     * 단 하나 — 생각 빈 여백은 켤 수 없다(REQ-94, {@link #applyShared}).
      */
     public Story create(User author, String text, Long bookId, String bgCode, String quote,
                         boolean shared) {
@@ -92,8 +93,21 @@ public class StoryService {
         Book book = bookRepository.findByIdAndUser(bookId, author)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "책을 찾을 수 없습니다"));
         Story story = Story.of(author, text, book, bgCode, quote);
-        story.markShared(shared);
+        applyShared(story, shared);
         return storyRepository.save(story);
+    }
+
+    /**
+     * 「함께 걸기」를 적용하는 유일한 문 — 생각 빈 여백(인용만 남긴 글)은 켤 수 없다(REQ-94). 끄기는
+     * 언제나 된다. 이 검사 덕에 {@code shared = true}를 지는 쿼리(sharedRecent·sharedByIsbn·개수)는
+     * 생각 빈 여백을 따로 거르지 않는다 — 이 문을 우회해 켜면 명언 카드가 「모두의 여백」에 실린다.
+     */
+    private static void applyShared(Story story, boolean shared) {
+        if (shared && story.isQuoteOnly()) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                    "생각을 적은 여백만 모두의 여백에 올릴 수 있어요");
+        }
+        story.markShared(shared);
     }
 
     /**
@@ -126,6 +140,11 @@ public class StoryService {
         }
         List<Story> stories = storyRepository.findByUserAndBookOrderByCreatedAtDescIdDesc(
                 target, book, PageRequest.of(0, MAX_MARGIN_ENTRIES));
+        if (!self) {
+            // 생각 빈 여백은 나만 보는 여백(REQ-95). ponytail: 상한 100을 자른 뒤 거르므로 남에게는
+            // 100장보다 적게 갈 수 있다 — 한 책 여백이 100장을 넘기면 쿼리 술어로 옮긴다.
+            stories = stories.stream().filter(s -> !s.isQuoteOnly()).toList();
+        }
         return new MarginResponse(MarginBook.of(book), target.getNickname(), self,
                 withLikes(stories, viewer));
     }
@@ -153,7 +172,8 @@ public class StoryService {
         List<BookVisibility> visibilities = self
                 ? List.of(BookVisibility.PUBLIC, BookVisibility.PRIVATE)
                 : List.of(BookVisibility.PUBLIC);
-        List<Story> stories = storyRepository.recentByUser(target, visibilities,
+        // 생각 빈 여백은 본인에게만(REQ-95) — visibilities와 같은 「본인이면 넓힌다」 축
+        List<Story> stories = storyRepository.recentByUser(target, visibilities, self,
                 PageRequest.of(0, MAX_MARGIN_ENTRIES));
         Likes likes = stories.isEmpty() ? new Likes(Map.of(), Set.of()) : likesOf(stories, viewer);
         return stories.stream()
@@ -246,7 +266,7 @@ public class StoryService {
         Story story = storyRepository.findById(storyId)
                 .filter(s -> isSameUser(s.getUser(), actor))
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "글을 찾을 수 없습니다"));
-        story.markShared(shared);
+        applyShared(story, shared);
         return new ShareState(story.isShared());
     }
 
@@ -302,11 +322,13 @@ public class StoryService {
      * <p>핸들 없는 주인({@code loginId == null})은 {@code resolveVisibleTarget}이 걸러 낸다 —
      * 그들의 글은 애초에 어느 목록에도 실리지 않는다(N-055).
      *
-     * <p><b>책 게이트가 마지막이자 유일한 방어</b>다(2026-08-22 팔로우 축 제거). 예전엔 그 뒤에
+     * <p><b>책 게이트가 비공개 메모를 막는 유일한 방어</b>다(2026-08-22 팔로우 축 제거). 그 뒤의
+     * 생각 빈 여백 404(REQ-95)는 다른 것을 막는 별도 판정이라 이 방어를 대신하지 않는다. 예전엔 그 뒤에
      * 「팔로워이거나 shared이거나」가 한 겹 더 있었는데, 둘 다 게이트에서 걷었다 — 팔로우는 열람
      * 권한이 아니고({@code marginOf} 참조), {@code shared}는 책축 목록에 실을지를 정하는 배치 값이다.
      * 이중 방어가 사라졌으므로 <b>이 공개 검사를 지우면 곧바로 비공개 메모가 샌다</b>({@link Story}
-     * 불변식). 목록 쪽 미러는 {@link StoryRepository#sharedByIsbn}이고, 둘은 같이 고친다.
+     * 불변식). 책축 목록 {@link StoryRepository#sharedByIsbn}은 미러가 아니다 — 의도적으로 더 좁다
+     * (그 javadoc 참조).
      */
     private void assertVisible(User viewer, Story story) {
         User owner = story.getUser();
@@ -316,6 +338,10 @@ public class StoryService {
         profileService.resolveVisibleTarget(viewer, owner.getLoginId())
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "글을 찾을 수 없습니다"));
         if (!story.getBook().isPublic()) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "글을 찾을 수 없습니다");
+        }
+        // 생각 빈 여백은 나만 보는 여백(REQ-95) — 목록({@code marginOf}·{@code recentByUser})과 같은 판정
+        if (story.isQuoteOnly()) {
             throw new ResponseStatusException(HttpStatus.NOT_FOUND, "글을 찾을 수 없습니다");
         }
     }

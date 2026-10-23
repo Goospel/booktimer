@@ -181,12 +181,34 @@ class StoryTest {
     }
 
     @Test
-    @DisplayName("of: 인용만 있고 주석이 비면 거부 — 주석은 여전히 필수다(2026-08-20 확정)")
-    void of_rejectsQuoteWithoutText() {
+    @DisplayName("REQ-93 · 인용이 있으면 생각이 비어도 저장한다")
+    void of_quoteWithBlankText_savesEmptyText() {
         User me = author();
         Book mine = publicBookOf(me);
 
-        assertThatThrownBy(() -> Story.of(me, "   ", mine, null, "새는 알에서 나오려고 투쟁한다."))
+        Story spaces = Story.of(me, "  \n ", mine, null, "새는 알에서 나오려고 투쟁한다.");
+        Story none = Story.of(me, null, mine, null, "새는 알에서 나오려고 투쟁한다.");
+
+        // 공백 그대로가 아니라 "" — 「생각 빈 여백」 판정(text <> '')이 이 값 하나에 기댄다
+        assertThat(spaces.getText()).isEqualTo("");
+        assertThat(none.getText()).isEqualTo("");
+        assertThat(spaces.getQuote()).isEqualTo("새는 알에서 나오려고 투쟁한다.");
+        // 인용 상한은 생각이 비어도 그대로다
+        assertThatThrownBy(() -> Story.of(me, "", mine, null, "가".repeat(201)))
+                .isInstanceOf(IllegalArgumentException.class);
+    }
+
+    @Test
+    @DisplayName("REQ-93 · 인용도 생각도 비면 거부한다")
+    void of_blankQuoteAndBlankText_rejects() {
+        User me = author();
+        Book mine = publicBookOf(me);
+
+        assertThatThrownBy(() -> Story.of(me, "   ", mine, null, "   "))
+                .isInstanceOf(IllegalArgumentException.class);
+        assertThatThrownBy(() -> Story.of(me, null, mine, null, null))
+                .isInstanceOf(IllegalArgumentException.class);
+        assertThatThrownBy(() -> Story.of(me, "", mine, null, ""))
                 .isInstanceOf(IllegalArgumentException.class);
     }
 
