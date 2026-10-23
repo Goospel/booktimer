@@ -407,7 +407,7 @@ class StoryRepositoryTest {
         storyAt(target, privateBookOf(target, "비공개 책"), "새면 안 되는 메모", NOW.minusSeconds(30));
         em.clear();
 
-        List<Story> entries = storyRepository.recentByUser(target, PUBLIC_ONLY, ALL);
+        List<Story> entries = storyRepository.recentByUser(target, PUBLIC_ONLY, false, ALL);
 
         assertThat(entries).extracting(Story::getText).containsExactly("보여야 하는 글");
         // U-9: fetch join 실증 — @DataJpaTest는 트랜잭션 안이라 지연 로딩이 조용히 성공한다.
@@ -422,7 +422,7 @@ class StoryRepositoryTest {
         storyAt(me, publicBookOf(me, "공개 책"), "공개 책 글", NOW.minusSeconds(60));
         storyAt(me, privateBookOf(me, "비공개 책"), "나만 보는 메모", NOW.minusSeconds(30));
 
-        List<Story> entries = storyRepository.recentByUser(me, SELF_VIEW, ALL);
+        List<Story> entries = storyRepository.recentByUser(me, SELF_VIEW, true, ALL);
 
         assertThat(entries).extracting(Story::getText)
                 .containsExactly("나만 보는 메모", "공개 책 글");
@@ -436,7 +436,7 @@ class StoryRepositoryTest {
         storyAt(target, publicBookOf(target, "같은 제목"), "대상의 글", NOW.minusSeconds(60));
         storyAt(stranger, publicBookOf(stranger, "같은 제목"), "남의 글", NOW.minusSeconds(30));
 
-        List<Story> entries = storyRepository.recentByUser(target, PUBLIC_ONLY, ALL);
+        List<Story> entries = storyRepository.recentByUser(target, PUBLIC_ONLY, false, ALL);
 
         assertThat(entries).extracting(Story::getText).containsExactly("대상의 글");
     }
@@ -451,18 +451,18 @@ class StoryRepositoryTest {
         Story olderTie = storyAt(target, two, "동시각 먼저", NOW.minusSeconds(100));
         Story newerTie = storyAt(target, one, "동시각 나중", NOW.minusSeconds(100));
 
-        assertThat(storyRepository.recentByUser(target, PUBLIC_ONLY, ALL))
+        assertThat(storyRepository.recentByUser(target, PUBLIC_ONLY, false, ALL))
                 .extracting(Story::getId)
                 .containsExactly(newerTie.getId(), olderTie.getId(), oldestIdOf(target));
 
-        assertThat(storyRepository.recentByUser(target, PUBLIC_ONLY, PageRequest.of(0, 2)))
+        assertThat(storyRepository.recentByUser(target, PUBLIC_ONLY, false, PageRequest.of(0, 2)))
                 .extracting(Story::getText)
                 .containsExactly("동시각 나중", "동시각 먼저");
     }
 
     /** 위 tie 테스트의 셋째 글 id — 시각이 가장 오래된 하나. */
     private Long oldestIdOf(User target) {
-        return storyRepository.recentByUser(target, PUBLIC_ONLY, ALL).stream()
+        return storyRepository.recentByUser(target, PUBLIC_ONLY, false, ALL).stream()
                 .min((a, b) -> a.getCreatedAt().compareTo(b.getCreatedAt()))
                 .orElseThrow()
                 .getId();

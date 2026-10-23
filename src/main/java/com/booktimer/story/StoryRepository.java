@@ -29,6 +29,9 @@ public interface StoryRepository extends JpaRepository<Story, Long> {
      * 책의 주인과 글 작성자는 언제나 같으므로({@code Story.of} 불변식) 작성자 기준 집계와 결과가 같다.
      *
      * <p>빈 목록이면 호출하지 않는다 — {@code in ()}은 DB마다 취급이 다르고, 물어볼 것도 없다.
+     *
+     * <p>ponytail: 생각 빈 여백(나만 보는 여백, REQ-95)도 센다 — 남의 프로필 격자 정렬에 「언제 썼나」만
+     * 드러나고 내용은 안 샌다. 그 시각까지 감춰야 하면 {@code and s.text <> ''}를 viewer별로 단다.
      */
     @Query("""
             select s.book.id as bookId, max(s.createdAt) as lastAt
@@ -54,6 +57,9 @@ public interface StoryRepository extends JpaRepository<Story, Long> {
      *
      * <p>글이 없는 책은 <b>행이 아예 없다</b>(group by) — 호출부가 0으로 채운다. 빈 목록이면 호출하지
      * 않는다(recencyByBook과 동일 가드 — {@code in ()}은 DB마다 취급이 다르다).
+     *
+     * <p>ponytail: 생각 빈 여백(나만 보는 여백, REQ-95)도 센다 — 개수만 드러나고 내용은 안 샌다. 그래서
+     * 공개 전환 고지의 N이 실제로 남에게 보일 글 수보다 클 수 있다. 정확히 맞춰야 하면 같은 술어를 단다.
      */
     @Query("""
             select s.book.id as bookId, count(s) as count
@@ -76,6 +82,9 @@ public interface StoryRepository extends JpaRepository<Story, Long> {
      * 소식 피드에서 지키는 유일한 장치가 됐다(예전엔 {@code Story.of} 불변식이 앞을 막아 이건 전환 창
      * 백업이었다). 지우면 남의 비공개 메모가 팔로워 홈에 실린다.
      *
+     * <p><b>생각 빈 여백은 뺀다</b>({@code s.text <> ''}, REQ-95) — 인용만 남긴 글은 나만 보는 여백이고
+     * ({@code Story} javadoc), 소식은 언제나 남(팔로우한 사람)의 글이라 조건 없이 거른다.
+     *
      * <p>작성자·책은 fetch로 즉시 초기화 — 소식 한 줄이 닉네임·책 제목을 읽으므로 홈 진입 핫패스의
      * N+1을 막는다. ToOne fetch만 쓴다.
      */
@@ -83,6 +92,7 @@ public interface StoryRepository extends JpaRepository<Story, Long> {
             select s from Story s join fetch s.user u join fetch s.book b, com.booktimer.follow.Follow f
             where f.followee = u and f.follower = :viewer
               and s.createdAt > :cutoff
+              and s.text <> ''
               and b.visibility = com.booktimer.book.BookVisibility.PUBLIC
               and u.role <> com.booktimer.user.Role.ADMIN
               and u.loginId is not null
@@ -149,6 +159,9 @@ public interface StoryRepository extends JpaRepository<Story, Long> {
      *
      * <p>{@code s.shared}는 보지 않는다 — 사람축은 올리든 말든 다 보인다({@code marginOf}와 같다).
      *
+     * <p>{@code includeQuoteOnly}가 생각 빈 여백(나만 보는 여백, REQ-95)을 가른다: 본인이 보면 {@code true},
+     * 남이 보면 {@code false}({@code s.text <> ''}). {@code visibilities}와 같은 「본인이면 넓힌다」 축이다.
+     *
      * <p>book은 <b>fetch한다</b>({@code findByUserAndBook…}과 반대) — 카드마다 책 라벨을 그리므로
      * 안 하면 100장 × 책 조회(N+1)다. {@code s.user}는 fetch하지 않는다(전부 target 한 사람이고
      * 카드에 작성자 줄이 없다). ToOne fetch + Pageable은 {@code sharedRecent}가 이미 쓰는 조합.
@@ -157,10 +170,12 @@ public interface StoryRepository extends JpaRepository<Story, Long> {
             select s from Story s join fetch s.book b
             where s.user = :target
               and b.visibility in :visibilities
+              and (:includeQuoteOnly = true or s.text <> '')
             order by s.createdAt desc, s.id desc
             """)
     List<Story> recentByUser(@Param("target") User target,
                              @Param("visibilities") Collection<BookVisibility> visibilities,
+                             @Param("includeQuoteOnly") boolean includeQuoteOnly,
                              Pageable pageable);
 
     /**

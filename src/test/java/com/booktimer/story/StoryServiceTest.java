@@ -30,6 +30,7 @@ import java.util.Optional;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyBoolean;
 import static org.mockito.ArgumentMatchers.anyCollection;
 import static org.mockito.ArgumentMatchers.anyList;
 import static org.mockito.ArgumentMatchers.eq;
@@ -973,7 +974,7 @@ class StoryServiceTest {
     void allMarginsOf_capsAtHundred() {
         User target = visibleTarget("target");
         ArgumentCaptor<Pageable> captor = ArgumentCaptor.forClass(Pageable.class);
-        when(storyRepository.recentByUser(eq(target), anyCollection(), captor.capture()))
+        when(storyRepository.recentByUser(eq(target), anyCollection(), anyBoolean(), captor.capture()))
                 .thenReturn(List.of());
 
         service.allMarginsOf(me, "target");
