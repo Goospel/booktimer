@@ -100,6 +100,27 @@ public class WritingService {
         draftRepository.delete(owned(user, id));
     }
 
+    /**
+     * AI 한 라운드 저장(PR-C) — 글을 다시 읽어 질문 기록에 덧붙이고 AI 열만 바꾼다(제목·본문·revision은 그대로 — REQ-47).
+     *
+     * <p><b>읽기와 쓰기가 한 트랜잭션이어야 한다.</b> 트랜잭션 밖에서 다시 읽은 사본을 따로 {@code save}하면, 그 사본이 낡은 경우
+     * (같은 스레드의 EntityManager가 먼저 읽어 둔 것을 돌려줌) 병합이 AI 호출 동안 저장된 본문을 옛 값으로 덮는다 — 2026-10-23
+     * {@code WritingAiServiceTest} REQ-19 실측. 한 트랜잭션 안에서는 낡은 사본이라도 스냅샷과 같아 {@code @DynamicUpdate}가 AI 열만 쓴다.
+     *
+     * @return 덧붙인 뒤의 질문 기록
+     */
+    public QuestionLog recordAiRound(User user, Long id, QuestionLog.Round round, long microUsd) {
+        WritingDraft draft = owned(user, id);
+        QuestionLog next = QuestionLog.parse(draft.getQuestionsJson()).append(round);
+        draft.recordRound(next.toJson(), microUsd, round.at());
+        return next;
+    }
+
+    /** 결과 없는 AI 실패의 원가를 글에 더한다(그사이 지워진 글이면 아무것도 하지 않는다). {@link #recordAiRound}와 같은 이유로 한 트랜잭션. */
+    public void addAiCost(User user, Long id, long microUsd) {
+        draftRepository.findByIdAndUser(id, user).ifPresent(d -> d.addCost(microUsd));
+    }
+
     // ── 책 재료 ─────────────────────────────────────────────────────────────
 
     /** 내 독서 서재 책 — {@code null}이면 400, 남의 것·없는 것·공부 서재 id면 404. */

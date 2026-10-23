@@ -6,6 +6,9 @@ import com.booktimer.story.Story;
 import com.booktimer.user.User;
 import com.booktimer.writing.BookLine;
 import com.booktimer.writing.QuestionLog;
+import com.booktimer.writing.Step;
+import com.booktimer.writing.WritingAiService;
+import com.booktimer.writing.WritingAiService.AiView;
 import com.booktimer.writing.WritingDraft;
 import com.booktimer.writing.WritingMaterial;
 import com.booktimer.writing.WritingService;
@@ -40,10 +43,13 @@ public class WritingApiController {
 
     private final CurrentUserService currentUserService;
     private final WritingService writingService;
+    private final WritingAiService aiService;
 
-    public WritingApiController(CurrentUserService currentUserService, WritingService writingService) {
+    public WritingApiController(CurrentUserService currentUserService, WritingService writingService,
+                                WritingAiService aiService) {
         this.currentUserService = currentUserService;
         this.writingService = writingService;
+        this.aiService = aiService;
     }
 
     /** 최근 고친 글 20편(책이 풀린 글 포함, 본문 없음). */
@@ -95,6 +101,20 @@ public class WritingApiController {
                 writingService.aiConsent(user));
     }
 
+    /**
+     * AI 질문(ASK)·꼬리 질문(FOLLOW) 한 번(PR-C) — 응답에 본문·제목·revision이 없다(REQ-47).
+     *
+     * @return 200 / 400 전제조건 / 403 동의 없음 / 404 남의·없는 글 / 409 revision 다름 / 422 거절 / 429 내 하루 몫 /
+     *         503 키·월 예산·전역 하루 몫·응답 없음
+     */
+    @PostMapping("/api/app/drafts/{id}/ai")
+    public AiView ai(@PathVariable Long id, @RequestBody AiStep request, Principal principal) {
+        if (request.step() == null) {
+            throw new IllegalArgumentException("단계를 골라 주세요");
+        }
+        return aiService.run(currentUserService.resolve(principal), id, request.step(), request.revision(), request.focus());
+    }
+
     /** @return 200 / 503 처리방침 6-3절 시행일 전(REQ-15) */
     @PutMapping("/api/app/ai-consent")
     public ConsentView consent(@RequestBody ConsentRequest request, Principal principal) {
@@ -106,7 +126,7 @@ public class WritingApiController {
         Book book = draft.getBook();
         return new DraftView(draft.getId(), book == null ? null : book.getId(), book == null ? null : book.getTitle(),
                 draft.getTitle(), draft.getBody(), draft.getRevision(), QuestionLog.parse(draft.getQuestionsJson()),
-                draft.getAiUpdatedAt(), writingService.aiConsent(user));
+                draft.getAiUpdatedAt(), aiService.remainingToday(user), writingService.aiConsent(user));
     }
 
     /** IAE 문구가 그대로 400 본문(text/plain — 반사 XSS 방지, charset 명시는 한글 깨짐 방지). */
@@ -135,6 +155,12 @@ public class WritingApiController {
 
     public record ConsentRequest(boolean agree) {}
 
+    /**
+     * @param revision 앱이 마지막으로 저장한 판 — 다르면 409(앱은 저장을 비우고 한 번 다시 부른다)
+     * @param focus    FOLLOW가 답하는 질문(띠) — 없으면 null. 200자까지
+     */
+    public record AiStep(Step step, int revision, String focus) {}
+
     /** @param aiConsent 지금 유효한 동의인가(시행일 이후 시각) · @param aiConsentAt 박힌 시각(철회면 null) */
     public record ConsentView(boolean aiConsent, Instant aiConsentAt) {}
 
@@ -149,13 +175,13 @@ public class WritingApiController {
     }
 
     /**
-     * 글 한 편(본문 포함). v1 §5.1.3의 {@code aiRemainingToday}는 하루 몫 종류({@code Kind.WRITE})가 생기는 PR-C가
-     * 함께 더한다 — 지금 넣으면 0이라는 거짓 값이 된다.
+     * 글 한 편(본문 포함).
      *
-     * @param questions 받은 질문 기록 — 없으면 rounds = []
+     * @param questions        받은 질문 기록 — 없으면 rounds = []
+     * @param aiRemainingToday 오늘 남은 글쓰기 AI 몫({@code Kind.WRITE} — UTC 날짜, KST 오전 9시에 다시 채워진다)
      */
     public record DraftView(Long id, Long bookId, String bookTitle, String title, String body, int revision,
-                            QuestionLog questions, Instant aiUpdatedAt, boolean aiConsent) {}
+                            QuestionLog questions, Instant aiUpdatedAt, int aiRemainingToday, boolean aiConsent) {}
 
     public record MarginItem(Long id, String quote, String text, Instant createdAt) {
         static MarginItem from(Story s) {
