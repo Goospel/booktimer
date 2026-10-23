@@ -24,5 +24,10 @@ public enum AuthProvider {
      * 아이폰 앱 「책생글」에서 Apple 로그인으로 시작한 계정 — 비밀번호 없음, 신원은 {@code users.apple_sub}.
      * 웹 계정에 앱을 연결한 경우엔 TOSS와 같은 규칙으로 바꾸지 않는다 — "Apple로 로그인 가능한가"는 apple_sub가 답한다.
      */
-    APPLE
+    APPLE,
+    /**
+     * 아이폰 앱 「책생글」에서 카카오 로그인으로 시작한 계정(REQ-81) — 비밀번호 없음, 신원은 {@code users.kakao_sub}(회원번호).
+     * 이메일은 늘 합성 주소다(카카오 이메일은 식별자로 쓰지 않는다). 웹 로그인 수단이 없다.
+     */
+    KAKAO
 }

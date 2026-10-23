@@ -54,6 +54,19 @@ class AccountServiceTossUnlinkTest {
     }
 
     @Test
+    @DisplayName("REQ-84 · 카카오가 붙은 계정은 토스 끊기에 지워지지 않는다")
+    void kakaoLinkedTossAccountIsSevered() {
+        User withKakao = tossUsers.register("uk-kakao", null);
+        withKakao.linkKakaoSub("4012345678");
+        userRepository.saveAndFlush(withKakao);
+        tossUsers.register("uk-plain-2", null); // 대조군 — 카카오가 없으면 예전대로 지워진다
+
+        assertThat(accountService.unlinkToss("uk-kakao")).isEqualTo(AccountService.TossUnlinkOutcome.SEVERED);
+        assertThat(accountService.unlinkToss("uk-plain-2")).isEqualTo(AccountService.TossUnlinkOutcome.PURGED);
+        assertThat(userRepository.findByKakaoSub("4012345678")).isPresent();
+    }
+
+    @Test
     @DisplayName("REQ-08 · SEVERED 뒤 앱 토큰은 401이고 Apple LOGIN이 같은 계정을 돌려준다")
     void afterSeverAppTokenDiesAndAppleLoginReturnsSameAccount() throws Exception {
         User u = tossUsers.register("uk-apple-2", null);

@@ -95,6 +95,9 @@ public class SecurityConfig {
                         // 아이폰 앱 Apple 로그인 — 토큰을 받기 전 단계. 매 요청이 Apple identity token으로 신원을 다시 증명하고
                         // (서버에 pending 상태 없음), 검증 전 IP 상한(APP_AUTH)이 남용을 막는다.
                         .requestMatchers("/api/app/auth/apple").permitAll()
+                        // 구글·카카오 로그인(PR-M) — 같은 이유. 매 요청이 ID 토큰으로 신원을 다시 증명하고 검증 전 APP_AUTH가 센다.
+                        .requestMatchers("/api/app/auth/google").permitAll()
+                        .requestMatchers("/api/app/auth/kakao").permitAll()
                         .anyRequest().authenticated())
                 .addFilterBefore(new BearerTokenFilter(apiTokenService),
                         UsernamePasswordAuthenticationFilter.class)

@@ -100,8 +100,11 @@ public class TossAuthApiController {
         }
     }
 
-    /** 로그아웃 — 이 요청에 실린 토큰만 폐기한다(다른 기기의 토큰은 살려 둔다). */
-    @PostMapping("/api/toss/logout")
+    /**
+     * 로그아웃 — 이 요청에 실린 토큰만 폐기한다(다른 기기의 토큰은 살려 둔다). {@code /api/app/logout}은 아이폰 앱의 별칭이다
+     * (REQ-109 — 앱 소스에 {@code /api/toss/} 호출을 두지 않는다). 둘 다 Bearer API 체인이다.
+     */
+    @PostMapping({"/api/toss/logout", "/api/app/logout"})
     public ResponseEntity<Void> logout(HttpServletRequest request) {
         apiTokenService.revoke(BearerTokenFilter.extractToken(request));
         return ResponseEntity.noContent().build();

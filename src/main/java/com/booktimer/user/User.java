@@ -813,11 +813,13 @@ public class User extends BaseTimeEntity {
     /**
      * 토스 없이 로그인할 수단이 있는가 — 토스 연결이 끊길 때 계정을 지울지(없음) 연결만 뗄지(있음)를 가른다.
      * 비밀번호(LOCAL)·구글 가입·인증된 이메일(같은 주소의 구글 로그인이 이 계정으로 흡수된다 — OAuthUserProvisioningService)·
-     * Apple 로그인(아이폰 앱 — 지우면 앱에서 쓴 기록이 토스 쪽 동작 하나로 사라진다).
+     * Apple · 카카오 로그인(아이폰 앱 — 지우면 앱에서 쓴 기록이 토스 쪽 동작 하나로 사라진다, REQ-84).
+     * 구글 고정({@code googleSub})은 더하지 않는다 — 고정이 생기는 계정(GOOGLE · 검증된 LOCAL · TOSS)은 이미 참이다.
      * 인증된 이메일이 구글 주소가 아니면 실제 수단이 없을 수 있지만, 지우는 오판(웹 기록 소실)이 남기는 오판보다 무겁다.
      */
     public boolean canSignInWithoutToss() {
-        return isLocalAccount() || authProvider == AuthProvider.GOOGLE || emailVerified || appleSub != null;
+        return isLocalAccount() || authProvider == AuthProvider.GOOGLE || emailVerified || appleSub != null
+                || kakaoSub != null;
     }
 
     /** 토스가 알려 온 연결 끊기 전용 — 토스 신원을 뗀다. 이후 그 신원은 이 계정을 못 찾고, 웹에서 다시 연결할 수 있다. */
@@ -850,6 +852,23 @@ public class User extends BaseTimeEntity {
     /** 연결된 Apple 신원(sub). 미연결이면 {@code null}. */
     public String getAppleSub() {
         return appleSub;
+    }
+
+    /**
+     * 이 계정에 카카오 신원(회원번호)을 붙인다 — {@link #linkAppleSub}와 같은 once-set 규칙. 쓰는 곳은 카카오 가입 하나다
+     * (카카오 LINK는 비목표). 해제 메서드는 없다 — 탈퇴로만 사라진다.
+     *
+     * @throws IllegalStateException    이미 카카오 신원이 붙어 있는 경우
+     * @throws IllegalArgumentException sub가 null/공백인 경우
+     */
+    public void linkKakaoSub(String sub) {
+        if (this.kakaoSub != null) {
+            throw new IllegalStateException("kakao_sub is immutable and already set: id=" + id);
+        }
+        if (sub == null || sub.isBlank()) {
+            throw new IllegalArgumentException("kakao sub must not be blank");
+        }
+        this.kakaoSub = sub.strip();
     }
 
     /** 연결된 카카오 신원(sub). 미연결이면 {@code null}. */

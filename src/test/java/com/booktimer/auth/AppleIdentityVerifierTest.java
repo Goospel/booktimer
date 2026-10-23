@@ -102,6 +102,32 @@ class AppleIdentityVerifierTest {
         assertThat(verifier.verify("  ")).isEmpty();
     }
 
+    /** 발급 시각만 바꾼 토큰 — 만료는 넉넉히 뒤라 발급 시각 검사만 잰다. */
+    private static String issuedAt(Instant iat) {
+        try {
+            JWTClaimsSet claims = new JWTClaimsSet.Builder().issuer(ISS).audience(BUNDLE).subject(SUB)
+                    .issueTime(Date.from(iat)).expirationTime(Date.from(Instant.now().plusSeconds(86_400))).build();
+            SignedJWT jwt = new SignedJWT(new JWSHeader.Builder(JWSAlgorithm.RS256).keyID("k1").build(), claims);
+            jwt.sign(new RSASSASigner((RSAPrivateKey) APPLE.getPrivate()));
+            return jwt.serialize();
+        } catch (Exception e) {
+            throw new IllegalStateException(e);
+        }
+    }
+
+    @Test
+    @DisplayName("REQ-110 · 11분 전에 발급된 Apple 토큰은 거부한다")
+    void staleAppleTokenRejected() {
+        assertThat(verifier.verify(issuedAt(Instant.now().minusSeconds(660)))).isEmpty();
+    }
+
+    @Test
+    @DisplayName("REQ-110 · 방금 발급된 Apple 토큰은 그대로 통과한다")
+    void freshAppleTokenPasses() {
+        assertThat(verifier.verify(issuedAt(Instant.now()))).contains(SUB);
+        assertThat(verifier.verify(issuedAt(Instant.now().minusSeconds(540)))).as("9분 전").contains(SUB);
+    }
+
     @Test
     @DisplayName("REQ-01 · 다른 키로 서명한 토큰은 거부한다")
     void otherKeySignatureRejected() {

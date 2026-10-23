@@ -230,16 +230,23 @@ class PrivacyControllerTest {
 
     private static final Pattern DATE = Pattern.compile("\\d{4}-\\d{2}-\\d{2}");
     private static final Pattern NOTICE = Pattern.compile("(\\d{4}-\\d{2}-\\d{2}) 개정 공지");
+    /** PR-M 즉시 시행 개정일(KST) — 머지일이 바뀌면 두 문서의 그 날짜 자리와 함께 고친다. */
+    private static final String IMMEDIATE_REVISION = "2026-10-23";
     private static final Pattern KOREAN_DATE = Pattern.compile("\\d+월 \\d+일");
 
     /**
      * 머지일이 밀려 E를 다시 셀 때 ISO 날짜(YYYY-MM-DD) 한 자리라도 놓치면 Red. 두 문서의 개정 공지일이 하나로 같고,
      * 공지일과 E 사이가 31일 이상이며(13절 「시행일 30일 전부터」), 공지일보다 뒤의 날짜는 전부 E다.
      * 「N월 N일」 꼴은 이 검사가 못 보므로 두 문서에 0건임을 함께 못 박는다.
+     *
+     * <p>예외 하나 — PR-M의 즉시 시행 개정일({@link #IMMEDIATE_REVISION}, 「YYYY-MM-DD 개정 —」 줄과 본문의 「… 이후 처음 로그인한
+     * 구글 계정」)은 공지일 뒤지만 E가 아니다. 그 날짜는 두 문서에 「개정 —」 줄로 하나씩 있어야만 허용한다. 머지일이 바뀌면 두 문서의
+     * 그 날짜 자리(privacy 2절 · 개정 이력, terms 제3조 ② · 개정 이력)와 이 상수를 함께 고친다.
      */
     @Test
-    @DisplayName("R-17 · 처리방침·약관: 개정 공지일이 같고 E까지 31일 이상이며, 공지일 뒤의 날짜는 전부 시행일 E다")
+    @DisplayName("R-17 · 처리방침·약관: 개정 공지일이 같고 E까지 31일 이상이며, 공지일 뒤의 날짜는 전부 시행일 E다(PR-M 즉시 시행 개정일 하나만 예외)")
     void legalPages_noticeDateAndEffectiveDateAgree() throws Exception {
+        LocalDate immediate = LocalDate.parse(IMMEDIATE_REVISION);
         LocalDate effective = LocalDate.parse(EFFECTIVE);
         List<LocalDate> notices = new ArrayList<>();
         for (String path : List.of("/privacy", "/terms")) {
@@ -250,10 +257,11 @@ class PrivacyControllerTest {
             assertThat(n.find()).as(path + " 개정 공지일은 하나").isFalse();
             notices.add(notice);
             assertThat(KOREAN_DATE.matcher(html).find()).as(path + " 「N월 N일」 꼴 날짜").isFalse();
+            assertThat(html.split(IMMEDIATE_REVISION + " 개정 —", -1)).as(path + " 즉시 시행 개정 줄은 하나").hasSize(2);
             Matcher d = DATE.matcher(html);
             while (d.find()) {
                 LocalDate date = LocalDate.parse(d.group());
-                if (date.isAfter(notice)) assertThat(date).as(path + " 공지일 뒤 날짜").isEqualTo(effective);
+                if (date.isAfter(notice)) assertThat(date).as(path + " 공지일 뒤 날짜").isIn(effective, immediate);
             }
         }
         assertThat(notices.get(1)).as("두 문서의 개정 공지일").isEqualTo(notices.get(0));

@@ -132,6 +132,30 @@ public class OAuthUserProvisioningService {
         };
     }
 
+    /** 앱 LOGIN의 결과 — 열 계정(없으면 null)과, 같은 이메일의 미검증 LOCAL이 있는가(앱이 REGISTER 전에 확인을 받는다). */
+    public record GoogleLookup(User user, boolean unverifiedWebAccount) {
+    }
+
+    /**
+     * 아이폰 앱 구글 LOGIN(REQ-79) — {@link #provision}과 같은 판정표를 쓰되 <b>계정을 만들지 않고 정책 ①②도 일으키지 않는다</b>.
+     * 유일한 쓰기는 {@code OPEN}인 계정의 빈 고정이다(그래서 읽기 전용 트랜잭션이 아니다). {@code OPEN_UNPINNED}는 열기만 한다.
+     * 이메일 미검증 · 합성 도메인 거부는 앱 검증기({@code IdTokenVerifier})가 먼저 끝냈다.
+     *
+     * @throws OAuth2AuthenticationException 다른 구글 계정에 고정됨/고정 경합({@value #GOOGLE_ACCOUNT_MISMATCH}) — 앱은 409
+     */
+    @Transactional
+    public GoogleLookup lookup(String sub, String email, String hd) {
+        GoogleMatch match = googleAccountResolver.resolve(sub, email, hd);
+        return switch (match.kind()) {
+            case OPEN -> new GoogleLookup(
+                    match.user().getGoogleSub() == null ? pin(match.user(), sub, true) : match.user(), false);
+            case OPEN_UNPINNED -> new GoogleLookup(match.user(), false);
+            case MISMATCH -> throw mismatch(match.user());
+            case PURGE_LOCAL -> new GoogleLookup(null, true);
+            case REASSIGN_TOSS, NONE -> new GoogleLookup(null, false);
+        };
+    }
+
     /**
      * 토스를 연결한 미검증 계정(TOSS 가입이든 웹 LOCAL 가입 후 연결이든)의 이메일을 합성 주소로 옮긴 뒤,
      * 그 이메일로 GOOGLE 계정을 새로 만든다(정책 ②).

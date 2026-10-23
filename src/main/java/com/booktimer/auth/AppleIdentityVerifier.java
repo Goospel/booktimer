@@ -93,7 +93,8 @@ public class AppleIdentityVerifier {
     private static OAuth2TokenValidator<Jwt> validator(String bundleId) {
         OAuth2TokenValidator<Jwt> audience = new JwtClaimValidator<List<String>>(JwtClaimNames.AUD,
                 aud -> aud != null && aud.contains(bundleId));
-        return new DelegatingOAuth2TokenValidator<>(JwtValidators.createDefaultWithIssuer(ISSUER), audience);
+        return new DelegatingOAuth2TokenValidator<>(JwtValidators.createDefaultWithIssuer(ISSUER), audience,
+                new IssuedRecentlyValidator()); // 발급 10분 이내(REQ-110) — 수명 24시간인 토큰의 재사용 창을 줄인다
     }
 
     /** JWKS 조회는 연결 3초·읽기 5초 — permitAll 경로가 요청 스레드를 오래 붙잡지 않게. 키 목록은 디코더가 캐시한다. */

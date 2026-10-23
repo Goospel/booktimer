@@ -1,6 +1,9 @@
 package com.booktimer.web.api;
 
 import com.booktimer.auth.AppleIdentityVerifier;
+import com.booktimer.auth.IdTokenVerificationUnavailableException;
+import com.booktimer.auth.IdTokenVerifier;
+import com.booktimer.auth.IdTokenVerifier.GoogleIdentity;
 import com.booktimer.email.AppLinkNotificationService;
 import com.booktimer.security.RateLimitAction;
 import com.booktimer.security.RateLimitService;
@@ -15,8 +18,12 @@ import com.booktimer.user.UserRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.test.system.CapturedOutput;
+import org.springframework.boot.test.system.OutputCaptureExtension;
 import org.springframework.http.MediaType;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.util.ReflectionTestUtils;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.ResultActions;
@@ -46,6 +53,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
  */
 @MockedBoundaryTest
 @Transactional
+@ExtendWith(OutputCaptureExtension.class)
 class AppAuthApiControllerTest {
 
     private static final String SUB = "000999.feedface01.0001";
@@ -59,6 +67,9 @@ class AppAuthApiControllerTest {
     @Autowired UserRegistrationService registrationService;
     @Autowired TossLinkCodeService linkCodeService;
     @Autowired TossLinkCodeRepository linkCodeRepository;
+    @Autowired IdTokenVerifier idTokens;
+    @Autowired JdbcTemplate jdbcTemplate;
+    @jakarta.persistence.PersistenceContext jakarta.persistence.EntityManager entityManager;
 
     @BeforeEach
     void setUp() {
@@ -283,5 +294,140 @@ class AppAuthApiControllerTest {
     void missingIntent400() throws Exception {
         appleSays(SUB);
         call("{\"identityToken\":\"t\"}").andExpect(status().isBadRequest());
+    }
+
+    // ── 구글 · 카카오 (PR-M) ──────────────────────────────────────────────────
+
+    private static final String KAKAO_SUB = "4012345678";
+    private static final String GOOGLE_SUB = "109876543210000000002";
+
+    private void kakaoSays(String sub) {
+        when(idTokens.isKakaoConfigured()).thenReturn(true);
+        when(idTokens.verifyKakao(any())).thenReturn(Optional.of(sub));
+    }
+
+    private void googleSays(String email) {
+        when(idTokens.isGoogleConfigured()).thenReturn(true);
+        when(idTokens.verifyGoogle(any())).thenReturn(Optional.of(new GoogleIdentity(GOOGLE_SUB, email, "읽는사람", null)));
+    }
+
+    private ResultActions callAt(String provider, String json) throws Exception {
+        return mockMvc.perform(post("/api/app/auth/" + provider).contentType(MediaType.APPLICATION_JSON).content(json));
+    }
+
+    @Test
+    @DisplayName("REQ-81 · 카카오 LOGIN은 모르면 registered:false, REGISTER는 만 14세 확인 뒤 KAKAO 계정 하나(두 번째는 created=false)")
+    void kakaoLoginAndRegister() throws Exception {
+        kakaoSays(KAKAO_SUB);
+        long before = userRepository.count();
+        callAt("kakao", login()).andExpect(status().isOk()).andExpect(jsonPath("$.registered").value(false));
+        callAt("kakao", register(null)).andExpect(status().isBadRequest());
+        assertThat(userRepository.count()).isEqualTo(before);
+
+        callAt("kakao", register(true)).andExpect(status().isOk())
+                .andExpect(jsonPath("$.created").value(true))
+                .andExpect(jsonPath("$.authProvider").value("KAKAO"))
+                .andExpect(jsonPath("$.token").isString());
+        User created = userRepository.findByKakaoSub(KAKAO_SUB).orElseThrow();
+        callAt("kakao", register(true)).andExpect(jsonPath("$.created").value(false))
+                .andExpect(jsonPath("$.userId").value(created.getId()));
+        callAt("kakao", login()).andExpect(jsonPath("$.registered").value(true))
+                .andExpect(jsonPath("$.userId").value(created.getId()));
+    }
+
+    @Test
+    @DisplayName("REQ-81 · 카카오 LINK는 400이다")
+    void kakaoLink400() throws Exception {
+        kakaoSays(KAKAO_SUB);
+        long before = userRepository.count();
+        callAt("kakao", link("ZZZZZZZZ")).andExpect(status().isBadRequest());
+        assertThat(userRepository.count()).isEqualTo(before);
+    }
+
+    @Test
+    @DisplayName("REQ-82 · 레이트리밋 429가 검증보다 먼저다(검증기 호출 0)")
+    void ipLimitBeforeVerifyForGoogleAndKakao() throws Exception {
+        when(idTokens.isGoogleConfigured()).thenReturn(true);
+        when(idTokens.isKakaoConfigured()).thenReturn(true);
+        for (int i = 0; i < RateLimitAction.APP_AUTH.limit(); i++) {
+            rateLimitService.allow(RateLimitAction.APP_AUTH, "127.0.0.1");
+        }
+        callAt("google", login()).andExpect(status().isTooManyRequests());
+        callAt("kakao", login()).andExpect(status().isTooManyRequests());
+        verify(idTokens, never()).verifyGoogle(any());
+        verify(idTokens, never()).verifyKakao(any());
+    }
+
+    @Test
+    @DisplayName("REQ-82 · 설정값이 없으면 그 제공자만 503")
+    void unconfiguredProviderOnly503() throws Exception {
+        kakaoSays(KAKAO_SUB); // 카카오만 켜져 있다 — 구글 목 기본값은 꺼짐
+        callAt("google", login()).andExpect(status().isServiceUnavailable())
+                .andExpect(content().string("구글 로그인이 아직 준비되지 않았어요"));
+        verify(idTokens, never()).verifyGoogle(any());
+        callAt("kakao", login()).andExpect(status().isOk()); // 양성 대조 — 켜진 쪽은 그대로
+    }
+
+    @Test
+    @DisplayName("REQ-82 · 검증기가 거부하면 401, 판정 불가면 503")
+    void rejectedIs401UnavailableIs503() throws Exception {
+        when(idTokens.isGoogleConfigured()).thenReturn(true);
+        when(idTokens.verifyGoogle(any())).thenReturn(Optional.empty());
+        callAt("google", login()).andExpect(status().isUnauthorized());
+        when(idTokens.verifyGoogle(any())).thenThrow(new IdTokenVerificationUnavailableException("down", null));
+        callAt("google", login()).andExpect(status().isServiceUnavailable());
+    }
+
+    @Test
+    @DisplayName("REQ-82 · 성공 로그에 userId만 있고 토큰·sub·이메일이 없다")
+    void successLogHasOnlyUserId(CapturedOutput output) throws Exception {
+        googleSays("logcheck@gmail.com");
+        String body = callAt("google", register(true)).andExpect(status().isOk())
+                .andReturn().getResponse().getContentAsString();
+        String token = body.replaceAll(".*\"token\":\"([^\"]+)\".*", "$1");
+        User google = userRepository.findByEmail("logcheck@gmail.com").orElseThrow();
+        kakaoSays(KAKAO_SUB);
+        callAt("kakao", register(true)).andExpect(status().isOk());
+        User kakao = userRepository.findByKakaoSub(KAKAO_SUB).orElseThrow();
+
+        assertThat(output.getOut())
+                .contains("app auth google ok userId=" + google.getId() + " intent=REGISTER")
+                .contains("app auth kakao ok userId=" + kakao.getId() + " intent=REGISTER")
+                .doesNotContain(token).doesNotContain(GOOGLE_SUB).doesNotContain("logcheck@gmail.com")
+                .doesNotContain(KAKAO_SUB);
+    }
+
+    @Test
+    @DisplayName("REQ-84 · 응답에 원 가입 경로 · Apple 연결 · 구글 고정 여부가 실린다")
+    void responseCarriesProviderAndLinks() throws Exception {
+        User web = webUser("fields@gmail.com", true);
+        web.linkAppleSub(SUB);
+        userRepository.saveAndFlush(web);
+        googleSays("fields@gmail.com");
+
+        callAt("google", login()).andExpect(status().isOk())
+                .andExpect(jsonPath("$.authProvider").value("GOOGLE"))
+                .andExpect(jsonPath("$.appleLinked").value(true))
+                .andExpect(jsonPath("$.googleLinked").value(true))
+                .andExpect(jsonPath("$.unverifiedWebAccount").value(false))
+                .andExpect(jsonPath("$.webAccount").value(true)); // 기존 필드는 그대로(설계자 판단)
+
+        appleSays("000999.other.0002"); // 대조 — Apple 가입 계정은 APPLE · 구글 고정 없음
+        call(register(true)).andExpect(jsonPath("$.authProvider").value("APPLE"))
+                .andExpect(jsonPath("$.appleLinked").value(true))
+                .andExpect(jsonPath("$.googleLinked").value(false));
+    }
+
+    @Test
+    @DisplayName("REQ-79 · google_account_mismatch는 409 평문으로 나간다")
+    void googleMismatchIs409PlainText() throws Exception {
+        User web = webUser("mismatch@gmail.com", true);
+        jdbcTemplate.update("update users set google_sub = ? where id = ?", "someone-else", web.getId());
+        entityManager.clear(); // 낡은 인스턴스(google_sub=null)가 판정에 섞이지 않게
+        googleSays("mismatch@gmail.com");
+
+        callAt("google", login()).andExpect(status().isConflict())
+                .andExpect(content().contentTypeCompatibleWith(MediaType.TEXT_PLAIN))
+                .andExpect(content().string("이 이메일의 계정은 처음 로그인한 구글 계정으로만 열려요 — 그 구글 계정으로 다시 해 주세요"));
     }
 }
