@@ -2,7 +2,18 @@
 // 주소는 설정에 두지 않는다(지문) — JS 기본값이 TestFlight·업데이트 모두의 주소다(앞당김 §6.6).
 import * as SecureStore from 'expo-secure-store';
 
-import type { AppAuthResponse, AppleIntent, Dashboard, DraftSummary } from './types';
+import type {
+  AddRequest,
+  AppAuthResponse,
+  AppleIntent,
+  Dashboard,
+  DraftSummary,
+  MaterialsView,
+  MyBookSummary,
+  SearchResponse,
+  ShelfResponse,
+  ShelfStatus,
+} from './types';
 
 const BASE_URL = process.env.EXPO_PUBLIC_API_BASE_URL ?? 'https://booktimer.app';
 
@@ -96,6 +107,13 @@ function errorMessage(status: number, body: string): string {
   return plain === '' || plain.startsWith('<') ? `요청에 실패했어요 (${status})` : plain;
 }
 
+/** 화면 알림 문구 — 서버 평문 · 연결 문구는 그대로, 문구 없는 실패(위 「요청에 실패했어요 (N)」 · 그 밖 예외)는 화면 문구로. */
+export function failText(e: unknown, fallback: string): string {
+  if (e instanceof NetworkError) return e.message;
+  if (e instanceof ApiError && !/^요청에 실패했어요 \(\d+\)$/.test(e.message)) return e.message;
+  return fallback;
+}
+
 // ── Apple 로그인(v1 §4.3) — LOGIN 먼저, 없으면 같은 토큰으로 REGISTER(시작) · LINK(웹 계정) ──
 const ALREADY_APP_ACCOUNT =
   '이 Apple ID로 만든 책생글 계정이 있어서 그 계정으로 들어왔어요 — 웹 계정과 이으려면 설정에서 이 계정을 지운 뒤 다시 연결해 주세요';
@@ -124,4 +142,23 @@ export const reading = {
   setGoal: (seconds: number) => request<void>('/api/app/goal', { body: { dailyIncrementSeconds: seconds } }),
   /** 최근 고친 글 20편(본문 없음) — 홈 「이어 쓰기」 */
   drafts: () => request<DraftSummary[]>('/api/app/drafts'),
+};
+
+// ── 서재 · 책 담기 · 책 재료(PR-G) — 독서 서재 책만. 공개 범위는 웹이 바꾼다(REQ-40 — 그 문을 부르지 않는다) ──
+export const library = {
+  shelf: () => request<ShelfResponse>('/api/books'),
+  /** 검색어는 인코딩한다(한글 · 공백 · & — REQ-125) */
+  search: (q: string) => request<SearchResponse>(`/api/books/search?q=${encodeURIComponent(q)}`),
+  /** 바코드 ISBN-13 한 건 조회(ItemLookUp) */
+  byIsbn: (isbn: string) => request<SearchResponse>(`/api/books/search?type=isbn&q=${encodeURIComponent(isbn)}`),
+  add: (body: AddRequest) => request<MyBookSummary>('/api/books', { body }),
+  setStatus: (id: number, status: ShelfStatus) => request<MyBookSummary>(`/api/books/${id}/status`, { body: { status } }),
+  materials: (id: number) => request<MaterialsView>(`/api/app/books/${id}/materials`),
+};
+
+// ── 여백 — 본문에 공유 · 배경색 필드를 싣지 않는다(REQ-40 · 사양 §8-18). 생각은 인용이 있을 때만 비울 수 있다(서버 REQ-93) ──
+export const margins = {
+  create: (p: { bookId: number; quote: string; thought: string }) =>
+    request<unknown>('/api/stories', { body: { bookId: p.bookId, quote: p.quote.trim() || null, text: p.thought.trim() } }),
+  remove: (id: number) => request<void>(`/api/stories/${id}`, { method: 'DELETE' }),
 };

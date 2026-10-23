@@ -6,7 +6,7 @@ jest.mock('expo-secure-store', () => ({
   deleteItemAsync: jest.fn(async (k: string) => void mockStore.delete(k)),
 }));
 
-import { ApiError, appleSignIn, NetworkError, request, session, UnauthorizedError } from './client';
+import { ApiError, appleSignIn, failText, library, margins, NetworkError, request, session, UnauthorizedError } from './client';
 
 const fetchMock = jest.fn();
 global.fetch = fetchMock as unknown as typeof fetch;
@@ -91,4 +91,24 @@ describe('Apple 로그인 흐름(v1 §4.3 — LOGIN 먼저, 없으면 같은 토
     expect(r.notice).toContain('그 계정으로 들어왔어요');
     expect(await session.token()).toBe('app');
   });
+});
+
+test('REQ-125 · 검색어는 encodeURIComponent로 싣는다', async () => {
+  fetchMock.mockResolvedValueOnce(reply(200, JSON.stringify({ results: [] })));
+  await library.search('데미안 & 헤세');
+  expect(fetchMock.mock.calls[0][0]).toBe('https://booktimer.app/api/books/search?q=%EB%8D%B0%EB%AF%B8%EC%95%88%20%26%20%ED%97%A4%EC%84%B8');
+});
+
+test('REQ-40 · 여백 생성 본문은 bookId · quote · text뿐이다(shared · bgCode 없음)', async () => {
+  fetchMock.mockResolvedValueOnce(reply(200, '{}'));
+  await margins.create({ bookId: 7, quote: '  ', thought: ' 좋다 ' });
+  expect(JSON.parse(fetchMock.mock.calls[0][1].body)).toEqual({ bookId: 7, quote: null, text: '좋다' });
+});
+
+test('실패 문구 · 서버 평문과 연결 문구는 그대로, 문구 없는 실패(HTML 오류 페이지)는 화면 문구로 바꾼다', () => {
+  const fb = '상태를 바꾸지 못했어요 — 잠시 뒤 다시 해 주세요';
+  expect(failText(new ApiError(404, '책을 찾을 수 없어요'), fb)).toBe('책을 찾을 수 없어요');
+  expect(failText(new NetworkError(), fb)).toBe(new NetworkError().message);
+  expect(failText(new ApiError(400, '요청에 실패했어요 (400)'), fb)).toBe(fb);
+  expect(failText(new Error('boom'), fb)).toBe(fb);
 });

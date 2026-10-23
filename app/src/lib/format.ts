@@ -19,6 +19,21 @@ export function durationLabel(seconds: number): string {
   return m === 0 ? `${h}시간` : `${h}시간 ${m}분`;
 }
 
+/**
+ * 목적격 조사 — 끝 글자에 받침이 있으면 「을」, 없으면 「를」(미니앱 format.ts objectParticle 이식).
+ * 끝의 괄호 · 문장부호 · 공백은 떼고 본다(「데미안 (큰글자책)」 → 책 → 을). 숫자는 읽는 소리, 그 밖은 받침 없음.
+ */
+export function objectParticle(word: string): string {
+  const last = word.replace(/[^\p{L}\p{N}]+$/u, '').at(-1);
+  if (last === undefined) return '를';
+  const code = last.charCodeAt(0);
+  if (code >= 0xac00 && code <= 0xd7a3) return (code - 0xac00) % 28 !== 0 ? '을' : '를';
+  // 영/일/이/삼/사/오/육/칠/팔/구 — 받침 있는 소리만 「을」
+  const digitFinal = [true, true, false, true, false, false, true, true, true, false];
+  if (last >= '0' && last <= '9') return digitFinal[Number(last)] ? '을' : '를';
+  return '를';
+}
+
 /** 「10월 23일」 */
 export function dateLabel(d: Date): string {
   return `${d.getMonth() + 1}월 ${d.getDate()}일`;
