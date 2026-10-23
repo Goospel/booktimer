@@ -1,21 +1,22 @@
 // 홈(시각 보충 §1.4 · 범위 보충 §3.4). 세 모양 — 새 계정 빈 홈 · 측정 전(홈-안A/B) · 측정 중(낮 팔레트 — REQ-107).
 // 측정 전의 표제는 「읽는 책」이고 시계가 아니다(REQ-61). 진입 직후 화면을 덮는 것은 0이다 — 시트는 목표 줄을 눌러야 열린다.
 // 밀린 시간(부채)은 읽지도 그리지도 않는다(REQ-91).
-import { router } from 'expo-router';
+import { router, useFocusEffect } from 'expo-router';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { ActivityIndicator, AppState, Image, Pressable, View } from 'react-native';
+import { ActivityIndicator, AppState, Pressable, View } from 'react-native';
 
 import { reading } from '../../api/client';
-import type { BookOption, Dashboard } from '../../api/types';
+import type { Dashboard } from '../../api/types';
+import { Cover } from '../../components/Cover';
 import { Sheet } from '../../components/Sheet';
 import { Button, Notice, Row, Screen, Txt } from '../../components/ui';
 import { clockLabel, dateLabel, durationLabel } from '../../lib/format';
 import { goalProgress, isStaleDay, nextMidnightOf, SESSION_CAP_MS } from '../../lib/goalProgress';
+import { savedNotice } from '../../lib/marginSave';
 import { startReading } from '../../lib/measureStart';
 import { type DraftRow, recentDrafts } from '../../lib/recentDrafts';
 import { syncSurfaces } from '../../lib/surfaces';
-import { coverColor, initialOf } from '../../theme/cover';
-import { color, cover, layout, space } from '../../theme/tokens';
+import { color, layout, space } from '../../theme/tokens';
 
 const GOAL_CHOICES_MIN = [10, 20, 30, 45, 60, 90, 120]; // 0은 내놓지 않는다(범위 보충 §3.4)
 
@@ -48,10 +49,18 @@ export default function Home() {
   }, []);
 
   useEffect(() => {
-    void load();
     const sub = AppState.addEventListener('change', (s) => s === 'active' && void load());
     return () => sub.remove();
   }, [load]);
+
+  // 포커스마다 다시 읽는다 — 쌓는 화면(책 담기 · 여백 쓰기)이나 서재 탭에서 돌아오면 옛 dash다(첫 마운트도 여기서 읽는다).
+  // 여백 쓰기에서 남기고 돌아오면 맨 위 흐름 안 알림(REQ-135)
+  useFocusEffect(
+    useCallback(() => {
+      if (savedNotice.take()) setNotice({ message: '여백을 남겼어요' });
+      void load();
+    }, [load]),
+  );
 
   const measuring = !!dash?.hasActiveSession && !!dash.activeStartedAt;
   useEffect(() => {
@@ -223,9 +232,8 @@ export default function Home() {
           <Txt v="B2">3 질문을 받아 내 글을 써요</Txt>
         </View>
         {noticeBand}
-        {/* 담기 · 바코드는 서재 화면(PR-G)이 맡는다 — 지금은 서재 탭으로 간다 */}
-        <Button kind="ink" label="첫 책 담기" onPress={() => router.navigate('/library')} />
-        <Button kind="outline" label="바코드로 담기" onPress={() => router.navigate('/library')} />
+        <Button kind="ink" label="첫 책 담기" onPress={() => router.push('/add')} />
+        <Button kind="outline" label="바코드로 담기" onPress={() => router.push('/add?scan=1')} />
         <View style={{ height: layout.sectionGap }} />
         <Button kind="text" label="책 없이 시간만 재기" busy={busy} onPress={() => void start(null)} />
       </Screen>
@@ -241,7 +249,7 @@ export default function Home() {
         {dateLabel(new Date(now))}
       </Txt>
       <View style={{ flexDirection: 'row', gap: space[4], alignItems: 'flex-start' }}>
-        <Cover book={book} />
+        <Cover title={book.title} coverUrl={book.coverUrl} size="card" />
         <View style={{ flex: 1, gap: space[1] }}>
           <Txt v="H2" numberOfLines={3}>
             {book.title}
@@ -256,8 +264,7 @@ export default function Home() {
       {goalLine}
       {noticeBand}
       <View style={{ gap: space[3] }}>
-        {/* 여백 쓰기는 책 화면(PR-G)이 맡는다 — 지금은 서재 탭으로 간다 */}
-        <Button kind="ink" label="여백 남기기" onPress={() => router.navigate('/library')} />
+        <Button kind="ink" label="여백 남기기" onPress={() => router.push(`/margin/${book.id}`)} />
         <Button kind="outline" label="읽기 시작" busy={busy} onPress={() => void start(book.id)} />
       </View>
       <View style={{ gap: space[2], marginTop: space[4] }}>
@@ -289,19 +296,5 @@ export default function Home() {
       ) : null}
       {goalSheet}
     </Screen>
-  );
-}
-
-/** 카드 표지 64×90 — 사진이 없으면 천 표지(제목 해시 색 + 첫 글자). 표지는 꾸밈이라 읽히지 않는다(U-33). */
-function Cover({ book }: { book: BookOption }) {
-  const size = { width: cover.card.width, height: cover.card.height };
-  const hidden = { accessible: false, accessibilityElementsHidden: true, importantForAccessibility: 'no-hide-descendants' as const };
-  if (book.coverUrl) return <Image source={{ uri: book.coverUrl }} style={size} resizeMode="cover" {...hidden} />;
-  return (
-    <View style={[size, { backgroundColor: coverColor(book.title), alignItems: 'center', justifyContent: 'center' }]} {...hidden}>
-      <Txt v="H2" style={{ color: cover.fg }}>
-        {initialOf(book.title)}
-      </Txt>
-    </View>
   );
 }
