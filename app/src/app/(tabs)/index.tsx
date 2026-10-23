@@ -11,7 +11,6 @@ import { Sheet } from '../../components/Sheet';
 import { Button, Notice, Row, Screen, Txt } from '../../components/ui';
 import { clockLabel, dateLabel, durationLabel } from '../../lib/format';
 import { goalProgress, isStaleDay, nextMidnightOf, SESSION_CAP_MS } from '../../lib/goalProgress';
-import { HOME_VARIANT, homeButtons } from '../../lib/homeVariant';
 import { startReading } from '../../lib/measureStart';
 import { type DraftRow, recentDrafts } from '../../lib/recentDrafts';
 import { syncSurfaces } from '../../lib/surfaces';
@@ -233,15 +232,9 @@ export default function Home() {
     );
   }
 
-  // ── 측정 전 — 표제는 읽는 책(홈-안A/B) ──────────────────────────────────
+  // ── 측정 전 — 표제는 읽는 책. 홈-안A(2026-10-23 사용자 선택): 쓰기가 검정 알약 · 읽기 시작은 외곽선 ──
   const book = books.find((b) => b.id === pickedId) ?? books.find((b) => b.id === dash.recentBookId) ?? books[0];
   const others = books.filter((b) => b.id !== book.id);
-  const kinds = homeButtons(HOME_VARIANT);
-  const write = (
-    // 여백 쓰기는 책 화면(PR-G)이 맡는다 — 지금은 서재 탭으로 간다
-    <Button key="write" kind={kinds.write} label="여백 남기기" onPress={() => router.navigate('/library')} />
-  );
-  const begin = <Button key="start" kind={kinds.start} label="읽기 시작" busy={busy} onPress={() => void start(book.id)} />;
   return (
     <Screen scroll>
       <Txt v="L1" style={{ color: color.muted }}>
@@ -262,9 +255,13 @@ export default function Home() {
       </View>
       {goalLine}
       {noticeBand}
-      <View style={{ gap: space[3] }}>{kinds.start === 'ink' ? [begin, write] : [write, begin]}</View>
+      <View style={{ gap: space[3] }}>
+        {/* 여백 쓰기는 책 화면(PR-G)이 맡는다 — 지금은 서재 탭으로 간다 */}
+        <Button kind="ink" label="여백 남기기" onPress={() => router.navigate('/library')} />
+        <Button kind="outline" label="읽기 시작" busy={busy} onPress={() => void start(book.id)} />
+      </View>
       <View style={{ gap: space[2], marginTop: space[4] }}>
-        <Txt v={kinds.writingStage} accessibilityRole="header">
+        <Txt v="H3" accessibilityRole="header">
           이어 쓰기
         </Txt>
         {drafts && drafts.length > 0 ? (
