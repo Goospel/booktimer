@@ -5,11 +5,18 @@ import { canSaveMargin, marginSaveStep, savedNotice, showsThought } from './marg
 test('REQ-44 · 공개 책 첫 저장은 confirm', () => {
   expect(marginSaveStep({ isPublic: true, thought: '좋다', margins: [] })).toBe('confirm');
   // 인용만 남긴 여백(남에게 안 보임)만 있으면 아직 「첫」 저장이다
-  expect(marginSaveStep({ isPublic: true, thought: '좋다', margins: [{ text: '' }, { text: '  ' }] })).toBe('confirm');
+  // 인용은 있어도 생각이 비면 남에게 안 보인다 — quote를 세면 확인 없이 공개된다(변수 픽스처 — 초과 속성 검사 회피)
+  const quoteOnly = [
+    { quote: '옮긴 문장', text: '' },
+    { quote: '옮긴 문장', text: '  ' },
+  ];
+  expect(marginSaveStep({ isPublic: true, thought: '좋다', margins: quoteOnly })).toBe('confirm');
 });
 
 test('REQ-44 · 같은 책 두 번째부터는 save', () => {
   expect(marginSaveStep({ isPublic: true, thought: '또 좋다', margins: [{ text: '처음 남긴 생각' }] })).toBe('save');
+  // 「.」 생각도 서버에 남아 남에게 보인다 — 이미 보이는 여백이 있으니 다시 묻지 않는다(§11-1 — showsThought가 아니라 trim)
+  expect(marginSaveStep({ isPublic: true, thought: '좋다', margins: [{ text: '.' }] })).toBe('save');
 });
 
 test('REQ-44 · 비공개 책은 save', () => {

@@ -49,16 +49,17 @@ export default function Home() {
   }, []);
 
   useEffect(() => {
-    void load();
     const sub = AppState.addEventListener('change', (s) => s === 'active' && void load());
     return () => sub.remove();
   }, [load]);
 
+  // 포커스마다 다시 읽는다 — 쌓는 화면(책 담기 · 여백 쓰기)이나 서재 탭에서 돌아오면 옛 dash다(첫 마운트도 여기서 읽는다).
   // 여백 쓰기에서 남기고 돌아오면 맨 위 흐름 안 알림(REQ-135)
   useFocusEffect(
     useCallback(() => {
       if (savedNotice.take()) setNotice({ message: '여백을 남겼어요' });
-    }, []),
+      void load();
+    }, [load]),
   );
 
   const measuring = !!dash?.hasActiveSession && !!dash.activeStartedAt;

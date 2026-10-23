@@ -1,5 +1,6 @@
 // TDS를 대신할 공통 부품(시각 보충 §3). PR-E는 로그인이 쓰는 것만 둔다 — 뒤 PR이 자기 부품을 더한다.
 // 색은 토큰만 쓴다(REQ-54). 누름 크기는 레이아웃으로 확보한다 — hitSlop으로 채우지 않는다(§4.3 · REQ-56).
+import { useHeaderHeight } from 'expo-router/react-navigation';
 import { type ReactNode, useEffect, useSyncExternalStore } from 'react';
 import {
   AccessibilityInfo,
@@ -152,10 +153,19 @@ export function Badge(p: { label: string; kind?: 'tint' | 'outline' | 'solid' })
 }
 
 // ── 화면 틀 ───────────────────────────────────────────────────────────────
-export function Screen({ children, scroll }: { children: ReactNode; scroll?: boolean }) {
-  const pad = { paddingHorizontal: layout.gutter, paddingVertical: space[6], gap: space[4] };
+// 쌓는 화면(stacked)은 유리 머리(headerTransparent) 밑 y=0부터 그려진다 — 위 안전 영역 대신 머리 높이(상태바 포함)만큼 띄운다(U-60).
+export function Screen(p: { children: ReactNode; scroll?: boolean; stacked?: boolean }) {
+  return p.stacked ? <StackedScreen {...p} /> : <ScreenBody {...p} />;
+}
+
+function StackedScreen(p: { children: ReactNode; scroll?: boolean }) {
+  return <ScreenBody {...p} top={useHeaderHeight() + space[6]} />;
+}
+
+function ScreenBody({ children, scroll, top }: { children: ReactNode; scroll?: boolean; top?: number }) {
+  const pad = { paddingHorizontal: layout.gutter, paddingVertical: space[6], paddingTop: top ?? space[6], gap: space[4] };
   return (
-    <SafeAreaView style={{ flex: 1, backgroundColor: color.paper }}>
+    <SafeAreaView edges={top === undefined ? undefined : ['bottom', 'left', 'right']} style={{ flex: 1, backgroundColor: color.paper }}>
       {scroll ? (
         <ScrollView contentContainerStyle={pad} keyboardShouldPersistTaps="handled">
           {children}

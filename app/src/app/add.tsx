@@ -10,6 +10,7 @@ import type { SearchRow } from '../api/types';
 import { Cover } from '../components/Cover';
 import { Button, Field, Notice, Screen, Txt, useStacked } from '../components/ui';
 import { addBody } from '../lib/bookAdd';
+import { objectParticle } from '../lib/format';
 import { toIsbn13 } from '../lib/isbn';
 import { color, line, space } from '../theme/tokens';
 
@@ -118,7 +119,7 @@ export default function AddBook() {
       const saved = await library.add(addBody(row));
       setRows((list) => list?.map((r, i) => (rowKey(r, i) === key ? { ...r, owned: true } : r)) ?? null);
       setNotice({
-        message: `『${row.title}』을 읽는 중에 담았어요`,
+        message: `『${row.title}』${objectParticle(row.title)} 읽는 중에 담았어요`,
         action: { label: '책 보기', onPress: () => router.push(`/book/${saved.id}`) },
       });
     } catch (e) {
@@ -131,7 +132,7 @@ export default function AddBook() {
   }
 
   return (
-    <Screen scroll>
+    <Screen scroll stacked>
       <Txt v="D2">책 담기</Txt>
       <Field
         key={inputKey}
@@ -186,7 +187,7 @@ function ResultRow(p: { row: SearchRow; stacked: boolean; busy: boolean; onAdd: 
       담음
     </Txt>
   ) : (
-    <Button kind="outline" label="담기" busy={p.busy} accessibilityHint={`『${row.title}』을 서재에 담아요`} onPress={p.onAdd} />
+    <Button kind="outline" label="담기" busy={p.busy} accessibilityHint={`『${row.title}』${objectParticle(row.title)} 서재에 담아요`} onPress={p.onAdd} />
   );
   return (
     <View

@@ -6,7 +6,7 @@ jest.mock('expo-secure-store', () => ({
   deleteItemAsync: jest.fn(async (k: string) => void mockStore.delete(k)),
 }));
 
-import { ApiError, appleSignIn, failText, library, NetworkError, request, session, UnauthorizedError } from './client';
+import { ApiError, appleSignIn, failText, library, margins, NetworkError, request, session, UnauthorizedError } from './client';
 
 const fetchMock = jest.fn();
 global.fetch = fetchMock as unknown as typeof fetch;
@@ -97,6 +97,12 @@ test('REQ-125 · 검색어는 encodeURIComponent로 싣는다', async () => {
   fetchMock.mockResolvedValueOnce(reply(200, JSON.stringify({ results: [] })));
   await library.search('데미안 & 헤세');
   expect(fetchMock.mock.calls[0][0]).toBe('https://booktimer.app/api/books/search?q=%EB%8D%B0%EB%AF%B8%EC%95%88%20%26%20%ED%97%A4%EC%84%B8');
+});
+
+test('REQ-40 · 여백 생성 본문은 bookId · quote · text뿐이다(shared · bgCode 없음)', async () => {
+  fetchMock.mockResolvedValueOnce(reply(200, '{}'));
+  await margins.create({ bookId: 7, quote: '  ', thought: ' 좋다 ' });
+  expect(JSON.parse(fetchMock.mock.calls[0][1].body)).toEqual({ bookId: 7, quote: null, text: '좋다' });
 });
 
 test('실패 문구 · 서버 평문과 연결 문구는 그대로, 문구 없는 실패(HTML 오류 페이지)는 화면 문구로 바꾼다', () => {

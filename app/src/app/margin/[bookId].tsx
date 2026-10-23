@@ -2,9 +2,10 @@
 // 입력은 비제어다(한글 조합 보호 — value를 넘기지 않는다). [남기기]는 아래 막대의 검정 알약이고 키보드 위로 따라 올라온다(결정 C ①).
 // 공개 여부는 이 화면이 직접 읽는다 — 웹에서 비공개로 바꾸고 돌아오면(AppState active) 다시 읽는다(§11-10).
 import { router, useLocalSearchParams, usePreventRemove } from 'expo-router';
+import { useHeaderHeight } from 'expo-router/react-navigation';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Alert, AppState, Keyboard, KeyboardAvoidingView, Linking, ScrollView, View } from 'react-native';
-import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
+import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { ApiError, library, margins as marginApi, NetworkError } from '../../api/client';
 import type { MaterialsView } from '../../api/types';
@@ -12,8 +13,6 @@ import { Sheet } from '../../components/Sheet';
 import { Button, Field, Notice, Txt } from '../../components/ui';
 import { canSaveMargin, marginSaveStep, savedNotice } from '../../lib/marginSave';
 import { color, layout, line, space } from '../../theme/tokens';
-
-const NAV_BAR = 44; // 쌓는 화면 머리 높이 — 공개 API가 없어 안전 영역 위 + 44(U-55가 잰다)
 
 function saveFailText(e: unknown): string {
   if (e instanceof NetworkError) return e.message;
@@ -23,7 +22,7 @@ function saveFailText(e: unknown): string {
 
 export default function MarginWrite() {
   const bookId = Number(useLocalSearchParams<{ bookId: string }>().bookId);
-  const insets = useSafeAreaInsets();
+  const headerHeight = useHeaderHeight(); // 유리 머리(headerTransparent) — 상태바 포함 높이
   const [data, setData] = useState<MaterialsView | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -69,7 +68,7 @@ export default function MarginWrite() {
     Keyboard.dismiss();
     // 다음 틱에 읽는다 — 조합 중이던 마지막 음절이 확정된 뒤의 값(v1 REQ-36 · U-05a)
     setTimeout(() => {
-      if (!data) return;
+      if (!data || loadError) return; // 다시 읽기가 실패했으면 옛 공개 여부로 판정하지 않는다(§5.6)
       const v = latest.current;
       if (!canSaveMargin(v)) return;
       if (marginSaveStep({ isPublic: data.book.isPublic, thought: v.thought, margins: data.margins }) === 'confirm') setSheetOpen(true);
@@ -94,10 +93,16 @@ export default function MarginWrite() {
 
   return (
     <SafeAreaView edges={['bottom']} style={{ flex: 1, backgroundColor: color.paper }}>
-      <KeyboardAvoidingView behavior="padding" keyboardVerticalOffset={insets.top + NAV_BAR} style={{ flex: 1 }}>
+      {/* KAV는 화면 y=0에서 시작한다(머리가 투명이라 위로 깔린다) — 오프셋 0이 키보드 틈 0이다(U-55) */}
+      <KeyboardAvoidingView behavior="padding" keyboardVerticalOffset={0} style={{ flex: 1 }}>
         <ScrollView
           style={{ flex: 1 }}
-          contentContainerStyle={{ paddingHorizontal: layout.gutter, paddingVertical: space[6], gap: space[4] }}
+          contentContainerStyle={{
+            paddingHorizontal: layout.gutter,
+            paddingTop: headerHeight + space[6],
+            paddingBottom: space[6],
+            gap: space[4],
+          }}
           keyboardShouldPersistTaps="handled"
         >
           {data ? (
@@ -105,11 +110,14 @@ export default function MarginWrite() {
               <Txt v="H2" numberOfLines={2}>
                 {data.book.title}
               </Txt>
-              <Txt v="L1" style={{ color: color.text }}>
-                {data.book.isPublic
-                  ? '공개 책이라 생각을 적은 여백은 웹·미니앱의 내 책방에서 다른 사람도 봐요'
-                  : '비공개 책이라 이 여백은 나만 봐요'}
-              </Txt>
+              {/* 다시 읽기가 실패하면 공개 여부를 모른다 — 옛 안내를 두지 않는다 */}
+              {loadError ? null : (
+                <Txt v="L1" style={{ color: color.text }}>
+                  {data.book.isPublic
+                    ? '공개 책이라 생각을 적은 여백은 웹·미니앱의 내 책방에서 다른 사람도 봐요'
+                    : '비공개 책이라 이 여백은 나만 봐요'}
+                </Txt>
+              )}
             </View>
           ) : null}
           {loadError ? <Notice tone="error" message={loadError} action={{ label: '다시 불러오기', onPress: () => void load() }} /> : null}
@@ -161,8 +169,8 @@ export default function MarginWrite() {
             paddingHorizontal: layout.gutter,
           }}
         >
-          {/* 책 정보를 못 읽으면 꺼 둔다 — 공개 여부를 모르면 확인 판정을 못 한다 */}
-          <Button kind="ink" label="남기기" disabled={!dirty || !data} busy={busy} onPress={onSave} />
+          {/* 책 정보를 못 읽으면(다시 읽기 실패 포함) 꺼 둔다 — 공개 여부를 모르면 확인 판정을 못 한다 */}
+          <Button kind="ink" label="남기기" disabled={!dirty || !data || !!loadError} busy={busy} onPress={onSave} />
         </View>
       </KeyboardAvoidingView>
 

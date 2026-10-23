@@ -70,7 +70,7 @@ export default function Book() {
 
   if (!data) {
     return (
-      <Screen>
+      <Screen stacked>
         {loadError ? (
           <Notice
             tone="error"
@@ -95,7 +95,7 @@ export default function Book() {
 
   const { book } = data;
   return (
-    <Screen scroll>
+    <Screen scroll stacked>
       {notice ? <Notice message={notice.message} tone={notice.tone} /> : null}
       <View style={{ flexDirection: 'row', gap: space[4], alignItems: 'flex-start' }}>
         <Cover title={book.title} coverUrl={book.coverUrl} size="head" />

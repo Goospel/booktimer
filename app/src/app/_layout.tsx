@@ -14,6 +14,8 @@ SplashScreen.preventAutoHideAsync();
 
 const stacked = {
   headerShown: true,
+  // 머리 모델 하나 — 유리 캡슐(확정 그림). iOS 버전과 무관하게 내용은 머리 밑 y=0부터, 화면이 useHeaderHeight로 띄운다
+  headerTransparent: true,
   title: '',
   headerBackButtonDisplayMode: 'minimal',
   headerTintColor: color.ink,
@@ -41,7 +43,8 @@ export default function RootLayout() {
   return (
     <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: color.paper } }}>
       <Stack.Protected guard={signedIn}>
-        <Stack.Screen name="(tabs)" />
+        {/* 제목은 화면에 안 보이고 뒤로 기록 메뉴 · VoiceOver에만 쓰인다 — 없으면 route 이름 「(tabs)」가 뜬다(U-60) */}
+        <Stack.Screen name="(tabs)" options={{ title: '책생글' }} />
         {/* 쌓는 화면 셋(PR-G) — 탭을 덮는다. 뒤로 단추는 갈매기만(「(tabs)」 글자 방지 — U-60) */}
         <Stack.Screen name="add" options={stacked} />
         <Stack.Screen name="book/[id]" options={stacked} />
