@@ -17,3 +17,8 @@ test('REQ-56 · 입력칸 경계 색은 muted이고 가는 선(line)이 아니�
   expect(base.field.borderColor).not.toBe(color.line);
   expect(base.field.borderWidth).toBeGreaterThan(0);
 });
+
+test('REQ-56 · 상태 칸(base.segment)의 최소 높이 · 폭은 layout.hit 이상이다', () => {
+  expect(base.segment.minHeight).toBeGreaterThanOrEqual(layout.hit);
+  expect(base.segment.minWidth).toBeGreaterThanOrEqual(layout.hit);
+});

@@ -50,3 +50,83 @@ export interface DraftSummary {
   updatedAt: string;
   exported: boolean;
 }
+
+// ── 서재 · 책 담기 · 책 재료 · 여백(PR-G) ─────────────────────────────────────
+
+/** `book.BookStatus` enum 이름. 화면 낱말은 앱 것(lib/shelf `SECTIONS`) — 서버 `statusLabel`은 읽지 않는다. */
+export type ShelfStatus = 'READING' | 'FINISHED' | 'WANT_TO_READ';
+
+/** `BookApiController.MyBookSummary` 중 앱이 읽는 것만(statusLabel · 공개 바꾸기 필드 없음). */
+export interface MyBookSummary {
+  id: number;
+  title: string;
+  author: string | null;
+  coverUrl: string | null;
+  status: ShelfStatus;
+  isPublic: boolean;
+  seconds: number;
+  storyCount: number;
+}
+
+/** `BookApiController.ShelfResponse` — 독서 서재 책만(공부 서재는 따로). */
+export interface ShelfResponse {
+  books: MyBookSummary[];
+}
+
+/** `BookApiController.SearchRow` — ⚠️ author는 원문(저장값), authorShort는 목록 표시용이다. */
+export interface SearchRow {
+  title: string;
+  author: string | null;
+  authorShort: string | null;
+  isbn13: string | null;
+  coverUrl: string | null;
+  publisher: string | null;
+  purchaseLink: string | null;
+  category: string | null;
+  pubDate: string | null;
+  owned: boolean;
+}
+
+export interface SearchResponse {
+  results: SearchRow[];
+}
+
+/** `BookApiController.AddRequest` — status가 없으면 서버가 WANT_TO_READ로 담는다. */
+export interface AddRequest {
+  title: string;
+  author: string | null;
+  isbn13: string | null;
+  coverUrl: string | null;
+  publisher: string | null;
+  purchaseLink: string | null;
+  category: string | null;
+  pubDate: string | null;
+  status: ShelfStatus;
+}
+
+/** `writing.BookLine` */
+export interface BookLine {
+  id: number;
+  title: string;
+  author: string | null;
+  coverUrl: string | null;
+  status: ShelfStatus;
+  readSeconds: number;
+  sessions: number;
+  isPublic: boolean;
+}
+
+/** `WritingApiController.MarginItem` — 생각(text)은 비어 있을 수 있다(인용만 남긴 여백 — REQ-93). */
+export interface MarginItem {
+  id: number;
+  quote: string | null;
+  text: string | null;
+  createdAt: string;
+}
+
+/** `WritingApiController.MaterialsView` 중 앱이 읽는 것만. 여백은 최근순(최대 200). */
+export interface MaterialsView {
+  book: BookLine;
+  margins: MarginItem[];
+  drafts: DraftSummary[];
+}

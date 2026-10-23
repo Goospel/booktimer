@@ -14,6 +14,7 @@ import {
   type TextInputProps,
   type TextProps,
   type TextStyle,
+  useWindowDimensions,
   View,
   type ViewStyle,
 } from 'react-native';
@@ -91,6 +92,13 @@ export const base = StyleSheet.create({
     justifyContent: 'space-between',
     gap: space[3],
   },
+  /** 상태 세 칸 한 칸(책 화면) — 고른 칸 밑줄은 화면이 얹는다 */
+  segment: {
+    minHeight: layout.hit,
+    minWidth: layout.hit,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   field: {
     minHeight: layout.hit,
     borderWidth: line.thin,
@@ -114,6 +122,32 @@ export function Txt({ v, style, ...rest }: TextProps & { v: Stage }) {
       {...rest}
       style={[{ color: color.ink }, stageStyle(v, { bold }), style]}
     />
+  );
+}
+
+/** 큰 글자(AX — 글자 배율 1.353 이상)면 가로 줄을 세로로 쌓는다(시각 보충 §4.1 배치 규칙). */
+export const useStacked = () => useWindowDimensions().fontScale >= 1.353;
+
+// ── 배지 — T1 · 모서리 sm · 높이 20(시각 보충 §3) ──────────────────────────
+export function Badge(p: { label: string; kind?: 'tint' | 'outline' | 'solid' }) {
+  const kind = p.kind ?? 'tint';
+  return (
+    <View
+      style={{
+        alignSelf: 'flex-start',
+        minHeight: 20,
+        paddingHorizontal: 6,
+        justifyContent: 'center',
+        borderRadius: radius.sm,
+        backgroundColor: kind === 'tint' ? color.paper2 : kind === 'solid' ? color.ink : undefined,
+        borderWidth: kind === 'outline' ? line.thin : 0,
+        borderColor: color.ink,
+      }}
+    >
+      <Txt v="T1" style={{ color: kind === 'solid' ? color.onInk : color.ink }}>
+        {p.label}
+      </Txt>
+    </View>
   );
 }
 
@@ -169,15 +203,22 @@ export function Button(p: {
 }
 
 // ── 입력칸 — 시스템 글꼴 · 경계 muted · 오류는 라벨 뒤에 붙여 읽힌다(§4.2-13) ──
-export function Field({ label, error, style, ...rest }: TextInputProps & { label: string; error?: string }) {
+export function Field({ label, error, aside, style, ...rest }: TextInputProps & { label: string; error?: string; aside?: string }) {
   useEffect(() => {
     if (error) AccessibilityInfo.announceForAccessibility(error);
   }, [error]);
   return (
     <View style={{ gap: space[1] }}>
-      <Txt v="L1" style={{ color: color.text }} accessible={false} importantForAccessibility="no">
-        {label}
-      </Txt>
+      <View style={{ flexDirection: 'row', alignItems: 'flex-end', gap: space[2] }}>
+        <Txt v="L1" style={{ color: color.text, flex: 1 }} accessible={false} importantForAccessibility="no">
+          {label}
+        </Txt>
+        {aside ? (
+          <Txt v="T2" style={{ color: color.muted, fontVariant: ['tabular-nums'] }}>
+            {aside}
+          </Txt>
+        ) : null}
+      </View>
       <TextInput
         accessibilityLabel={error ? `${label}, ${error}` : label}
         placeholderTextColor={color.muted}

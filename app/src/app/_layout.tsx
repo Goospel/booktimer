@@ -12,6 +12,14 @@ import { color } from '../theme/tokens';
 // 지금 바이너리엔 스플래시 모듈이 없어 아무 일도 안 한다(expo-router가 선택 모듈로 부른다 — 시각 §0.2-6). PR-L부터 실제로 붙잡는다.
 SplashScreen.preventAutoHideAsync();
 
+const stacked = {
+  headerShown: true,
+  title: '',
+  headerBackButtonDisplayMode: 'minimal',
+  headerTintColor: color.ink,
+  contentStyle: { backgroundColor: color.paper },
+} as const;
+
 export default function RootLayout() {
   const fontsOk = useAppFonts(); // 실패해도 참 — 빈 화면에 멈추지 않는다(REQ-55)
   const [signedIn, setSignedIn] = useState<boolean | null>(null);
@@ -34,6 +42,10 @@ export default function RootLayout() {
     <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: color.paper } }}>
       <Stack.Protected guard={signedIn}>
         <Stack.Screen name="(tabs)" />
+        {/* 쌓는 화면 셋(PR-G) — 탭을 덮는다. 뒤로 단추는 갈매기만(「(tabs)」 글자 방지 — U-60) */}
+        <Stack.Screen name="add" options={stacked} />
+        <Stack.Screen name="book/[id]" options={stacked} />
+        <Stack.Screen name="margin/[bookId]" options={stacked} />
       </Stack.Protected>
       <Stack.Protected guard={!signedIn}>
         <Stack.Screen name="(auth)/login" />

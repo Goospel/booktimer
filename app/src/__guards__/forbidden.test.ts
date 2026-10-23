@@ -26,6 +26,8 @@ const ROWS: Row[] = [
     skip: [],
     planted: 'const left = d.carriedDebtSeconds',
   },
+  // 공개 범위 · 공유는 웹이 맡는다 — 앱은 그 문을 부르지 않는다(v1 REQ-40). 웹 /books 주소는 걸리지 않는다.
+  { id: 'REQ-40', pattern: /\/(?:visibility|share)\b/, skip: [], planted: "request(`/api/stories/${id}/share`)" },
 ];
 
 const SELF = join('__guards__');
@@ -66,4 +68,11 @@ test('REQ-109 · 앱 소스에 /api/miniapp/·/api/toss/ 호출이 없다(심은
 test('REQ-91 · 앱 소스에 부채 필드 읽기와 지우개 호출이 없다(심은 픽스처는 잡힌다)', () => {
   expect(hits(ROWS[2])).toEqual([]);
   expect(hits(ROWS[2], [{ rel: join('app', 'planted.tsx'), text: "request('/api/miniapp/debt-waiver')" }])).toHaveLength(1);
+});
+
+test('REQ-40 · 앱 소스에 /visibility·/share 호출이 없다(심은 픽스처는 잡힌다)', () => {
+  expect(hits(ROWS[3])).toEqual([]);
+  expect(hits(ROWS[3], [{ rel: join('app', 'planted.tsx'), text: "request(`/api/books/${id}/visibility`, { body })" }])).toHaveLength(1);
+  // 웹 공개 설정 화면(/books)을 여는 주소는 공개 문 호출이 아니다
+  expect(hits(ROWS[3], [{ rel: join('app', 'planted.tsx'), text: "Linking.openURL('https://booktimer.app/books')" }])).toEqual([]);
 });
