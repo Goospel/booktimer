@@ -194,6 +194,28 @@ export function Field({ label, error, style, ...rest }: TextInputProps & { label
   );
 }
 
+// ── 목록 행 — 행 하나 = 접근성 요소 하나(§4.2). 고른 칸은 「선택됨」으로 읽힌다 ──
+export function Row(p: { title: string; meta?: string; onPress: () => void; selected?: boolean; accessibilityHint?: string }) {
+  return (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel={p.meta ? `${p.title}, ${p.meta}` : p.title}
+      accessibilityHint={p.accessibilityHint}
+      accessibilityState={{ selected: !!p.selected }}
+      onPress={p.onPress}
+      onLayout={hitCheck(p.title)}
+      style={({ pressed }) => [base.row, { paddingVertical: space[2] }, pressed && { backgroundColor: color.pressed }]}
+    >
+      <Txt v={p.selected ? 'B1' : 'B2'}>{p.title}</Txt>
+      {p.meta ? (
+        <Txt v="T2" style={{ color: color.muted }}>
+          {p.meta}
+        </Txt>
+      ) : null}
+    </Pressable>
+  );
+}
+
 // ── 알림 — 흐름 안의 띠(화면을 덮는 토스트 대신) ───────────────────────────
 export function Notice(p: { message: string; tone?: 'info' | 'error'; action?: { label: string; onPress: () => void } }) {
   useEffect(() => {

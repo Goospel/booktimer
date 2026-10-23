@@ -19,6 +19,13 @@ const ROWS: Row[] = [
   { id: 'REQ-107', pattern: /\bnight\./, skip: ['theme', 'widgets'], planted: 'backgroundColor: night.desk' },
   // 미니앱 이름 경로를 앱이 부르지 않는다 — 폐기 때 할 일 0(/api/app/* 별칭만).
   { id: 'REQ-109', pattern: /\/api\/(?:miniapp|toss)\//, skip: [], planted: "request('/api/toss/logout')" },
+  // 부채는 영원히 뺀다 — 앱은 밀린 시간 필드를 읽지도 그리지도 않고 지우개를 부르지 않는다.
+  {
+    id: 'REQ-91',
+    pattern: /\b(?:remainingSeconds|carriedDebtSeconds|carryover|debtWaiverAvailable)\b|debt-waiver/,
+    skip: [],
+    planted: 'const left = d.carriedDebtSeconds',
+  },
 ];
 
 const SELF = join('__guards__');
@@ -54,4 +61,9 @@ test('REQ-107 · 화면 코드에 밤 토큰 사용이 없다(위젯·테마 제
 
 test('REQ-109 · 앱 소스에 /api/miniapp/·/api/toss/ 호출이 없다(심은 픽스처는 잡힌다)', () => {
   expect(hits(ROWS[1])).toEqual([]);
+});
+
+test('REQ-91 · 앱 소스에 부채 필드 읽기와 지우개 호출이 없다(심은 픽스처는 잡힌다)', () => {
+  expect(hits(ROWS[2])).toEqual([]);
+  expect(hits(ROWS[2], [{ rel: join('app', 'planted.tsx'), text: "request('/api/miniapp/debt-waiver')" }])).toHaveLength(1);
 });
