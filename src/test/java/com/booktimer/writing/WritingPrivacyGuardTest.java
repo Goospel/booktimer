@@ -2,6 +2,8 @@ package com.booktimer.writing;
 
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.EnumSource;
 import org.springframework.core.io.ClassPathResource;
 
 import java.io.IOException;
@@ -32,15 +34,23 @@ class WritingPrivacyGuardTest {
         assertThat(WritingPrivacyGuard.missingItems(section63())).isEmpty();
     }
 
-    @Test
-    @DisplayName("REQ-43 · 항목 하나를 뺀 픽스처는 빠진 이름을 돌려준다(양성 대조)")
-    void removedItemIsReported() throws IOException {
+    @ParameterizedTest
+    @EnumSource(ClaudeWritingAssistant.SentItem.class)
+    @DisplayName("REQ-43 · 목록에서 항목 하나를 뺀 픽스처는 빠진 이름을 돌려준다(양성 대조 — 다섯 항목 전부)")
+    void removedItemIsReported(ClaudeWritingAssistant.SentItem item) throws IOException {
         String real = section63();
-        String withoutFocus = real.replace("<li>지금 답하는 질문</li>", "");
-        String withoutClosing = real.replace("그 밖의 이용 기록은 보내지 않습니다", "");
+        // 머리 문단에 같은 낱말이 있어도(「지금 쓰는 글」) 목록 항목이 빠진 것을 잡아야 한다
+        String without = real.replace("<li>" + item.privacyLabel + "</li>", "");
 
-        assertThat(withoutFocus).as("픽스처가 실제로 항목을 뺐다").isNotEqualTo(real);
-        assertThat(WritingPrivacyGuard.missingItems(withoutFocus)).containsExactly("지금 답하는 질문");
+        assertThat(without).as("픽스처가 실제로 항목을 뺐다").isNotEqualTo(real);
+        assertThat(WritingPrivacyGuard.missingItems(without)).containsExactly(item.privacyLabel);
+    }
+
+    @Test
+    @DisplayName("REQ-43 · 「그 밖의 이용 기록은 보내지 않습니다」를 뺀 픽스처와 빈 문서는 빠진 것을 돌려준다")
+    void removedClosingIsReported() throws IOException {
+        String withoutClosing = section63().replace("그 밖의 이용 기록은 보내지 않습니다", "");
+
         assertThat(WritingPrivacyGuard.missingItems(withoutClosing)).containsExactly("그 밖의 이용 기록은 보내지 않습니다");
         assertThat(WritingPrivacyGuard.missingItems("")).hasSize(6);
     }

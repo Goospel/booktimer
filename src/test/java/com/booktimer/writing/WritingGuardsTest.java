@@ -69,7 +69,7 @@ class WritingGuardsTest {
     @DisplayName("REQ-24 · 121자 질문은 버린다")
     void length() {
         String ok = "가".repeat(119) + "?";
-        String tooLong = "나".repeat(120) + "?";
+        String tooLong = "나".repeat(119) + "??"; // 121자 — 120자로 잘라도 ?로 끝나 「자르기」 구현과 갈린다
 
         assertThat(WritingGuards.ask(of(q(tooLong), q(ok)), MATERIAL).orElseThrow().questions())
                 .extracting(Question::text).containsExactly(ok);
@@ -85,6 +85,21 @@ class WritingGuardsTest {
 
         assertThat(WritingGuards.ask(raw, MATERIAL).orElseThrow().questions()).extracting(Question::anchor)
                 .containsExactly("알에서 나오려고", null, null, null);
+    }
+
+    @Test
+    @DisplayName("REQ-24 · anchor는 40자까지 남기고 41자는 비운다(두 조각 모두 출처에 있다)")
+    void anchorLength() {
+        String longLine = "가나다라마바사아자차".repeat(5);
+        String material = WritingGuards.materialText("[책] 데미안 / 헤르만 헤세\n### 여백 · 2026-09-03\n옮긴 문장: " + longLine + "\n\n");
+        String forty = longLine.substring(0, 40);
+        String fortyOne = longLine.substring(0, 41);
+        assertThat(material).contains(forty, fortyOne);
+
+        Questions raw = of(new Question("무엇이 남았나요?", forty), new Question("왜 그랬나요?", fortyOne));
+
+        assertThat(WritingGuards.ask(raw, material).orElseThrow().questions()).extracting(Question::anchor)
+                .containsExactly(forty, null);
     }
 
     @Test

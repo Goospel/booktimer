@@ -9,7 +9,10 @@ import com.sun.net.httpserver.HttpServer;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.boot.test.system.CapturedOutput;
+import org.springframework.boot.test.system.OutputCaptureExtension;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.json.JsonMapper;
 
@@ -94,6 +97,17 @@ class ClaudeWritingAssistantTest {
         ClaudeWritingAssistant assistant = stub(ex -> json(ex, 200, ok("end_turn")), sent, Duration.ofSeconds(10));
         assistant.follow(MATERIAL, List.of("q?"), null, "글");
         assertThat(sent.get()).as("실제로 나간 요청 본문").isNotNull().doesNotContain("cache_control");
+        assertThat(JsonMapper.builder().build().readTree(sent.get()).path("system").asString())
+                .as("실제로 나간 FOLLOW 요청의 system은 상수 그대로").isEqualTo(ClaudeWritingAssistant.system(Step.FOLLOW));
+    }
+
+    @Test
+    @DisplayName("REQ-22 · sentChars는 시스템 + user 블록 글자 수 합이다")
+    void sentCharsIsSystemPlusBlocks() {
+        assertThat(ClaudeWritingAssistant.sentChars(Step.ASK, List.of(MATERIAL)))
+                .isEqualTo(ClaudeWritingAssistant.system(Step.ASK).length() + MATERIAL.length());
+        assertThat(ClaudeWritingAssistant.sentChars(Step.FOLLOW, List.of(MATERIAL, "뒤 블록")))
+                .isEqualTo(ClaudeWritingAssistant.system(Step.FOLLOW).length() + MATERIAL.length() + "뒤 블록".length());
     }
 
     @Test
@@ -155,7 +169,7 @@ class ClaudeWritingAssistantTest {
         assertThat(r.failure()).isNull();
         assertThat(r.value().questions()).extracting(Question::text).containsExactly("어떤 투쟁이었나요?");
         assertThat(r.value().questions().get(0).anchor()).isEqualTo("알에서 나오려고");
-        assertThat(r.usage()).isEqualTo(new ClaudeWritingAssistant.Usage(1200, 0, 0, 300));
+        assertThat(r.usage()).isEqualTo(new ClaudeWritingAssistant.Usage(1200, 7, 11, 300));
     }
 
     @Test
@@ -179,6 +193,27 @@ class ClaudeWritingAssistantTest {
         assertThat(r.failure()).isEqualTo(Failure.UNAVAILABLE);
         assertThat(r.value()).isNull();
         assertThat(r.usage()).as("잘린 응답도 과금된다 — 비용 기록용").isNotNull();
+
+        // 본문 JSON이 온전해도 stop_reason이 max_tokens면 성공이 아니다(파싱 실패에 기대지 않는 판별)
+        stop();
+        WritingAiResult<Questions> whole = stub(ex -> json(ex, 200, ok("max_tokens")), null, Duration.ofSeconds(10))
+                .ask(MATERIAL);
+        assertThat(whole.failure()).isEqualTo(Failure.UNAVAILABLE);
+        assertThat(whole.value()).isNull();
+        assertThat(whole.usage()).isNotNull();
+    }
+
+    @Test
+    @ExtendWith(OutputCaptureExtension.class)
+    @DisplayName("REQ-28 · 스키마와 어긋난 응답의 파싱 실패 로그에 모델 응답 원문(사용자 글 조각)이 남지 않는다")
+    void parseFailureDoesNotLogBody(CapturedOutput output) throws Exception {
+        String bad = "[{\"type\":\"text\",\"text\":\"{\\\"questions\\\":\\\"BODYMARKER-회사를 그만두던 날\\\"}\"}]";
+        WritingAiResult<Questions> r = stub(ex -> json(ex, 200, message("end_turn", bad)), null, Duration.ofSeconds(10))
+                .ask(MATERIAL);
+
+        assertThat(r.failure()).isEqualTo(Failure.UNAVAILABLE);
+        assertThat(output.getAll()).as("양성 대조 — 로그가 실제로 잡혔다").contains("파싱 실패");
+        assertThat(output.getAll()).doesNotContain("BODYMARKER");
     }
 
     @Test
@@ -257,8 +292,8 @@ class ClaudeWritingAssistantTest {
     private static String message(String stop, String content) {
         return "{\"id\":\"msg_stub\",\"type\":\"message\",\"role\":\"assistant\",\"model\":\"claude-haiku-5-5\","
                 + "\"content\":" + content + ",\"stop_reason\":\"" + stop + "\",\"stop_sequence\":null,"
-                + "\"usage\":{\"input_tokens\":1200,\"output_tokens\":300,\"cache_creation_input_tokens\":0,"
-                + "\"cache_read_input_tokens\":0}}";
+                + "\"usage\":{\"input_tokens\":1200,\"output_tokens\":300,\"cache_creation_input_tokens\":7,"
+                + "\"cache_read_input_tokens\":11}}"; // 둘을 다른 값으로 — 어느 쪽을 읽었는지 묻는다
     }
 
     private static List<String> valueDefaults(Class<?> type) {

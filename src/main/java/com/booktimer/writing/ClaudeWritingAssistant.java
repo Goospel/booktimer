@@ -167,7 +167,8 @@ public class ClaudeWritingAssistant {
                 return parsed == null ? new WritingAiResult<>(null, Failure.UNAVAILABLE, usage)
                         : new WritingAiResult<>(parsed, null, usage);
             } catch (RuntimeException e) {
-                log.warn("Claude writing {} 파싱 실패: {}", step, e.toString());
+                // 클래스 이름만 — SDK의 파싱 예외 메시지는 모델 응답 원문(사용자 글·여백 조각)을 통째로 싣는다.
+                log.warn("Claude writing {} 파싱 실패: {}", step, e.getClass().getSimpleName());
                 return new WritingAiResult<>(null, Failure.UNAVAILABLE, usage);
             }
         } catch (RateLimitException e) {
@@ -184,8 +185,8 @@ public class ClaudeWritingAssistant {
             log.warn("Claude writing {} 응답 없음: {}", step, e.toString());
             return new WritingAiResult<>(null, Failure.NO_RESPONSE, null);
         } catch (Exception e) {
-            // 키·본문은 로그에 남기지 않는다 — toString만.
-            log.warn("Claude writing {} 실패: {}", step, e.toString());
+            // 키·본문은 로그에 남기지 않는다 — 클래스 이름만(파싱 예외 메시지는 응답 원문을 싣는다).
+            log.warn("Claude writing {} 실패: {}", step, e.getClass().getSimpleName());
             return new WritingAiResult<>(null, Failure.UNAVAILABLE, null);
         }
     }

@@ -16,11 +16,14 @@ final class WritingPrivacyGuard {
     private WritingPrivacyGuard() {
     }
 
-    /** {@link SentItem#privacyLabel} 전부 + {@value #NOTHING_ELSE} 중 6-3절 본문에 없는 것. */
+    /**
+     * {@link SentItem#privacyLabel} 전부 + {@value #NOTHING_ELSE} 중 6-3절 본문에 없는 것. 항목은 {@code <li>이름</li>}으로만 찾는다 —
+     * 머리 문단에 같은 낱말(「지금 쓰는 글」)이 있어 맨 contains는 목록 항목이 빠져도 통과했다.
+     */
     static List<String> missingItems(String privacySection63) {
         List<String> missing = new ArrayList<>();
         for (SentItem item : SentItem.values()) {
-            if (!privacySection63.contains(item.privacyLabel)) {
+            if (!privacySection63.contains("<li>" + item.privacyLabel + "</li>")) {
                 missing.add(item.privacyLabel);
             }
         }

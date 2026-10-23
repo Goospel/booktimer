@@ -197,6 +197,24 @@ class WritingAiServiceTest {
     }
 
     @Test
+    @DisplayName("REQ-19 · revision이 다르면 409이고 몫·호출·비용이 0")
+    void staleRevisionIs409BeforeQuota() {
+        User u = user(true);
+        WritingDraft d = draft(u, true, null);
+        int globalBefore = globalUsed();
+        given(assistant.ask(anyString())).willReturn(answer("어떤 투쟁이었나요?"));
+
+        assertThat(statusOf(() -> aiService.run(u, d.getId(), Step.ASK, d.getRevision() + 1, null)))
+                .isEqualTo(HttpStatus.CONFLICT);
+        assertThat(remaining(u)).isEqualTo(Kind.WRITE.max());
+        assertThat(globalUsed()).isEqualTo(globalBefore);
+        verify(assistant, never()).ask(anyString());
+        assertThat(draftRepository.findById(d.getId()).orElseThrow().getAiCostMicroUsd()).isZero();
+        // 양성 대조 — 맞는 revision이면 라운드가 생긴다
+        assertThat(aiService.run(u, d.getId(), Step.ASK, d.getRevision(), null).questions().rounds()).hasSize(1);
+    }
+
+    @Test
     @DisplayName("REQ-19 · 어댑터 실패는 두 몫을 환불한다")
     void failureRefundsBoth() {
         User u = user(true);
@@ -382,6 +400,7 @@ class WritingAiServiceTest {
         User u = user(true);
         WritingDraft d = draft(u, true, null);
         long before = monthSpend();
+        int globalBefore = globalUsed();
         given(assistant.ask(anyString())).willReturn(answer("이렇게 써 보세요.")); // 물음표 없음 → 가드가 비운다
 
         assertThat(statusOf(() -> aiService.run(u, d.getId(), Step.ASK, d.getRevision(), null)))
@@ -393,6 +412,23 @@ class WritingAiServiceTest {
         assertThat(after.getAiCostMicroUsd()).isEqualTo(cost);
         assertThat(QuestionLog.parse(after.getQuestionsJson()).rounds()).isEmpty();
         assertThat(remaining(u)).isEqualTo(Kind.WRITE.max());
+        assertThat(globalUsed()).as("전역 하루 몫도 돌려준다").isEqualTo(globalBefore);
+    }
+
+    @Test
+    @DisplayName("REQ-22 · 성공한 호출의 usage 원가가 월 누적과 글에 더해진다")
+    void successCostsMonthAndDraft() {
+        User u = user(true);
+        WritingDraft d = draft(u, true, null);
+        long before = monthSpend();
+        given(assistant.ask(anyString())).willReturn(answer("새 질문인가요?"));
+
+        aiService.run(u, d.getId(), Step.ASK, d.getRevision(), null);
+
+        long cost = AiPrice.microUsd(MODEL, new Usage(1_000, 0, 0, 500));
+        assertThat(cost).isPositive();
+        assertThat(monthSpend() - before).isEqualTo(cost);
+        assertThat(draftRepository.findById(d.getId()).orElseThrow().getAiCostMicroUsd()).isEqualTo(cost);
     }
 
     @Test
