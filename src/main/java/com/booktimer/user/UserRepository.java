@@ -52,6 +52,16 @@ public interface UserRepository extends JpaRepository<User, Long> {
     /** Apple sub로 사용자 조회 — 아이폰 앱 로그인의 신원 키(UNIQUE, V100). 미연결 계정은 NULL이라 걸리지 않는다. */
     Optional<User> findByAppleSub(String appleSub);
 
+    /** 카카오 sub로 사용자 조회 — 아이폰 앱 카카오 로그인의 신원 키(UNIQUE, V102). */
+    Optional<User> findByKakaoSub(String kakaoSub);
+
+    /**
+     * 고정된 구글 sub로 사용자 조회(REQ-115 판정 1단계). ⚠️ null을 넘기지 않는다 — 파생 쿼리는 null을 {@code IS NULL}로
+     * 바꿔 고정 없는 계정 전부를 찾는다({@link GoogleAccountResolver}가 막는다). 운영 정렬이 대소문자를 가리지 않을 수 있어
+     * 돌아온 행의 값을 호출부가 {@code equals}로 다시 대조한다.
+     */
+    Optional<User> findByGoogleSub(String googleSub);
+
     boolean existsByEmail(String email);
 
     /** 정규화된 login_id가 이미 쓰이는지 — 온보딩에서 공개 핸들 확정 전 유니크 사전 확인(uk_users_login_id). */
@@ -132,6 +142,19 @@ public interface UserRepository extends JpaRepository<User, Long> {
             """)
     int claimReadingReminder(@Param("id") Long id, @Param("now") java.time.Instant now,
                              @Param("threshold") java.time.Instant threshold);
+
+    /**
+     * 구글 신원 고정(REQ-115) — {@code google_sub}가 비어 있을 때만 쓰고 반영 행 수를 돌려준다(1 = 고정, 0 = 그사이 누가 고정).
+     *
+     * <p>엔티티 setter가 아니라 조건부 단독 UPDATE인 이유: {@code User}엔 {@code @Version}이 없어, 고정이 빈 계정에 두 요청(웹과
+     * 앱 · 두 기기)이 동시에 처음 오면 둘 다 null을 읽고 둘 다 쓴다. 이 문은 once-set을 DB가 지킨다. 다른 계정이 같은 sub를
+     * 이미 가졌으면 이 문 안에서 바로 유니크 위반이 난다(커밋 때가 아니라 — 호출부가 잡을 수 있다). clear 뒤라 호출부는
+     * 새 값을 보려면 다시 읽는다({@code claimReadingReminder}와 같은 꼴).
+     */
+    @Transactional
+    @Modifying(flushAutomatically = true, clearAutomatically = true)
+    @Query("update User u set u.googleSub = :sub where u.id = :id and u.googleSub is null")
+    int pinGoogleSubIfEmpty(@Param("id") Long id, @Param("sub") String sub);
 
     /** 선점 반납 — 발송이 실패하면 선점 전 값으로 되돌려 다음 차례에 다시 보게 한다. */
     @Transactional

@@ -2,6 +2,7 @@ package com.booktimer.testsupport;
 
 import com.booktimer.auth.AppleIdentityVerifier;
 import com.booktimer.auth.AppleTokenRevoker;
+import com.booktimer.auth.IdTokenVerifier;
 import com.booktimer.auth.TossLoginClient;
 import com.booktimer.book.BookSearchClient;
 import com.booktimer.book.CoupangDeeplinkClient;
@@ -63,7 +64,10 @@ import java.lang.annotation.Target;
         // 실제 빈(테스트엔 키가 없다)과 같다 — 앱 신원 테스트는 true로 스텁한다. 실제 빈의 꺼짐은 AppSecurityChainTest가 잰다.
         AppleIdentityVerifier.class,
         AppleTokenRevoker.class,
-        AppLinkNotificationService.class
+        AppLinkNotificationService.class,
+        // 구글·카카오 앱 로그인(PR-M) — 구글·카카오 JWKS. 목 기본값 isGoogleConfigured()·isKakaoConfigured()=false ·
+        // verify*()=빈 값은 실제 빈(테스트엔 설정값이 없다)과 같다. 실제 빈의 꺼짐은 AppSecurityChainTest가 잰다.
+        IdTokenVerifier.class
 })
 @MockitoSpyBean(types = {StoryRepository.class, StudyNoteRepository.class})
 public @interface MockedBoundaryTest {

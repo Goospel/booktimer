@@ -174,6 +174,19 @@ public class User extends BaseTimeEntity {
     @Column(name = "apple_sub", length = 64)
     private String appleSub;
 
+    /** 아이폰 앱 카카오 로그인 신원(ID 토큰의 {@code sub} — 회원번호). {@link #appleSub}와 같은 once-set 규칙(UNIQUE uk_users_kakao_sub, V102). */
+    @Column(name = "kakao_sub", length = 64)
+    private String kakaoSub;
+
+    /**
+     * 구글 신원 고정(REQ-115) — 처음 구글로 열린 그 구글 계정의 {@code sub}. 고정되면 그 계정은 이 sub로만 구글로 열린다.
+     * <b>setter가 없다</b>: 쓰기는 {@link UserRepository#pinGoogleSubIfEmpty}(비어 있을 때만 쓰는 조건부 UPDATE) 하나뿐이다 —
+     * 이 엔티티엔 {@code @Version}이 없어, 메모리 once-set은 동시 첫 로그인 둘이 모두 null을 읽고 둘 다 쓰게 둔다.
+     * 해제는 운영 SQL이다. UNIQUE(uk_users_google_sub, V102).
+     */
+    @Column(name = "google_sub", length = 255)
+    private String googleSub;
+
     /**
      * 영리목적 광고성 정보(재참여 넛지 등 마케팅 메일) 수신에 동의했는지(이메일 인프라 2단계).
      * 정보통신망법 §50의 <b>사전 동의(opt-in)</b> 불변식 — 기본 {@code false}(미동의)이고, 가입 폼·설정의
@@ -800,11 +813,13 @@ public class User extends BaseTimeEntity {
     /**
      * 토스 없이 로그인할 수단이 있는가 — 토스 연결이 끊길 때 계정을 지울지(없음) 연결만 뗄지(있음)를 가른다.
      * 비밀번호(LOCAL)·구글 가입·인증된 이메일(같은 주소의 구글 로그인이 이 계정으로 흡수된다 — OAuthUserProvisioningService)·
-     * Apple 로그인(아이폰 앱 — 지우면 앱에서 쓴 기록이 토스 쪽 동작 하나로 사라진다).
+     * Apple · 카카오 로그인(아이폰 앱 — 지우면 앱에서 쓴 기록이 토스 쪽 동작 하나로 사라진다, REQ-84).
+     * 구글 고정({@code googleSub})은 더하지 않는다 — 고정이 생기는 계정(GOOGLE · 검증된 LOCAL · TOSS)은 이미 참이다.
      * 인증된 이메일이 구글 주소가 아니면 실제 수단이 없을 수 있지만, 지우는 오판(웹 기록 소실)이 남기는 오판보다 무겁다.
      */
     public boolean canSignInWithoutToss() {
-        return isLocalAccount() || authProvider == AuthProvider.GOOGLE || emailVerified || appleSub != null;
+        return isLocalAccount() || authProvider == AuthProvider.GOOGLE || emailVerified || appleSub != null
+                || kakaoSub != null;
     }
 
     /** 토스가 알려 온 연결 끊기 전용 — 토스 신원을 뗀다. 이후 그 신원은 이 계정을 못 찾고, 웹에서 다시 연결할 수 있다. */
@@ -837,6 +852,33 @@ public class User extends BaseTimeEntity {
     /** 연결된 Apple 신원(sub). 미연결이면 {@code null}. */
     public String getAppleSub() {
         return appleSub;
+    }
+
+    /**
+     * 이 계정에 카카오 신원(회원번호)을 붙인다 — {@link #linkAppleSub}와 같은 once-set 규칙. 쓰는 곳은 카카오 가입 하나다
+     * (카카오 LINK는 비목표). 해제 메서드는 없다 — 탈퇴로만 사라진다.
+     *
+     * @throws IllegalStateException    이미 카카오 신원이 붙어 있는 경우
+     * @throws IllegalArgumentException sub가 null/공백인 경우
+     */
+    public void linkKakaoSub(String sub) {
+        if (this.kakaoSub != null) {
+            throw new IllegalStateException("kakao_sub is immutable and already set: id=" + id);
+        }
+        if (sub == null || sub.isBlank()) {
+            throw new IllegalArgumentException("kakao sub must not be blank");
+        }
+        this.kakaoSub = sub.strip();
+    }
+
+    /** 연결된 카카오 신원(sub). 미연결이면 {@code null}. */
+    public String getKakaoSub() {
+        return kakaoSub;
+    }
+
+    /** 고정된 구글 신원(sub). 아직 구글로 열린 적 없거나 고정하지 않는 계정이면 {@code null}. */
+    public String getGoogleSub() {
+        return googleSub;
     }
 
     /**
@@ -886,6 +928,15 @@ public class User extends BaseTimeEntity {
      */
     public boolean hasSyntheticEmail() {
         return email != null && email.endsWith(SYNTHETIC_EMAIL_DOMAIN);
+    }
+
+    /**
+     * 바깥에서 들어온 주소가 합성 도메인인가 — 대소문자 무시({@code Locale.ROOT}). 운영 MySQL 정렬이 대소문자를 가리지
+     * 않으면 대문자 꼴도 합성 계정과 같은 행이다. 웹 이메일 가입(REQ-113)과 구글 로그인(REQ-116)이 이 주소를 받지 않는다 —
+     * 도메인은 운영자 것이라 메일을 붙이는 날 합성 계정(Apple · 카카오 · 토스)이 그 주소로 열리지 않게.
+     */
+    public static boolean isSyntheticEmailAddress(String email) {
+        return email != null && email.toLowerCase(java.util.Locale.ROOT).endsWith(SYNTHETIC_EMAIL_DOMAIN);
     }
 
     public Long getId() {

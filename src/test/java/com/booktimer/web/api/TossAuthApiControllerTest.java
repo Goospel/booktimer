@@ -45,6 +45,8 @@ class TossAuthApiControllerTest {
     @Autowired RateLimitService rateLimitService;
 
     @Autowired TossLoginClient tossLoginClient;
+    @Autowired com.booktimer.auth.ApiTokenService apiTokenService;
+    @Autowired com.booktimer.user.UserRegistrationService registrationService;
 
     @BeforeEach
     void resetRateLimit() {
@@ -346,5 +348,24 @@ class TossAuthApiControllerTest {
         mockMvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders
                         .get("/api/dashboard").header("Authorization", "Bearer " + token))
                 .andExpect(status().isUnauthorized());
+    }
+
+    @Test
+    @DisplayName("REQ-109 · /api/app/logout은 /api/toss/logout과 같이 이 요청의 토큰만 폐기한다")
+    void appLogoutAlias_revokesOnlyThisToken() throws Exception {
+        User user = registrationService.registerOAuth("app-logout@booktimer.com", "앱", "Asia/Seoul",
+                AuthProvider.APPLE, java.time.LocalDate.of(2026, 10, 23), false); // 타이머까지 — 대시보드가 200이게
+        String thisDevice = apiTokenService.issue(user);
+        String otherDevice = apiTokenService.issue(user);
+
+        mockMvc.perform(post("/api/app/logout").header("Authorization", "Bearer " + thisDevice))
+                .andExpect(status().isNoContent());
+
+        mockMvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders
+                        .get("/api/dashboard").header("Authorization", "Bearer " + thisDevice))
+                .andExpect(status().isUnauthorized());
+        mockMvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders
+                        .get("/api/dashboard").header("Authorization", "Bearer " + otherDevice))
+                .andExpect(status().isOk()); // 다른 기기 토큰은 산다
     }
 }

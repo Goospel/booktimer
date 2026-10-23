@@ -3,20 +3,28 @@ package com.booktimer.web.api;
 import com.booktimer.auth.ApiTokenService;
 import com.booktimer.auth.AppleIdentityVerifier;
 import com.booktimer.auth.AppleVerificationUnavailableException;
+import com.booktimer.auth.IdTokenVerificationUnavailableException;
+import com.booktimer.auth.IdTokenVerifier;
+import com.booktimer.auth.IdTokenVerifier.GoogleIdentity;
 import com.booktimer.email.AppLinkNotificationService;
 import com.booktimer.security.RateLimitAction;
 import com.booktimer.security.RateLimitService;
 import com.booktimer.user.AppleLinkConflictException;
 import com.booktimer.user.AppleUserProvisioningService;
+import com.booktimer.user.KakaoUserProvisioningService;
+import com.booktimer.user.OAuthUserProvisioningService;
+import com.booktimer.user.OAuthUserProvisioningService.GoogleLookup;
 import com.booktimer.user.TossLinkCode;
 import com.booktimer.user.TossLinkCodeService;
 import com.booktimer.user.User;
 import jakarta.servlet.http.HttpServletRequest;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.oauth2.core.OAuth2AuthenticationException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -25,9 +33,11 @@ import org.springframework.web.server.ResponseStatusException;
 
 import java.nio.charset.StandardCharsets;
 import java.util.Optional;
+import java.util.function.Supplier;
 
 /**
- * 아이폰 앱 「책생글」 신원 API — {@code POST /api/app/auth/apple} 하나에 의도 셋(LOGIN · REGISTER · LINK, v1 REQ-02).
+ * 아이폰 앱 「책생글」 신원 API — {@code POST /api/app/auth/apple} 하나에 의도 셋(LOGIN · REGISTER · LINK, v1 REQ-02),
+ * 그리고 {@code /api/app/auth/google} · {@code /api/app/auth/kakao}(LOGIN · REGISTER — LINK는 400, PR-M REQ-79 · 81).
  *
  * <p>{@link TossAuthApiController}와 같은 「먼저 묻고 만든다」다. 서버에 pending 상태가 없다 — 매 요청이 Apple identity
  * token(24시간)으로 신원을 다시 증명하고, 앱은 LOGIN이 {@code registered:false}면 같은 토큰으로 REGISTER·LINK를 다시 부른다.
@@ -51,19 +61,143 @@ public class AppAuthApiController {
     private final ApiTokenService apiTokenService;
     private final RateLimitService rateLimitService;
     private final AppLinkNotificationService linkNotifier;
+    private final IdTokenVerifier idTokens;
+    private final OAuthUserProvisioningService googleUsers;
+    private final KakaoUserProvisioningService kakaoUsers;
 
     public AppAuthApiController(AppleIdentityVerifier verifier,
                                 AppleUserProvisioningService provisioningService,
                                 TossLinkCodeService linkCodeService,
                                 ApiTokenService apiTokenService,
                                 RateLimitService rateLimitService,
-                                AppLinkNotificationService linkNotifier) {
+                                AppLinkNotificationService linkNotifier,
+                                IdTokenVerifier idTokens,
+                                OAuthUserProvisioningService googleUsers,
+                                KakaoUserProvisioningService kakaoUsers) {
         this.verifier = verifier;
         this.provisioningService = provisioningService;
         this.linkCodeService = linkCodeService;
         this.apiTokenService = apiTokenService;
         this.rateLimitService = rateLimitService;
         this.linkNotifier = linkNotifier;
+        this.idTokens = idTokens;
+        this.googleUsers = googleUsers;
+        this.kakaoUsers = kakaoUsers;
+    }
+
+    static final String GOOGLE_MISMATCH = "이 이메일의 계정은 처음 로그인한 구글 계정으로만 열려요 — 그 구글 계정으로 다시 해 주세요";
+    private static final String NO_LINK = "이 로그인 방식은 웹 계정 연결을 지원하지 않아요";
+    private static final String EMAIL_TAKEN = "이미 쓰는 이메일이라 가입할 수 없어요";
+
+    /**
+     * 구글 로그인(REQ-79) — LOGIN은 판정이 여는 계정만 주고(빈 고정을 채우는 것이 유일한 쓰기), REGISTER는 웹 구글 로그인과
+     * 같은 {@code provision}(정책 ①② · 새 계정 고정)이다. 다른 구글 계정에 고정된 이메일이면 409. LINK는 없다(400).
+     */
+    @PostMapping("/api/app/auth/google")
+    public AppAuthResponse google(@RequestBody IdTokenAuthRequest request, HttpServletRequest http) {
+        if (!idTokens.isGoogleConfigured()) {
+            throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE, "구글 로그인이 아직 준비되지 않았어요");
+        }
+        limit(RateLimitAction.APP_AUTH, http.getRemoteAddr());
+        GoogleIdentity id = verified(() -> idTokens.verifyGoogle(request.identityToken()), "구글");
+        Intent intent = requireIntent(request.intent());
+        AppAuthResponse response;
+        try {
+            response = switch (intent) {
+                case LOGIN -> {
+                    GoogleLookup found = googleUsers.lookup(id.sub(), id.email(), id.hd());
+                    yield found.user() == null
+                            ? AppAuthResponse.unregistered(found.unverifiedWebAccount())
+                            : issued(found.user(), false);
+                }
+                case REGISTER -> {
+                    requireAge(request.ageConfirmed());
+                    // 먼저 열어 보고(멱등 · created=false) 없을 때만 웹과 같은 provision으로 만든다 — Apple REGISTER와 같은 꼴
+                    GoogleLookup found = googleUsers.lookup(id.sub(), id.email(), id.hd());
+                    yield found.user() != null
+                            ? issued(found.user(), false)
+                            : created(() -> googleUsers.provision(id.sub(), id.email(), id.hd(), id.name(), true),
+                                    () -> Optional.ofNullable(googleUsers.lookup(id.sub(), id.email(), id.hd()).user()));
+                }
+                case LINK -> throw new ResponseStatusException(HttpStatus.BAD_REQUEST, NO_LINK);
+            };
+        } catch (OAuth2AuthenticationException e) {
+            if (OAuthUserProvisioningService.GOOGLE_ACCOUNT_MISMATCH.equals(e.getError().getErrorCode())) {
+                throw new ResponseStatusException(HttpStatus.CONFLICT, GOOGLE_MISMATCH);
+            }
+            throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "구글 로그인 확인에 실패했어요 — 다시 시도해 주세요");
+        }
+        logOk("google", response, intent);
+        return response;
+    }
+
+    /** 카카오 로그인(REQ-81) — 신원은 회원번호 하나. LOGIN은 조회만, REGISTER는 합성 이메일 계정(멱등). LINK는 없다(400). */
+    @PostMapping("/api/app/auth/kakao")
+    public AppAuthResponse kakao(@RequestBody IdTokenAuthRequest request, HttpServletRequest http) {
+        if (!idTokens.isKakaoConfigured()) {
+            throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE, "카카오 로그인이 아직 준비되지 않았어요");
+        }
+        limit(RateLimitAction.APP_AUTH, http.getRemoteAddr());
+        String sub = verified(() -> idTokens.verifyKakao(request.identityToken()), "카카오");
+        Intent intent = requireIntent(request.intent());
+        AppAuthResponse response = switch (intent) {
+            case LOGIN -> kakaoUsers.login(sub).map(user -> issued(user, false))
+                    .orElseGet(() -> AppAuthResponse.unregistered(false));
+            case REGISTER -> {
+                requireAge(request.ageConfirmed());
+                Optional<User> existing = kakaoUsers.login(sub);
+                yield existing.isPresent()
+                        ? issued(existing.get(), false)
+                        : created(() -> kakaoUsers.register(sub), () -> kakaoUsers.login(sub));
+            }
+            case LINK -> throw new ResponseStatusException(HttpStatus.BAD_REQUEST, NO_LINK);
+        };
+        logOk("kakao", response, intent);
+        return response;
+    }
+
+    /** 검증 — 거부 401(앱은 로그인 창을 다시 띄운다) · 판정 불가 503. */
+    private static <T> T verified(Supplier<Optional<T>> verification, String providerName) {
+        try {
+            return verification.get().orElseThrow(() -> new ResponseStatusException(HttpStatus.UNAUTHORIZED,
+                    providerName + " 로그인 확인에 실패했어요 — 다시 시도해 주세요"));
+        } catch (IdTokenVerificationUnavailableException e) {
+            throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE,
+                    providerName + " 로그인을 지금 확인할 수 없어요 — 잠시 뒤 다시 해 주세요");
+        }
+    }
+
+    private static Intent requireIntent(Intent intent) {
+        if (intent == null) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "로그인 방식이 빠졌어요");
+        }
+        return intent;
+    }
+
+    private static void requireAge(Boolean ageConfirmed) {
+        if (!Boolean.TRUE.equals(ageConfirmed)) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "만 14세 이상인지 먼저 확인해 주세요");
+        }
+    }
+
+    /**
+     * REGISTER의 만들기 — 이메일 유니크 위반(같은 신원의 동시 REGISTER 등)이면 500 대신 커밋된 행을 다시 찾아 그 계정을 주고,
+     * 없으면 409 평문이다. 만든 쪽 트랜잭션은 이미 롤백됐다.
+     */
+    private AppAuthResponse created(Supplier<User> create, Supplier<Optional<User>> reread) {
+        try {
+            return issued(create.get(), true);
+        } catch (DataIntegrityViolationException e) {
+            return reread.get().map(user -> issued(user, false))
+                    .orElseThrow(() -> new ResponseStatusException(HttpStatus.CONFLICT, EMAIL_TAKEN));
+        }
+    }
+
+    /** 성공 한 줄 — userId만(토큰 · sub · 이메일 원문 없음, REQ-82). U-43 · U-51의 신호다. */
+    private static void logOk(String provider, AppAuthResponse response, Intent intent) {
+        if (response.registered()) {
+            log.info("app auth {} ok userId={} intent={}", provider, response.userId(), intent);
+        }
     }
 
     @PostMapping("/api/app/auth/apple")
@@ -131,7 +265,8 @@ public class AppAuthApiController {
     }
 
     private AppAuthResponse issued(User user, boolean created) {
-        return new AppAuthResponse(true, apiTokenService.issue(user), created, user.isWebAccount(), user.getId());
+        return new AppAuthResponse(true, apiTokenService.issue(user), created, user.isWebAccount(), user.getId(),
+                user.getAuthProvider().name(), user.getAppleSub() != null, user.getGoogleSub() != null, false);
     }
 
     /** 앱은 에러 본문을 그대로 띄운다 — 상태 예외의 문구를 평문으로(전역 핸들러의 HTML error 뷰보다 먼저 받는다). */
@@ -159,15 +294,34 @@ public class AppAuthApiController {
     }
 
     /**
-     * @param registered 이 Apple 신원에 계정이 있는가(false면 token·userId가 없다)
-     * @param created    이번 호출이 계정을 만들었는가(REGISTER에서만 true 가능)
-     * @param webAccount 원 가입이 아이폰 앱이 아닌가 — 앱의 삭제 화면 분기(true면 웹 설정으로 보낸다)
-     * @param userId     기기 초안 칸을 나누는 키(v1 REQ-38)
+     * @param identityToken 구글 · 카카오가 준 ID 토큰(JWT)
+     * @param ageConfirmed  REGISTER일 때 만 14세 이상 확인
      */
-    public record AppAuthResponse(boolean registered, String token, boolean created, boolean webAccount, Long userId) {
+    public record IdTokenAuthRequest(String identityToken, Intent intent, Boolean ageConfirmed) {
+    }
+
+    /**
+     * 필드는 <b>맨 뒤에만</b> 덧붙인다(REQ-84) — {@code webAccount}는 그대로 두고 앱은 {@code authProvider}를 읽는다.
+     *
+     * @param registered           이 신원에 계정이 있는가(false면 token·userId가 없다)
+     * @param created              이번 호출이 계정을 만들었는가(REGISTER에서만 true 가능)
+     * @param webAccount           원 가입이 Apple 앱이 아닌가(PR-A 그대로)
+     * @param userId               기기 초안 칸을 나누는 키(v1 REQ-38)
+     * @param authProvider         원 가입 경로 — 앱이 탈퇴 화면을 고른다
+     * @param appleLinked          Apple이 붙어 있는가 — 탈퇴 때 Apple 창을 한 번 더 연다(REQ-111)
+     * @param googleLinked         구글 신원이 고정돼 있는가 — LOCAL · TOSS의 탈퇴 갈래(REQ-87)
+     * @param unverifiedWebAccount 구글 LOGIN에서 같은 이메일의 미검증 웹 계정이 있다 — REGISTER 전에 앱이 확인을 받는다
+     */
+    public record AppAuthResponse(boolean registered, String token, boolean created, boolean webAccount, Long userId,
+                                  String authProvider, boolean appleLinked, boolean googleLinked,
+                                  boolean unverifiedWebAccount) {
 
         static AppAuthResponse unregistered() {
-            return new AppAuthResponse(false, null, false, false, null);
+            return unregistered(false);
+        }
+
+        static AppAuthResponse unregistered(boolean unverifiedWebAccount) {
+            return new AppAuthResponse(false, null, false, false, null, null, false, false, unverifiedWebAccount);
         }
     }
 }

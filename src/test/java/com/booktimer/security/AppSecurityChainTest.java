@@ -1,5 +1,9 @@
 package com.booktimer.security;
 
+import com.booktimer.auth.ApiTokenService;
+import com.booktimer.user.AuthProvider;
+import com.booktimer.user.User;
+import com.booktimer.user.UserRegistrationService;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -9,6 +13,8 @@ import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.MvcResult;
 import org.springframework.transaction.annotation.Transactional;
+
+import java.time.LocalDate;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
@@ -28,6 +34,8 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 class AppSecurityChainTest {
 
     @Autowired MockMvc mockMvc;
+    @Autowired UserRegistrationService registrationService;
+    @Autowired ApiTokenService apiTokenService;
 
     @Test
     @DisplayName("REQ-05 · Bearer 없는 /api/app/auth/apple은 로그인 페이지로 튕기지 않는다")
@@ -39,6 +47,33 @@ class AppSecurityChainTest {
                 .andExpect(content().string("앱 로그인이 아직 준비되지 않았어요"))
                 .andReturn();
         assertThat(r.getResponse().getHeader("Location")).isNull();
+    }
+
+    @Test
+    @DisplayName("REQ-82 · Bearer 없는 google·kakao 문은 302가 아니다")
+    void googleAndKakaoReachController() throws Exception {
+        // 실제 빈 세계엔 구글 iOS 클라이언트 ID · 카카오 앱 키가 없다 — 컨트롤러에 닿아 그 제공자만 503으로 닫힌다
+        String[][] doors = {{"google", "구글 로그인이 아직 준비되지 않았어요"}, {"kakao", "카카오 로그인이 아직 준비되지 않았어요"}};
+        for (String[] door : doors) {
+            MvcResult r = mockMvc.perform(post("/api/app/auth/" + door[0]).contentType(MediaType.APPLICATION_JSON)
+                            .content("{\"identityToken\":\"t\",\"intent\":\"LOGIN\"}"))
+                    .andExpect(status().isServiceUnavailable())
+                    .andExpect(content().string(door[1]))
+                    .andReturn();
+            assertThat(r.getResponse().getHeader("Location")).as(door[0]).isNull();
+        }
+    }
+
+    @Test
+    @DisplayName("REQ-109 · /api/app/logout은 Bearer로 인증된다(토큰 없으면 401)")
+    void appLogoutNeedsBearer() throws Exception {
+        mockMvc.perform(post("/api/app/logout")).andExpect(status().isUnauthorized());
+
+        User user = registrationService.registerOAuth("chain-logout@booktimer.com", "앱", "Asia/Seoul",
+                AuthProvider.APPLE, LocalDate.of(2026, 10, 23), false);
+        String token = apiTokenService.issue(user);
+        mockMvc.perform(post("/api/app/logout").header("Authorization", "Bearer " + token))
+                .andExpect(status().isNoContent());
     }
 
     @Test

@@ -74,6 +74,7 @@ public class AccountService {
     private final WritingDraftRepository writingDraftRepository;
     private final SessionInvalidator sessionInvalidator;
     private final PasswordEncoder passwordEncoder;
+    private final GoogleAccountResolver googleAccountResolver;
 
     public AccountService(UserRepository userRepository,
                           ReadingTimerRepository timerRepository,
@@ -103,7 +104,8 @@ public class AccountService {
                           ChatRoomRepository chatRoomRepository,
                           WritingDraftRepository writingDraftRepository,
                           SessionInvalidator sessionInvalidator,
-                          PasswordEncoder passwordEncoder) {
+                          PasswordEncoder passwordEncoder,
+                          GoogleAccountResolver googleAccountResolver) {
         this.userRepository = userRepository;
         this.timerRepository = timerRepository;
         this.goalChangeRepository = goalChangeRepository;
@@ -133,6 +135,7 @@ public class AccountService {
         this.writingDraftRepository = writingDraftRepository;
         this.sessionInvalidator = sessionInvalidator;
         this.passwordEncoder = passwordEncoder;
+        this.googleAccountResolver = googleAccountResolver;
     }
 
     /**
@@ -249,11 +252,42 @@ public class AccountService {
      * @throws WebAccountDeletionException          웹·미니앱에서 만든 계정
      */
     public void deleteAppleVerifiedAccount(User user, String verifiedSub) {
-        if (user.getAppleSub() == null || !user.getAppleSub().equals(verifiedSub)) {
-            throw new AccountDeletionConfirmationException();
-        }
-        if (user.isWebAccount()) {
-            throw new WebAccountDeletionException();
+        deleteProviderVerifiedAccount(user, AuthProvider.APPLE, new VerifiedIdentity(verifiedSub, null, null));
+    }
+
+    /**
+     * 제공자 재확인으로 신원이 확인된 계정을 삭제한다(REQ-83) — {@link #deleteAppleVerifiedAccount}의 2중 게이트를 제공자별로
+     * 일반화했다. 컨트롤러가 이미 대조했어도 여기서 <b>한 번 더</b> 대조하고, 걸리면 아무것도 지우지 않는다.
+     * <ul>
+     *   <li>APPLE · KAKAO: sub가 본인 {@code apple_sub} · {@code kakao_sub}와 같고(null이면 불일치), 원 가입 경로가 그 제공자다.</li>
+     *   <li>GOOGLE: 구글 판정({@link GoogleAccountResolver})이 {@code OPEN}이고 <b>그 계정의 id가 지금 사용자의 id와 같다</b> —
+     *       {@code OPEN_UNPINNED}(구글이 보증하지 않는 주소) · {@code NONE} · 다른 계정을 연 {@code OPEN}은 지우지 않는다.
+     *       Bearer에는 채널 열이 없어 연결 코드를 가로챈 쪽이 자기 구글 토큰을 내면 판정은 그 사람 자신의 계정을 연다 —
+     *       이 id 비교가 데이터 보호의 전부다. 원 가입 경로 대조는 없다(구글 판정이 여는 계정은 GOOGLE · LOCAL · TOSS뿐).</li>
+     * </ul>
+     *
+     * @throws AccountDeletionConfirmationException 신원 불일치 · 미보유 · 다른 계정 · 그 밖의 제공자
+     * @throws WebAccountDeletionException          APPLE · KAKAO로 확인했는데 원 가입 경로가 다르다(웹 설정에서 지운다)
+     */
+    public void deleteProviderVerifiedAccount(User user, AuthProvider provider, VerifiedIdentity identity) {
+        switch (provider) {
+            case APPLE, KAKAO -> {
+                String owned = provider == AuthProvider.APPLE ? user.getAppleSub() : user.getKakaoSub();
+                if (owned == null || !owned.equals(identity.sub())) {
+                    throw new AccountDeletionConfirmationException();
+                }
+                if (user.getAuthProvider() != provider) {
+                    throw new WebAccountDeletionException();
+                }
+            }
+            case GOOGLE -> {
+                GoogleAccountResolver.GoogleMatch match =
+                        googleAccountResolver.resolve(identity.sub(), identity.email(), identity.hd());
+                if (match.kind() != GoogleAccountResolver.Kind.OPEN || !match.user().getId().equals(user.getId())) {
+                    throw new AccountDeletionConfirmationException();
+                }
+            }
+            default -> throw new AccountDeletionConfirmationException();
         }
         purge(user);
     }

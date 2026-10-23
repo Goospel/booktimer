@@ -42,7 +42,7 @@ class OAuthPreHijackingIntegrationTest {
         Long squatterId = squatter.getId();
 
         // 피해자가 Google로 로그인 → provider가 이메일 소유 보증(verified=true)
-        User result = provisioningService.provision(email, "진짜주인", true);
+        User result = provisioningService.provision("google-sub-1", email, null, "진짜주인", true);
 
         // 새 계정은 OAuth(비밀번호 없음), 같은 이메일은 정확히 하나만 — 선점 계정은 사라짐
         assertThat(result.getAuthProvider()).isEqualTo(AuthProvider.GOOGLE);
@@ -64,7 +64,7 @@ class OAuthPreHijackingIntegrationTest {
         bookRepository.saveAndFlush(
                 Book.register(saved, "미니앱에서 읽던 책", null, null, null, null, null, BookStatus.READING));
 
-        User result = provisioningService.provision(email, "진짜주인", true);
+        User result = provisioningService.provision("google-sub-1", email, null, "진짜주인", true);
 
         // 새 구글 계정이 그 이메일을 가진다
         assertThat(result.getAuthProvider()).isEqualTo(AuthProvider.GOOGLE);
@@ -89,7 +89,7 @@ class OAuthPreHijackingIntegrationTest {
         owner.verifyEmail(); // 이메일 검증 완료 = 소유 증명
         User saved = userRepository.saveAndFlush(owner);
 
-        User result = provisioningService.provision(email, "주인", true);
+        User result = provisioningService.provision("google-sub-1", email, null, "주인", true);
 
         assertThat(result.getId()).isEqualTo(saved.getId());
         assertThat(result.getAuthProvider()).isEqualTo(AuthProvider.LOCAL); // 그대로 LOCAL
@@ -104,7 +104,7 @@ class OAuthPreHijackingIntegrationTest {
         Long squatterId = squatter.getId();
 
         // 실소유자가 Google로 로그인 → provider가 이메일 소유 보증
-        User result = provisioningService.provision(email, "진짜주인", true);
+        User result = provisioningService.provision("google-sub-1", email, null, "진짜주인", true);
 
         // 새 구글 계정이 그 이메일을 가진다 — 토스 계정으로 흡수되지 않는다
         assertThat(result.getAuthProvider()).isEqualTo(AuthProvider.GOOGLE);

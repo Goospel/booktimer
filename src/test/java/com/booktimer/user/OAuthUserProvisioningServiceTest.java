@@ -2,22 +2,29 @@ package com.booktimer.user;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
+import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.boot.test.system.CapturedOutput;
+import org.springframework.boot.test.system.OutputCaptureExtension;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.security.oauth2.core.OAuth2AuthenticationException;
+import org.springframework.test.util.ReflectionTestUtils;
 
 import java.time.Clock;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneOffset;
 import java.util.Optional;
+import java.util.concurrent.atomic.AtomicReference;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -44,10 +51,14 @@ class OAuthUserProvisioningServiceTest {
     private AccountService accountService;
 
     private OAuthUserProvisioningService service;
+    private final AtomicReference<User> registered = new AtomicReference<>();
 
     @BeforeEach
     void setUp() {
-        service = new OAuthUserProvisioningService(userRepository, registrationService, accountService, clock);
+        service = new OAuthUserProvisioningService(userRepository, registrationService, accountService,
+                new GoogleAccountResolver(userRepository), clock);
+        // 구글 신원 고정(REQ-115): OPEN · 새 계정은 조건부 UPDATE로 고정된다 — 기본은 1행(성공). 0행 · 유니크 위반은 GooglePinning.
+        lenient().when(userRepository.pinGoogleSubIfEmpty(any(), any())).thenReturn(1);
     }
 
     @Test
@@ -56,7 +67,8 @@ class OAuthUserProvisioningServiceTest {
         User existing = User.ofOAuth("g@booktimer.com", "구글러", "Asia/Seoul", Role.USER, AuthProvider.GOOGLE);
         when(userRepository.findByEmail("g@booktimer.com")).thenReturn(Optional.of(existing));
 
-        User result = service.provision("g@booktimer.com", "구글러", true);
+        reloads(existing); // 고정 뒤 다시 읽기(clear 뒤라 새 인스턴스) — 같은 행
+        User result = service.provision("google-sub-1", "g@booktimer.com", null, "구글러", true);
 
         assertThat(result).isSameAs(existing);
         verify(registrationService, never()).registerOAuth(any(), any(), any(), any(), any());
@@ -71,7 +83,8 @@ class OAuthUserProvisioningServiceTest {
                 eq("Asia/Seoul"), eq(AuthProvider.GOOGLE), eq(LocalDate.of(2026, 6, 2))))
                 .thenReturn(created);
 
-        User result = service.provision("new@booktimer.com", "새사람", true);
+        reloads(created); // 고정 뒤 다시 읽기(clear 뒤라 새 인스턴스) — 같은 행
+        User result = service.provision("google-sub-1", "new@booktimer.com", null, "새사람", true);
 
         assertThat(result).isSameAs(created);
         verify(registrationService).registerOAuth("new@booktimer.com", "새사람",
@@ -83,10 +96,11 @@ class OAuthUserProvisioningServiceTest {
     void provision_blankName_usesEmailLocalPart() {
         when(userRepository.findByEmail("noname@booktimer.com")).thenReturn(Optional.empty());
         when(registrationService.registerOAuth(any(), any(), any(), any(), any()))
-                .thenAnswer(inv -> User.ofOAuth(inv.getArgument(0), inv.getArgument(1),
-                        inv.getArgument(2), Role.USER, inv.getArgument(3)));
+                .thenAnswer(inv -> registered.updateAndGet(ignored -> User.ofOAuth(inv.getArgument(0), inv.getArgument(1),
+                        inv.getArgument(2), Role.USER, inv.getArgument(3))));
 
-        User result = service.provision("noname@booktimer.com", "  ", true);
+        when(userRepository.findById(any())).thenAnswer(inv -> Optional.of(registered.get()));
+        User result = service.provision("google-sub-1", "noname@booktimer.com", null, "  ", true);
 
         assertThat(result.getNickname()).isEqualTo("noname");
         verify(registrationService).registerOAuth(eq("noname@booktimer.com"), eq("noname"),
@@ -98,10 +112,11 @@ class OAuthUserProvisioningServiceTest {
     void provision_duplicateDisplayName_usedAsIs() {
         when(userRepository.findByEmail("dupname@booktimer.com")).thenReturn(Optional.empty());
         when(registrationService.registerOAuth(any(), any(), any(), any(), any()))
-                .thenAnswer(inv -> User.ofOAuth(inv.getArgument(0), inv.getArgument(1),
-                        inv.getArgument(2), Role.USER, inv.getArgument(3)));
+                .thenAnswer(inv -> registered.updateAndGet(ignored -> User.ofOAuth(inv.getArgument(0), inv.getArgument(1),
+                        inv.getArgument(2), Role.USER, inv.getArgument(3))));
 
-        User result = service.provision("dupname@booktimer.com", "구글러", true);
+        when(userRepository.findById(any())).thenAnswer(inv -> Optional.of(registered.get()));
+        User result = service.provision("google-sub-1", "dupname@booktimer.com", null, "구글러", true);
 
         // 중복 확인(existsByNickname) 없이 provider가 준 이름을 그대로 쓴다.
         assertThat(result.getNickname()).isEqualTo("구글러");
@@ -120,7 +135,8 @@ class OAuthUserProvisioningServiceTest {
         when(registrationService.registerOAuth(eq("victim@booktimer.com"), any(),
                 eq("Asia/Seoul"), eq(AuthProvider.GOOGLE), any())).thenReturn(created);
 
-        User result = service.provision("victim@booktimer.com", "진짜주인", true);
+        reloads(created); // 고정 뒤 다시 읽기(clear 뒤라 새 인스턴스) — 같은 행
+        User result = service.provision("google-sub-1", "victim@booktimer.com", null, "진짜주인", true);
 
         assertThat(result).isSameAs(created); // 새 OAuth 계정
         verify(accountService).purgeUnverifiedLocalAccount(unverifiedLocal); // 선점 계정 폐기
@@ -140,7 +156,8 @@ class OAuthUserProvisioningServiceTest {
         when(registrationService.registerOAuth(eq("victim@booktimer.com"), eq("진짜주인"),
                 eq("Asia/Seoul"), eq(AuthProvider.GOOGLE), any())).thenReturn(created);
 
-        User result = service.provision("victim@booktimer.com", "진짜주인", true);
+        reloads(created); // 고정 뒤 다시 읽기(clear 뒤라 새 인스턴스) — 같은 행
+        User result = service.provision("google-sub-1", "victim@booktimer.com", null, "진짜주인", true);
 
         assertThat(result).isSameAs(created);
         verify(accountService).reassignUnverifiedTossEmail(local, "toss-uklocal01@noreply.booktimer.app");
@@ -156,7 +173,8 @@ class OAuthUserProvisioningServiceTest {
         google.linkTossUserKey("UKgoogle-01");
         when(userRepository.findByEmail("g@booktimer.com")).thenReturn(Optional.of(google));
 
-        User result = service.provision("g@booktimer.com", "구글러", true);
+        reloads(google); // 고정 뒤 다시 읽기(clear 뒤라 새 인스턴스) — 같은 행
+        User result = service.provision("google-sub-1", "g@booktimer.com", null, "구글러", true);
 
         assertThat(result).isSameAs(google);
         verify(accountService, never()).reassignUnverifiedTossEmail(any(), any());
@@ -171,7 +189,7 @@ class OAuthUserProvisioningServiceTest {
         verifiedLocal.verifyEmail(); // 검증됨 = 이메일 소유 증명
         when(userRepository.findByEmail("owner@booktimer.com")).thenReturn(Optional.of(verifiedLocal));
 
-        User result = service.provision("owner@booktimer.com", "주인", true);
+        User result = service.provision("google-sub-1", "owner@booktimer.com", null, "주인", true);
 
         assertThat(result).isSameAs(verifiedLocal); // 기존 계정 그대로
         verify(accountService, never()).purgeUnverifiedLocalAccount(any());
@@ -185,7 +203,8 @@ class OAuthUserProvisioningServiceTest {
         // OAuth 계정은 emailVerified 기본 false지만 LOCAL이 아니라 폐기 대상이 아니다
         when(userRepository.findByEmail("g@booktimer.com")).thenReturn(Optional.of(existingOAuth));
 
-        User result = service.provision("g@booktimer.com", "구글러", true);
+        reloads(existingOAuth); // 고정 뒤 다시 읽기(clear 뒤라 새 인스턴스) — 같은 행
+        User result = service.provision("google-sub-1", "g@booktimer.com", null, "구글러", true);
 
         assertThat(result).isSameAs(existingOAuth);
         verify(accountService, never()).purgeUnverifiedLocalAccount(any());
@@ -204,7 +223,8 @@ class OAuthUserProvisioningServiceTest {
         when(registrationService.registerOAuth(eq("toss@booktimer.com"), eq("구글이름"),
                 eq("Asia/Seoul"), eq(AuthProvider.GOOGLE), any())).thenReturn(created);
 
-        User result = service.provision("toss@booktimer.com", "구글이름", true);
+        reloads(created); // 고정 뒤 다시 읽기(clear 뒤라 새 인스턴스) — 같은 행
+        User result = service.provision("google-sub-1", "toss@booktimer.com", null, "구글이름", true);
 
         assertThat(result).isSameAs(created); // 반환은 새 구글 계정 — 기존 토스 계정이 아니다
         // 재배정 자체는 AccountService가 한다(세션 무효화 → 이메일 변경 → flush 순서가 거기 있다).
@@ -220,7 +240,7 @@ class OAuthUserProvisioningServiceTest {
         User keyless = User.ofOAuth("keyless@booktimer.com", "토스러", "Asia/Seoul", Role.USER, AuthProvider.TOSS);
         when(userRepository.findByEmail("keyless@booktimer.com")).thenReturn(Optional.of(keyless));
 
-        assertThatThrownBy(() -> service.provision("keyless@booktimer.com", "구글이름", true))
+        assertThatThrownBy(() -> service.provision("google-sub-1", "keyless@booktimer.com", null, "구글이름", true))
                 .isInstanceOf(IllegalStateException.class);
 
         verify(accountService, never()).reassignUnverifiedTossEmail(any(), any());
@@ -235,7 +255,7 @@ class OAuthUserProvisioningServiceTest {
         verifiedToss.verifyEmail(); // 그 토스 사용자가 웹에서 이메일 인증을 통과한 경우
         when(userRepository.findByEmail("vtoss@booktimer.com")).thenReturn(Optional.of(verifiedToss));
 
-        User result = service.provision("vtoss@booktimer.com", "구글이름", true);
+        User result = service.provision("google-sub-1", "vtoss@booktimer.com", null, "구글이름", true);
 
         assertThat(result).isSameAs(verifiedToss);
         assertThat(verifiedToss.getEmail()).isEqualTo("vtoss@booktimer.com"); // 재배정 없음
@@ -247,7 +267,7 @@ class OAuthUserProvisioningServiceTest {
     @Test
     @DisplayName("provision: 이메일 미검증(email_verified=false)이면 거부하고 아무 사용자도 만들지/조회하지 않는다")
     void provision_unverifiedEmail_rejected() {
-        assertThatThrownBy(() -> service.provision("attacker@booktimer.com", "공격자", false))
+        assertThatThrownBy(() -> service.provision("google-sub-1", "attacker@booktimer.com", null, "공격자", false))
                 .isInstanceOf(OAuth2AuthenticationException.class);
 
         // 자동 계정 연결(find-or-create) 자체에 도달하지 않아야 한다 — 조회/생성 모두 없음.
@@ -255,10 +275,86 @@ class OAuthUserProvisioningServiceTest {
         verify(registrationService, never()).registerOAuth(any(), any(), any(), any(), any());
     }
 
+    /** 고정한 뒤 provision은 그 행을 다시 읽는다 — 다시 읽기가 같은 계정을 돌려주게 한다. */
+    private void reloads(User user) {
+        when(userRepository.findById(any())).thenReturn(Optional.of(user));
+    }
+
+    @Nested
+    @ExtendWith(OutputCaptureExtension.class)
+    class GooglePinning {
+
+        @Test
+        @DisplayName("REQ-116 · 첫 고정·불일치 로그에 sub와 이메일이 없다")
+        void pinAndMismatchLogs_carryUserIdOnly(CapturedOutput output) {
+            User first = withId(google("first-log@booktimer.com"), 42L);
+            when(userRepository.findByEmail("first-log@booktimer.com")).thenReturn(Optional.of(first));
+            when(userRepository.pinGoogleSubIfEmpty(42L, "sub-LOG-111")).thenReturn(1);
+            when(userRepository.findById(42L)).thenReturn(Optional.of(first));
+
+            service.provision("sub-LOG-111", "first-log@booktimer.com", null, "구글러", true);
+
+            User pinnedElsewhere = withId(google("taken-log@booktimer.com"), 43L);
+            ReflectionTestUtils.setField(pinnedElsewhere, "googleSub", "sub-OWNER-999");
+            when(userRepository.findByEmail("taken-log@booktimer.com")).thenReturn(Optional.of(pinnedElsewhere));
+
+            assertThatThrownBy(() -> service.provision("sub-LOG-222", "taken-log@booktimer.com", null, "침입자", true))
+                    .isInstanceOf(OAuth2AuthenticationException.class);
+
+            assertThat(output).contains("google sub pinned userId=42");
+            assertThat(output).contains("google sub mismatch userId=43");
+            assertThat(output).doesNotContain("sub-LOG-111", "sub-LOG-222", "sub-OWNER-999",
+                    "first-log@booktimer.com", "taken-log@booktimer.com");
+        }
+
+        @Test
+        @DisplayName("REQ-115 · 고정이 0행이면 아무것도 바꾸지 않고 불일치로 거부한다")
+        void pinZeroRows_rejectsAsMismatch_changesNothing(CapturedOutput output) {
+            // 판정은 고정 없는 GOOGLE(OPEN)이었는데, 고정 전에 다른 요청이 그 행을 고정했다.
+            User raced = withId(google("raced@booktimer.com"), 44L);
+            when(userRepository.findByEmail("raced@booktimer.com")).thenReturn(Optional.of(raced));
+            when(userRepository.pinGoogleSubIfEmpty(44L, "sub-late")).thenReturn(0);
+
+            assertThatThrownBy(() -> service.provision("sub-late", "raced@booktimer.com", null, "구글러", true))
+                    .isInstanceOfSatisfying(OAuth2AuthenticationException.class,
+                            e -> assertThat(e.getError().getErrorCode()).isEqualTo("google_account_mismatch"));
+
+            assertThat(output).doesNotContain("google sub pinned");
+            verify(accountService, never()).purgeUnverifiedLocalAccount(any());
+            verify(accountService, never()).reassignUnverifiedTossEmail(any(), any());
+            verify(registrationService, never()).registerOAuth(any(), any(), any(), any(), any());
+        }
+
+        @Test
+        @DisplayName("REQ-115 · 고정의 유니크 위반은 500이 아니라 불일치다")
+        void pinUniqueViolation_isMismatchAuthenticationFailure() {
+            // 다른 계정이 그새 같은 sub를 가졌다 — 문 안에서 바로 나는 예외라 잡아 인증 실패로 바꾼다(웹은 /login?error).
+            User open = withId(google("dup-sub@booktimer.com"), 45L);
+            when(userRepository.findByEmail("dup-sub@booktimer.com")).thenReturn(Optional.of(open));
+            when(userRepository.pinGoogleSubIfEmpty(45L, "sub-dup"))
+                    .thenThrow(new DataIntegrityViolationException("uk_users_google_sub"));
+
+            assertThatThrownBy(() -> service.provision("sub-dup", "dup-sub@booktimer.com", null, "구글러", true))
+                    .isInstanceOfSatisfying(OAuth2AuthenticationException.class,
+                            e -> assertThat(e.getError().getErrorCode()).isEqualTo("google_account_mismatch"));
+        }
+
+        private User google(String email) {
+            User u = User.ofOAuth(email, "구글러", "Asia/Seoul", Role.USER, AuthProvider.GOOGLE);
+            u.verifyEmail();
+            return u;
+        }
+
+        private User withId(User user, long id) {
+            ReflectionTestUtils.setField(user, "id", id);
+            return user;
+        }
+    }
+
     @Test
     @DisplayName("provision: email_verified 클레임이 없으면(null) 검증 안 된 것으로 보고 거부한다")
     void provision_nullVerified_rejected() {
-        assertThatThrownBy(() -> service.provision("attacker@booktimer.com", "공격자", null))
+        assertThatThrownBy(() -> service.provision("google-sub-1", "attacker@booktimer.com", null, "공격자", null))
                 .isInstanceOf(OAuth2AuthenticationException.class);
 
         verify(userRepository, never()).findByEmail(any());

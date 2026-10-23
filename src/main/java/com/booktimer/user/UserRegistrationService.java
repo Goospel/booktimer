@@ -86,9 +86,10 @@ public class UserRegistrationService {
         if (userRepository.isLoginIdTaken(normalizedLoginId)) {
             throw new LoginIdAlreadyExistsException(normalizedLoginId);
         }
-        if (userRepository.existsByEmail(email)) {
+        if (User.isSyntheticEmailAddress(email) || userRepository.existsByEmail(email)) {
             // DB 유니크 제약(uk_users_email) 위반이 500으로 새기 전에 미리 막는다. 컨트롤러는 열거 완화를 위해
             // 이 예외를 가입 성공과 동일한 응답으로 흡수한다(이메일 존재 여부를 응답으로 구분할 수 없게).
+            // 합성 도메인 주소도 같은 오류다(REQ-113) — 남이 kakao-{sub}@… 를 먼저 차지하면 그 앱 가입이 막힌다.
             throw new EmailAlreadyExistsException(email);
         }
         // nickname은 더 이상 유니크가 아니다(단순 표시 이름) — 중복 확인 없이 그대로 저장한다.
@@ -109,7 +110,7 @@ public class UserRegistrationService {
                          String timezone, Role role, LocalDate startDate) {
         // 존재 검사보다 먼저 해싱 — 위 오버로드와 같은 이유(타이밍 오라클). 같은 파일에 상반된 순서를 남기지 않는다.
         String passwordHash = passwordEncoder.encode(rawPassword);
-        if (userRepository.existsByEmail(email)) {
+        if (User.isSyntheticEmailAddress(email) || userRepository.existsByEmail(email)) {
             throw new EmailAlreadyExistsException(email);
         }
         return persistWithTimer(User.of(email, passwordHash, nickname, timezone, role));
