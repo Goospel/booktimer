@@ -155,6 +155,28 @@ class ReadingContributionServiceTest {
         assertThat(schedule.goalFor(LocalDate.of(2026, 6, 1))).isEqualTo(3600L);  // 다음 변경 당일
     }
 
+    @Test
+    @DisplayName("REQ-88 · 목표 연속의 오늘은 유저 타임존 자정으로 정한다 — 서울 00:30엔 어제(6/2)가 비어 끊기고, UTC엔 6/1이 어제라 이어진다")
+    void readingGraph_goalStreak_todayIsUserTimezoneBased() {
+        LocalDate june1 = LocalDate.of(2026, 6, 1);
+        ReadingHistoryService history = mock(ReadingHistoryService.class);
+        when(history.dailyHistory(any()))
+                .thenReturn(List.of(new DailyReadingRecord(june1, 3600L, List.of(new BookRead("책", null, 3600L)))));
+        ReadingTimerRepository timers = mock(ReadingTimerRepository.class);
+        when(timers.findByUser(any())).thenReturn(Optional.empty()); // 기본 목표 60분
+        ReadingGoalChangeRepository goalChanges = mock(ReadingGoalChangeRepository.class);
+        when(goalChanges.findByUserOrderByEffectiveDateAsc(any())).thenReturn(List.of());
+        ReadingContributionService service =
+                new ReadingContributionService(history, timers, goalChanges, Clock.fixed(INSTANT, ZoneOffset.UTC));
+
+        User seoul = User.of("gs@booktimer.com", "h", "서울", "Asia/Seoul", Role.USER);
+        User utc = User.of("gu@booktimer.com", "h", "UTC", "UTC", Role.USER);
+
+        assertThat(service.readingGraph(seoul).goalStreak()).isZero();
+        assertThat(service.readingGraph(utc).goalStreak()).isEqualTo(1);
+        assertThat(latestDate(service.readingGraph(seoul).graph())).isEqualTo(LocalDate.of(2026, 6, 3)); // 같은 잔디
+    }
+
     private static ContributionDay cellOf(ContributionGraph graph, LocalDate date) {
         return graph.weeks().stream()
                 .flatMap(List::stream)

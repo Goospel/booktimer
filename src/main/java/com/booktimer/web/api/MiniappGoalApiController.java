@@ -37,8 +37,13 @@ public class MiniappGoalApiController {
         this.onboardingService = onboardingService;
     }
 
-    /** @return 200 (본문 없음) / 400 목표가 음수 / 401 토큰 없음·무효(체인이 처리) */
-    @PostMapping("/api/miniapp/goal")
+    /**
+     * {@code /api/app/goal}은 책생글 앱의 별칭이다(REQ-109) — 같은 일을 하고, 앱은 처음부터 이것만 불러
+     * 미니앱 폐기 때 앱 쪽 할 일이 0이 된다. {@code /api/app/**}도 Bearer API 체인이 맡는다.
+     *
+     * @return 200 (본문 없음) / 400 목표가 음수 / 401 토큰 없음·무효(체인이 처리)
+     */
+    @PostMapping({"/api/miniapp/goal", "/api/app/goal"})
     public ResponseEntity<Void> setGoal(Principal principal, @RequestBody MiniappGoalRequest request) {
         onboardingService.setDailyGoal(currentUserService.resolve(principal), request.dailyIncrementSeconds());
         return ResponseEntity.ok().build();

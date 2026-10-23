@@ -10,6 +10,7 @@ import com.booktimer.session.ContributionDay;
 import com.booktimer.session.ContributionGraph;
 import com.booktimer.session.GoalWaiverService;
 import com.booktimer.session.ReadingContributionService;
+import com.booktimer.session.ReadingGraph;
 import com.booktimer.session.ReadingSession;
 import com.booktimer.session.ReadingSessionRepository;
 import com.booktimer.session.ReadingSessionService;
@@ -98,7 +99,7 @@ public class DashboardApiController {
     public DashboardResponse get(Principal principal) {
         User user = currentUserService.resolve(principal);
         DashboardModel.LiveState live = dashboardModel.computeLive(user);
-        ContributionGraph graph = contributionService.contributionGraph(user);
+        ReadingGraph graph = contributionService.readingGraph(user);
         List<QuoteDto> quotes = quoteService.randomList(QUOTE_ROTATION_MAX).stream()
                 .map(q -> new QuoteDto(q.getText(), q.getAuthor()))
                 .toList();
@@ -160,7 +161,7 @@ public class DashboardApiController {
         // 측정 종료는 잔디가 변하는 바로 그 순간 — 방금 확정된 세션이 반영된 graph를 동봉해
         // 클라이언트가 새로고침 없이 잔디·연속일을 즉시 갱신하게 한다(start는 잔디 불변이라 TimerState 그대로).
         TimerState timer = buildTimerState(user);
-        ContributionGraphDto graph = toGraphDto(contributionService.contributionGraph(user));
+        ContributionGraphDto graph = toGraphDto(contributionService.readingGraph(user));
         // sessionId + untagged: 책 없이 시작한 세션(book==null)이면 종료 후 "무슨 책?" 태깅 시트를 띄운다(발견 1).
         // getBook()==null은 lazy 프록시를 초기화하지 않는 참조 비교라 트랜잭션 밖에서도 안전(null 연관=실제 null).
         boolean untagged = stopped.getBook() == null;
@@ -317,10 +318,11 @@ public class DashboardApiController {
                 .toList();
     }
 
-    private static ContributionGraphDto toGraphDto(ContributionGraph g) {
+    private static ContributionGraphDto toGraphDto(ReadingGraph reading) {
+        ContributionGraph g = reading.graph();
         return new ContributionGraphDto(
                 g.weeks(), g.monthLabels(),
-                g.totalSeconds(), g.activeDays(), g.currentStreak());
+                g.totalSeconds(), g.activeDays(), g.currentStreak(), reading.goalStreak());
     }
 
     // ── DTO records ──────────────────────────────────────────────────────────
@@ -453,12 +455,18 @@ public class DashboardApiController {
     /** 기기에서 이미 끝난 측정 — ISO-8601 문자열로 받는다(파싱 실패를 400으로 옮기려고 Instant가 아니다). */
     public record ImportRequest(String startedAt, String endedAt) {}
 
-    /** ContributionGraph 래퍼 — 잔디 그리드와 집계값만 싣는다. */
+    /**
+     * ContributionGraph 래퍼 — 잔디 그리드와 집계값만 싣는다.
+     *
+     * <p>{@code currentStreak}은 1초 연속(값·뜻 그대로 — 미니앱·옛 클라이언트), {@code goalStreak}은 목표를 채운 날의
+     * 연속(REQ-88·89 — 앱·웹)이다. {@code goalStreak}은 <b>맨 뒤</b>에 둔다 — 모르는 키는 미니앱이 무시한다.
+     */
     public record ContributionGraphDto(
             List<List<ContributionDay>> weeks,
             List<ContributionGraph.MonthLabel> monthLabels,
             long totalSeconds,
             int activeDays,
-            int currentStreak
+            int currentStreak,
+            int goalStreak
     ) {}
 }

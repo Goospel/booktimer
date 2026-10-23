@@ -162,8 +162,44 @@ class DashboardApiControllerTest {
 
     /** 오늘(유저 TZ) 안에 확정 완료 세션 한 건을 심는다 — 실행 시각과 무관하게 날짜가 흔들리지 않도록 자정 기준 오프셋으로. */
     private void seedTodayReading(User u, Book book, long seconds) {
-        Instant dayStart = today().atStartOfDay(ZoneId.of(SEOUL)).toInstant();
+        seedReading(u, book, 0, seconds);
+    }
+
+    private void seedReading(User u, Book book, int daysAgo, long seconds) {
+        Instant dayStart = today().minusDays(daysAgo).atStartOfDay(ZoneId.of(SEOUL)).toInstant();
         sessionService.recordManual(u, dayStart.plusSeconds(3600), dayStart.plusSeconds(3600 + seconds), book);
+    }
+
+    /**
+     * 목표 1시간(가입 기본)에 오늘 70분 · 어제 70분 · 그제 10분 · 사흘 전 70분 — 1초 연속은 4, 목표 연속은 2.
+     * 두 값이 달라야 응답이 어느 쪽을 실었는지 물을 수 있다.
+     */
+    private void seedStreakFixture(User u, Book book) {
+        seedReading(u, book, 0, 70 * 60L);
+        seedReading(u, book, 1, 70 * 60L);
+        seedReading(u, book, 2, 10 * 60L);
+        seedReading(u, book, 3, 70 * 60L);
+    }
+
+    @Test
+    @DisplayName("REQ-89 · 대시보드와 정지 응답의 잔디 DTO 맨 뒤에 goalStreak이 있고 currentStreak은 그대로다")
+    void graphDto_carriesGoalStreakLast_currentStreakUnchanged() throws Exception {
+        User u = register("goalstreak@a.com", "goalstreak");
+        Book book = addBook(u, "연속 책", BookStatus.READING);
+        seedStreakFixture(u, book);
+
+        mockMvc.perform(get("/api/dashboard").with(user("goalstreak@a.com")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.graph.currentStreak").value(4))
+                .andExpect(jsonPath("$.graph.goalStreak").value(2))
+                .andExpect(content().string(containsString("\"currentStreak\":4,\"goalStreak\":2}")));
+
+        sessionService.start(u, clock.instant(), book);
+        mockMvc.perform(post("/api/sessions/stop").with(user("goalstreak@a.com")).with(csrf()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.graph.currentStreak").value(4))
+                .andExpect(jsonPath("$.graph.goalStreak").value(2))
+                .andExpect(content().string(containsString("\"currentStreak\":4,\"goalStreak\":2}")));
     }
 
     /**

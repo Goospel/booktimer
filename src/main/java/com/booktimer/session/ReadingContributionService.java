@@ -54,11 +54,16 @@ public class ReadingContributionService {
 
     /** 본인이 보는 전체 잔디 — 모든 완료 세션을 합산한다. */
     public ContributionGraph contributionGraph(User user) {
+        return readingGraph(user).graph();
+    }
+
+    /** 잔디 + 목표 연속(REQ-88) — 같은 집계·같은 날짜별 목표로 한 번에 만든다(대시보드 GET·stop). */
+    public ReadingGraph readingGraph(User user) {
         return graphFrom(user, historyService.dailyHistory(user));
     }
 
-    /** 일자별 집계를 받아 유저 타임존 "오늘"·하루 목표로 잔디 그리드를 만든다(가시성 필터는 호출자가 끝낸 상태). */
-    private ContributionGraph graphFrom(User user, List<DailyReadingRecord> history) {
+    /** 일자별 집계를 받아 유저 타임존 "오늘"·하루 목표로 잔디 그리드와 목표 연속을 만든다(가시성 필터는 호출자가 끝낸 상태). */
+    private ReadingGraph graphFrom(User user, List<DailyReadingRecord> history) {
         ZoneId zone = ZoneId.of(user.getTimezone());
         LocalDate today = LocalDate.ofInstant(clock.instant(), zone);
 
@@ -74,7 +79,9 @@ public class ReadingContributionService {
         // 각 칸을 그날 목표로 색칠(소급 재채색 차단, N-059).
         GoalSchedule schedule = goalSchedule(user);
 
-        return ContributionGraphBuilder.build(secondsByDate, today, schedule::goalFor, manualDates);
+        return new ReadingGraph(
+                ContributionGraphBuilder.build(secondsByDate, today, schedule::goalFor, manualDates),
+                ContributionGraphBuilder.currentGoalStreak(secondsByDate, today, schedule::goalFor));
     }
 
     /**
