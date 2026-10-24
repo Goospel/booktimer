@@ -14,24 +14,28 @@ const KEY = 'booktimer.liveActivity';
 
 export async function syncSurfaces(d: Dashboard, now = new Date()): Promise<void> {
   if (Platform.OS !== 'ios') return;
+  // 「무엇을 재는 중인가」(독서 · 공부)는 widgetPayload 한 곳이 정하고 위젯과 Live Activity가 같은 값을 쓴다(범위 보충 REQ-106).
+  const p = widgetPayload(d, now);
   try {
-    ReadingWidget.updateSnapshot(widgetPayload(d, now));
+    ReadingWidget.updateSnapshot(p);
   } catch (e) {
     console.warn('widget', e);
   }
   try {
     const instances = ReadingActivity.getInstances();
     const local = knownActivity(instances.length > 0 ? await AsyncStorage.getItem(KEY) : null, instances.length);
-    const startedAt = d.hasActiveSession && d.activeStartedAt ? Date.parse(d.activeStartedAt) : null;
-    const action = liveActivityAction({ active: startedAt !== null, startedAt, bookTitle: d.activeBookTitle }, local);
+    const startedAt = p.activeStartedAt ?? null;
+    const bookTitle = p.bookTitle ?? null;
+    // 판정에 모드를 넣지 않는다 — 독서 · 공부는 서로를 막아 차례로만 생기므로 모드가 바뀌면 시작 시각이 늘 바뀐다(사양 §5.7)
+    const action = liveActivityAction({ active: startedAt !== null, startedAt, bookTitle }, local);
     if (action === 'end' || action === 'restart') {
       await Promise.all(instances.map((a) => a.end('immediate')));
       await AsyncStorage.removeItem(KEY);
     }
     if ((action === 'start' || action === 'restart') && startedAt !== null) {
       const t = activityTimes(startedAt);
-      ReadingActivity.start({ bookTitle: d.activeBookTitle ?? '', lowerMs: t.lowerMs, upperMs: t.upperMs }, 'booktimer://', new Date(t.staleMs));
-      const saved: LocalActivity = { startedAt, bookTitle: d.activeBookTitle };
+      ReadingActivity.start({ bookTitle: bookTitle ?? '', lowerMs: t.lowerMs, upperMs: t.upperMs, mode: p.mode }, 'booktimer://', new Date(t.staleMs));
+      const saved: LocalActivity = { startedAt, bookTitle };
       await AsyncStorage.setItem(KEY, JSON.stringify(saved));
     }
   } catch (e) {

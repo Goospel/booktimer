@@ -36,6 +36,45 @@ export interface Dashboard {
   recentBookId: number | null;
   /** 목표를 채운 날의 연속(REQ-89 — 서버 PR-F). 옛 서버엔 없다. */
   graph: { goalStreak?: number };
+  /** 공부 모드(PR-S1 — `StudyApiController.StudyState`). 독서 · 공부는 서로를 막는다(409). */
+  study: StudyState;
+}
+
+// ── 공부 타이머 · 공부 서재(PR-S1) — 회독 · 회당 시간 · 링크 필드는 일부러 없다(v1 REQ-98 — 금지 표) ──
+
+/** `StudyBookApiController.StudyBookRow` 중 앱이 읽는 것만. totalSeconds 0 = 아직 안 잼. */
+export interface StudyBook {
+  id: number;
+  title: string;
+  author: string | null;
+  coverUrl: string | null;
+  isbn13: string | null;
+  totalSeconds: number;
+}
+
+/** `StudyApiController.StudyState` 중 앱이 읽는 것만. todaySeconds는 끝난 세션만 — 진행 중 몫은 앱이 얹는다(lib/studyTimer). books = 등록 최신 먼저. */
+export interface StudyState {
+  hasActiveSession: boolean;
+  activeStartedAt: string | null;
+  todaySeconds: number;
+  activeBook: StudyBook | null;
+  recentBookId: number | null;
+  books: StudyBook[];
+}
+
+/** `StudyBookApiController.StudyShelfResponse` 중 앱이 읽는 것만 — 담기 화면의 「담음」 판정용. */
+export interface StudyShelfResponse {
+  books: StudyBook[];
+}
+
+/** `StudyBookApiController.AddRequest` 중 6필드 — 독서 담기의 상태 · 분류 · 출간일은 없다(linkUrl은 웹 「직접 추가」 전용). */
+export interface StudyAddRequest {
+  title: string;
+  author: string | null;
+  isbn13: string | null;
+  coverUrl: string | null;
+  publisher: string | null;
+  purchaseLink: string | null;
 }
 
 /** `WritingApiController.DraftSummary` — 책이 풀린 글이면 bookId · bookTitle이 null, 제목은 비어 있을 수 있다. */

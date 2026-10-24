@@ -13,7 +13,7 @@ import { Button, Notice, Row, Screen, Txt } from '../../components/ui';
 import { clockLabel, dateLabel, durationLabel } from '../../lib/format';
 import { goalProgress, isStaleDay, nextMidnightOf, SESSION_CAP_MS } from '../../lib/goalProgress';
 import { savedNotice } from '../../lib/marginSave';
-import { startReading } from '../../lib/measureStart';
+import { startMeasure, stopMeasure } from '../../lib/measureStart';
 import { type DraftRow, recentDrafts } from '../../lib/recentDrafts';
 import { syncSurfaces } from '../../lib/surfaces';
 import { color, layout, space } from '../../theme/tokens';
@@ -109,7 +109,7 @@ export default function Home() {
     if (busy) return;
     setBusy(true);
     setNotice(null);
-    const r = await startReading({ start: reading.start, reload: load }, bookId);
+    const r = await startMeasure({ start: reading.start, reload: load }, bookId);
     if (r.error) setNotice({ message: r.error, tone: 'error' });
     setBusy(false);
   }
@@ -117,12 +117,9 @@ export default function Home() {
   async function stop() {
     if (busy) return;
     setBusy(true);
-    try {
-      await reading.stop();
-    } catch (e) {
-      setNotice({ message: e instanceof Error ? e.message : String(e), tone: 'error' });
-    }
-    await load();
+    const r = await stopMeasure({ stop: reading.stop, reload: load });
+    if (r.error) setNotice({ message: r.error, tone: 'error' });
+    else if (r.info) setNotice({ message: r.info });
     setBusy(false);
   }
 

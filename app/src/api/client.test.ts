@@ -6,7 +6,7 @@ jest.mock('expo-secure-store', () => ({
   deleteItemAsync: jest.fn(async (k: string) => void mockStore.delete(k)),
 }));
 
-import { ApiError, appleSignIn, failText, library, margins, NetworkError, request, session, UnauthorizedError } from './client';
+import { ApiError, appleSignIn, failText, library, margins, NetworkError, request, session, study, UnauthorizedError } from './client';
 
 const fetchMock = jest.fn();
 global.fetch = fetchMock as unknown as typeof fetch;
@@ -111,4 +111,25 @@ test('실패 문구 · 서버 평문과 연결 문구는 그대로, 문구 없�
   expect(failText(new NetworkError(), fb)).toBe(new NetworkError().message);
   expect(failText(new ApiError(400, '요청에 실패했어요 (400)'), fb)).toBe(fb);
   expect(failText(new Error('boom'), fb)).toBe(fb);
+});
+
+test('REQ-98 · 공부 시작은 {bookId}, 정지는 {}를 싣는다', async () => {
+  fetchMock.mockResolvedValue(reply(200, '{}'));
+  await study.start(3);
+  await study.start(null);
+  await study.stop();
+  expect(fetchMock.mock.calls[0][0]).toBe('https://booktimer.app/api/study/start');
+  expect(fetchMock.mock.calls[0][1].method).toBe('POST');
+  expect(JSON.parse(fetchMock.mock.calls[0][1].body)).toEqual({ bookId: 3 });
+  expect(JSON.parse(fetchMock.mock.calls[1][1].body)).toEqual({ bookId: null });
+  expect(fetchMock.mock.calls[2][0]).toBe('https://booktimer.app/api/study/stop');
+  expect(fetchMock.mock.calls[2][1].method).toBe('POST');
+  expect(JSON.parse(fetchMock.mock.calls[2][1].body)).toEqual({});
+});
+
+test('REQ-99 · 공부 서재 빼기는 POST /api/study/books/{id}/delete다', async () => {
+  fetchMock.mockResolvedValue(reply(200, '{"deleted":true}'));
+  await study.remove(12);
+  expect(fetchMock.mock.calls[0][0]).toBe('https://booktimer.app/api/study/books/12/delete');
+  expect(fetchMock.mock.calls[0][1].method).toBe('POST');
 });

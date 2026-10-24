@@ -8,7 +8,8 @@ export type ReadingWidgetProps = {
   todayMinutes: number;
   activeStartedAt?: number;
   bookTitle?: string;
-  mode: 'reading';
+  /** 측정 중일 때 무엇을 재는가 — 대기 값(오늘 분)은 늘 독서다(REQ-106) */
+  mode: 'reading' | 'study';
 };
 
 // 시각 보충 §5.3 — 시스템 외형을 따른다. 배경만 paper · desk 리터럴(REQ-60 — widgetColors.test.ts가 토큰과 대조),
@@ -29,7 +30,7 @@ const ReadingWidget = (props: ReadingWidgetProps, environment: WidgetEnvironment
     const upper = new Date(props.activeStartedAt + 22200000);
     return (
       <VStack alignment="leading" spacing={4} modifiers={box}>
-        <Text modifiers={caption}>읽는 중</Text>
+        <Text modifiers={caption}>{props.mode === 'study' ? '공부 중' : '읽는 중'}</Text>
         {props.bookTitle ? <Text modifiers={[font({ textStyle: 'headline' }), lineLimit(2), primary]}>{props.bookTitle}</Text> : null}
         <Text timerInterval={{ lower, upper }} countsDown={false} pauseTime={upper} modifiers={value} />
       </VStack>

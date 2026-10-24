@@ -18,6 +18,9 @@ import type {
   ShelfResponse,
   ShelfStatus,
   Step,
+  StudyAddRequest,
+  StudyBook,
+  StudyShelfResponse,
 } from './types';
 
 const BASE_URL = process.env.EXPO_PUBLIC_API_BASE_URL ?? 'https://booktimer.app';
@@ -181,4 +184,15 @@ export const writing = {
   remove: (id: number) => request<void>(`/api/app/drafts/${id}`, { method: 'DELETE' }),
   ai: (id: number, body: { step: Step; revision: number; focus: string | null }) => request<AiView>(`/api/app/drafts/${id}/ai`, { body }),
   consent: (agree: boolean) => request<ConsentView>('/api/app/ai-consent', { method: 'PUT', body: { agree } }),
+};
+
+// ── 공부 타이머 · 공부 서재(PR-S1) — 회당 시간 · 회독 문은 부르지 않는다(v1 REQ-98 — 금지 표). 공부 탭은 대시보드 study로 그린다 ──
+export const study = {
+  start: (bookId: number | null) => request<unknown>('/api/study/start', { body: { bookId } }),
+  stop: () => request<unknown>('/api/study/stop', { body: {} }),
+  /** 담기 화면의 「담음」 판정용(공부 서재 isbn) */
+  shelf: () => request<StudyShelfResponse>('/api/study/books'),
+  add: (body: StudyAddRequest) => request<StudyBook>('/api/study/books', { body }),
+  /** 필기가 있으면 409 평문(서버 문구 그대로 보인다 — REQ-99) */
+  remove: (id: number) => request<unknown>(`/api/study/books/${id}/delete`, { method: 'POST' }),
 };

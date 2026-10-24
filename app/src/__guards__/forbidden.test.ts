@@ -31,6 +31,13 @@ const ROWS: Row[] = [
   // 키보드 위 막대는 KeyboardAvoidingView 안 보통 View다 — InputAccessoryView는 다시 마운트한 입력칸에 안 붙었다(U-05a 실측).
   // 낱말이 아니라 JSX 사용을 본다 — 「왜 안 쓰는가」를 적은 주석은 남겨도 된다(PR-H 사양 §8-27).
   { id: 'REQ-136', pattern: /<InputAccessoryView\b/, skip: [], planted: '<InputAccessoryView nativeID="bar">' },
+  // 공부엔 목표 · 회당 시간 · 회독이 없다(사용자 결정) — 앱은 그 문을 부르지도 그 필드를 읽지도 않는다.
+  {
+    id: 'REQ-98',
+    pattern: /\/(?:session-goal|read-count)\b|\b(?:sessionGoalSeconds|readCount)\b/,
+    skip: [],
+    planted: 'request(`/api/study/books/${id}/session-goal`)',
+  },
 ];
 
 const SELF = join('__guards__');
@@ -85,4 +92,12 @@ test('REQ-40 · 앱 소스에 /visibility·/share 호출이 없다(심은 픽스
   expect(hits(ROWS[3], [{ rel: join('app', 'planted.tsx'), text: "request(`/api/books/${id}/visibility`, { body })" }])).toHaveLength(1);
   // 웹 공개 설정 화면(/books)을 여는 주소는 공개 문 호출이 아니다
   expect(hits(ROWS[3], [{ rel: join('app', 'planted.tsx'), text: "Linking.openURL('https://booktimer.app/books')" }])).toEqual([]);
+});
+
+test('REQ-98 · 앱 소스에 회당 시간·회독 호출이 없다(심은 픽스처는 잡힌다)', () => {
+  const row = ROWS.find((r) => r.id === 'REQ-98');
+  expect(row).toBeDefined();
+  expect(hits(row!)).toEqual([]);
+  expect(hits(row!, [{ rel: join('app', 'planted.tsx'), text: 'request(`/api/study/books/${id}/session-goal`)' }])).toHaveLength(1);
+  expect(hits(row!, [{ rel: join('app', 'planted.tsx'), text: 'const n = b.readCount' }])).toHaveLength(1);
 });
