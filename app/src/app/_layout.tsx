@@ -6,6 +6,7 @@ import { View } from 'react-native';
 import '../../widgets/ReadingWidget';
 import '../../widgets/ReadingActivity';
 import { session } from '../api/client';
+import { clearSurfaces } from '../lib/surfaces';
 import { useAppFonts } from '../theme/fonts';
 import { color } from '../theme/tokens';
 
@@ -31,7 +32,11 @@ export default function RootLayout() {
       (t) => setSignedIn(t !== null),
       () => setSignedIn(false),
     );
-    return session.subscribe(setSignedIn); // 로그인 · 401이 화면 틀을 바꾼다
+    // 로그인 · 401이 화면 틀을 바꾼다. 로그인 화면이 되면(로그아웃 · 탈퇴 · 401) 예약 알림 · LA · 위젯을 비운다 — 초안은 남긴다(PR-I §8-15)
+    return session.subscribe((v) => {
+      setSignedIn(v);
+      if (!v) void clearSurfaces();
+    });
   }, []);
 
   const ready = fontsOk && signedIn !== null;
@@ -51,6 +56,8 @@ export default function RootLayout() {
         <Stack.Screen name="margin/[bookId]" options={stacked} />
         {/* 글쓰기(PR-H) — 화면이 머리 가운데 책 제목 · 오른쪽 「내보내기」를 단다 */}
         <Stack.Screen name="draft/[id]" options={stacked} />
+        {/* 계정 삭제(PR-I — 결정 A ① 쌓는 화면) */}
+        <Stack.Screen name="account-delete" options={stacked} />
       </Stack.Protected>
       <Stack.Protected guard={!signedIn}>
         <Stack.Screen name="(auth)/login" />

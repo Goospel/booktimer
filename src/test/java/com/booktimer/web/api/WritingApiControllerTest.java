@@ -380,6 +380,31 @@ class WritingApiControllerTest {
         call(get("/api/app/drafts/" + id), token).andExpect(jsonPath("$.aiConsent").value(true));
     }
 
+    @Test
+    @DisplayName("REQ-154 · GET /api/app/ai-consent는 지금 동의 상태와 시각을 준다(시행일보다 이른 시각은 동의 없음)")
+    void consentViewReadsState() throws Exception {
+        clock.set(EFFECTIVE.plusSeconds(86_400 * 3));
+        User me = register("wconsview", Role.USER);
+        String token = apiTokenService.issue(me);
+
+        call(get("/api/app/ai-consent"), token).andExpect(status().isOk())
+                .andExpect(jsonPath("$.aiConsent").value(false))
+                .andExpect(jsonPath("$.aiConsentAt").doesNotExist());
+
+        me.consentToAi(EFFECTIVE);
+        userRepository.saveAndFlush(me);
+        call(get("/api/app/ai-consent"), token).andExpect(status().isOk())
+                .andExpect(jsonPath("$.aiConsent").value(true))
+                .andExpect(jsonPath("$.aiConsentAt").value(EFFECTIVE.toString()));
+
+        // 같은 계정 · 입력만 바꾼 대조 — 시행일 1초 전 시각은 동의 없음
+        me.consentToAi(EFFECTIVE.minusSeconds(1));
+        userRepository.saveAndFlush(me);
+        call(get("/api/app/ai-consent"), token).andExpect(jsonPath("$.aiConsent").value(false));
+
+        mvc.perform(get("/api/app/ai-consent")).andExpect(status().isUnauthorized());
+    }
+
     // ── REQ-16 내보내기 계측 ─────────────────────────────────────────────────
 
     @Test

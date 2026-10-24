@@ -1,12 +1,13 @@
 // 로그인 첫 화면(시각 보충 §1.6 ② · 문구 §8 (가)) — 만 14세 스위치 + Apple로 계속하기 + 「웹에서 쓰던 계정이 있어요」.
 // 웹 계정 모드만 다음 화면(연결 코드 칸)이 있다. 나이 스위치는 웹 가입 때 확인해 그 화면엔 없다.
 import * as AppleAuthentication from 'expo-apple-authentication';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Alert, Image, Linking, View } from 'react-native';
 
 import { ApiError, appleSignIn, NetworkError } from '../../api/client';
 import { Button, Field, Notice, Screen, SwitchRow, Txt } from '../../components/ui';
 import { type LoginMode, LINK_CODE_LENGTH, loginGate } from '../../lib/loginGate';
+import { signedOutNotice } from '../../lib/logout';
 import { color, space } from '../../theme/tokens';
 
 const APPLE_HEIGHT = 48;
@@ -17,6 +18,12 @@ export default function Login() {
   const [code, setCode] = useState('');
   const [notice, setNotice] = useState<{ message: string; tone: 'info' | 'error' } | null>(null);
   const [busy, setBusy] = useState(false);
+
+  // 탈퇴 뒤 한 번만 「계정을 지웠어요」(PR-I). 효과에 둔다 — 개발 모드의 두 번 부름에서 둘째(빈 값)는 덮지 않는다
+  useEffect(() => {
+    const m = signedOutNotice.take();
+    if (m) setNotice({ message: m, tone: 'info' });
+  }, []);
 
   async function onApple() {
     const gate = loginGate({ mode, ageOn, code });

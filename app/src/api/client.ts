@@ -25,7 +25,22 @@ import type {
 
 const BASE_URL = process.env.EXPO_PUBLIC_API_BASE_URL ?? 'https://booktimer.app';
 
-const KEY = { token: 'booktimer.token', userId: 'booktimer.userId', webAccount: 'booktimer.webAccount' } as const;
+const KEY = {
+  token: 'booktimer.token',
+  userId: 'booktimer.userId',
+  webAccount: 'booktimer.webAccount',
+  authProvider: 'booktimer.authProvider',
+  appleLinked: 'booktimer.appleLinked',
+  googleLinked: 'booktimer.googleLinked',
+} as const;
+
+/** 마지막 로그인 응답의 로그인 정보 — 탈퇴 갈래(lib/deleteVia). PR-I 전에 로그인한 세션은 authProvider가 null이다. */
+export interface AccountInfo {
+  authProvider: string | null;
+  appleLinked: boolean;
+  googleLinked: boolean;
+  webAccount: boolean;
+}
 
 // ── 세션 — 로그인 상태가 바뀌면(로그인 · 401) 화면 틀이 다시 그린다 ───────────
 const listeners = new Set<(signedIn: boolean) => void>();
@@ -36,9 +51,19 @@ export const session = {
     const v = await SecureStore.getItemAsync(KEY.userId);
     return v === null ? null : Number(v);
   },
-  async save(p: { token: string; userId: number; webAccount: boolean }) {
+  async account(): Promise<AccountInfo> {
+    const [authProvider, appleLinked, googleLinked, webAccount] = await Promise.all(
+      [KEY.authProvider, KEY.appleLinked, KEY.googleLinked, KEY.webAccount].map((k) => SecureStore.getItemAsync(k)),
+    );
+    return { authProvider, appleLinked: appleLinked === 'true', googleLinked: googleLinked === 'true', webAccount: webAccount === 'true' };
+  },
+  async save(p: { token: string; userId: number; webAccount: boolean; authProvider?: string | null; appleLinked?: boolean; googleLinked?: boolean }) {
     await SecureStore.setItemAsync(KEY.userId, String(p.userId));
     await SecureStore.setItemAsync(KEY.webAccount, String(p.webAccount));
+    if (p.authProvider) await SecureStore.setItemAsync(KEY.authProvider, p.authProvider);
+    else await SecureStore.deleteItemAsync(KEY.authProvider);
+    await SecureStore.setItemAsync(KEY.appleLinked, String(!!p.appleLinked));
+    await SecureStore.setItemAsync(KEY.googleLinked, String(!!p.googleLinked));
     await SecureStore.setItemAsync(KEY.token, p.token);
     listeners.forEach((l) => l(true));
   },
@@ -143,7 +168,14 @@ export async function appleSignIn(p: { mode: 'start' | 'link'; identityToken: st
       : await auth(p.identityToken, 'LINK', { linkCode: p.code.trim() });
   }
   if (!res.registered || res.token === null || res.userId === null) throw new ApiError(500, '요청에 실패했어요 (500)');
-  await session.save({ token: res.token, userId: res.userId, webAccount: res.webAccount });
+  await session.save({
+    token: res.token,
+    userId: res.userId,
+    webAccount: res.webAccount,
+    authProvider: res.authProvider ?? null, // 옛 서버엔 없다
+    appleLinked: !!res.appleLinked,
+    googleLinked: !!res.googleLinked,
+  });
   return existed && p.mode === 'link' ? { notice: ALREADY_APP_ACCOUNT } : {};
 }
 
@@ -184,6 +216,14 @@ export const writing = {
   remove: (id: number) => request<void>(`/api/app/drafts/${id}`, { method: 'DELETE' }),
   ai: (id: number, body: { step: Step; revision: number; focus: string | null }) => request<AiView>(`/api/app/drafts/${id}/ai`, { body }),
   consent: (agree: boolean) => request<ConsentView>('/api/app/ai-consent', { method: 'PUT', body: { agree } }),
+};
+
+// ── 설정 · 로그아웃 · 계정 삭제(PR-I) — 동의 거두기는 writing.consent(false). 탈퇴 토큰은 Apple 창에서 방금 받은 것(저장하지 않는다) ──
+export const account = {
+  logout: () => request<void>('/api/app/logout', { method: 'POST' }),
+  remove: (body: { provider: 'APPLE'; identityToken: string; authorizationCode: string | null }) =>
+    request<void>('/api/app/account/delete', { body }),
+  consent: () => request<ConsentView>('/api/app/ai-consent'),
 };
 
 // ── 공부 타이머 · 공부 서재(PR-S1) — 회당 시간 · 회독 문은 부르지 않는다(v1 REQ-98 — 금지 표). 공부 탭은 대시보드 study로 그린다 ──
