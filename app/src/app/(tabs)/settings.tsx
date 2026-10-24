@@ -50,11 +50,16 @@ export default function Settings() {
   const [consentError, setConsentError] = useState<string | null>(null);
   const [notice, setNotice] = useState<NoticeState>(null);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // 권한 창이 닫히며 AppState active가 load를 부른다 — 켜기 · 시각 바꾸기보다 먼저 나간 load가 끝나며 옛 설정으로 덮지 않게 순번을 본다
+  const loadSeq = useRef(0);
 
   const load = useCallback(async () => {
+    const seq = ++loadSeq.current;
     const [s, p, a] = await Promise.all([reminderStore.get(), permission().catch(() => null), session.account()]);
-    setSetting(s);
-    setPerm(p);
+    if (seq === loadSeq.current) {
+      setSetting(s);
+      setPerm(p);
+    }
     setAcc(a);
     try {
       setConsent(await account.consent());
@@ -78,6 +83,7 @@ export default function Settings() {
     setNotice(null);
     if (!next) {
       const s = { ...setting, on: false };
+      loadSeq.current++;
       await reminderStore.set(s);
       setSetting(s);
       await syncReminders(null); // 계획 0 → 우리 예약 전부 취소(목표 달성 포함 — REQ-92)
@@ -85,6 +91,7 @@ export default function Settings() {
     }
     let p = await permission();
     if (p.status === 'undetermined') p = await askPermission();
+    loadSeq.current++; // 권한 창 사이에 나간 load를 무효로
     setPerm(p);
     setTried(true);
     if (p.status !== 'granted') return; // 꺼진 채 — 안내는 렌더가 그린다
@@ -96,6 +103,7 @@ export default function Settings() {
 
   function pick(d: Date) {
     const s = { ...setting, ...clampTime({ hour: d.getHours(), minute: d.getMinutes() }) };
+    loadSeq.current++;
     setSetting(s);
     void reminderStore.set(s);
     // 휠이 돌 때마다 30개를 다시 걸지 않는다 — 1초 뒤 한 번
@@ -204,7 +212,7 @@ export default function Settings() {
 
       <Group
         title="AI 질문"
-        help={consent && !consented ? '글쓰기에서 「질문 받기」를 누르면 물어요' : undefined}
+        help={!consentError && consent && !consented ? '글쓰기에서 「질문 받기」를 누르면 물어요' : undefined}
         notice={consentError ? <Notice message={consentError} tone="error" action={{ label: '다시 불러오기', onPress: () => void load() }} /> : at('ai')}
       >
         {consentError ? null : (

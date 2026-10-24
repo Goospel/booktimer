@@ -118,4 +118,7 @@ test('REQ-40 · 앱 소스에 결제·구독·프리미엄 문구가 없다', ()
   expect(hits(row!, [{ rel: join('app', 'planted.tsx'), text: '// 화면을 떠날 때도 구독을 지운다' }])).toEqual([]);
   expect(hits(row!, [{ rel: join('app', 'planted.tsx'), text: "Linking.openURL('https://booktimer.app/terms') // 결제 없음" }])).toEqual([]);
   expect(hits(row!, [{ rel: join('app', 'planted.tsx'), text: "Linking.openURL('https://booktimer.app/결제') // 주석" }])).toHaveLength(1);
+  // 갈래마다 양성 대조 — 「구독」 · 「유료」를 패턴에서 빼면 여기서 걸린다
+  expect(hits(row!, [{ rel: join('app', 'planted.tsx'), text: '<Txt v="B2">구독하고 질문 더 받기</Txt>' }])).toHaveLength(1);
+  expect(hits(row!, [{ rel: join('app', 'planted.tsx'), text: '<Txt v="B2">유료 질문</Txt>' }])).toHaveLength(1);
 });

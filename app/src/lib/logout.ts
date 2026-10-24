@@ -15,7 +15,11 @@ export async function logout(deps: {
   } catch {
     // 연결 · 401이어도 기기에선 로그아웃한다 — 폐기 못 한 토큰은 기기에서 지워져 아무도 갖지 않는다
   }
-  await deps.clearDrafts();
+  try {
+    await deps.clearDrafts();
+  } catch {
+    // 초안을 못 지워도 세션은 지운다 — 서버 토큰은 이미 폐기했다
+  }
   await deps.clearSession();
   return 'done';
 }

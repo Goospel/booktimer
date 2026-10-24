@@ -54,7 +54,11 @@ export async function deleteAccount(deps: {
     if (e instanceof ApiError && e.status === 409) return { error: e.message, web: true };
     return { error: failText(e, DELETE_FAILED) };
   }
-  await deps.clearDrafts();
+  try {
+    await deps.clearDrafts();
+  } catch {
+    // 초안을 못 지워도 세션은 지운다 — 서버 계정은 이미 지웠다
+  }
   await deps.clearSession();
   return { done: true };
 }

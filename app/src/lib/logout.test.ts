@@ -39,6 +39,13 @@ test('REQ-155 · 서버 토큰 폐기가 실패해도(연결·401) 기기에서�
   }
 });
 
+test('REQ-155 · 기기 초안 지우기가 실패해도 세션은 지운다(서버 토큰은 이미 폐기했다)', async () => {
+  const { d, calls } = deps(0, true);
+  d.clearDrafts = async () => { calls.push('clearDrafts'); throw new Error('kv'); };
+  expect(await logout(d)).toBe('done');
+  expect(calls.filter((c) => c === 'clearSession')).toHaveLength(1);
+});
+
 test('REQ-155 · 일회성 알림은 한 번만 꺼낸다', () => {
   signedOutNotice.set('계정을 지웠어요');
   expect(signedOutNotice.take()).toBe('계정을 지웠어요');

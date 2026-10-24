@@ -1,11 +1,16 @@
 // expo-notifications 얇은 감싸개(v1 REQ-33 · REQ-92 · REQ-153). 판정은 lib/reminders(순수 — 단위 테스트), 여기는 네이티브 호출만.
-// 앱이 앞에 있을 때는 띄우지 않는다(setNotificationHandler를 두지 않는다 — 흐름 안 Notice가 맡는다). 권한은 스위치를 켤 때만 묻는다.
+// 앱이 앞에 있을 때 띄우지 않는 핸들러를 둔다(흐름 안 Notice가 맡는다). 권한은 스위치를 켤 때만 묻는다.
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Notifications from 'expo-notifications';
 
 import { session } from '../api/client';
 import type { Dashboard } from '../api/types';
 import { DEFAULT_REMINDER, planNotifications, type ReminderSetting, scheduleDiff } from './reminders';
+
+// expo-notifications는 import만 해도 「앞에서도 배너 · 목록 · 소리」 기본 핸들러를 구독한다 — 명시로 덮는다.
+Notifications.setNotificationHandler({
+  handleNotification: async () => ({ shouldShowBanner: false, shouldShowList: false, shouldPlaySound: false, shouldSetBadge: false }),
+});
 
 export type PermissionState = { status: 'granted' | 'denied' | 'undetermined'; canAsk: boolean };
 

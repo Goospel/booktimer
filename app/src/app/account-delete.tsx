@@ -31,30 +31,33 @@ export default function AccountDelete() {
   async function onDelete(userId: number | null) {
     setNotice(null);
     setBusy(true);
-    const r = await deleteAccount({
-      confirm: async () => {
-        try {
-          // 이메일 · 이름은 받지 않는다 — 신원 재확인만
-          const c = await AppleAuthentication.signInAsync({ requestedScopes: [] });
-          if (!c.identityToken) throw new Error('no identity token');
-          return { identityToken: c.identityToken, authorizationCode: c.authorizationCode ?? null };
-        } catch (e) {
-          if ((e as { code?: string }).code === 'ERR_REQUEST_CANCELED') return null; // 창을 닫았다
-          throw e;
-        }
-      },
-      remove: account.remove,
-      clearDrafts: async () => {
-        if (userId !== null) await draftSync({ kv: AsyncStorage, userId, put: writing.save }).clear();
-      },
-      // 표지는 세션을 지우기 전에 — 지우는 순간 루트 틀이 로그인 화면을 그린다
-      clearSession: async () => {
-        signedOutNotice.set('계정을 지웠어요');
-        await session.clear();
-      },
-    });
-    if ('error' in r) setNotice({ message: r.error, web: r.web });
-    setBusy(false);
+    try {
+      const r = await deleteAccount({
+        confirm: async () => {
+          try {
+            // 이메일 · 이름은 받지 않는다 — 신원 재확인만
+            const c = await AppleAuthentication.signInAsync({ requestedScopes: [] });
+            if (!c.identityToken) throw new Error('no identity token');
+            return { identityToken: c.identityToken, authorizationCode: c.authorizationCode ?? null };
+          } catch (e) {
+            if ((e as { code?: string }).code === 'ERR_REQUEST_CANCELED') return null; // 창을 닫았다
+            throw e;
+          }
+        },
+        remove: account.remove,
+        clearDrafts: async () => {
+          if (userId !== null) await draftSync({ kv: AsyncStorage, userId, put: writing.save }).clear();
+        },
+        // 표지는 세션을 지우기 전에 — 지우는 순간 루트 틀이 로그인 화면을 그린다
+        clearSession: async () => {
+          signedOutNotice.set('계정을 지웠어요');
+          await session.clear();
+        },
+      });
+      if ('error' in r) setNotice({ message: r.error, web: r.web });
+    } finally {
+      setBusy(false); // 세션 지우기가 실패해도 단추가 busy로 굳지 않게
+    }
   }
 
   return (

@@ -6,6 +6,7 @@ import { Platform } from 'react-native';
 
 import ReadingActivity from '../../widgets/ReadingActivity';
 import ReadingWidget from '../../widgets/ReadingWidget';
+import { session } from '../api/client';
 import type { Dashboard } from '../api/types';
 import { activityTimes, knownActivity, liveActivityAction, type LocalActivity } from './liveActivity';
 import { cancelReminders, syncReminders } from './notify';
@@ -15,6 +16,8 @@ const KEY = 'booktimer.liveActivity';
 
 export async function syncSurfaces(d: Dashboard, now = new Date()): Promise<void> {
   if (Platform.OS !== 'ios') return;
+  // 로그아웃 직전에 나간 대시보드 GET이 clearSurfaces보다 늦게 와도 로그아웃한 폰에 책 제목 · 시간을 다시 그리지 않는다
+  if ((await session.token()) === null) return;
   // 「무엇을 재는 중인가」(독서 · 공부)는 widgetPayload 한 곳이 정하고 위젯과 Live Activity가 같은 값을 쓴다(범위 보충 REQ-106).
   const p = widgetPayload(d, now);
   try {
@@ -33,7 +36,8 @@ export async function syncSurfaces(d: Dashboard, now = new Date()): Promise<void
       await Promise.all(instances.map((a) => a.end('immediate')));
       await AsyncStorage.removeItem(KEY);
     }
-    if ((action === 'start' || action === 'restart') && startedAt !== null) {
+    // 위 await(AsyncStorage · LA 끝) 사이에 로그아웃했을 수 있다 — 띄우기 직전에 한 번 더 본다
+    if ((action === 'start' || action === 'restart') && startedAt !== null && (await session.token()) !== null) {
       const t = activityTimes(startedAt);
       ReadingActivity.start({ bookTitle: bookTitle ?? '', lowerMs: t.lowerMs, upperMs: t.upperMs, mode: p.mode }, 'booktimer://', new Date(t.staleMs));
       const saved: LocalActivity = { startedAt, bookTitle };

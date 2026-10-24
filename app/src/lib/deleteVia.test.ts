@@ -52,6 +52,16 @@ test('REQ-157 · 탈퇴가 204면 기기 초안을 지운 뒤 세션을 지운�
   expect(bodies).toEqual([{ provider: 'APPLE', identityToken: 'jwt', authorizationCode: 'code' }]);
 });
 
+test('REQ-157 · 탈퇴가 204인데 기기 초안 지우기가 실패해도 세션은 지운다(서버 계정은 이미 지웠다)', async () => {
+  const calls: string[] = [];
+  const { d } = deps({
+    clearDrafts: async () => { calls.push('clearDrafts'); throw new Error('kv'); },
+    clearSession: async () => void calls.push('clearSession'),
+  });
+  expect(await deleteAccount(d)).toEqual({ done: true });
+  expect(calls.filter((c) => c === 'clearSession')).toHaveLength(1);
+});
+
 test('REQ-157 · Apple 창을 닫거나 탈퇴가 실패하면 아무것도 지우지 않는다(409면 웹 설정으로 안내)', async () => {
   const cleared = (calls: string[]) => calls.filter((c) => c.startsWith('clear'));
 
