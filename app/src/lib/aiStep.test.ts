@@ -8,6 +8,7 @@ jest.mock('expo-secure-store', () => ({
 import { ApiError, NetworkError } from '../api/client';
 import type { AiView, DraftView, QuestionLog } from '../api/types';
 import { aiButton, messageFor, sendAiStep } from './aiStep';
+import { revisionOrThrow } from './draftSync';
 
 const log = (text: string): QuestionLog => ({
   rounds: [{ step: 'ASK', at: '2026-10-24T00:00:00Z', focus: null, bodyChars: 0, questions: [{ text, anchor: null }] }],
@@ -41,7 +42,7 @@ function harness(o: { flush?: () => Promise<{ revision: number }>; post?: (r: nu
         if (next instanceof Error) throw next;
         return next;
       },
-      since: null as string | null,
+      roundsBefore: 0,
       wait: async (ms: number) => void waits.push(ms),
     },
   };
@@ -53,6 +54,14 @@ const NOT_YET = '질문을 아직 받지 못했어요';
 const GENERIC = '질문을 보내지 못했어요 — 잠시 뒤 다시 눌러 주세요';
 
 describe('REQ-36 · 보내기 순서 · 안전망', () => {
+  test('REQ-36 · 안전망은 시각 문자열이 아니라 라운드 수로 판정한다 — 서버가 마이크로초로 자른 같은 순간은 새 결과가 아니다', async () => {
+    const old = draft({ aiUpdatedAt: '2026-10-24T01:49:12.770543Z', questions: log('옛 질문인가요?') });
+    const h = harness({ post: async () => { throw new NetworkError(); }, reloads: [old, old, old] });
+    // POST 응답 시각은 나노초('…770543300Z'), 다시 읽은 글은 datetime(6)('…770543Z') — 문자열로는 달라도 새 라운드가 아니다
+    h.p.roundsBefore = 1;
+    expect(await sendAiStep(h.p)).toEqual({ kind: 'retry', message: NOT_YET });
+  });
+
   test('REQ-36 · 보내기는 blur → 저장 비우기 → POST 순서이고 POST의 revision은 저장 응답의 revision이다', async () => {
     const h = harness();
     const r = await sendAiStep(h.p);
@@ -81,7 +90,6 @@ describe('REQ-36 · 보내기 순서 · 안전망', () => {
   test('REQ-36 · 세 번 다 그대로면 다시 시도 상태', async () => {
     const same = draft({ aiUpdatedAt: '2026-10-24T00:00:00Z' });
     const h2 = harness({ post: async () => { throw new NetworkError(); }, reloads: [same, same, same] });
-    h2.p.since = '2026-10-24T00:00:00Z';
     const r = await sendAiStep(h2.p);
     expect(r).toEqual({ kind: 'retry', message: NOT_YET });
     expect(h2.waits).toEqual([5000, 15000, 30000]);
@@ -139,9 +147,35 @@ describe('REQ-62 · 실패 문구', () => {
     expect(await sendAiStep(off.p)).toEqual({ kind: 'error', message: NET });
   });
 
-  test('REQ-62 · 알 수 없는 오류는 연결 실패 문구로 떨어지지 않고 일반 문구가 된다', () => {
+  test('REQ-62 · 알 수 없는 오류는 연결 실패 문구로 떨어지지 않고 일반 문구가 된다', async () => {
     expect(messageFor(new TypeError('Cannot read properties of undefined'), 'send')).toBe(GENERIC);
     expect(messageFor(new ApiError(500, '요청에 실패했어요 (500)'), 'send')).toBe(GENERIC);
+    // POST가 NetworkError도 ApiError도 아닌 것으로 실패하면 안전망(약 50초 뒤 연결 문구)으로 가지 않는다
+    const h = harness({ post: async () => { throw new TypeError('x'); } });
+    expect(await sendAiStep(h.p)).toEqual({ kind: 'error', message: GENERIC });
+    expect(h.waits).toEqual([]);
+    expect(h.calls).not.toContain('reload');
+  });
+
+  test('REQ-36 · 화면의 저장 결과 → revision 어댑터: 서버 문구 없는 저장 실패는 저장 실패 문구가 된다', () => {
+    const caught = (o: Parameters<typeof revisionOrThrow>[0]): unknown => {
+      try {
+        revisionOrThrow(o);
+      } catch (e) {
+        return e;
+      }
+      throw new Error('던지지 않았다');
+    };
+    const generic = '글을 저장하지 못했어요 — 잠시 뒤 다시 해 주세요';
+    expect(messageFor(caught({ kind: 'error', message: generic, cause: new ApiError(500, '요청에 실패했어요 (500)') }), 'save')).toBe(SAVE_FAIL);
+    expect(messageFor(caught({ kind: 'error', message: generic }), 'save')).toBe(SAVE_FAIL);
+    expect(messageFor(caught({ kind: 'error', message: '서버 문구', cause: new ApiError(400, '서버 문구') }), 'save')).toBe('서버 문구');
+    expect(revisionOrThrow({ kind: 'saved', revision: 4 })).toEqual({ revision: 4 });
+    expect(revisionOrThrow({ kind: 'mismatch', revision: 5 })).toEqual({ revision: 5 });
+    expect(caught({ kind: 'offline' })).toBeInstanceOf(NetworkError);
+    expect((caught({ kind: 'conflict' }) as ApiError).status).toBe(409);
+    expect(caught({ kind: 'gone' })).toBeInstanceOf(Error);
+    expect(caught(null)).toBeInstanceOf(Error);
   });
 });
 

@@ -17,6 +17,17 @@ test('REQ-39 · 하나를 뺀 픽스처는 그 리터럴을 돌려준다(양성 
   expect(missingLiterals(sheetText.replace('질문만 해요', '질문해요'))).toEqual(['질문만 해요']);
 });
 
+// 법정 고지(제28조의8 ②)를 그리는 자리 — 제목과 일곱 항목을 상수 그대로 전부 그린다(빼거나 자르는 길 0).
+const consentSheetSrc = readFileSync(resolve(__dirname, '..', 'components', 'ConsentSheet.tsx'), 'utf8');
+const sheetRendersAll = (src: string) => [/\{CONSENT_TITLE\}/.test(src), /CONSENT_ITEMS\.map\(/.test(src), /CONSENT_ITEMS\.(?!map\()/.test(src)];
+
+test('REQ-39 · 동의 시트(ConsentSheet)는 제목과 항목 전부를 상수에서 그대로 그린다(자른 픽스처는 잡힌다)', () => {
+  expect(sheetRendersAll(consentSheetSrc)).toEqual([true, true, false]);
+  const cut = consentSheetSrc.replace('CONSENT_ITEMS.map(', 'CONSENT_ITEMS.slice(1).map(');
+  expect(cut).not.toBe(consentSheetSrc); // 주입이 실제로 일어났다
+  expect(sheetRendersAll(cut)[2]).toBe(true); // 양성 대조
+});
+
 // 질문을 그리는 두 파일만 본다 — 설정 탭 빌드 줄은 정당하게 selectable이다(사양 §3).
 const COMPONENTS = ['QuestionSheet', 'QuestionBand'].map((n) => ({
   name: n,

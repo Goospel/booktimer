@@ -21,14 +21,14 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
-import { ApiError, failText, library, NetworkError, session, writing } from '../../api/client';
+import { ApiError, failText, library, session, writing } from '../../api/client';
 import type { DraftView, Question, Step } from '../../api/types';
 import { ConsentSheet } from '../../components/ConsentSheet';
 import { QuestionBand } from '../../components/QuestionBand';
 import { QuestionSheet } from '../../components/QuestionSheet';
-import { Button, Notice, Screen, Txt } from '../../components/ui';
+import { Button, Notice, Screen, Txt, useStacked } from '../../components/ui';
 import { aiButton, ROUNDS_MAX, sendAiStep } from '../../lib/aiStep';
-import { AUTOSAVE_MS, draftSync, type SaveOutcome, shouldDiscard } from '../../lib/draftSync';
+import { AUTOSAVE_MS, draftSync, revisionOrThrow, type SaveOutcome, shouldDiscard } from '../../lib/draftSync';
 import { buildExport, shouldMarkExported } from '../../lib/exportText';
 import { againArgs, bandHint } from '../../lib/questions';
 import { color, layout, line, space, type } from '../../theme/tokens';
@@ -43,6 +43,7 @@ const nextTick = () => new Promise<void>((r) => setTimeout(r, 0));
 export default function DraftWrite() {
   const id = Number(useLocalSearchParams<{ id: string }>().id);
   const headerHeight = useHeaderHeight(); // 유리 머리(headerTransparent) — 상태바 포함 높이
+  const stacked = useStacked();
   const [draft, setDraft] = useState<DraftView | null>(null); // 서버 쪽 사실(책 · 질문 기록 · 남은 몫 · 동의) — 본문은 편집기가 쥔다
   const [materials, setMaterials] = useState<{ included: number; excluded: number } | null>(null);
   const [loadError, setLoadError] = useState<{ message: string; notFound: boolean } | null>(null);
@@ -69,6 +70,7 @@ export default function DraftWrite() {
   const offlineShown = useRef(false);
   const conflictOpen = useRef(false);
   const pending = useRef<{ step: Step; focus: string | null } | null>(null);
+  const waitingRef = useRef(false); // 보내는 중에 떠나면 빈 글이어도 지우지 않는다 — 서버가 이미 몫을 깎았다(§8-17)
 
   function applyText(t: { title: string; body: string }) {
     titleRef.current = t.title;
@@ -115,15 +117,15 @@ export default function DraftWrite() {
     };
   }, []);
 
-  // 앱이 뒤로 가면 즉시 저장 · 떠날 때 남은 저장을 보내고 빈 글은 지운다(최선 노력 — 기다리지 않는다, REQ-142)
+  // 앱이 뒤로 가거나 돌아오면 저장(복귀 = 연결이 돌아온 뒤 dirty 칸 보내기 · §8-15) · 떠날 때 남은 저장을 보내고 빈 글은 지운다(최선 노력 — 기다리지 않는다, REQ-142)
   useEffect(() => {
-    const sub = AppState.addEventListener('change', (s) => s === 'background' && void save());
+    const sub = AppState.addEventListener('change', (s) => (s === 'background' || s === 'active') && void save());
     return () => {
       sub.remove();
       if (timer.current) clearTimeout(timer.current);
       const s = sync.current;
       if (!s) return;
-      if (shouldDiscard({ title: titleRef.current, body: bodyRef.current, rounds: roundsRef.current })) {
+      if (shouldDiscard({ title: titleRef.current, body: bodyRef.current, rounds: roundsRef.current }) && !waitingRef.current) {
         void writing.remove(id).then(() => s.drop(id), () => undefined);
       } else {
         void s.flush(id);
@@ -211,6 +213,8 @@ export default function DraftWrite() {
     setNotice(null);
     setSheet(null);
     setWaiting(step);
+    waitingRef.current = true;
+    let gone = false;
     const r = await sendAiStep({
       blur: () => {
         titleInput.current?.blur();
@@ -218,17 +222,16 @@ export default function DraftWrite() {
       },
       flush: async () => {
         const o = await save();
-        if (o?.kind === 'saved' || o?.kind === 'mismatch') return { revision: o.revision };
-        if (o?.kind === 'offline') throw new NetworkError();
-        if (o?.kind === 'error') throw new ApiError(400, o.message);
-        if (o?.kind === 'conflict') throw new ApiError(409, '다른 기기에서 이 글이 바뀌었어요 — 그쪽을 불러와 주세요');
-        throw new Error('not saved');
+        if (o?.kind === 'gone') gone = true;
+        return revisionOrThrow(o);
       },
       post: (revision) => writing.ai(id, { step, revision, focus: step === 'ASK' ? null : f }),
       reload: () => writing.get(id),
-      since: draft.aiUpdatedAt,
+      roundsBefore: roundsRef.current,
     });
     setWaiting(null);
+    waitingRef.current = false;
+    if (gone) return; // save()가 띄운 「글을 찾을 수 없어요 + 돌아가기」를 남긴다
     if (r.kind === 'done') {
       roundsRef.current = r.questions.rounds.length;
       setDraft((d) => (d ? { ...d, aiConsent: true, questions: r.questions, aiUpdatedAt: r.aiUpdatedAt, aiRemainingToday: r.aiRemainingToday } : d));
@@ -238,7 +241,7 @@ export default function DraftWrite() {
       pending.current = { step, focus: f };
       setSheet('consent');
     } else if (r.kind === 'retry') {
-      setNotice({ message: r.message, tone: 'error', action: { label: '다시 시도', onPress: () => void runAi(step, f) } });
+      setNotice({ message: r.message, tone: 'error', action: { label: '다시 시도', onPress: () => void runAi(step, f, consented) } }); // 낡은 클로저의 aiConsent=false로 동의 시트를 다시 띄우지 않는다
     } else {
       setNotice({ message: r.message, tone: 'error' });
     }
@@ -279,8 +282,8 @@ export default function DraftWrite() {
     await nextTick(); // 조합 중이던 마지막 음절 확정
     const saved = await save();
     const r = await Share.share({ message: buildExport({ title: titleRef.current, body: bodyRef.current }) });
-    // ponytail: 내보낸 표시는 지표뿐이라 실패해도 조용히 넘긴다(저장이 안 된 상태면 보내지 않는다)
-    if (shouldMarkExported(r) && (saved?.kind === 'saved' || saved?.kind === 'mismatch')) void save({ exported: true });
+    // ponytail: 내보낸 표시는 지표뿐이라 실패해도 조용히 넘긴다 — onOutcome을 거치지 않는다(글은 이미 저장됐는데 저장 실패 알림이 뜨면 오도다 · §8-22)
+    if (shouldMarkExported(r) && (saved?.kind === 'saved' || saved?.kind === 'mismatch')) void sync.current?.flush(id, { exported: true });
   }
 
   const canExport = titleText.trim() !== '' || bodyText.trim() !== '';
@@ -403,6 +406,7 @@ export default function DraftWrite() {
         <View
           style={{
             flexDirection: 'row',
+            flexWrap: stacked ? 'wrap' : 'nowrap', // 큰 글자면 글자 단추 둘이 폭을 다 써 알약이 찌그러진다 — 알약을 아래 줄로
             alignItems: 'center',
             gap: space[2],
             backgroundColor: color.paper,
@@ -414,7 +418,7 @@ export default function DraftWrite() {
         >
           {keyboard ? <Button kind="text" label="키보드 내리기" onPress={() => Keyboard.dismiss()} /> : null}
           {rounds > 0 ? <Button kind="text" label="질문 보기" onPress={openQuestions} /> : null}
-          <View style={{ flex: 1 }}>
+          <View style={stacked ? { flexBasis: '100%' } : { flex: 1 }}>
             <Button
               kind="ink"
               label={ai.label}

@@ -29,7 +29,7 @@ export function ConsentSheet(p: { open: boolean; busy: boolean; onAgree: () => v
               ·
             </Txt>
             <Txt v="L1" style={{ color: color.text, flex: 1 }}>
-              {name ? <Txt v="L2">{name}</Txt> : null}
+              {name ? <Txt v="L2" style={{ color: color.text }}>{name}</Txt> : null}
               {rest}
             </Txt>
           </View>

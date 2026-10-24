@@ -45,7 +45,8 @@ export async function sendAiStep(p: {
   flush: () => Promise<{ revision: number }>;
   post: (revision: number) => Promise<AiView>;
   reload: () => Promise<DraftView>;
-  since: string | null;
+  /** 보내기 전 라운드 수 — 서버는 라운드를 덧붙이기만 한다. 시각 문자열 비교는 서버 정밀도(나노초 응답 vs datetime(6))에 깨진다 */
+  roundsBefore: number;
   wait?: (ms: number) => Promise<void>;
 }): Promise<AiOutcome> {
   const wait = p.wait ?? sleep;
@@ -83,7 +84,7 @@ export async function sendAiStep(p: {
     try {
       const d = await p.reload();
       reached = true;
-      if (d.aiUpdatedAt !== null && d.aiUpdatedAt !== p.since) return done({ ...d, aiUpdatedAt: d.aiUpdatedAt });
+      if (d.aiUpdatedAt !== null && d.questions.rounds.length > p.roundsBefore) return done({ ...d, aiUpdatedAt: d.aiUpdatedAt });
     } catch {
       // 다시 읽기도 못 했다 — 다음 차례에 한 번 더
     }

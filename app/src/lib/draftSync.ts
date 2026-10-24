@@ -28,7 +28,7 @@ export type SaveOutcome =
   | { kind: 'conflict' } // 409
   | { kind: 'gone' } // 404 — 칸을 버렸다
   | { kind: 'offline' } // 연결 없음 — 칸에 남는다
-  | { kind: 'error'; message: string };
+  | { kind: 'error'; message: string; cause?: unknown }; // cause = 원래 오류(AI 보내기가 다시 던져 문구를 고른다)
 
 export const AUTOSAVE_MS = 1_500;
 export const slotKey = (userId: number, draftId: number) => `draft:${userId}:${draftId}`;
@@ -65,7 +65,7 @@ export function draftSync(p: { kv: KV; userId: number; put: (id: number, b: Save
         await serial(() => p.kv.removeItem(slotKey(p.userId, id)));
         return { kind: 'gone' };
       }
-      return { kind: 'error', message: failText(e, '글을 저장하지 못했어요 — 잠시 뒤 다시 해 주세요') };
+      return { kind: 'error', message: failText(e, '글을 저장하지 못했어요 — 잠시 뒤 다시 해 주세요'), cause: e };
     }
     const mismatch = res.body !== sent.body;
     await serial(async () => {
@@ -134,4 +134,13 @@ export function draftSync(p: { kv: KV; userId: number; put: (id: number, b: Save
 /** 나갈 때 지울 빈 글 — 받은 질문이 있으면 원가가 든 글이라 남긴다(REQ-142). */
 export function shouldDiscard(d: { title: string; body: string; rounds: number }): boolean {
   return d.title.trim() === '' && d.body.trim() === '' && d.rounds === 0;
+}
+
+/** 저장 결과 → AI 보내기의 revision. 저장이 안 됐으면 던진다 — 그때 POST하지 않는다(REQ-36). */
+export function revisionOrThrow(o: SaveOutcome | null): { revision: number } {
+  if (o?.kind === 'saved' || o?.kind === 'mismatch') return { revision: o.revision };
+  if (o?.kind === 'offline') throw new NetworkError();
+  if (o?.kind === 'error') throw o.cause ?? new Error(o.message); // 원래 오류 그대로 — 서버 문구가 없으면 저장 실패 문구가 된다
+  if (o?.kind === 'conflict') throw new ApiError(409, '다른 기기에서 이 글이 바뀌었어요 — 그쪽을 불러와 주세요');
+  throw new Error('not saved');
 }
