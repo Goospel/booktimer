@@ -5,14 +5,19 @@ import * as SecureStore from 'expo-secure-store';
 import type {
   AddRequest,
   AppAuthResponse,
+  AiView,
   AppleIntent,
+  ConsentView,
   Dashboard,
   DraftSummary,
+  DraftView,
   MaterialsView,
   MyBookSummary,
+  SaveDraft,
   SearchResponse,
   ShelfResponse,
   ShelfStatus,
+  Step,
 } from './types';
 
 const BASE_URL = process.env.EXPO_PUBLIC_API_BASE_URL ?? 'https://booktimer.app';
@@ -23,6 +28,11 @@ const KEY = { token: 'booktimer.token', userId: 'booktimer.userId', webAccount: 
 const listeners = new Set<(signedIn: boolean) => void>();
 export const session = {
   token: () => SecureStore.getItemAsync(KEY.token),
+  /** 기기 초안 칸의 주인(v1 REQ-38) — 로그인할 때 저장한 값 */
+  async userId(): Promise<number | null> {
+    const v = await SecureStore.getItemAsync(KEY.userId);
+    return v === null ? null : Number(v);
+  },
   async save(p: { token: string; userId: number; webAccount: boolean }) {
     await SecureStore.setItemAsync(KEY.userId, String(p.userId));
     await SecureStore.setItemAsync(KEY.webAccount, String(p.webAccount));
@@ -161,4 +171,14 @@ export const margins = {
   create: (p: { bookId: number; quote: string; thought: string }) =>
     request<unknown>('/api/stories', { body: { bookId: p.bookId, quote: p.quote.trim() || null, text: p.thought.trim() } }),
   remove: (id: number) => request<void>(`/api/stories/${id}`, { method: 'DELETE' }),
+};
+
+// ── 글쓰기 · AI 질문 · 동의(PR-H) — /ai 응답에는 본문이 없다(REQ-47). 동의는 시행일 전이면 503(서버 문구가 날짜를 낸다) ──
+export const writing = {
+  get: (id: number) => request<DraftView>(`/api/app/drafts/${id}`),
+  create: (bookId: number) => request<DraftView>('/api/app/drafts', { body: { bookId } }),
+  save: (id: number, body: SaveDraft) => request<DraftView>(`/api/app/drafts/${id}`, { method: 'PUT', body }),
+  remove: (id: number) => request<void>(`/api/app/drafts/${id}`, { method: 'DELETE' }),
+  ai: (id: number, body: { step: Step; revision: number; focus: string | null }) => request<AiView>(`/api/app/drafts/${id}/ai`, { body }),
+  consent: (agree: boolean) => request<ConsentView>('/api/app/ai-consent', { method: 'PUT', body: { agree } }),
 };
