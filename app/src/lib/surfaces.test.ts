@@ -3,6 +3,8 @@ jest.mock('../../widgets/ReadingActivity', () => ({ __esModule: true, default: {
 // ↑ 화살표로 감싼다 — import가 const 선언보다 먼저 돌아 팩토리 시점엔 mockStart가 아직 없다
 jest.mock('../../widgets/ReadingWidget', () => ({ __esModule: true, default: { updateSnapshot: jest.fn() } }));
 jest.mock('@react-native-async-storage/async-storage', () => ({ getItem: async () => null, setItem: jest.fn(), removeItem: jest.fn() }));
+// 로컬 알림 예약(notify)은 expo-notifications 네이티브 모듈을 끌고 온다 — 판정은 reminders.test가 본다
+jest.mock('./notify', () => ({ syncReminders: jest.fn(async () => {}), cancelReminders: jest.fn(async () => {}) }));
 
 import { Platform } from 'react-native';
 

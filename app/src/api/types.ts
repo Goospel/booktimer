@@ -10,6 +10,11 @@ export interface AppAuthResponse {
   created: boolean;
   webAccount: boolean;
   userId: number | null;
+  /** 원 가입 경로(`AuthProvider` 이름) — 탈퇴 갈래(lib/deleteVia). 미가입이면 null */
+  authProvider: string | null;
+  appleLinked: boolean;
+  googleLinked: boolean;
+  unverifiedWebAccount: boolean;
 }
 
 /** `DashboardApiController.BookOption` — 손으로 넣은 책이면 coverUrl · author가 null이다. */

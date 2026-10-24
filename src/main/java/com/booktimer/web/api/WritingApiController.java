@@ -122,6 +122,13 @@ public class WritingApiController {
         return new ConsentView(writingService.aiConsent(user), user.getAiConsentAt());
     }
 
+    /** 앱 설정의 동의 상태(REQ-154) — PUT과 같은 모양. 시행일보다 이른 시각은 aiConsent=false다. */
+    @GetMapping("/api/app/ai-consent")
+    public ConsentView consentView(Principal principal) {
+        User user = currentUserService.resolve(principal);
+        return new ConsentView(writingService.aiConsent(user), user.getAiConsentAt());
+    }
+
     private DraftView view(User user, WritingDraft draft) {
         Book book = draft.getBook();
         return new DraftView(draft.getId(), book == null ? null : book.getId(), book == null ? null : book.getTitle(),

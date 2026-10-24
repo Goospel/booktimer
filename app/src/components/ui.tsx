@@ -256,6 +256,8 @@ export function Row(p: {
   selected?: boolean;
   accessibilityHint?: string;
   onDelete?: () => void;
+  /** 제목 글자만 빨강(설정 「계정 삭제」 — 빨강은 오류·삭제에만) */
+  tone?: 'danger';
 }) {
   const del = p.onDelete;
   return (
@@ -271,7 +273,9 @@ export function Row(p: {
       onLayout={hitCheck(p.title)}
       style={({ pressed }) => [base.row, { paddingVertical: space[2] }, pressed && { backgroundColor: color.pressed }]}
     >
-      <Txt v={p.selected ? 'B1' : 'B2'}>{p.title}</Txt>
+      <Txt v={p.selected ? 'B1' : 'B2'} style={p.tone === 'danger' ? { color: color.danger } : undefined}>
+        {p.title}
+      </Txt>
       {p.meta ? (
         <Txt v="T2" style={{ color: color.muted }}>
           {p.meta}
