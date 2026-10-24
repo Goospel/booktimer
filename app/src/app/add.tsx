@@ -1,17 +1,19 @@
 // 책 담기(PR-G 사양 §5.3 — 피그마 R7 S-ADD). 제목 검색과 바코드를 한 화면이 맡는다.
 // 담은 책은 「읽는 중」이고 화면에 남는다 — 맨 위 알림 + [책 보기](결정 B ①). 바코드 결과는 바로 담지 않는다(§8-5).
+// ?shelf=study = 공부 책 담기(PR-S1 사양 §5.6) — 다른 것은 셋: 머리 · 「담음」(공부 서재 isbn 기준) · 담기(공부 6필드 · 알림에 동작 없음).
 import { Camera, CameraView } from 'expo-camera';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, Linking, View } from 'react-native';
 
-import { library, NetworkError } from '../api/client';
+import { library, NetworkError, study } from '../api/client';
 import type { SearchRow } from '../api/types';
 import { Cover } from '../components/Cover';
 import { Button, Field, Notice, Screen, Txt, useStacked } from '../components/ui';
 import { addBody } from '../lib/bookAdd';
 import { objectParticle } from '../lib/format';
 import { toIsbn13 } from '../lib/isbn';
+import { studyAddBody, studyOwned } from '../lib/studyShelf';
 import { color, line, space } from '../theme/tokens';
 
 type NoticeState = { message: string; tone?: 'info' | 'error'; action?: { label: string; onPress: () => void } } | null;
@@ -19,7 +21,8 @@ type NoticeState = { message: string; tone?: 'info' | 'error'; action?: { label:
 const errText = (e: unknown) => (e instanceof Error ? e.message : String(e));
 
 export default function AddBook() {
-  const { scan } = useLocalSearchParams<{ scan?: string }>();
+  const { scan, shelf } = useLocalSearchParams<{ scan?: string; shelf?: string }>();
+  const forStudy = shelf === 'study';
   const query = useRef('');
   const [inputKey, setInputKey] = useState(0); // 바코드 결과 때 검색어 칸을 비운다(비제어 입력 — 다시 그려 비운다)
   const [rows, setRows] = useState<SearchRow[] | null>(null);
@@ -32,6 +35,21 @@ export default function AddBook() {
 
   // 화면을 떠날 때도 구독을 지운다 — 안 지우면 다음 스캔에 두 번 불린다(§11-8)
   useEffect(() => () => sub.current?.remove(), []);
+
+  // 공부 책 담기 — 검색 응답의 owned는 독서 서재 기준이라 공부 서재 isbn으로 다시 쓴다(REQ-150). 못 읽으면 빈 집합(전부 [담기] — 서버가 같은 isbn은 기존 행을 돌려준다).
+  // 결과가 늘 own()을 거쳐 들어오므로, 집합이 늦게 왔을 때 남은 owned: true는 방금 담은 행뿐이다 — 그 행은 지킨다.
+  const studyIsbns = useRef<ReadonlySet<string> | null>(null);
+  const own = (list: SearchRow[]) => (forStudy ? studyOwned(list, studyIsbns.current) : list);
+  useEffect(() => {
+    if (!forStudy) return;
+    void study
+      .shelf()
+      .then((r) => new Set(r.books.flatMap((b) => (b.isbn13 ? [b.isbn13] : []))), () => new Set<string>())
+      .then((set) => {
+        studyIsbns.current = set;
+        setRows((list) => list && studyOwned(list, set).map((r, i) => (list[i].owned ? { ...r, owned: true } : r)));
+      });
+  }, [forStudy]);
 
   // ?scan=1 — 사용자가 「바코드로 담기」를 눌러 온 것이라 「진입 직후 덮기」가 아니다. 마운트 때 한 번만 연다.
   const scanOnce = useRef(scan === '1');
@@ -49,7 +67,7 @@ export default function AddBook() {
     setSearching(true);
     try {
       const r = await library.search(q);
-      setRows(r.results);
+      setRows(own(r.results));
       setFromBarcode(false);
     } catch (e) {
       setNotice({ message: errText(e), tone: 'error' });
@@ -103,7 +121,7 @@ export default function AddBook() {
       } else {
         query.current = '';
         setInputKey((k) => k + 1);
-        setRows(r.results.slice(0, 1));
+        setRows(own(r.results.slice(0, 1)));
         setFromBarcode(true);
       }
     } catch (e) {
@@ -116,12 +134,15 @@ export default function AddBook() {
     if (addingKey) return;
     setAddingKey(key);
     try {
-      const saved = await library.add(addBody(row));
+      const saved = forStudy ? await study.add(studyAddBody(row)) : await library.add(addBody(row));
       setRows((list) => list?.map((r, i) => (rowKey(r, i) === key ? { ...r, owned: true } : r)) ?? null);
-      setNotice({
-        message: `『${row.title}』${objectParticle(row.title)} 읽는 중에 담았어요`,
-        action: { label: '책 보기', onPress: () => router.push(`/book/${saved.id}`) },
-      });
+      const named = `『${row.title}』${objectParticle(row.title)}`;
+      // 공부 책은 동작 없음 — 뒤로 = 공부 탭(공부 책 화면이 없다)
+      setNotice(
+        forStudy
+          ? { message: `${named} 공부 서재에 담았어요` }
+          : { message: `${named} 읽는 중에 담았어요`, action: { label: '책 보기', onPress: () => router.push(`/book/${saved.id}`) } },
+      );
     } catch (e) {
       setNotice({
         message: e instanceof NetworkError ? e.message : '책을 담지 못했어요 — 잠시 뒤 다시 눌러 주세요',
@@ -133,7 +154,7 @@ export default function AddBook() {
 
   return (
     <Screen scroll stacked>
-      <Txt v="D2">책 담기</Txt>
+      <Txt v="D2">{forStudy ? '공부 책 담기' : '책 담기'}</Txt>
       <Field
         key={inputKey}
         label="책 찾기"

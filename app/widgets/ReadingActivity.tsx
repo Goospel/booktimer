@@ -7,6 +7,8 @@ export type ReadingActivityProps = {
   bookTitle: string;
   lowerMs: number;
   upperMs: number;
+  /** 없으면 독서 — 옛 JS가 띄운 활동은 독서만이었다(범위 보충 REQ-106) */
+  mode?: 'reading' | 'study';
 };
 
 // 시각 보충 §5.3 — 잠금화면 배경을 칠하지 않는다(색 리터럴 0 — REQ-60) · 여백 14 · 글자는 시스템 계층색.
@@ -20,10 +22,12 @@ const ReadingActivity = (props: ReadingActivityProps, environment: LiveActivityE
   const primary = foregroundStyle({ type: 'hierarchical', style: 'primary' });
   const secondary = foregroundStyle({ type: 'hierarchical', style: 'secondary' });
   const caption = [font({ textStyle: 'caption' }), secondary];
+  const study = props.mode === 'study';
+  const icon = study ? 'pencil.line' : 'book.closed';
   return {
     banner: (
       <VStack alignment="leading" spacing={4} modifiers={[padding({ all: 14 })]}>
-        <Text modifiers={caption}>읽는 중</Text>
+        <Text modifiers={caption}>{study ? '공부 중' : '읽는 중'}</Text>
         {props.bookTitle ? <Text modifiers={[font({ textStyle: 'headline' }), lineLimit(1), primary]}>{props.bookTitle}</Text> : null}
         <Text
           timerInterval={{ lower, upper }}
@@ -34,9 +38,9 @@ const ReadingActivity = (props: ReadingActivityProps, environment: LiveActivityE
         {stale ? <Text modifiers={caption}>6시간이 지나 자동으로 멈췄어요</Text> : null}
       </VStack>
     ),
-    compactLeading: <Image systemName="book.closed" />,
+    compactLeading: <Image systemName={icon} />,
     compactTrailing: <Text timerInterval={{ lower, upper }} countsDown={false} pauseTime={upper} modifiers={[monospacedDigit()]} />,
-    minimal: <Image systemName="book.closed" />,
+    minimal: <Image systemName={icon} />,
   };
 };
 
