@@ -28,6 +28,9 @@ const ROWS: Row[] = [
   },
   // 공개 범위 · 공유는 웹이 맡는다 — 앱은 그 문을 부르지 않는다(v1 REQ-40). 웹 /books 주소는 걸리지 않는다.
   { id: 'REQ-40', pattern: /\/(?:visibility|share)\b/, skip: [], planted: "request(`/api/stories/${id}/share`)" },
+  // 키보드 위 막대는 KeyboardAvoidingView 안 보통 View다 — InputAccessoryView는 다시 마운트한 입력칸에 안 붙었다(U-05a 실측).
+  // 낱말이 아니라 JSX 사용을 본다 — 「왜 안 쓰는가」를 적은 주석은 남겨도 된다(PR-H 사양 §8-27).
+  { id: 'REQ-136', pattern: /<InputAccessoryView\b/, skip: [], planted: '<InputAccessoryView nativeID="bar">' },
 ];
 
 const SELF = join('__guards__');
@@ -68,6 +71,13 @@ test('REQ-109 · 앱 소스에 /api/miniapp/·/api/toss/ 호출이 없다(심은
 test('REQ-91 · 앱 소스에 부채 필드 읽기와 지우개 호출이 없다(심은 픽스처는 잡힌다)', () => {
   expect(hits(ROWS[2])).toEqual([]);
   expect(hits(ROWS[2], [{ rel: join('app', 'planted.tsx'), text: "request('/api/miniapp/debt-waiver')" }])).toHaveLength(1);
+});
+
+test('REQ-136 · 앱 소스에 InputAccessoryView가 없다(심은 픽스처는 잡힌다)', () => {
+  const row = ROWS.find((r) => r.id === 'REQ-136');
+  expect(row).toBeDefined();
+  expect(hits(row!)).toEqual([]); // 여백 쓰기의 「InputAccessoryView가 아니라」 주석은 JSX 사용이 아니라 걸리지 않는다
+  expect(hits(row!, [{ rel: join('app', 'planted.tsx'), text: 'const why = "InputAccessoryView가 아니라 보통 View"' }])).toEqual([]);
 });
 
 test('REQ-40 · 앱 소스에 /visibility·/share 호출이 없다(심은 픽스처는 잡힌다)', () => {

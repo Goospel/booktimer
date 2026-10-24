@@ -45,10 +45,12 @@ export default function RootLayout() {
       <Stack.Protected guard={signedIn}>
         {/* 제목은 화면에 안 보이고 뒤로 기록 메뉴 · VoiceOver에만 쓰인다 — 없으면 route 이름 「(tabs)」가 뜬다(U-60) */}
         <Stack.Screen name="(tabs)" options={{ title: '책생글' }} />
-        {/* 쌓는 화면 셋(PR-G) — 탭을 덮는다. 뒤로 단추는 갈매기만(「(tabs)」 글자 방지 — U-60) */}
+        {/* 쌓는 화면(PR-G · PR-H) — 탭을 덮는다. 뒤로 단추는 갈매기만(「(tabs)」 글자 방지 — U-60) */}
         <Stack.Screen name="add" options={stacked} />
         <Stack.Screen name="book/[id]" options={stacked} />
         <Stack.Screen name="margin/[bookId]" options={stacked} />
+        {/* 글쓰기(PR-H) — 화면이 머리 가운데 책 제목 · 오른쪽 「내보내기」를 단다 */}
+        <Stack.Screen name="draft/[id]" options={stacked} />
       </Stack.Protected>
       <Stack.Protected guard={!signedIn}>
         <Stack.Screen name="(auth)/login" />

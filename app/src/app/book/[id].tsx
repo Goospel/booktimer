@@ -1,15 +1,16 @@
-// 책 화면(PR-G 사양 §5.4 · §5.5 — 피그마 R7 S-BOOK · S-BOOK-EMPTY). 머리 → 상태 세 칸 → [여백 남기기] → 여백.
-// 「이 책의 글」 단과 [이 책으로 글쓰기]는 글쓰기 화면이 생기는 PR-H가 켠다 — 없는 화면으로 가는 버튼을 두지 않는다(§11-17).
+// 책 화면(PR-G 사양 §5.4 · §5.5 · PR-H 사양 §5.7 — 피그마 R7 S-BOOK · S-BOOK-EMPTY · S-BOOK-H).
+// 머리 → 상태 세 칸 → [여백 남기기] · [이 책으로 글쓰기] → 이 책의 글 → 여백(결정 D ①). 글 · 여백 행은 길게 눌러 지운다.
 import { router, useFocusEffect, useLocalSearchParams } from 'expo-router';
 import { useCallback, useState } from 'react';
 import { ActivityIndicator, Alert, Image, Pressable, View } from 'react-native';
 
-import { ApiError, failText, library, margins as marginApi } from '../../api/client';
-import type { MarginItem, MaterialsView, ShelfStatus } from '../../api/types';
+import { ApiError, failText, library, margins as marginApi, writing } from '../../api/client';
+import type { DraftSummary, MarginItem, MaterialsView, ShelfStatus } from '../../api/types';
 import { Cover } from '../../components/Cover';
-import { Badge, base, Button, Notice, Screen, Txt, useStacked } from '../../components/ui';
+import { Badge, base, Button, Notice, Row, Screen, Txt, useStacked } from '../../components/ui';
 import { dateLabel, durationLabel } from '../../lib/format';
 import { savedNotice, showsThought } from '../../lib/marginSave';
+import { draftTitle } from '../../lib/recentDrafts';
 import { SECTIONS } from '../../lib/shelf';
 import { color, line, space } from '../../theme/tokens';
 
@@ -21,6 +22,7 @@ export default function Book() {
   const [loadError, setLoadError] = useState<{ message: string; notFound: boolean } | null>(null);
   const [notice, setNotice] = useState<NoticeState>(null);
   const [statusBusy, setStatusBusy] = useState(false);
+  const [creating, setCreating] = useState(false);
   const stacked = useStacked();
 
   const load = useCallback(async () => {
@@ -65,6 +67,35 @@ export default function Book() {
       setData((d) => (d ? { ...d, margins: d.margins.filter((x) => x.id !== marginId) } : d));
     } catch (e) {
       setNotice({ message: failText(e, '여백을 지우지 못했어요 — 잠시 뒤 다시 해 주세요'), tone: 'error' });
+    }
+  }
+
+  // 누르는 동안 busy — 연타로 글 둘이 생기지 않게(§11-18). 글쓰기 화면이 다시 읽는다(넘겨주지 않는다 · §8-21)
+  async function createDraft() {
+    if (creating) return;
+    setCreating(true);
+    try {
+      const d = await writing.create(id);
+      router.push(`/draft/${d.id}`);
+    } catch (e) {
+      setNotice({ message: failText(e, '글을 만들지 못했어요 — 잠시 뒤 다시 눌러 주세요'), tone: 'error' });
+    }
+    setCreating(false);
+  }
+
+  function confirmRemoveDraft(d: DraftSummary) {
+    Alert.alert('이 글을 지울까요?', '지우면 되돌릴 수 없어요 — 받은 질문도 함께 지워져요', [
+      { text: '취소', style: 'cancel' },
+      { text: '지우기', style: 'destructive', onPress: () => void removeDraft(d.id) },
+    ]);
+  }
+
+  async function removeDraft(draftId: number) {
+    try {
+      await writing.remove(draftId);
+      setData((x) => (x ? { ...x, drafts: x.drafts.filter((d) => d.id !== draftId) } : x));
+    } catch (e) {
+      setNotice({ message: failText(e, '글을 지우지 못했어요 — 잠시 뒤 다시 해 주세요'), tone: 'error' });
     }
   }
 
@@ -148,7 +179,44 @@ export default function Book() {
         })}
       </View>
 
-      <Button kind="ink" label="여백 남기기" onPress={() => router.push(`/margin/${book.id}`)} />
+      <View style={{ gap: space[3] }}>
+        <Button kind="ink" label="여백 남기기" onPress={() => router.push(`/margin/${book.id}`)} />
+        <Button kind="outline" label="이 책으로 글쓰기" busy={creating} onPress={() => void createDraft()} />
+      </View>
+
+      <View style={{ marginTop: space[4], gap: space[3] }}>
+        <View
+          accessible
+          accessibilityRole="header"
+          accessibilityLabel={data.drafts.length > 0 ? `이 책의 글, ${data.drafts.length}편` : '이 책의 글'}
+          style={{ flexDirection: 'row', alignItems: 'flex-end', justifyContent: 'space-between', gap: space[2] }}
+        >
+          <Txt v="H1">이 책의 글</Txt>
+          {data.drafts.length > 0 ? (
+            <Txt v="L1" style={{ color: color.muted }}>
+              {data.drafts.length}편
+            </Txt>
+          ) : null}
+        </View>
+        {data.drafts.length > 0 ? (
+          <View>
+            {data.drafts.map((d) => (
+              <Row
+                key={d.id}
+                title={draftTitle(d)}
+                meta={`${dateLabel(new Date(d.updatedAt))}${d.exported ? ' · 내보냄' : ''}`}
+                accessibilityHint="글쓰기 화면을 열어요"
+                onPress={() => router.push(`/draft/${d.id}`)}
+                onDelete={() => confirmRemoveDraft(d)}
+              />
+            ))}
+          </View>
+        ) : (
+          <Txt v="L1" style={{ color: color.text }}>
+            이 책으로 쓴 글이 아직 없어요
+          </Txt>
+        )}
+      </View>
 
       <View style={{ marginTop: space[4], gap: space[3] }}>
         <View

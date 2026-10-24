@@ -1,0 +1,144 @@
+// 기기 초안 · 자동저장(v1 REQ-38 · PR-H 사양 REQ-141 · 142). KV는 AsyncStorage 꼴의 Map 가짜.
+jest.mock('expo-secure-store', () => ({
+  getItemAsync: jest.fn(async () => null),
+  setItemAsync: jest.fn(async () => undefined),
+  deleteItemAsync: jest.fn(async () => undefined),
+}));
+
+import { ApiError, NetworkError } from '../api/client';
+import type { DraftView, SaveDraft } from '../api/types';
+import { draftSync, type KV, shouldDiscard, slotKey } from './draftSync';
+
+function memoryKV(): KV & { map: Map<string, string> } {
+  const map = new Map<string, string>();
+  return {
+    map,
+    getItem: async (k) => map.get(k) ?? null,
+    setItem: async (k, v) => void map.set(k, v),
+    removeItem: async (k) => void map.delete(k),
+    getAllKeys: async () => [...map.keys()],
+  };
+}
+
+const server = (p: Partial<DraftView> = {}): DraftView => ({
+  id: 7, bookId: 1, bookTitle: '데미안', title: '서버 제목', body: '서버 본문', revision: 3,
+  questions: { rounds: [] }, aiUpdatedAt: null, aiRemainingToday: 20, aiConsent: true, ...p,
+});
+
+function setup(userId: number, put: (id: number, b: SaveDraft) => Promise<DraftView>, kv = memoryKV()) {
+  const calls: SaveDraft[] = [];
+  const sync = draftSync({ kv, userId, put: async (id, b) => { calls.push(b); return put(id, b); } });
+  return { kv, calls, sync };
+}
+
+const echo = async (_id: number, b: SaveDraft) => server({ title: b.title, body: b.body, revision: b.revision + 1 });
+
+test('REQ-38 · 서버 확인 전 본문은 그 userId 칸에 남는다', async () => {
+  const { kv, sync } = setup(1, async () => { throw new NetworkError(); });
+  await sync.open(server());
+  await sync.edit(7, { body: '끊긴 동안 쓴 글' });
+  expect(await sync.flush(7)).toEqual({ kind: 'offline' });
+  const slot = JSON.parse(kv.map.get(slotKey(1, 7))!);
+  expect(slot).toMatchObject({ body: '끊긴 동안 쓴 글', dirty: true, base: 3 });
+  // 다시 열면 서버 글이 아니라 칸의 글
+  expect((await sync.open(server())).body).toBe('끊긴 동안 쓴 글');
+});
+
+test('REQ-38 · 409면 선택 상태로 가고 로컬 본문을 버리지 않는다', async () => {
+  const { kv, sync } = setup(1, async () => { throw new ApiError(409, '다른 기기에서 이 글이 바뀌었어요 — 그쪽을 불러와 주세요'); });
+  await sync.open(server());
+  await sync.edit(7, { body: '이 기기에서 쓴 글' });
+  expect(await sync.flush(7)).toEqual({ kind: 'conflict' });
+  expect(JSON.parse(kv.map.get(slotKey(1, 7))!)).toMatchObject({ body: '이 기기에서 쓴 글', dirty: true });
+
+  // 「이 기기 것 유지」 = 서버 판으로 다시 PUT · 「그쪽 불러오기」 = 칸을 서버 글로(띠 질문은 남긴다)
+  const keep = setup(1, echo, kv);
+  expect(await keep.sync.keepMine(7, server({ revision: 9 }))).toEqual({ kind: 'saved', revision: 10 });
+  expect(keep.calls.at(-1)).toMatchObject({ body: '이 기기에서 쓴 글', revision: 9 });
+  await keep.sync.edit(7, { body: '또 고침', focus: '띠 질문인가요?' });
+  const theirs = await keep.sync.takeTheirs(7, server({ body: '그쪽 글', revision: 12 }));
+  expect(theirs).toEqual({ title: '서버 제목', body: '그쪽 글', focus: '띠 질문인가요?', base: 12, dirty: false });
+});
+
+test('REQ-38 · PUT 응답 본문이 보낸 것과 다르면 기기 초안을 지우지 않고 알린다', async () => {
+  const { kv, sync } = setup(1, async (_id, b) => server({ body: '서버가 바꾼 본문', revision: b.revision + 1 }));
+  await sync.open(server());
+  await sync.edit(7, { body: '보낸 본문' });
+  expect(await sync.flush(7)).toEqual({ kind: 'mismatch', revision: 4 });
+  expect(JSON.parse(kv.map.get(slotKey(1, 7))!)).toMatchObject({ body: '보낸 본문', dirty: true });
+
+  // 대조군 — 같으면 저장됨이고 칸은 깨끗해진다
+  const ok = setup(1, echo);
+  await ok.sync.open(server());
+  await ok.sync.edit(7, { body: '보낸 본문' });
+  expect(await ok.sync.flush(7)).toEqual({ kind: 'saved', revision: 4 });
+  expect(JSON.parse(ok.kv.map.get(slotKey(1, 7))!)).toMatchObject({ dirty: false, base: 4 });
+});
+
+test('REQ-38 · 다른 userId로 로그인하면 앞 사람 초안을 보지도 보내지도 않는다', async () => {
+  const kv = memoryKV();
+  const first = setup(1, async () => { throw new NetworkError(); }, kv);
+  await first.sync.open(server());
+  await first.sync.edit(7, { body: '앞 사람의 비밀 글', focus: '앞 사람 질문인가요?' });
+  await first.sync.flush(7);
+
+  const second = setup(2, echo, kv);
+  const opened = await second.sync.open(server());
+  expect(opened.body).toBe('서버 본문');
+  expect(opened.focus).toBeNull();
+  await second.sync.edit(7, { title: '두 번째 사람 제목' });
+  await second.sync.flush(7);
+  expect(second.calls.map((c) => c.body)).toEqual(['서버 본문']);
+  expect(JSON.stringify(second.calls)).not.toContain('앞 사람');
+  expect(await second.sync.pending()).toBe(0);
+  expect(await first.sync.pending()).toBe(1);
+  await second.sync.clear();
+  expect(await first.sync.pending()).toBe(1); // 남의 칸은 지우지 않는다
+});
+
+test('REQ-38 · 404면 그 기기 초안을 버린다', async () => {
+  const { kv, sync } = setup(1, async () => { throw new ApiError(404, '글을 찾을 수 없어요'); });
+  await sync.open(server());
+  await sync.edit(7, { body: '지워진 글에 쓴 것' });
+  expect(await sync.flush(7)).toEqual({ kind: 'gone' });
+  expect(kv.map.has(slotKey(1, 7))).toBe(false);
+});
+
+test('REQ-38 · 띠의 질문은 그 글의 칸에 남고 다른 글·다른 userId에는 보이지 않는다', async () => {
+  const kv = memoryKV();
+  const a = setup(1, echo, kv);
+  await a.sync.open(server());
+  await a.sync.edit(7, { focus: '띠에 올린 질문인가요?' });
+  expect(JSON.parse(kv.map.get(slotKey(1, 7))!).dirty).toBe(false); // 띠만 바꾼 것은 저장할 글이 아니다
+  expect((await a.sync.open(server())).focus).toBe('띠에 올린 질문인가요?');
+  expect((await a.sync.open(server({ id: 8 }))).focus).toBeNull();
+  expect((await setup(2, echo, kv).sync.open(server())).focus).toBeNull();
+});
+
+test('REQ-38 · 제목·본문 편집을 기다리지 않고 연달아 불러도 둘 다 칸에 남고 저장에 실린다', async () => {
+  const { calls, sync } = setup(1, echo);
+  await sync.open(server());
+  // 화면은 글자마다 edit를 기다리지 않고 부른다 — 읽고 쓰기가 엇갈리면 앞의 편집이 사라진다
+  void sync.edit(7, { title: '새 제목' });
+  void sync.edit(7, { body: '새 본문' });
+  await sync.flush(7);
+  expect(calls).toEqual([{ title: '새 제목', body: '새 본문', revision: 3 }]);
+});
+
+test('REQ-37 · 내보낸 표시 PUT은 고친 것이 없어도 가고 칸의 판을 올린다(다음 저장이 409가 아니다)', async () => {
+  const { calls, kv, sync } = setup(1, echo);
+  await sync.open(server());
+  expect(await sync.flush(7, { exported: true })).toEqual({ kind: 'saved', revision: 4 });
+  expect(calls).toEqual([{ title: '서버 제목', body: '서버 본문', revision: 3, exported: true }]);
+  expect(JSON.parse(kv.map.get(slotKey(1, 7))!).base).toBe(4);
+  await sync.edit(7, { body: '내보낸 뒤 고침' });
+  await sync.flush(7);
+  expect(calls[1]).toEqual({ title: '서버 제목', body: '내보낸 뒤 고침', revision: 4 });
+});
+
+test('REQ-142 · 제목·본문이 공백뿐이고 받은 질문이 0인 글만 나갈 때 지운다', () => {
+  expect(shouldDiscard({ title: '', body: '  \n', rounds: 0 })).toBe(true);
+  expect(shouldDiscard({ title: '', body: 'a', rounds: 0 })).toBe(false);
+  expect(shouldDiscard({ title: '제목', body: '', rounds: 0 })).toBe(false);
+  expect(shouldDiscard({ title: '', body: '', rounds: 1 })).toBe(false);
+});

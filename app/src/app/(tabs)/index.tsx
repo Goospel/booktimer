@@ -273,9 +273,8 @@ export default function Home() {
         </Txt>
         {drafts && drafts.length > 0 ? (
           <View>
-            {/* 글쓰기 화면(draft/[id])은 PR-H가 맡는다 — 지금은 서재 탭으로 간다 */}
             {drafts.map((d) => (
-              <Row key={d.id} title={d.title} meta={d.meta} onPress={() => router.navigate('/library')} />
+              <Row key={d.id} title={d.title} meta={d.meta} accessibilityHint="글쓰기 화면을 열어요" onPress={() => router.push(`/draft/${d.id}`)} />
             ))}
           </View>
         ) : drafts ? (

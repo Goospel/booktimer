@@ -124,9 +124,75 @@ export interface MarginItem {
   createdAt: string;
 }
 
-/** `WritingApiController.MaterialsView` 중 앱이 읽는 것만. 여백은 최근순(최대 200). */
+/**
+ * `WritingApiController.MaterialsView` 중 앱이 읽는 것만. 여백은 최근순(최대 200).
+ * aiIncluded = AI에 보내는 여백 수 · aiExcluded = 상한에 걸려 빠지는 수(「재료 N개 중 M개를 보냈어요」).
+ */
 export interface MaterialsView {
   book: BookLine;
   margins: MarginItem[];
+  aiIncluded: number;
+  aiExcluded: number;
   drafts: DraftSummary[];
+  aiConsent: boolean;
+}
+
+// ── 글쓰기 · AI 질문(PR-H) — 서버 WritingApiController · QuestionLog record 그대로 ──────
+
+/** `writing.Step` */
+export type Step = 'ASK' | 'FOLLOW';
+
+/** `writing.Question` — anchor = 재료 · 사용자 글에서 그대로 따온 조각(없으면 null) */
+export interface Question {
+  text: string;
+  anchor: string | null;
+}
+
+/** `QuestionLog.Round` — focus = FOLLOW가 답하던 질문 */
+export interface Round {
+  step: Step;
+  at: string;
+  focus: string | null;
+  bodyChars: number;
+  questions: Question[];
+}
+
+/** `writing.QuestionLog` — rounds는 먼저 받은 것부터, 비어 있어도 null이 아니다. */
+export interface QuestionLog {
+  rounds: Round[];
+}
+
+/** `WritingApiController.DraftView` — 글 한 편(본문 포함). 책이 풀린 글이면 bookId · bookTitle이 null. */
+export interface DraftView {
+  id: number;
+  bookId: number | null;
+  bookTitle: string | null;
+  title: string | null;
+  body: string;
+  revision: number;
+  questions: QuestionLog;
+  aiUpdatedAt: string | null;
+  aiRemainingToday: number;
+  aiConsent: boolean;
+}
+
+/** `WritingAiService.AiView` — 본문 · 제목 · revision이 없다(REQ-47). */
+export interface AiView {
+  questions: QuestionLog;
+  aiUpdatedAt: string;
+  aiRemainingToday: number;
+}
+
+/** `WritingApiController.SaveDraft` — exported는 공유 시트 sharedAction일 때만 true. */
+export interface SaveDraft {
+  title: string;
+  body: string;
+  revision: number;
+  exported?: boolean;
+}
+
+/** `WritingApiController.ConsentView` */
+export interface ConsentView {
+  aiConsent: boolean;
+  aiConsentAt: string | null;
 }

@@ -152,6 +152,9 @@ export function Badge(p: { label: string; kind?: 'tint' | 'outline' | 'solid' })
   );
 }
 
+/** AI가 만든 질문 표시(v1 REQ-39 · R-12) — 질문을 그리는 자리마다 붙는다(소스 가드가 QuestionBand · QuestionSheet에서 찾는다). */
+export const AiBadge = () => <Badge kind="outline" label="AI 질문" />;
+
 // ── 화면 틀 ───────────────────────────────────────────────────────────────
 // 쌓는 화면(stacked)은 유리 머리(headerTransparent) 밑 y=0부터 그려진다 — 위 안전 영역 대신 머리 높이(상태바 포함)만큼 띄운다(U-60).
 export function Screen(p: { children: ReactNode; scroll?: boolean; stacked?: boolean }) {
@@ -245,14 +248,25 @@ export function Field({ label, error, aside, style, ...rest }: TextInputProps & 
   );
 }
 
-// ── 목록 행 — 행 하나 = 접근성 요소 하나(§4.2). 고른 칸은 「선택됨」으로 읽힌다 ──
-export function Row(p: { title: string; meta?: string; onPress: () => void; selected?: boolean; accessibilityHint?: string }) {
+// ── 목록 행 — 행 하나 = 접근성 요소 하나(§4.2). 고른 칸은 「선택됨」으로 읽힌다. onDelete = 길게 누르기 + VoiceOver 동작 「지우기」 ──
+export function Row(p: {
+  title: string;
+  meta?: string;
+  onPress: () => void;
+  selected?: boolean;
+  accessibilityHint?: string;
+  onDelete?: () => void;
+}) {
+  const del = p.onDelete;
   return (
     <Pressable
       accessibilityRole="button"
       accessibilityLabel={p.meta ? `${p.title}, ${p.meta}` : p.title}
       accessibilityHint={p.accessibilityHint}
       accessibilityState={{ selected: !!p.selected }}
+      accessibilityActions={del ? [{ name: 'delete', label: '지우기' }] : undefined}
+      onAccessibilityAction={del ? (e) => e.nativeEvent.actionName === 'delete' && del() : undefined}
+      onLongPress={del}
       onPress={p.onPress}
       onLayout={hitCheck(p.title)}
       style={({ pressed }) => [base.row, { paddingVertical: space[2] }, pressed && { backgroundColor: color.pressed }]}
