@@ -294,7 +294,8 @@ function StudyRow(p: { book: StudyBook; current: boolean; stacked: boolean; onPr
         ) : null}
         {p.stacked ? badge : null}
       </View>
-      {p.stacked ? null : badge}
+      {/* 감싼다 — Badge의 alignSelf flex-start가 행의 alignItems center를 이겨 맨 위로 붙는다(확정 그림은 세로 가운데) */}
+      {p.stacked || !badge ? null : <View>{badge}</View>}
     </Pressable>
   );
 }

@@ -33,6 +33,7 @@ test('REQ-99 · 빼기가 되면 다시 읽고 알림이 없다', async () => {
 test('REQ-99 · 행 메타는 1분 이상일 때만 「{시간} 공부」다', () => {
   expect(studyMeta(0)).toBeUndefined();
   expect(studyMeta(59)).toBeUndefined();
+  expect(studyMeta(60)).toBe('1분 공부');
   expect(studyMeta(3720)).toBe('1시간 2분 공부');
 });
 

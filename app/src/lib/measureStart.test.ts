@@ -22,6 +22,11 @@ test('REQ-114 · 409가 아닌 실패는 그 문구를 그대로 보이고 다�
     throw new NetworkError();
   });
   expect(await startMeasure({ start, reload }, null)).toEqual({ error: '인터넷에 연결되지 않았어요 — 연결한 뒤 다시 해 주세요' });
+  // ApiError라도 409가 아니면(웹에서 빠진 책 404 등) 그 문구 그대로 · 다시 읽지 않는다
+  const start404 = jest.fn(async () => {
+    throw new ApiError(404, '요청에 실패했어요 (404)');
+  });
+  expect(await startMeasure({ start: start404, reload }, 3)).toEqual({ error: '요청에 실패했어요 (404)' });
   expect(reload).not.toHaveBeenCalled();
 });
 
