@@ -12,6 +12,8 @@ interface Row {
   /** app/src 기준 상대 경로 접두 — 이 행이 보지 않는 곳 */
   skip: string[];
   planted: string;
+  /** 주석을 걷은 소스에서 찾는다(낱말 금지 — 주석의 「왜」는 남겨도 된다) */
+  strip?: boolean;
 }
 
 const ROWS: Row[] = [
@@ -38,7 +40,12 @@ const ROWS: Row[] = [
     skip: [],
     planted: 'request(`/api/study/books/${id}/session-goal`)',
   },
+  // v1에 결제는 없다(v1 REQ-40 둘째 이름 · R-10) — 화면 · 문자열에 결제 · 구독 · 프리미엄 문구가 없다. 주석의 「구독」(이벤트 구독)은 걸리지 않는다.
+  { id: 'REQ-40 결제', pattern: /결제|구독|프리미엄|유료/, skip: [], planted: '<Txt v="B2">프리미엄으로 질문 더 받기</Txt>', strip: true },
 ];
+
+// 블록 주석 · 줄 주석을 걷는다. URL의 //(앞이 :)는 주석이 아니다.
+const stripComments = (s: string) => s.replace(/\/\*[\s\S]*?\*\//g, '').replace(/(^|[^:])\/\/.*$/gm, '$1');
 
 const SELF = join('__guards__');
 
@@ -54,7 +61,7 @@ const ALL = files(APP_SRC).map((p) => ({ rel: p.slice(APP_SRC.length + 1), text:
 
 function hits(row: Row, all = ALL): string[] {
   return all.filter((f) => !f.rel.startsWith(SELF) && !row.skip.some((s) => f.rel.startsWith(s)))
-    .filter((f) => row.pattern.test(f.text))
+    .filter((f) => row.pattern.test(row.strip ? stripComments(f.text) : f.text))
     .map((f) => f.rel);
 }
 
@@ -100,4 +107,18 @@ test('REQ-98 · 앱 소스에 회당 시간·회독 호출이 없다(심은 픽�
   expect(hits(row!)).toEqual([]);
   expect(hits(row!, [{ rel: join('app', 'planted.tsx'), text: 'request(`/api/study/books/${id}/session-goal`)' }])).toHaveLength(1);
   expect(hits(row!, [{ rel: join('app', 'planted.tsx'), text: 'const n = b.readCount' }])).toHaveLength(1);
+});
+
+test('REQ-40 · 앱 소스에 결제·구독·프리미엄 문구가 없다', () => {
+  const row = ROWS.find((r) => r.id === 'REQ-40 결제');
+  expect(row).toBeDefined();
+  expect(hits(row!)).toEqual([]);
+  expect(hits(row!, [{ rel: join('app', 'planted.tsx'), text: row!.planted }])).toHaveLength(1);
+  // 주석 대조 — 주석의 「구독」(이벤트 구독)은 걸리지 않고, URL의 //는 주석이 아니라 걷지 않는다
+  expect(hits(row!, [{ rel: join('app', 'planted.tsx'), text: '// 화면을 떠날 때도 구독을 지운다' }])).toEqual([]);
+  expect(hits(row!, [{ rel: join('app', 'planted.tsx'), text: "Linking.openURL('https://booktimer.app/terms') // 결제 없음" }])).toEqual([]);
+  expect(hits(row!, [{ rel: join('app', 'planted.tsx'), text: "Linking.openURL('https://booktimer.app/결제') // 주석" }])).toHaveLength(1);
+  // 갈래마다 양성 대조 — 「구독」 · 「유료」를 패턴에서 빼면 여기서 걸린다
+  expect(hits(row!, [{ rel: join('app', 'planted.tsx'), text: '<Txt v="B2">구독하고 질문 더 받기</Txt>' }])).toHaveLength(1);
+  expect(hits(row!, [{ rel: join('app', 'planted.tsx'), text: '<Txt v="B2">유료 질문</Txt>' }])).toHaveLength(1);
 });

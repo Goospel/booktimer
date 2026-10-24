@@ -6,7 +6,7 @@ jest.mock('expo-secure-store', () => ({
   deleteItemAsync: jest.fn(async (k: string) => void mockStore.delete(k)),
 }));
 
-import { ApiError, appleSignIn, failText, library, margins, NetworkError, request, session, study, UnauthorizedError } from './client';
+import { account, ApiError, appleSignIn, failText, library, margins, NetworkError, request, session, study, UnauthorizedError, writing } from './client';
 
 const fetchMock = jest.fn();
 global.fetch = fetchMock as unknown as typeof fetch;
@@ -132,4 +132,50 @@ test('REQ-99 · 공부 서재 빼기는 POST /api/study/books/{id}/delete다', a
   await study.remove(12);
   expect(fetchMock.mock.calls[0][0]).toBe('https://booktimer.app/api/study/books/12/delete');
   expect(fetchMock.mock.calls[0][1].method).toBe('POST');
+});
+
+// ── 설정 · 로그아웃 · 계정 삭제(PR-I) ─────────────────────────────────────────
+test('REQ-156 · 로그인하면 원 가입 경로·Apple 연결·구글 고정 여부를 기기에 남기고 세션을 지우면 함께 지운다', async () => {
+  fetchMock.mockResolvedValueOnce(
+    reply(200, JSON.stringify({ registered: true, token: 't', created: false, webAccount: true, userId: 17, authProvider: 'GOOGLE', appleLinked: true, googleLinked: true, unverifiedWebAccount: false })),
+  );
+  await appleSignIn({ mode: 'start', identityToken: 'jwt', code: '' });
+  expect(await session.account()).toEqual({ authProvider: 'GOOGLE', appleLinked: true, googleLinked: true, webAccount: true });
+
+  await session.clear();
+  expect(await session.account()).toEqual({ authProvider: null, appleLinked: false, googleLinked: false, webAccount: false });
+  expect(mockStore.size).toBe(0);
+
+  // PR-I 전에 로그인한 옛 세션 — 셋 없이 저장돼 있다
+  await session.save({ token: 'old', userId: 3, webAccount: false });
+  expect(await session.account()).toEqual({ authProvider: null, appleLinked: false, googleLinked: false, webAccount: false });
+});
+
+test('REQ-154 · 동의 상태는 GET /api/app/ai-consent로 읽고, 거두기는 PUT agree:false다', async () => {
+  fetchMock.mockResolvedValue(reply(200, JSON.stringify({ aiConsent: false, aiConsentAt: null })));
+  await account.consent();
+  await writing.consent(false);
+  expect(fetchMock.mock.calls[0][0]).toBe('https://booktimer.app/api/app/ai-consent');
+  expect(fetchMock.mock.calls[0][1].method).toBe('GET');
+  expect(fetchMock.mock.calls[0][1].body).toBeUndefined();
+  expect(fetchMock.mock.calls[1][0]).toBe('https://booktimer.app/api/app/ai-consent');
+  expect(fetchMock.mock.calls[1][1].method).toBe('PUT');
+  expect(JSON.parse(fetchMock.mock.calls[1][1].body)).toEqual({ agree: false });
+});
+
+test('REQ-155 · 로그아웃은 POST /api/app/logout이다', async () => {
+  await session.save({ token: 'tok', userId: 17, webAccount: false });
+  fetchMock.mockResolvedValueOnce(reply(204, ''));
+  await account.logout();
+  expect(fetchMock.mock.calls[0][0]).toBe('https://booktimer.app/api/app/logout');
+  expect(fetchMock.mock.calls[0][1].method).toBe('POST');
+  expect(fetchMock.mock.calls[0][1].headers.Authorization).toBe('Bearer tok');
+});
+
+test('REQ-157 · 탈퇴는 provider APPLE과 방금 받은 identityToken·authorizationCode를 싣는다', async () => {
+  fetchMock.mockResolvedValueOnce(reply(204, ''));
+  await account.remove({ provider: 'APPLE', identityToken: 'jwt', authorizationCode: 'code' });
+  expect(fetchMock.mock.calls[0][0]).toBe('https://booktimer.app/api/app/account/delete');
+  expect(fetchMock.mock.calls[0][1].method).toBe('POST');
+  expect(JSON.parse(fetchMock.mock.calls[0][1].body)).toEqual({ provider: 'APPLE', identityToken: 'jwt', authorizationCode: 'code' });
 });

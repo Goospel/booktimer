@@ -189,7 +189,7 @@ export default function AddBook() {
           ) : null}
           {rows.map((r, i) => {
             const key = rowKey(r, i);
-            return <ResultRow key={key} row={r} stacked={stacked} busy={addingKey === key} onAdd={() => void add(r, key)} />;
+            return <ResultRow key={key} row={r} stacked={stacked} busy={addingKey === key} forStudy={forStudy} onAdd={() => void add(r, key)} />;
           })}
         </View>
       ) : null}
@@ -200,7 +200,7 @@ export default function AddBook() {
 /** 「담음」 갱신 키 — isbn13, 없으면 행 순번(§5.3) */
 const rowKey = (r: SearchRow, i: number) => r.isbn13 ?? `#${i}`;
 
-function ResultRow(p: { row: SearchRow; stacked: boolean; busy: boolean; onAdd: () => void }) {
+function ResultRow(p: { row: SearchRow; stacked: boolean; busy: boolean; forStudy: boolean; onAdd: () => void }) {
   const { row } = p;
   const sub = [row.authorShort, row.publisher].filter(Boolean).join(' · ');
   const action = row.owned ? (
@@ -208,7 +208,13 @@ function ResultRow(p: { row: SearchRow; stacked: boolean; busy: boolean; onAdd: 
       담음
     </Txt>
   ) : (
-    <Button kind="outline" label="담기" busy={p.busy} accessibilityHint={`『${row.title}』${objectParticle(row.title)} 서재에 담아요`} onPress={p.onAdd} />
+    <Button
+      kind="outline"
+      label="담기"
+      busy={p.busy}
+      accessibilityHint={`『${row.title}』${objectParticle(row.title)} ${p.forStudy ? '공부 서재' : '서재'}에 담아요`}
+      onPress={p.onAdd}
+    />
   );
   return (
     <View
