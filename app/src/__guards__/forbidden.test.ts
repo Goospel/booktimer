@@ -43,9 +43,10 @@ const ROWS: Row[] = [
   // v1에 결제는 없다(v1 REQ-40 둘째 이름 · R-10) — 화면 · 문자열에 결제 · 구독 · 프리미엄 문구가 없다. 주석의 「구독」(이벤트 구독)은 걸리지 않는다.
   { id: 'REQ-40 결제', pattern: /결제|구독|프리미엄|유료/, skip: [], planted: '<Txt v="B2">프리미엄으로 질문 더 받기</Txt>', strip: true },
   // RNHostView matchContents 양 축이면 너비를 RN 글에서 받아 줄바꿈 없이 시트 밖으로 잘린다 — false 아니면 { vertical: true }만(T-274).
+  // 앵커는 <RNHostView 여는 태그 안([^<]) — Host matchContents(SwiftUI 내용 맞춤)는 다른 방향이라 걸지 않는다.
   {
     id: 'T-274 시트 너비',
-    pattern: /\bmatchContents\b(?!\s*=\s*\{\s*(?:false|\{\s*vertical\s*:\s*true\s*,?\s*\})\s*\})/,
+    pattern: /<RNHostView\b[^<]*?\bmatchContents\b(?!\s*=\s*\{\s*(?:false|\{\s*vertical\s*:\s*true\s*,?\s*\})\s*\})/,
     skip: [],
     planted: '<RNHostView matchContents>',
     strip: true,
@@ -141,6 +142,10 @@ test('T-274 · RNHostView matchContents는 양 축을 쓰지 않는다(글이 �
   expect(at('<RNHostView matchContents={true}>')).toHaveLength(1);
   expect(at('<RNHostView matchContents={{ vertical: true, horizontal: true }}>')).toHaveLength(1);
   expect(at('<RNHostView\n  matchContents\n>')).toHaveLength(1);
+  expect(at('<RNHostView style={s} onLayout={() => go()} matchContents>')).toHaveLength(1);
+  // Host matchContents(SwiftUI 내용으로 RN 상자를 맞추는 정상 꼴 — @expo/ui MenuView)는 이 행의 대상이 아니다
+  expect(at('<Host matchContents style={style}>')).toEqual([]);
+  expect(at('<RNHostView matchContents={false}>\n  <Host matchContents>')).toEqual([]);
   // 끔 · 세로만 · 주석은 걸리지 않는다
   expect(at('<RNHostView matchContents={false}>')).toEqual([]);
   expect(at('<RNHostView matchContents={{ vertical: true }}>')).toEqual([]);
