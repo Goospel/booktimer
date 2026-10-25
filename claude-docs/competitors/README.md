@@ -32,4 +32,5 @@
 - **근거 등급을 단다**: (화면) 실기기·에뮬레이터 캡처 / (합성) 스토어용 합성 이미지 / (문구) 소개 글뿐 / (모름). 「경쟁사에 없다」와 「경쟁사 쪽은 모른다」를 섞지 않는다. 섞이면 ②에서 근거 없이 「우리만」으로 세게 된다.
 - **경쟁사의 스크린샷·문구 원본은 레포에 커밋하지 않는다.** 요약과 출처 URL만 둔다(저작권).
 - **클라우드 세션에서 다시 볼 때**: github.io와 App Store·Google Play는 프록시가 막는다. 소개 사이트 원본은 `raw.githubusercontent.com` 경로로 받는다(각 문서 「출처」). 스토어 메타데이터(평점·다운로드·버전 이력)는 사용자 캡처가 유일한 경로다.
+- **읽기 화면(아티팩트)**: 사용자는 md 원문을 읽기 불편해해서 경쟁사 문서를 한 페이지로 그린 비공개 아티팩트가 있다 — <https://claude.ai/artifact/C9jRd4DbiGP7NktVZbtTtH>. 원본은 이 폴더의 md이고, 화면은 사본이다. md를 고쳤으면 `node scripts/competitors-reader/build.mjs <출력 경로>`로 다시 만들어 **같은 URL로** 다시 게시한다(Artifact `url`). 「한눈에」 탭의 단계 그림·표·앱 카드는 `scripts/competitors-reader/template.html`에 손으로 쓴 요약이라, 판정이 바뀌거나 경쟁사가 늘면 그것도 함께 고친다.
 - **새 경쟁사**는 사용자가 지정할 때만 추가하고, [booktrack.md](booktrack.md)와 같은 틀로 쓴다. 전수 대조표가 필요 없는 경쟁사는 [serotiny.md](serotiny.md)처럼 「그 앱이 나은 점 / 북타이머가 나은 점」 두 표를 대조표 대신 써도 된다(행 id는 문서마다 접두어를 따로 단다 — SR · SQ · TS · TP).
