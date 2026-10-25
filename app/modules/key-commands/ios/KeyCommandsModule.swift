@@ -18,9 +18,10 @@ public final class KeyCommandsModule: Module {
       KeyCommandsModule.current = self
     }
 
+    // reload마다 불린다(holder deinit). self를 강하게 잡아야 블록이 돌 때까지 모듈이 살아 옛 명령을 뗀다 — 약한 캡처면 그때 nil이라 남는다.
     OnDestroy {
-      DispatchQueue.main.async { [weak self] in
-        MainActor.assumeIsolated { self?.apply(false) }
+      DispatchQueue.main.async {
+        MainActor.assumeIsolated { self.apply(false) }
       }
     }
 
@@ -52,7 +53,9 @@ public final class KeyCommandsModule: Module {
     return command
   }
 
-  fileprivate func fire() {
+  // 켜진 인스턴스만 낸다 — reload 뒤 남은 옛 명령이 새 모듈을 불러도 setEnabled(false)면 아무 일도 없다(U-96 ②).
+  @MainActor fileprivate func fire() {
+    guard host != nil else { return }
     sendEvent("onMeasureShortcut")
   }
 }

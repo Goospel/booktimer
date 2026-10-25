@@ -16,7 +16,8 @@ function pluginProps(c: ExpoConfig, name: string): unknown[] {
 const kakaoKey = (c: ExpoConfig) =>
   (pluginProps(c, '@react-native-kakao/core')[0] as { nativeAppKey?: string } | undefined)?.nativeAppKey;
 
-// 네이티브 설정 지킴 테스트 — 스켈레톤이 값을 이미 가져 처음부터 통과한다. 돌연변이 설정으로 실패를 한 번 보였다(PR-E).
+// 네이티브 설정 지킴 테스트 — REQ-45 · 69 · 161은 스켈레톤 지킴(PR-E — 처음부터 통과, 돌연변이로 실패를 한 번 보였다).
+// REQ-103 · 158 · 159 · 166~171은 PR-L(Red → Green, 돌연변이 ⓐ~ⓓ).
 
 /** 설정 객체 안에서 그 키가 나오는 횟수(중첩 전부). */
 function countKey(node: unknown, key: string): number {
@@ -118,7 +119,7 @@ test('REQ-168 · 카카오 두 패키지는 같은 정확 버전 3.x이고 expo-
   const pkg = require('./package.json');
   const lock = require('./package-lock.json');
   const core = pkg.dependencies['@react-native-kakao/core'];
-  expect(core).toMatch(/^3\.\d+\.\d+$/); // ^ · ~ 없음 — npm latest 태그는 2.x다
+  expect(core).toBe('3.0.0'); // ^ · ~ 없음 — npm latest 태그는 2.x다. 3.0.0 선택은 설계 판단 2 — 올릴 때 설계와 함께 고친다
   expect(pkg.dependencies['@react-native-kakao/user']).toBe(core); // user peer가 core를 정확히 요구한다
   for (const n of ['expo-font', 'expo-asset']) {
     expect([n, pkg.dependencies[n]]).toEqual([n, expect.stringMatching(/^\d+\.\d+\.\d+$/)]);
@@ -160,9 +161,19 @@ test('REQ-171 · 키 명령 모듈 이름이 JS · Swift · 모듈 설정 · pod
     'Events("onMeasureShortcut")',
     'AsyncFunction("setEnabled")',
     'sendEvent("onMeasureShortcut")',
+    // 격리 리터럴 — runOnQueue(.main)을 빼도 컴파일은 되지만 첫 setEnabled에서 assumeIsolated가 앱을 떨어뜨린다(리뷰 반영)
+    '}.runOnQueue(.main)',
+    '@MainActor private func apply',
+    // reload 뒤 정리 — 약한 캡처면 holder deinit 뒤 블록이 돌 때 self가 nil이라 옛 명령이 남는다(리뷰 반영)
+    'MainActor.assumeIsolated { self.apply(false) }',
+    // 꺼진 모듈은 이벤트를 내지 않는다 — 남은 옛 명령이 새 모듈의 fire()를 불러도 setEnabled(false)면 조용하다
+    '@MainActor fileprivate func fire()',
+    'guard host != nil else { return }',
   ]) {
     expect([lit, swift.toString('utf8').includes(lit)]).toEqual([lit, true]);
   }
+  expect(swift.toString('utf8').includes('[weak self]')).toBe(false);
+  expect(swift.toString('utf8').split('MainActor.assumeIsolated').length - 1).toBe(2); // OnDestroy · setEnabled
   for (const lit of ["requireOptionalNativeModule<KeyCommandsNative>('KeyCommands')", "'onMeasureShortcut'", 'setEnabled(']) {
     expect([lit, ts.includes(lit)]).toEqual([lit, true]);
   }

@@ -1,3 +1,3 @@
 # 로컬 Expo 모듈의 ios/ 폴더는 @expo/fingerprint가 바이트째 해시한다(dir 원천). autocrlf=true 체크아웃이 CRLF로 꺼내면
 # Windows 로컬 지문이 CI · EAS(LF)와 갈린다 — 루트 .gitattributes의 app/.gitignore 규칙과 같은 이유(T-273). 여기 두는 이유: 루트를 고치면 서버 배포가 돈다.
-modules/** text eol=lf
+modules/*/ios/** text eol=lf
