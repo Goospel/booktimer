@@ -53,3 +53,12 @@ test('REQ-159 · APP_VARIANT가 정확히 development가 아니면 production �
     expect([v, c.name, c.scheme, c.ios?.bundleIdentifier]).toEqual([v, '책생글', 'booktimer', 'com.goospel.chaeksaenggeul']);
   }
 });
+
+test('REQ-161 · eas.json — development 프로필만 APP_VARIANT=development, production은 production, 그 밖 프로필엔 없다', () => {
+  const build: Record<string, { env?: Record<string, string> }> = require('./eas.json').build;
+  expect(build.development.env?.APP_VARIANT).toBe('development');
+  expect(build.production.env?.APP_VARIANT).toBe('production');
+  for (const [name, p] of Object.entries(build)) {
+    if (name !== 'development' && name !== 'production') expect([name, p.env?.APP_VARIANT]).toEqual([name, undefined]);
+  }
+});
