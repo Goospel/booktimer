@@ -9,6 +9,9 @@ import com.nimbusds.jwt.JWTClaimsSet;
 import com.nimbusds.jwt.SignedJWT;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.core.env.PropertiesPropertySource;
+import org.springframework.core.env.StandardEnvironment;
 import org.springframework.http.MediaType;
 import org.springframework.http.client.SimpleClientHttpRequestFactory;
 import org.springframework.security.oauth2.jwt.JwtDecoder;
@@ -19,12 +22,19 @@ import org.springframework.test.web.client.MockRestServiceServer;
 import org.springframework.web.client.RestOperations;
 import org.springframework.web.client.RestTemplate;
 
+import java.io.IOException;
+import java.io.Reader;
+import java.lang.reflect.Parameter;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.security.KeyPair;
 import java.security.KeyPairGenerator;
 import java.security.interfaces.RSAPrivateKey;
 import java.security.interfaces.RSAPublicKey;
 import java.time.Instant;
 import java.util.Date;
+import java.util.Properties;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -40,6 +50,7 @@ import static org.springframework.test.web.client.response.MockRestResponseCreat
 class AppleIdentityVerifierTest {
 
     private static final String BUNDLE = "com.goospel.chaeksaenggeul";
+    private static final String DEV_BUNDLE = "com.goospel.chaeksaenggeul.dev";
     private static final String ISS = "https://appleid.apple.com";
 
     private static final KeyPair APPLE = rsa();
@@ -57,14 +68,18 @@ class AppleIdentityVerifierTest {
         }
     }
 
-    /** 운영 조립({@link AppleIdentityVerifier#appleDecoder(String, RestOperations)}) 그대로 — JWKS 응답만 테스트 키로 바꿔 끼운다. */
     private static JwtDecoder decoderFor(RSAPublicKey key) {
+        return decoderFor(key, null);
+    }
+
+    /** 운영 조립({@link AppleIdentityVerifier#appleDecoder(String, String, RestOperations)}) 그대로 — JWKS 응답만 테스트 키로 바꿔 끼운다. */
+    private static JwtDecoder decoderFor(RSAPublicKey key, String devBundle) {
         RestTemplate rest = new RestTemplate();
         String jwks = new JWKSet(new RSAKey.Builder(key).keyID("k1").build()).toString();
         MockRestServiceServer.bindTo(rest).build()
                 .expect(ExpectedCount.manyTimes(), requestTo("https://appleid.apple.com/auth/keys")) // 상수 참조면 주소가 바뀌어도 초록이다
                 .andRespond(withSuccess(jwks, MediaType.APPLICATION_JSON));
-        return AppleIdentityVerifier.appleDecoder(BUNDLE, rest);
+        return AppleIdentityVerifier.appleDecoder(BUNDLE, devBundle, rest);
     }
 
     private static String token(KeyPair signer, String iss, String aud, Instant exp, String sub) {
@@ -166,11 +181,48 @@ class AppleIdentityVerifierTest {
     @Test
     @DisplayName("번들 ID가 없으면(not-configured) 기동은 되고, 꺼진 상태로 아무 토큰도 통과시키지 않는다 — 네트워크 0")
     void notConfiguredBootsAndRejects() {
-        AppleIdentityVerifier off = new AppleIdentityVerifier("not-configured");
+        AppleIdentityVerifier off = new AppleIdentityVerifier("not-configured", "");
         assertThat(off.isConfigured()).isFalse();
         assertThat(off.verify(token(APPLE, ISS, BUNDLE, later(), SUB))).isEmpty();
 
-        assertThat(new AppleIdentityVerifier(BUNDLE).isConfigured()).isTrue(); // 양성 대조 — 값이 있으면 켜진다(JWKS는 첫 검증 때 받는다)
+        assertThat(new AppleIdentityVerifier(BUNDLE, "").isConfigured()).isTrue(); // 양성 대조 — 값이 있으면 켜진다(JWKS는 첫 검증 때 받는다)
         assertThat(verifier.isConfigured()).isTrue();
+    }
+
+    @Test
+    @DisplayName("REQ-163 · 개발 앱 번들 ID를 설정하면 그 aud의 토큰도 sub를 돌려준다 — 운영 번들은 그대로, 다른 앱 · 접두만 같은 번들은 거부")
+    void devBundleAudienceAccepted() {
+        AppleIdentityVerifier withDev = new AppleIdentityVerifier(decoderFor((RSAPublicKey) APPLE.getPublic(), DEV_BUNDLE));
+        assertThat(withDev.verify(token(APPLE, ISS, DEV_BUNDLE, later(), SUB))).contains(SUB);
+        assertThat(withDev.verify(token(APPLE, ISS, BUNDLE, later(), SUB))).contains(SUB);
+        assertThat(withDev.verify(token(APPLE, ISS, "com.goospel.symposium", later(), SUB))).isEmpty();
+        assertThat(withDev.verify(token(APPLE, ISS, DEV_BUNDLE + ".x", later(), SUB))).as("접두만 같은 번들").isEmpty();
+    }
+
+    @Test
+    @DisplayName("REQ-163 · 개발 앱 번들 ID가 비면 개발 aud 토큰은 거부된다")
+    void devBundleAudienceRejectedWhenUnset() {
+        assertThat(verifier.verify(token(APPLE, ISS, DEV_BUNDLE, later(), SUB))).isEmpty();
+    }
+
+    @Test
+    @DisplayName("REQ-163 · 운영 번들 ID가 없으면 개발 값만으로는 켜지지 않는다")
+    void devBundleAloneDoesNotEnable() {
+        assertThat(new AppleIdentityVerifier("not-configured", DEV_BUNDLE).isConfigured()).isFalse();
+        assertThat(new AppleIdentityVerifier(BUNDLE, "").isConfigured()).isTrue(); // 양성 대조
+    }
+
+    @Test
+    @DisplayName("REQ-163 · 운영 설정 파일의 booktimer.apple.dev-bundle-id가 생성자 @Value로 그대로 들어간다 — 테스트 리소스가 메인 파일을 가려 컨텍스트로는 못 잰다")
+    void devBundlePropertyWiredFromMainProperties() throws IOException, NoSuchMethodException {
+        Properties props = new Properties();
+        try (Reader r = Files.newBufferedReader(Path.of("src/main/resources/application.properties"), StandardCharsets.UTF_8)) {
+            props.load(r);
+        }
+        StandardEnvironment env = new StandardEnvironment();
+        env.getPropertySources().addFirst(new PropertiesPropertySource("main", props));
+        Parameter[] params = AppleIdentityVerifier.class.getConstructor(String.class, String.class).getParameters();
+        String devExpr = params[1].getAnnotation(Value.class).value();
+        assertThat(env.resolvePlaceholders(devExpr)).isEqualTo(DEV_BUNDLE);
     }
 }
