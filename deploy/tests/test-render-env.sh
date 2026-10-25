@@ -52,6 +52,7 @@ case "\$*" in
                  TOSS_READING_REMINDER_REST_TEMPLATE_CODE \\
                  TOSS_UNLINK_BASIC_AUTH \\
                  APPLE_BUNDLE_ID APPLE_TEAM_ID APPLE_SIGNIN_KEY_ID APPLE_SIGNIN_P8 \\
+                 GOOGLE_IOS_CLIENT_ID KAKAO_NATIVE_APP_KEY \\
                  APP_LINK_CARD_USERS; do
             printf '/booktimer/%s\tvalue-of-%s\n' "\$n" "\$n"
         done
@@ -154,6 +155,9 @@ assert_has "  .env 에 Apple 번들 ID" "$env_out" "BOOKTIMER_APPLE_BUNDLE_ID=va
 assert_has "  .env 에 Apple 팀 ID" "$env_out" "BOOKTIMER_APPLE_TEAM_ID=value-of-APPLE_TEAM_ID"
 assert_has "  .env 에 Apple 로그인 키 ID" "$env_out" "BOOKTIMER_APPLE_SIGNIN_KEY_ID=value-of-APPLE_SIGNIN_KEY_ID"
 assert_has "  .env 에 Apple 로그인 .p8" "$env_out" "BOOKTIMER_APPLE_SIGNIN_P8=value-of-APPLE_SIGNIN_P8"
+# 아이폰 앱 구글·카카오 로그인(PR-M) — 빠지면 앱 값이 비어 /api/app/auth/google · /kakao가 503으로 닫힌다.
+assert_has "  .env 에 구글 iOS 클라이언트 ID" "$env_out" "BOOKTIMER_GOOGLE_IOS_CLIENT_ID=value-of-GOOGLE_IOS_CLIENT_ID"
+assert_has "  .env 에 카카오 네이티브 앱 키" "$env_out" "BOOKTIMER_KAKAO_NATIVE_APP_KEY=value-of-KAKAO_NATIVE_APP_KEY"
 # 웹 「앱 연결」 카드 허용 목록(v1 REQ-73) — 빠지면 기본값 none이라 본인(17)에게도 카드가 안 보인다.
 assert_has "  .env 에 앱 연결 카드 허용 목록" "$env_out" "BOOKTIMER_APP_LINK_CARD_USERS=value-of-APP_LINK_CARD_USERS"
 
