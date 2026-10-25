@@ -154,10 +154,11 @@ export default function Home() {
   const status = `오늘 ${durationLabel(progress.todaySeconds)} · ${
     dash.todayGoalSeconds > 0 ? `목표 ${durationLabel(dash.todayGoalSeconds)}` : '목표 없음'
   }${progress.streak > 0 ? ` · ${progress.streak}일째` : ''}`;
+  const goalCue = dash.todayGoalSeconds > 0 ? '바꾸기' : '정하기'; // 목표 0(웹에서 끈 계정)이면 「정하기」 — 미니앱 목표 타일과 같은 말
   const goalLine = (
     <Pressable
       accessibilityRole="button"
-      accessibilityLabel={status}
+      accessibilityLabel={`${status}, ${goalCue}`} // 보이는 단서를 이름에도 — 음성 제어가 「바꾸기」로 찾는다
       accessibilityHint="하루 목표를 바꿔요"
       onPress={() => setGoalOpen(true)}
       style={({ pressed }) => [
@@ -171,7 +172,7 @@ export default function Home() {
         {status}
       </Txt>
       <Txt v="L1" style={{ color: color.muted }} accessible={false}>
-        바꾸기 ›
+        {goalCue} ›
       </Txt>
     </Pressable>
   );
