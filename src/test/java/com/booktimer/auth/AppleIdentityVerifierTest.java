@@ -74,12 +74,17 @@ class AppleIdentityVerifierTest {
 
     /** 운영 조립({@link AppleIdentityVerifier#appleDecoder(String, String, RestOperations)}) 그대로 — JWKS 응답만 테스트 키로 바꿔 끼운다. */
     private static JwtDecoder decoderFor(RSAPublicKey key, String devBundle) {
+        return AppleIdentityVerifier.appleDecoder(BUNDLE, devBundle, jwksRest(key));
+    }
+
+    /** Apple JWKS 주소에 테스트 공개키만 돌려주는 RestTemplate. */
+    private static RestTemplate jwksRest(RSAPublicKey key) {
         RestTemplate rest = new RestTemplate();
         String jwks = new JWKSet(new RSAKey.Builder(key).keyID("k1").build()).toString();
         MockRestServiceServer.bindTo(rest).build()
                 .expect(ExpectedCount.manyTimes(), requestTo("https://appleid.apple.com/auth/keys")) // 상수 참조면 주소가 바뀌어도 초록이다
                 .andRespond(withSuccess(jwks, MediaType.APPLICATION_JSON));
-        return AppleIdentityVerifier.appleDecoder(BUNDLE, devBundle, rest);
+        return rest;
     }
 
     private static String token(KeyPair signer, String iss, String aud, Instant exp, String sub) {
@@ -197,6 +202,23 @@ class AppleIdentityVerifierTest {
         assertThat(withDev.verify(token(APPLE, ISS, BUNDLE, later(), SUB))).contains(SUB);
         assertThat(withDev.verify(token(APPLE, ISS, "com.goospel.symposium", later(), SUB))).isEmpty();
         assertThat(withDev.verify(token(APPLE, ISS, DEV_BUNDLE + ".x", later(), SUB))).as("접두만 같은 번들").isEmpty();
+        assertThat(withDev.verify(token(APPLE, ISS, "x." + DEV_BUNDLE, later(), SUB))).as("끝만 같은 번들").isEmpty();
+    }
+
+    @Test
+    @DisplayName("REQ-163 · 운영 조립 — 속성이 디코더까지 간다")
+    void propertiesReachDecoder() {
+        RSAPublicKey k = (RSAPublicKey) APPLE.getPublic();
+
+        AppleIdentityVerifier devUnset = new AppleIdentityVerifier(AppleIdentityVerifier.fromProperties(BUNDLE, "", jwksRest(k)));
+        assertThat(devUnset.verify(token(APPLE, ISS, BUNDLE, later(), SUB))).as("양성 대조 — 운영 번들은 통과").contains(SUB);
+        assertThat(devUnset.verify(token(APPLE, ISS, DEV_BUNDLE, later(), SUB))).as("개발 값이 비면 닫힌다").isEmpty();
+
+        AppleIdentityVerifier devSet = new AppleIdentityVerifier(
+                AppleIdentityVerifier.fromProperties(BUNDLE, " " + DEV_BUNDLE + " ", jwksRest(k)));
+        assertThat(devSet.verify(token(APPLE, ISS, DEV_BUNDLE, later(), SUB))).as("개발 값(앞뒤 공백 제거)이 열린다").contains(SUB);
+
+        assertThat(AppleIdentityVerifier.fromProperties("not-configured", DEV_BUNDLE, jwksRest(k))).as("운영 번들 없으면 꺼짐").isNull();
     }
 
     @Test

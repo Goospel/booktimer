@@ -53,9 +53,14 @@ public class AppleIdentityVerifier {
     @Autowired
     public AppleIdentityVerifier(@Value("${booktimer.apple.bundle-id:not-configured}") String bundleId,
                                  @Value("${booktimer.apple.dev-bundle-id:}") String devBundleId) {
-        this(configured(bundleId)
-                ? appleDecoder(bundleId.strip(), configured(devBundleId) ? devBundleId.strip() : null, appleRest())
-                : null);
+        this(fromProperties(bundleId, devBundleId, appleRest()));
+    }
+
+    /** 속성값 → 운영 디코더(운영 번들이 없으면 null = 꺼짐, 개발 번들이 비면 개발 aud는 닫힘). 테스트는 JWKS 응답만 바꿔 이 경로를 잰다. */
+    static JwtDecoder fromProperties(String bundleId, String devBundleId, RestOperations rest) {
+        return configured(bundleId)
+                ? appleDecoder(bundleId.strip(), configured(devBundleId) ? devBundleId.strip() : null, rest)
+                : null;
     }
 
     /** 테스트 — 디코더를 바꿔 끼운다(운영 조립을 재려면 {@link #appleDecoder(String, String, RestOperations)}로 만든다). */
