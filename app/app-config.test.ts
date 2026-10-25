@@ -164,14 +164,14 @@ test('REQ-171 · 키 명령 모듈 이름이 JS · Swift · 모듈 설정 · pod
     // 격리 리터럴 — runOnQueue(.main)을 빼도 컴파일은 되지만 첫 setEnabled에서 assumeIsolated가 앱을 떨어뜨린다(리뷰 반영)
     '}.runOnQueue(.main)',
     '@MainActor private func apply',
-    // reload 뒤 정리 — 약한 캡처면 holder deinit 뒤 블록이 돌 때 self가 nil이라 옛 명령이 남는다(리뷰 반영)
-    'MainActor.assumeIsolated { self.apply(false) }',
-    // 꺼진 모듈은 이벤트를 내지 않는다 — 남은 옛 명령이 새 모듈의 fire()를 불러도 setEnabled(false)면 조용하다
     '@MainActor fileprivate func fire()',
-    'guard host != nil else { return }',
   ]) {
     expect([lit, swift.toString('utf8').includes(lit)]).toEqual([lit, true]);
   }
+  // reload 뒤 정리 — OnDestroy는 Hermes finalizer 스레드에서 돌 수 있어 main 홉이 먼저다(빼면 assumeIsolated 트랩). 약한 캡처면 그때 self가 nil이라 옛 명령이 남는다(재리뷰 반영)
+  expect(swift.toString('utf8')).toMatch(/OnDestroy \{\s*DispatchQueue\.main\.async \{\s*MainActor\.assumeIsolated \{ self\.apply\(false\) \}/); // 텍스트 검사 — 동작은 G1 · U-96, 음성 판정 전용
+  // 꺼진 모듈은 이벤트를 내지 않는다 — guard가 sendEvent보다 먼저여야 남은 옛 명령이 새 모듈의 fire()를 불러도 조용하다(재리뷰 반영)
+  expect(swift.toString('utf8')).toMatch(/fileprivate func fire\(\) \{\s*guard host != nil else \{ return \}\s*sendEvent\("onMeasureShortcut"\)/); // 텍스트 검사 — 동작은 G1 · U-96, 음성 판정 전용
   expect(swift.toString('utf8').includes('[weak self]')).toBe(false);
   expect(swift.toString('utf8').split('MainActor.assumeIsolated').length - 1).toBe(2); // OnDestroy · setEnabled
   for (const lit of ["requireOptionalNativeModule<KeyCommandsNative>('KeyCommands')", "'onMeasureShortcut'", 'setEnabled(']) {
