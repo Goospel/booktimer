@@ -9,7 +9,7 @@ import { reading } from '../../api/client';
 import type { Dashboard } from '../../api/types';
 import { Cover } from '../../components/Cover';
 import { Sheet } from '../../components/Sheet';
-import { Button, Notice, Row, Screen, Txt } from '../../components/ui';
+import { Button, Notice, Row, Screen, Txt, useStacked } from '../../components/ui';
 import { clockLabel, dateLabel, durationLabel } from '../../lib/format';
 import { goalProgress, isStaleDay, nextMidnightOf, SESSION_CAP_MS } from '../../lib/goalProgress';
 import { savedNotice } from '../../lib/marginSave';
@@ -32,6 +32,7 @@ export default function Home() {
   const [now, setNow] = useState(Date.now());
   const [loadedMidnight, setLoadedMidnight] = useState(0);
   const [drafts, setDrafts] = useState<DraftRow[] | null>(null);
+  const stacked = useStacked();
 
   const load = useCallback(async () => {
     // 글 목록은 따로 읽는다 — 실패해도 홈이 불러오기 오류로 막히지 않는다(못 읽으면 빈 상태 문구도 띄우지 않는다).
@@ -159,10 +160,18 @@ export default function Home() {
       accessibilityLabel={status}
       accessibilityHint="하루 목표를 바꿔요"
       onPress={() => setGoalOpen(true)}
-      style={({ pressed }) => [{ minHeight: layout.hit, justifyContent: 'center' }, pressed && { backgroundColor: color.pressed }]}
+      style={({ pressed }) => [
+        { minHeight: layout.hit, justifyContent: 'center', gap: stacked ? space[1] : space[3] },
+        !stacked && { flexDirection: 'row', alignItems: 'center' },
+        pressed && { backgroundColor: color.pressed },
+      ]}
     >
-      <Txt v="Q2" style={{ color: color.text }}>
+      {/* 줄이 글처럼만 보여 목표 바꾸는 곳을 못 찾았다(2026-10-25 실기기) — 오른쪽 「바꾸기 ›」 단서(질문 띠 꺾쇠와 같은 L1 · muted). 큰 글자면 아래로 쌓는다 */}
+      <Txt v="Q2" style={[{ color: color.text }, !stacked && { flex: 1 }]}>
         {status}
+      </Txt>
+      <Txt v="L1" style={{ color: color.muted }} accessible={false}>
+        바꾸기 ›
       </Txt>
     </Pressable>
   );
