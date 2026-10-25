@@ -1,6 +1,6 @@
 // 시트(시각 보충 §3 · REQ-57) — @expo/ui universal BottomSheet(iOS = SwiftUI sheet) 감싸개. 안은 RN 부품이라 RNHostView로 싣는다.
 // ui.tsx와 따로 둔다 — ui.test.ts가 ui.tsx를 jest에서 import하는데 네이티브 시트 모듈을 끌고 오지 않게.
-// snap이 없으면 내용 맞춤(목표 · 공개 책 확인). 있으면 고정 높이 + 안 스크롤 + (footer) 아래 고정 단추 — 질문 시트 · 동의 시트(PR-H §9).
+// snap이 없으면 너비는 시트, 높이는 내용 맞춤(목표 · 공개 책 확인). 있으면 고정 높이 + 안 스크롤 + (footer) 아래 고정 단추 — 질문 시트 · 동의 시트(PR-H §9).
 import { BottomSheet, RNHostView } from '@expo/ui';
 import type { ReactNode } from 'react';
 import { ScrollView, View } from 'react-native';
@@ -15,7 +15,8 @@ export function Sheet(p: { open: boolean; onClose: () => void; children: ReactNo
   if (!p.snap) {
     return (
       <BottomSheet isPresented={p.open} onDismiss={p.onClose} containerColor={color.paper} contentPadding={0}>
-        <RNHostView matchContents>
+        {/* 너비는 시트에서, 높이는 내용에서 — 양 축이면 글이 줄바꿈되지 않아 잘린다(T-274) */}
+        <RNHostView matchContents={{ vertical: true }}>
           <View style={inner}>{p.children}</View>
         </RNHostView>
       </BottomSheet>
