@@ -390,6 +390,8 @@ PowerShell 5.1 에서 한글 커밋 메시지를 인라인으로 넘기면 깨�
 - toolchain: Java 21 (로컬에 없어도 foojay-resolver 가 자동 다운로드 — 노트 N-002)
 - **프론트 번들 (Vue 섬)**: `npm --prefix frontend run build` — `src/main/resources/static/<앱>/<앱>.js` 재생성. `frontend/` TS 수정 후 `bootRun` 전에 반드시 재실행 (T-063). 산출물은 git add·commit까지 해야 반영.
   **(훅 `require-bundle-build.ps1`이 하드 강제 — `frontend/**` 스테이징 커밋 전 재빌드·diff 검사. 10섬 전수 커버(CI의 garden-only 사각 보완). 우회: `SKIP_BUNDLE_CHECK` 토큰.)**
+- **책생글 앱 화면 확인 = 개발 앱 「책생글 개발」 + Metro**(2026-10-25 REQ-164): PR 워크트리의 `app/`에서(`npm --prefix app ci` 먼저 — 정션 금지) 사용자 터미널 탭에 Git Bash `APP_VARIANT=development npx expo start --dev-client --port 8082 --scheme booktimer-dev`(PowerShell은 `$env:APP_VARIANT='development'; npx expo start --dev-client --port 8082 --scheme booktimer-dev` — 그 탭은 Metro 전용, 게시 · 지문 검사는 다른 탭). npm 스크립트로 만들지 않는다 — `package.json` scripts는 production 지문에 해시된다.
+  `--scheme booktimer-dev`는 빼지 않는다 — 없으면 QR 스킴이 `exp+chaeksaenggeul`이 되는데 TestFlight 앱도 그 스킴을 가져 카메라 QR이 어느 앱을 열지 정해지지 않는다.
 
 ### 미니앱 개발 루프 — 기본은 브라우저 목 모드 (2026-08-12 실측 갱신)
 
