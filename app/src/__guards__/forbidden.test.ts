@@ -42,6 +42,14 @@ const ROWS: Row[] = [
   },
   // v1에 결제는 없다(v1 REQ-40 둘째 이름 · R-10) — 화면 · 문자열에 결제 · 구독 · 프리미엄 문구가 없다. 주석의 「구독」(이벤트 구독)은 걸리지 않는다.
   { id: 'REQ-40 결제', pattern: /결제|구독|프리미엄|유료/, skip: [], planted: '<Txt v="B2">프리미엄으로 질문 더 받기</Txt>', strip: true },
+  // RNHostView matchContents 양 축이면 너비를 RN 글에서 받아 줄바꿈 없이 시트 밖으로 잘린다 — false 아니면 { vertical: true }만(T-274).
+  {
+    id: 'T-274 시트 너비',
+    pattern: /\bmatchContents\b(?!\s*=\s*\{\s*(?:false|\{\s*vertical\s*:\s*true\s*,?\s*\})\s*\})/,
+    skip: [],
+    planted: '<RNHostView matchContents>',
+    strip: true,
+  },
 ];
 
 // 블록 주석 · 줄 주석을 걷는다. URL의 //(앞이 :)는 주석이 아니다.
@@ -121,4 +129,20 @@ test('REQ-40 · 앱 소스에 결제·구독·프리미엄 문구가 없다', ()
   // 갈래마다 양성 대조 — 「구독」 · 「유료」를 패턴에서 빼면 여기서 걸린다
   expect(hits(row!, [{ rel: join('app', 'planted.tsx'), text: '<Txt v="B2">구독하고 질문 더 받기</Txt>' }])).toHaveLength(1);
   expect(hits(row!, [{ rel: join('app', 'planted.tsx'), text: '<Txt v="B2">유료 질문</Txt>' }])).toHaveLength(1);
+});
+
+test('T-274 · RNHostView matchContents는 양 축을 쓰지 않는다(글이 들어가면 { vertical: true })', () => {
+  const row = ROWS.find((r) => r.id === 'T-274 시트 너비');
+  expect(row).toBeDefined();
+  expect(hits(row!)).toEqual([]);
+  const at = (text: string) => hits(row!, [{ rel: join('app', 'planted.tsx'), text }]);
+  // 양 축(맨 이름 · true · 두 축 객체 · 줄바꿈된 JSX)은 잡힌다
+  expect(at('<RNHostView matchContents>')).toHaveLength(1);
+  expect(at('<RNHostView matchContents={true}>')).toHaveLength(1);
+  expect(at('<RNHostView matchContents={{ vertical: true, horizontal: true }}>')).toHaveLength(1);
+  expect(at('<RNHostView\n  matchContents\n>')).toHaveLength(1);
+  // 끔 · 세로만 · 주석은 걸리지 않는다
+  expect(at('<RNHostView matchContents={false}>')).toEqual([]);
+  expect(at('<RNHostView matchContents={{ vertical: true }}>')).toEqual([]);
+  expect(at('// matchContents 양 축 금지')).toEqual([]);
 });
