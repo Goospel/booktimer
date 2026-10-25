@@ -64,7 +64,7 @@ nav.tabs a:hover { color: var(--fg); }
 nav.tabs a:focus-visible, button:focus-visible, a:focus-visible { outline: 2px solid var(--fg); outline-offset: 2px; }
 
 main { padding-top: 28px; }
-.view { display: grid; gap: 32px; }
+.view { display: grid; grid-template-columns: minmax(0, 1fr); gap: 32px; } .view[hidden] { display: none; }
 
 h2.sec-h { font-family: var(--font-serif); font-weight: 500; font-size: 1.35rem; margin: 0 0 12px; text-wrap: balance; }
 .lede { max-width: 68ch; color: var(--ink-2); margin: 0; }
@@ -155,7 +155,7 @@ footer.note a { color: var(--muted); }
   <header class="masthead">
     <div class="eyebrow">북타이머 · 책생글 — 경쟁사 대조</div>
     <h1 class="title">경쟁사 노트</h1>
-    <p class="sub">인스타 광고로 찾은 독서 앱 다섯 곳을 북타이머와 나란히 놓았다. 마지막 확인 2026-10-24.</p>
+    <p class="sub">인스타 광고로 찾은 독서 앱 다섯 곳을 북타이머와 나란히 놓았다. 마지막 확인 2026-10-22(북트랙) · 2026-10-24(나머지 넷).</p>
   </header>
 
   <nav class="tabs" aria-label="문서">
@@ -205,7 +205,7 @@ footer.note a { color: var(--muted); }
                 <rect x="266" y="83" width="108" height="14" rx="3"/><rect x="506" y="83" width="108" height="14" rx="3"/>
                 <rect x="386" y="151" width="108" height="14" rx="3"/>
                 <rect x="506" y="185" width="108" height="14" rx="3"/><rect x="626" y="185" width="108" height="14" rx="3"/>
-                <rect x="266" y="219" width="108" height="14" rx="3"/><rect x="506" y="219" width="108" height="14" rx="3"/>
+                <rect x="506" y="219" width="108" height="14" rx="3"/>
               </g>
               <g class="cov-unk" text-anchor="middle" font-size="13">
                 <text x="680" y="162">?</text><text x="200" y="230">?</text><text x="680" y="230">?</text>
@@ -223,11 +223,11 @@ footer.note a { color: var(--muted); }
             </thead>
             <tbody>
               <tr><th scope="row">읽기<small>독서 타이머</small></th>
-                <td class="m-yes"><span class="mk">●</span>서버 보관</td><td class="us m-yes"><span class="mk">●</span>잠금화면·위젯</td><td class="m-yes"><span class="mk">●</span>카운트다운까지</td><td class="m-yes"><span class="mk">●</span>일시정지·쪽수 입력</td><td class="m-yes"><span class="mk">●</span>Live Activity</td><td class="m-unk"><span class="mk">?</span>언급 없음</td><td class="m-no"><span class="mk">○</span></td></tr>
+                <td class="m-yes"><span class="mk">●</span>서버 보관</td><td class="us m-yes"><span class="mk">●</span>잠금화면·위젯</td><td class="m-yes"><span class="mk">●</span>카운트다운까지</td><td class="m-yes"><span class="mk">●</span>스톱워치·쪽수 입력</td><td class="m-yes"><span class="mk">●</span>Live Activity</td><td class="m-unk"><span class="mk">?</span>언급 없음</td><td class="m-no"><span class="mk">○</span></td></tr>
               <tr><th scope="row">목표·연속<small>매일 이어 가기</small></th>
-                <td class="m-yes"><span class="mk">●</span>하루 목표·부채</td><td class="us m-yes"><span class="mk">●</span>목표 채운 날 연속</td><td class="m-part"><span class="mk">◐</span>월·연 권수·시간</td><td class="m-part"><span class="mk">◐</span>월 권수·스트릭</td><td class="m-part"><span class="mk">◐</span>히트맵·읽은 일수</td><td class="m-unk"><span class="mk">?</span>언급 없음</td><td class="m-no"><span class="mk">○</span></td></tr>
+                <td class="m-yes"><span class="mk">●</span>하루 목표·부채</td><td class="us m-yes"><span class="mk">●</span>목표 채운 날 연속</td><td class="m-part"><span class="mk">◐</span>월·연 권수·시간</td><td class="m-part"><span class="mk">◐</span>월 권수·스트릭</td><td class="m-unk"><span class="mk">?</span>목표 언급 없음</td><td class="m-unk"><span class="mk">?</span>언급 없음</td><td class="m-no"><span class="mk">○</span></td></tr>
               <tr><th scope="row">건지기<small>문장 모으기</small></th>
-                <td class="m-part"><span class="mk">◐</span>여백(직접 입력)</td><td class="us m-yes"><span class="mk">●</span>텍스트 스캔·바코드</td><td class="m-yes"><span class="mk">●</span>OCR·바코드</td><td class="m-yes"><span class="mk">●</span>카메라 스캔</td><td class="m-yes"><span class="mk">●</span>찍고 끌어 고르기</td><td class="m-part"><span class="mk">◐</span>쪽에 깃발 한 줄</td><td class="m-no"><span class="mk">○</span></td></tr>
+                <td class="m-part"><span class="mk">◐</span>여백(직접 입력)</td><td class="us m-yes"><span class="mk">●</span>텍스트 스캔·바코드</td><td class="m-yes"><span class="mk">●</span>OCR·바코드</td><td class="m-yes"><span class="mk">●</span>카메라 스캔</td><td class="m-yes"><span class="mk">●</span>찍고 끌어 고르기</td><td class="m-no"><span class="mk">○</span>깃발은 반응(함께 읽기)</td><td class="m-no"><span class="mk">○</span></td></tr>
               <tr><th scope="row">묻기<small>질문 받으며 쓰기</small></th>
                 <td class="m-no"><span class="mk">○</span></td><td class="us m-yes"><span class="mk">●</span>AI가 내 여백을 읽고</td><td class="m-no"><span class="mk">○</span>쓴 뒤 AI 분석</td><td class="m-part"><span class="mk">◐</span>고정 질문·공개 글</td><td class="m-no"><span class="mk">○</span></td><td class="m-no"><span class="mk">○</span></td><td class="m-no"><span class="mk">○</span>추천용 되묻기만</td></tr>
               <tr><th scope="row">쓰기<small>한 편의 글</small></th>
@@ -239,7 +239,7 @@ footer.note a { color: var(--muted); }
               <tr><th scope="row">플랫폼</th>
                 <td>웹 · 토스(동결)</td><td class="us">iPhone · iPad<br>(출시 전)</td><td>iOS · Android</td><td>iOS · Android · 웹</td><td>iPhone · iPad</td><td>iOS · Android</td><td>웹</td></tr>
               <tr><th scope="row">돈</th>
-                <td>무료</td><td class="us">무료</td><td>무료 + 광고</td><td>월 11,000원 멤버십</td><td>월 2,200원 · 평생 19,900원</td><td>무료</td><td>무료(교보 연결·B2B)</td></tr>
+                <td>무료(미니앱 광고)</td><td class="us">무료</td><td>무료 + 광고</td><td>월 11,000원 멤버십</td><td>월 2,200원 · 평생 19,900원</td><td>무료</td><td>무료(교보 연결·B2B)</td></tr>
             </tbody>
           </table>
         </div>
@@ -277,7 +277,7 @@ footer.note a { color: var(--muted); }
             <a class="open" href="#savequotes" data-tab="savequotes">문서 읽기 →</a>
           </article>
           <article class="card">
-            <h3>탐식이네 <span class="chip">겹침 좁음</span></h3>
+            <h3>탐식이네 <span class="chip">겹침 거의 없음</span></h3>
             <p class="what">장르소설 팬을 위한 iOS·Android 독서모임 앱. 법인, 2026-10 출시.</p>
             <div class="vs">
               <div class="t"><b>탐식이네가 앞선 곳</b><ul><li>같은 책 독자의 진도를 한 화면에</li><li>쪽에 꽂는 반응 「깃발」 · 랜덤 독서회</li><li>Android · 오픈 이벤트</li></ul></div>
@@ -346,7 +346,7 @@ footer.note a { color: var(--muted); }
         tb.querySelectorAll('tbody tr').forEach(function (tr) {
           var td = tr.lastElementChild; if (!td) return;
           var v = td.textContent.trim();
-          if (/^우리만/.test(v)) td.classList.add('v-ours');
+          if (/^우리만(?!\?)/.test(v)) td.classList.add('v-ours');   // 「우리만?」은 상대 쪽 모름이라 칠하지 않는다
           else if (/^북트랙만|북트랙 유리/.test(v)) td.classList.add('v-theirs');
         });
       }
@@ -362,13 +362,16 @@ footer.note a { color: var(--muted); }
     });
   }
 
+  // build.mjs가 md 속 스크립트 닫는 태그에 역슬래시를 넣어 막았다 — 읽을 때 되돌린다.
+  function mdOf(el) { return el ? el.textContent.replace(/<\\\/script/gi, '<\/script') : ''; }
+
   function render() {
     if (!window.marked) return false;
     DOCS.forEach(function (id) {
       var src = document.getElementById('md-' + id);
       var art = document.querySelector('article[data-doc="' + id + '"]');
       if (!src || !art) return;
-      art.innerHTML = marked.parse(src.textContent, { gfm: true });
+      art.innerHTML = marked.parse(mdOf(src), { gfm: true });
       wrapSections(art);
       decorate(art);
     });
@@ -398,7 +401,7 @@ footer.note a { color: var(--muted); }
       var id = art.dataset.doc;
       var pre = document.createElement('pre');
       pre.style.whiteSpace = 'pre-wrap';
-      pre.textContent = document.getElementById('md-' + id).textContent;
+      pre.textContent = mdOf(document.getElementById('md-' + id));
       art.appendChild(pre);
     });
   }
