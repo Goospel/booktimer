@@ -1,0 +1,407 @@
+<title>북타이머 경쟁사 노트</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Serif+KR:wght@500&family=Noto+Sans+KR:wght@400;500;700&display=swap">
+<style>
+/* 레이아웃: 신문 스크랩북 — 위에 탭(한눈에 + 앱 5곳), 「한눈에」는 판정 표와 앱 카드, 앱 탭은 원본 문서를 그대로 읽는 단(段). 색은 북타이머 웹 에디토리얼 토큰(미색 종이 · 잉크). */
+:root {
+  --bg: #F5F0E6;
+  --paper: #ECE5D8;
+  --line: #D9D1C3;
+  --fg: #1D1B18;
+  --ink-2: #4A453E;
+  --muted: #645E54;
+  --theirs: #9A4A2E;
+  --theirs-tint: #F1E3D8;
+  --ours: #2E6159;
+  --ours-tint: #DDE9E4;
+  --font-serif: 'Noto Serif KR', 'Noto Serif CJK KR', 'Apple SD Gothic Neo', serif;
+  --font-sans: 'Noto Sans KR', -apple-system, BlinkMacSystemFont, 'Apple SD Gothic Neo', 'Malgun Gothic', sans-serif;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #1C1A17; --paper: #2C2925; --line: #45403A; --fg: #F2EDE3; --ink-2: #D6CFC2; --muted: #A39B8E;
+    --theirs: #E39C80; --theirs-tint: #3A2A22; --ours: #8CC3B7; --ours-tint: #1E2F2B;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #1C1A17; --paper: #2C2925; --line: #45403A; --fg: #F2EDE3; --ink-2: #D6CFC2; --muted: #A39B8E;
+  --theirs: #E39C80; --theirs-tint: #3A2A22; --ours: #8CC3B7; --ours-tint: #1E2F2B;
+  color-scheme: dark;
+}
+
+body {
+  background: var(--bg); color: var(--fg);
+  font-family: var(--font-sans); font-size: 15px; line-height: 1.75;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+  padding-block: 0 64px;
+  word-break: keep-all; overflow-wrap: anywhere;
+}
+body::before { content: ""; position: fixed; inset: 0 0 auto; height: env(safe-area-inset-top, 0px); z-index: 10; background: var(--bg); }
+.wrap { max-width: 980px; margin: 0 auto; }
+
+header.masthead { padding-block: 36px 18px; border-bottom: 1px solid var(--line); display: grid; gap: 6px; }
+.eyebrow { font-size: 12px; letter-spacing: .12em; color: var(--muted); }
+h1.title { font-family: var(--font-serif); font-weight: 500; font-size: clamp(1.9rem, 5vw, 2.6rem); line-height: 1.25; margin: 0; text-wrap: balance; }
+.sub { color: var(--ink-2); margin: 0; }
+
+nav.tabs {
+  position: sticky; top: env(safe-area-inset-top, 0px); z-index: 5; background: var(--bg);
+  display: flex; gap: 4px; overflow-x: auto; border-bottom: 1px solid var(--line);
+  margin-inline: calc(-1 * max(16px, env(safe-area-inset-left, 0px))); padding-inline: max(16px, env(safe-area-inset-left, 0px));
+  scrollbar-width: none;
+}
+nav.tabs::-webkit-scrollbar { display: none; }
+nav.tabs a {
+  flex: none; padding: 12px 12px 10px; color: var(--muted); text-decoration: none; font-weight: 500;
+  border-bottom: 2px solid transparent; white-space: nowrap;
+}
+nav.tabs a[aria-current="page"] { color: var(--fg); border-bottom-color: var(--fg); }
+nav.tabs a:hover { color: var(--fg); }
+nav.tabs a:focus-visible, button:focus-visible, a:focus-visible { outline: 2px solid var(--fg); outline-offset: 2px; }
+
+main { padding-top: 28px; }
+.view { display: grid; gap: 32px; }
+
+h2.sec-h { font-family: var(--font-serif); font-weight: 500; font-size: 1.35rem; margin: 0 0 12px; text-wrap: balance; }
+.lede { max-width: 68ch; color: var(--ink-2); margin: 0; }
+
+/* 핵심 세 줄 */
+ol.findings { list-style: none; margin: 0; padding: 0; display: grid; gap: 14px; counter-reset: f; }
+ol.findings li { display: grid; grid-template-columns: 2.2em 1fr; gap: 4px 12px; counter-increment: f; }
+ol.findings li::before { content: counter(f); font-family: var(--font-serif); font-size: 1.6rem; line-height: 1.1; color: var(--muted); }
+ol.findings b { font-weight: 700; }
+
+/* 단계 그림 */
+figure.cov { margin: 0 0 18px; display: grid; gap: 10px; }
+.cov-scroll { overflow-x: auto; }
+.cov-scroll svg { display: block; width: 100%; min-width: 640px; height: auto; color: var(--fg); font-family: var(--font-sans); }
+.cov-band { fill: var(--ours-tint); }
+.cov-head text { fill: var(--muted); font-weight: 500; }
+.cov-head .cov-head-us { fill: var(--ours); font-weight: 700; }
+.cov-rail line { stroke: var(--line); stroke-width: 1; }
+.cov-label text { fill: var(--fg); }
+.cov-label .cov-label-us { fill: var(--ours); font-weight: 700; }
+.cov-full rect { fill: var(--fg); }
+.cov-part rect { fill: var(--fg); fill-opacity: .25; }
+.cov-unk text { fill: var(--muted); font-weight: 700; }
+.cov-note { fill: var(--muted); }
+figure.cov figcaption { font-size: 13.5px; color: var(--ink-2); max-width: 72ch; }
+
+/* 판정 표 */
+.table-wrap { overflow-x: auto; border: 1px solid var(--line); border-radius: 6px; background: var(--bg); }
+table { border-collapse: collapse; width: 100%; font-size: 13.5px; line-height: 1.55; }
+th, td { padding: 9px 10px; border-bottom: 1px solid var(--line); text-align: left; vertical-align: top; }
+thead th { font-weight: 500; color: var(--muted); font-size: 12.5px; background: var(--paper); white-space: nowrap; }
+tbody tr:last-child td, tbody tr:last-child th { border-bottom: 0; }
+table.matrix { min-width: 860px; }
+table.matrix tbody th { font-weight: 500; white-space: nowrap; }
+table.matrix tbody th small { display: block; font-weight: 400; color: var(--muted); font-size: 12px; }
+table.matrix .us { background: var(--ours-tint); }
+table.matrix thead th.us { color: var(--ours); }
+.mk { display: inline-block; width: 1.1em; font-weight: 700; }
+.m-yes .mk { color: var(--fg); }
+.m-part .mk, .m-no .mk, .m-unk .mk { color: var(--muted); }
+.m-no, .m-unk { color: var(--muted); }
+.legend { display: flex; flex-wrap: wrap; gap: 6px 18px; font-size: 13px; color: var(--muted); margin: 10px 0 0; padding: 0; list-style: none; }
+
+/* 앱 카드 */
+.cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(290px, 1fr)); gap: 16px; }
+.card { border: 1px solid var(--line); border-radius: 6px; padding: 18px; display: grid; gap: 10px; align-content: start; min-width: 0; }
+.card h3 { font-family: var(--font-serif); font-weight: 500; font-size: 1.2rem; margin: 0; display: flex; justify-content: space-between; align-items: baseline; gap: 8px; flex-wrap: wrap; }
+.card .what { margin: 0; color: var(--ink-2); font-size: 14px; }
+.chip { font-family: var(--font-sans); font-size: 12px; font-weight: 500; padding: 1px 8px; border-radius: 999px; border: 1px solid var(--line); color: var(--muted); white-space: nowrap; }
+.chip.wide { color: var(--theirs); border-color: currentColor; }
+.vs { display: grid; gap: 8px; font-size: 13.5px; line-height: 1.6; }
+.vs div { padding: 8px 10px; border-radius: 4px; }
+.vs .t { background: var(--theirs-tint); }
+.vs .o { background: var(--ours-tint); }
+.vs b { display: block; font-size: 12px; font-weight: 700; }
+.vs .t b { color: var(--theirs); }
+.vs .o b { color: var(--ours); }
+.vs ul { margin: 2px 0 0; padding-left: 1.1em; }
+.card .open { justify-self: start; font-size: 14px; font-weight: 500; color: var(--fg); }
+
+/* 원본 문서 */
+article.doc { max-width: 860px; min-width: 0; }
+article.doc h1 { font-family: var(--font-serif); font-weight: 500; font-size: clamp(1.5rem, 4vw, 2rem); line-height: 1.3; margin: 0 0 16px; text-wrap: balance; }
+article.doc h2 { font-family: var(--font-serif); font-weight: 500; font-size: 1.3rem; margin: 0 0 12px; text-wrap: balance; }
+article.doc h3, article.doc h4 { font-size: 1rem; font-weight: 700; margin: 20px 0 8px; }
+article.doc p, article.doc li { max-width: 72ch; }
+article.doc blockquote { margin: 0 0 8px; padding: 12px 16px; background: var(--paper); border-radius: 6px; color: var(--ink-2); font-size: 14px; }
+article.doc blockquote p { margin: 4px 0; }
+article.doc code { font-size: .88em; background: var(--paper); padding: 1px 5px; border-radius: 3px; }
+article.doc a { color: var(--fg); }
+article.doc section.sec { padding-block: 22px 6px; border-top: 1px solid var(--line); margin-top: 18px; }
+article.doc section.sec.theirs, article.doc section.sec.ours { border-top: 0; border-radius: 8px; padding: 20px 18px 8px; margin-top: 24px; }
+article.doc section.sec.theirs { background: var(--theirs-tint); }
+article.doc section.sec.ours { background: var(--ours-tint); }
+article.doc section.sec.theirs > h2 { color: var(--theirs); }
+article.doc section.sec.ours > h2 { color: var(--ours); }
+article.doc section.sec .table-wrap { background: var(--bg); }
+td.v-ours { color: var(--ours); font-weight: 700; }
+td.v-theirs { color: var(--theirs); font-weight: 700; }
+
+footer.note { margin-top: 48px; padding-top: 16px; border-top: 1px solid var(--line); color: var(--muted); font-size: 13px; }
+footer.note a { color: var(--muted); }
+
+@media (prefers-reduced-motion: no-preference) { html { scroll-behavior: smooth; } }
+</style>
+
+<div class="wrap">
+  <header class="masthead">
+    <div class="eyebrow">북타이머 · 책생글 — 경쟁사 대조</div>
+    <h1 class="title">경쟁사 노트</h1>
+    <p class="sub">인스타 광고로 찾은 독서 앱 다섯 곳을 북타이머와 나란히 놓았다. 마지막 확인 2026-10-24.</p>
+  </header>
+
+  <nav class="tabs" aria-label="문서">
+    <a href="#overview" data-tab="overview">한눈에</a>
+    <a href="#serotiny" data-tab="serotiny">serotiny</a>
+    <a href="#booktrack" data-tab="booktrack">북트랙</a>
+    <a href="#savequotes" data-tab="savequotes">SaveQuotes</a>
+    <a href="#tamsikine" data-tab="tamsikine">탐식이네</a>
+    <a href="#topa" data-tab="topa">topa</a>
+  </nav>
+
+  <main>
+    <section class="view" id="view-overview" data-view="overview">
+      <div>
+        <h2 class="sec-h">먼저 알아야 할 세 가지</h2>
+        <ol class="findings">
+          <li><span><b>「질문을 받으며 쓰기」는 이제 우리만의 것이 아니다.</b> serotiny가 2026-10-11에 「비판적 사고」를 냈다 — 정해진 질문 중 골라 답하고, 글은 공개 게시판에 올라간다. 책생글의 차별은 <b>AI가 내 여백을 읽고 묻는다 · 꼬리 질문으로 한 편이 된다 · 글은 나만 보다가 내보낸다 · 문장은 내가 쓴다</b>로 좁혀 말해야 한다.</span></li>
+          <li><span><b>문장 모으기의 기준선이 올라갔다.</b> SaveQuotes는 페이지를 찍고 손가락으로 끌어 문장을 고른다. 책생글 텍스트 스캔은 카메라 틀 안 글자를 통째로 넣는다.</span></li>
+          <li><span><b>다섯 곳에서 되풀이된 우리 쪽 열세.</b> 쪽 진행을 받지 않는다(topa 빼고 모두 받는다) · Android 앱이 없다 · 로그인 없이 시작하지 못한다 · 돈을 받는 구조가 없다. 결정은 아니고, 각 작업 계획에서 다룬다.</span></li>
+        </ol>
+      </div>
+
+      <div>
+        <h2 class="sec-h">무엇을 하는가 — 단계별로</h2>
+        <figure class="cov">
+          <div class="cov-scroll">
+            <svg viewBox="0 0 760 290" role="img" aria-label="책생글 흐름 다섯 단계를 누가 채우는가. 묻기 칸은 책생글만 온전히 채우고, serotiny가 고정 질문으로 반쯤 들어왔다.">
+              <rect class="cov-band" x="380" y="30" width="120" height="252" rx="4"/>
+              <g class="cov-head" text-anchor="middle" font-size="13">
+                <text x="200" y="20">읽기</text><text x="320" y="20">건지기</text><text class="cov-head-us" x="440" y="20">묻기</text><text x="560" y="20">쓰기</text><text x="680" y="20">내보내기</text>
+              </g>
+              <g class="cov-rail" stroke-dasharray="2 5">
+                <line x1="140" y1="56" x2="740" y2="56"/><line x1="140" y1="90" x2="740" y2="90"/><line x1="140" y1="124" x2="740" y2="124"/><line x1="140" y1="158" x2="740" y2="158"/><line x1="140" y1="192" x2="740" y2="192"/><line x1="140" y1="226" x2="740" y2="226"/><line x1="140" y1="260" x2="740" y2="260"/>
+              </g>
+              <g class="cov-label" text-anchor="end" font-size="13">
+                <text class="cov-label-us" x="128" y="60">책생글 v1</text><text x="128" y="94">북타이머 웹</text><text x="128" y="128">북트랙</text><text x="128" y="162">serotiny</text><text x="128" y="196">SaveQuotes</text><text x="128" y="230">탐식이네</text><text x="128" y="264">topa</text>
+              </g>
+              <!-- 칸: x = 단계 시작 + 6, 폭 108. full = 있음, part = 일부·다른 방식 -->
+              <g class="cov-full">
+                <rect x="146" y="49" width="108" height="14" rx="3"/><rect x="266" y="49" width="108" height="14" rx="3"/><rect x="386" y="49" width="108" height="14" rx="3"/><rect x="506" y="49" width="108" height="14" rx="3"/><rect x="626" y="49" width="108" height="14" rx="3"/>
+                <rect x="146" y="83" width="108" height="14" rx="3"/>
+                <rect x="146" y="117" width="108" height="14" rx="3"/><rect x="266" y="117" width="108" height="14" rx="3"/><rect x="506" y="117" width="108" height="14" rx="3"/><rect x="626" y="117" width="108" height="14" rx="3"/>
+                <rect x="146" y="151" width="108" height="14" rx="3"/><rect x="266" y="151" width="108" height="14" rx="3"/><rect x="506" y="151" width="108" height="14" rx="3"/>
+                <rect x="146" y="185" width="108" height="14" rx="3"/><rect x="266" y="185" width="108" height="14" rx="3"/>
+              </g>
+              <g class="cov-part">
+                <rect x="266" y="83" width="108" height="14" rx="3"/><rect x="506" y="83" width="108" height="14" rx="3"/>
+                <rect x="386" y="151" width="108" height="14" rx="3"/>
+                <rect x="506" y="185" width="108" height="14" rx="3"/><rect x="626" y="185" width="108" height="14" rx="3"/>
+                <rect x="266" y="219" width="108" height="14" rx="3"/><rect x="506" y="219" width="108" height="14" rx="3"/>
+              </g>
+              <g class="cov-unk" text-anchor="middle" font-size="13">
+                <text x="680" y="162">?</text><text x="200" y="230">?</text><text x="680" y="230">?</text>
+              </g>
+              <text class="cov-note" x="440" y="264" text-anchor="middle" font-size="12">책 고르기 서비스 — 이 흐름 앞 단계</text>
+            </svg>
+          </div>
+          <figcaption>책생글 흐름 다섯 단계를 누가 채우는가. 진한 칸은 있음, 옅은 칸은 일부·다른 방식, ?는 공개 자료로 확인 못 함. <b>묻기 칸은 책생글만 온전히 채우고</b>, serotiny가 고정 질문(공개 글)으로 반쯤 들어왔다. 북트랙은 묻기 하나만 빼고 다 채웠다.</figcaption>
+        </figure>
+        <p class="lede">아래 표는 같은 비교에 목표·함께 읽기·플랫폼·돈을 더하고 칸마다 짧은 설명을 붙였다. 옆으로 밀어 볼 수 있다.</p>
+        <div class="table-wrap" style="margin-top:14px">
+          <table class="matrix">
+            <thead>
+              <tr><th scope="col">단계</th><th scope="col">북타이머<br>웹·미니앱</th><th scope="col" class="us">책생글 v1<br>(개발 중)</th><th scope="col">북트랙</th><th scope="col">serotiny</th><th scope="col">SaveQuotes</th><th scope="col">탐식이네</th><th scope="col">topa</th></tr>
+            </thead>
+            <tbody>
+              <tr><th scope="row">읽기<small>독서 타이머</small></th>
+                <td class="m-yes"><span class="mk">●</span>서버 보관</td><td class="us m-yes"><span class="mk">●</span>잠금화면·위젯</td><td class="m-yes"><span class="mk">●</span>카운트다운까지</td><td class="m-yes"><span class="mk">●</span>일시정지·쪽수 입력</td><td class="m-yes"><span class="mk">●</span>Live Activity</td><td class="m-unk"><span class="mk">?</span>언급 없음</td><td class="m-no"><span class="mk">○</span></td></tr>
+              <tr><th scope="row">목표·연속<small>매일 이어 가기</small></th>
+                <td class="m-yes"><span class="mk">●</span>하루 목표·부채</td><td class="us m-yes"><span class="mk">●</span>목표 채운 날 연속</td><td class="m-part"><span class="mk">◐</span>월·연 권수·시간</td><td class="m-part"><span class="mk">◐</span>월 권수·스트릭</td><td class="m-part"><span class="mk">◐</span>히트맵·읽은 일수</td><td class="m-unk"><span class="mk">?</span>언급 없음</td><td class="m-no"><span class="mk">○</span></td></tr>
+              <tr><th scope="row">건지기<small>문장 모으기</small></th>
+                <td class="m-part"><span class="mk">◐</span>여백(직접 입력)</td><td class="us m-yes"><span class="mk">●</span>텍스트 스캔·바코드</td><td class="m-yes"><span class="mk">●</span>OCR·바코드</td><td class="m-yes"><span class="mk">●</span>카메라 스캔</td><td class="m-yes"><span class="mk">●</span>찍고 끌어 고르기</td><td class="m-part"><span class="mk">◐</span>쪽에 깃발 한 줄</td><td class="m-no"><span class="mk">○</span></td></tr>
+              <tr><th scope="row">묻기<small>질문 받으며 쓰기</small></th>
+                <td class="m-no"><span class="mk">○</span></td><td class="us m-yes"><span class="mk">●</span>AI가 내 여백을 읽고</td><td class="m-no"><span class="mk">○</span>쓴 뒤 AI 분석</td><td class="m-part"><span class="mk">◐</span>고정 질문·공개 글</td><td class="m-no"><span class="mk">○</span></td><td class="m-no"><span class="mk">○</span></td><td class="m-no"><span class="mk">○</span>추천용 되묻기만</td></tr>
+              <tr><th scope="row">쓰기<small>한 편의 글</small></th>
+                <td class="m-part"><span class="mk">◐</span>여백 메모 500자</td><td class="us m-yes"><span class="mk">●</span>글쓰기 화면</td><td class="m-yes"><span class="mk">●</span>다이어리·감상평</td><td class="m-yes"><span class="mk">●</span>일기·서평(유료)</td><td class="m-part"><span class="mk">◐</span>문장별 짧은 생각</td><td class="m-part"><span class="mk">◐</span>책별 독후감 1편</td><td class="m-no"><span class="mk">○</span></td></tr>
+              <tr><th scope="row">내보내기<small>밖으로 공유</small></th>
+                <td class="m-no"><span class="mk">○</span></td><td class="us m-yes"><span class="mk">●</span>공유 시트</td><td class="m-yes"><span class="mk">●</span>이미지 카드</td><td class="m-unk"><span class="mk">?</span>모름</td><td class="m-part"><span class="mk">◐</span>기록 이미지</td><td class="m-unk"><span class="mk">?</span>모름</td><td class="m-no"><span class="mk">○</span></td></tr>
+              <tr><th scope="row">함께 읽기<small>다른 독자</small></th>
+                <td class="m-part"><span class="mk">◐</span>팔로우·책방</td><td class="us m-no"><span class="mk">○</span>v1 밖</td><td class="m-part"><span class="mk">◐</span>모임(문구뿐)</td><td class="m-yes"><span class="mk">●</span>지역 지도·챌린지</td><td class="m-no"><span class="mk">○</span></td><td class="m-yes"><span class="mk">●</span>독서회·진도 공유</td><td class="m-part"><span class="mk">◐</span>공개 추천 페이지</td></tr>
+              <tr><th scope="row">플랫폼</th>
+                <td>웹 · 토스(동결)</td><td class="us">iPhone · iPad<br>(출시 전)</td><td>iOS · Android</td><td>iOS · Android · 웹</td><td>iPhone · iPad</td><td>iOS · Android</td><td>웹</td></tr>
+              <tr><th scope="row">돈</th>
+                <td>무료</td><td class="us">무료</td><td>무료 + 광고</td><td>월 11,000원 멤버십</td><td>월 2,200원 · 평생 19,900원</td><td>무료</td><td>무료(교보 연결·B2B)</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <ul class="legend"><li><span class="mk">●</span>있음</li><li><span class="mk">◐</span>일부·다른 방식</li><li><span class="mk">○</span>없음</li><li><span class="mk">?</span>공개 자료로 확인 못 함</li></ul>
+      </div>
+
+      <div>
+        <h2 class="sec-h">앱별 — 앞선 곳과 우리가 앞선 곳</h2>
+        <div class="cards">
+          <article class="card">
+            <h3>serotiny <span class="chip wide">겹침 넓음</span></h3>
+            <p class="what">타이머·문장 스캔·일기에 지역 소셜(지도·기간 챌린지)을 얹은 iOS·Android·웹 앱. 개인사업자, 2026-07 출시.</p>
+            <div class="vs">
+              <div class="t"><b>serotiny가 앞선 곳</b><ul><li>함께 하는 기간 챌린지 · 지역 독서 지도</li><li>질문에 답하는 공개 글 · 회독 기록</li><li>세 플랫폼 + 유료 멤버십</li></ul></div>
+              <div class="o"><b>북타이머가 앞선 곳</b><ul><li>AI가 내 여백으로 묻고 꼬리 질문</li><li>나만 보는 글 → 내보내기</li><li>하루 목표·부채 · 공부 모드</li></ul></div>
+            </div>
+            <a class="open" href="#serotiny" data-tab="serotiny">문서 읽기 →</a>
+          </article>
+          <article class="card">
+            <h3>북트랙 <span class="chip wide">겹침 넓음</span></h3>
+            <p class="what">타이머·바코드·OCR·카드 꾸미기·다이어리·Gemini 리포트를 담은 iOS·Android 기록 앱. 2026-06 출시(추정).</p>
+            <div class="vs">
+              <div class="t"><b>북트랙이 앞선 곳</b><ul><li>책생글 흐름의 네 단계를 이미 출시</li><li>이미지 카드 꾸미기 · 워터마크 노출</li><li>로그인 없이 시작(추정) · Android</li></ul></div>
+              <div class="o"><b>북타이머가 앞선 곳</b><ul><li>묻기 — AI가 질문만 하고 사람이 쓴다</li><li>하루 목표·부채</li><li>공부 모드 · 웹</li></ul></div>
+            </div>
+            <a class="open" href="#booktrack" data-tab="booktrack">문서 읽기 →</a>
+          </article>
+          <article class="card">
+            <h3>SaveQuotes <span class="chip">겹침 중간</span></h3>
+            <p class="what">책 속 문장을 찍어 모으는 iPhone·iPad 앱. 법인, 2026-09 출시, 한 달에 13번 업데이트.</p>
+            <div class="vs">
+              <div class="t"><b>SaveQuotes가 앞선 곳</b><ul><li>찍고 끌어 고르는 문장 스캔</li><li>모은 문장을 다시 꺼내 주는 재발견</li><li>로그인 없이 시작 · iPad 출시</li></ul></div>
+              <div class="o"><b>북타이머가 앞선 곳</b><ul><li>모은 문장에서 글 한 편으로</li><li>하루 목표·연속</li><li>무료 · 바코드</li></ul></div>
+            </div>
+            <a class="open" href="#savequotes" data-tab="savequotes">문서 읽기 →</a>
+          </article>
+          <article class="card">
+            <h3>탐식이네 <span class="chip">겹침 좁음</span></h3>
+            <p class="what">장르소설 팬을 위한 iOS·Android 독서모임 앱. 법인, 2026-10 출시.</p>
+            <div class="vs">
+              <div class="t"><b>탐식이네가 앞선 곳</b><ul><li>같은 책 독자의 진도를 한 화면에</li><li>쪽에 꽂는 반응 「깃발」 · 랜덤 독서회</li><li>Android · 오픈 이벤트</li></ul></div>
+              <div class="o"><b>북타이머가 앞선 곳</b><ul><li>타이머·목표·개인 기록</li><li>글쓰기 · AI 질문</li><li>iPad · 웹</li></ul></div>
+            </div>
+            <a class="open" href="#tamsikine" data-tab="tamsikine">문서 읽기 →</a>
+          </article>
+          <article class="card">
+            <h3>topa <span class="chip">겹침 거의 없음</span></h3>
+            <p class="what">기분·상황을 적으면 AI가 되물어 책을 골라 주는 웹 서비스. 법인, 앱 없음.</p>
+            <div class="vs">
+              <div class="t"><b>topa가 앞선 곳</b><ul><li>대화로 책 고르기 · 추천 이유와 리뷰</li><li>검색에 걸리는 공개 추천 페이지</li><li>도서관·교보 B2B</li></ul></div>
+              <div class="o"><b>북타이머가 앞선 곳</b><ul><li>고른 뒤 — 타이머·여백·글</li><li>내 기록에서 나오는 추천</li><li>서점 고르기 · AI 수신자 고지</li></ul></div>
+            </div>
+            <a class="open" href="#topa" data-tab="topa">문서 읽기 →</a>
+          </article>
+        </div>
+      </div>
+    </section>
+
+    <section class="view" id="view-serotiny" data-view="serotiny" hidden><article class="doc" data-doc="serotiny"></article></section>
+    <section class="view" id="view-booktrack" data-view="booktrack" hidden><article class="doc" data-doc="booktrack"></article></section>
+    <section class="view" id="view-savequotes" data-view="savequotes" hidden><article class="doc" data-doc="savequotes"></article></section>
+    <section class="view" id="view-tamsikine" data-view="tamsikine" hidden><article class="doc" data-doc="tamsikine"></article></section>
+    <section class="view" id="view-topa" data-view="topa" hidden><article class="doc" data-doc="topa"></article></section>
+  </main>
+
+  <footer class="note">
+    이 화면은 읽기용 사본이다. 원본은 레포의 md 문서 — <a href="https://github.com/Goospel/booktimer/tree/main/claude-docs/competitors" target="_blank" rel="noopener">claude-docs/competitors/</a>. 문서를 고치면 이 화면도 다시 만든다.
+  </footer>
+</div>
+
+<!--MD-->
+
+<script src="https://cdn.jsdelivr.net/npm/marked@12.0.2/marked.min.js"></script>
+<script>
+(function () {
+  var TABS = ['overview', 'serotiny', 'booktrack', 'savequotes', 'tamsikine', 'topa'];
+  var DOCS = ['serotiny', 'booktrack', 'savequotes', 'tamsikine', 'topa'];
+  var GH = 'https://github.com/Goospel/booktimer/blob/main/claude-docs/competitors/';
+
+  function wrapSections(article) {
+    var kids = Array.prototype.slice.call(article.childNodes);
+    var cur = null;
+    kids.forEach(function (n) {
+      if (n.nodeName === 'H2') {
+        cur = document.createElement('section');
+        cur.className = 'sec';
+        var t = n.textContent;
+        if (/북타이머가 나은 점/.test(t)) cur.classList.add('ours');
+        else if (/나은 점/.test(t)) cur.classList.add('theirs');
+        article.insertBefore(cur, n);
+      }
+      if (cur) cur.appendChild(n);
+    });
+  }
+
+  function decorate(article) {
+    article.querySelectorAll('table').forEach(function (tb) {
+      var w = document.createElement('div');
+      w.className = 'table-wrap';
+      tb.parentNode.insertBefore(w, tb);
+      w.appendChild(tb);
+      var heads = tb.querySelectorAll('thead th');
+      if (heads.length && heads[heads.length - 1].textContent.trim() === '판정') {
+        tb.querySelectorAll('tbody tr').forEach(function (tr) {
+          var td = tr.lastElementChild; if (!td) return;
+          var v = td.textContent.trim();
+          if (/^우리만/.test(v)) td.classList.add('v-ours');
+          else if (/^북트랙만|북트랙 유리/.test(v)) td.classList.add('v-theirs');
+        });
+      }
+    });
+    article.querySelectorAll('a[href]').forEach(function (a) {
+      var h = a.getAttribute('href');
+      var m = h.match(/^([a-z]+)\.md$/);
+      if (m && DOCS.indexOf(m[1]) >= 0) { a.setAttribute('href', '#' + m[1]); a.dataset.tab = m[1]; return; }
+      if (h === 'README.md') { a.setAttribute('href', '#overview'); a.dataset.tab = 'overview'; return; }
+      if (h.charAt(0) === '#') return;
+      if (!/^https?:/.test(h)) { try { a.href = new URL(h, GH).href; } catch (e) { /* 그대로 둔다 */ } }
+      a.target = '_blank'; a.rel = 'noopener';
+    });
+  }
+
+  function render() {
+    if (!window.marked) return false;
+    DOCS.forEach(function (id) {
+      var src = document.getElementById('md-' + id);
+      var art = document.querySelector('article[data-doc="' + id + '"]');
+      if (!src || !art) return;
+      art.innerHTML = marked.parse(src.textContent, { gfm: true });
+      wrapSections(art);
+      decorate(art);
+    });
+    return true;
+  }
+
+  function show(id, scroll) {
+    if (TABS.indexOf(id) < 0) id = 'overview';
+    document.querySelectorAll('.view').forEach(function (v) { v.hidden = v.dataset.view !== id; });
+    document.querySelectorAll('nav.tabs a').forEach(function (a) {
+      if (a.dataset.tab === id) a.setAttribute('aria-current', 'page'); else a.removeAttribute('aria-current');
+    });
+    if (scroll) window.scrollTo(0, 0);
+  }
+
+  document.addEventListener('click', function (e) {
+    var a = e.target.closest('a[data-tab]');
+    if (!a) return;
+    e.preventDefault();
+    show(a.dataset.tab, true);
+    try { history.replaceState(null, '', '#' + a.dataset.tab); } catch (err) { /* 무시 */ }
+  });
+  window.addEventListener('hashchange', function () { show(location.hash.slice(1), true); });
+
+  if (!render()) {
+    document.querySelectorAll('article.doc').forEach(function (art) {
+      var id = art.dataset.doc;
+      var pre = document.createElement('pre');
+      pre.style.whiteSpace = 'pre-wrap';
+      pre.textContent = document.getElementById('md-' + id).textContent;
+      art.appendChild(pre);
+    });
+  }
+  show(location.hash.slice(1), false);
+})();
+</script>
