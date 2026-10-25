@@ -71,6 +71,10 @@ declare -A SECRET_MAP=(
   [APPLE_TEAM_ID]=BOOKTIMER_APPLE_TEAM_ID
   [APPLE_SIGNIN_KEY_ID]=BOOKTIMER_APPLE_SIGNIN_KEY_ID
   [APPLE_SIGNIN_P8]=BOOKTIMER_APPLE_SIGNIN_P8
+  # 아이폰 앱 구글·카카오 로그인(PR-M) — 구글 iOS 클라이언트 ID(Google Cloud booktimer-498203 「책생글 iOS」) ·
+  # 카카오 네이티브 앱 키(카카오 앱 1621706 「책생글 운영」). 둘 다 비밀이 아니라 String이다(앱 번들에도 실린다).
+  [GOOGLE_IOS_CLIENT_ID]=BOOKTIMER_GOOGLE_IOS_CLIENT_ID
+  [KAKAO_NATIVE_APP_KEY]=BOOKTIMER_KAKAO_NATIVE_APP_KEY
   # 웹 설정 「아이폰 앱 연결」 카드 허용 목록 — 출시 전 17(본인), 출시 때 *(모두). 바꾸면 재배포(workflow_dispatch).
   [APP_LINK_CARD_USERS]=BOOKTIMER_APP_LINK_CARD_USERS
 )
