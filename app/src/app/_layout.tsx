@@ -1,6 +1,6 @@
 import { SplashScreen, Stack } from 'expo-router';
 import { useEffect, useState } from 'react';
-import { View } from 'react-native';
+import { LogBox, View } from 'react-native';
 
 // 앱 시작 때 위젯·Live Activity 레이아웃을 등록한다(보충 REQ-03 「위젯 레이아웃」).
 import '../../widgets/ReadingWidget';
@@ -10,7 +10,11 @@ import { clearSurfaces } from '../lib/surfaces';
 import { useAppFonts } from '../theme/fonts';
 import { color } from '../theme/tokens';
 
-// 지금 바이너리엔 스플래시 모듈이 없어 아무 일도 안 한다(expo-router가 선택 모듈로 부른다 — 시각 §0.2-6). PR-L부터 실제로 붙잡는다.
+// 스킴 둘째 칸(구글 역순 클라이언트 ID) 탓에 expo-linking이 시작마다 「multiple possible URI schemes」 경고를 낸다 —
+// 첫 칸(앱 스킴)을 쓰는 것이 맞으므로 개발 화면의 노란 막대만 숨긴다(PR-L 설계 §3.7).
+LogBox.ignoreLogs(['Linking found multiple possible URI schemes']);
+
+// 스플래시 모듈(PR-L — expo-splash-screen)이 미색 올빼미 화면을 붙잡고 있다가 준비(글꼴 · 세션)되면 걷는다.
 SplashScreen.preventAutoHideAsync();
 
 const stacked = {
