@@ -27,7 +27,8 @@ import java.util.regex.Pattern;
 /**
  * 아이폰 앱이 보낸 Apple identity token을 검증해 {@code sub}를 꺼낸다(v1 REQ-01).
  *
- * <p>통과 조건은 <b>전부</b>다: Apple JWKS 서명(RS256) · {@code iss=https://appleid.apple.com} · {@code aud=번들 ID} · 만료 전 ·
+ * <p>통과 조건은 <b>전부</b>다: Apple JWKS 서명(RS256) · {@code iss=https://appleid.apple.com} · {@code aud=번들 ID}(개발 앱 번들 ID도 —
+ * REQ-163, 같은 팀이라 sub가 같다) · 만료 전 ·
  * sub가 1~64자 영숫자·점. sub 형식은 합성 이메일 로컬 부분에 그대로 들어가므로 여기서 거른다.
  *
  * <p><b>nonce는 쓰지 않는다</b>(v1 §4.3) — 서버 상태 없는 nonce는 토큰과 원문을 함께 가로챈 쪽을 못 막는다. 앱 ↔ 서버는 TLS
@@ -50,11 +51,19 @@ public class AppleIdentityVerifier {
     private final JwtDecoder decoder;
 
     @Autowired
-    public AppleIdentityVerifier(@Value("${booktimer.apple.bundle-id:not-configured}") String bundleId) {
-        this(configured(bundleId) ? appleDecoder(bundleId.strip(), appleRest()) : null);
+    public AppleIdentityVerifier(@Value("${booktimer.apple.bundle-id:not-configured}") String bundleId,
+                                 @Value("${booktimer.apple.dev-bundle-id:}") String devBundleId) {
+        this(fromProperties(bundleId, devBundleId, appleRest()));
     }
 
-    /** 테스트 — 디코더를 바꿔 끼운다(운영 조립을 재려면 {@link #appleDecoder(String, RestOperations)}로 만든다). */
+    /** 속성값 → 운영 디코더(운영 번들이 없으면 null = 꺼짐, 개발 번들이 비면 개발 aud는 닫힘). 테스트는 JWKS 응답만 바꿔 이 경로를 잰다. */
+    static JwtDecoder fromProperties(String bundleId, String devBundleId, RestOperations rest) {
+        return configured(bundleId)
+                ? appleDecoder(bundleId.strip(), configured(devBundleId) ? devBundleId.strip() : null, rest)
+                : null;
+    }
+
+    /** 테스트 — 디코더를 바꿔 끼운다(운영 조립을 재려면 {@link #appleDecoder(String, String, RestOperations)}로 만든다). */
     AppleIdentityVerifier(JwtDecoder decoder) {
         this.decoder = decoder;
     }
@@ -89,10 +98,10 @@ public class AppleIdentityVerifier {
         return Optional.of(sub);
     }
 
-    /** 운영 디코더에 다는 검증기 — 기본(만료·nbf, 60초 허용) + 발급자 + 대상(번들 ID). */
-    private static OAuth2TokenValidator<Jwt> validator(String bundleId) {
+    /** 운영 디코더에 다는 검증기 — 기본(만료·nbf, 60초 허용) + 발급자 + 대상(운영 번들 ID, 있으면 개발 앱 번들 ID도 — REQ-163). */
+    private static OAuth2TokenValidator<Jwt> validator(String bundleId, String devBundleId) {
         OAuth2TokenValidator<Jwt> audience = new JwtClaimValidator<List<String>>(JwtClaimNames.AUD,
-                aud -> aud != null && aud.contains(bundleId));
+                aud -> aud != null && (aud.contains(bundleId) || (devBundleId != null && aud.contains(devBundleId))));
         return new DelegatingOAuth2TokenValidator<>(JwtValidators.createDefaultWithIssuer(ISSUER), audience,
                 new IssuedRecentlyValidator()); // 발급 10분 이내(REQ-110) — 수명 24시간인 토큰의 재사용 창을 줄인다
     }
@@ -106,9 +115,9 @@ public class AppleIdentityVerifier {
     }
 
     /** 운영 디코더 조립 — Apple JWKS 서명 + {@link #validator}. 테스트는 JWKS 응답만 바꿔 끼워 이 조립을 그대로 잰다. */
-    static JwtDecoder appleDecoder(String bundleId, RestOperations rest) {
+    static JwtDecoder appleDecoder(String bundleId, String devBundleId, RestOperations rest) {
         NimbusJwtDecoder decoder = NimbusJwtDecoder.withJwkSetUri(JWKS_URI).restOperations(rest).build();
-        decoder.setJwtValidator(validator(bundleId));
+        decoder.setJwtValidator(validator(bundleId, devBundleId));
         return decoder;
     }
 

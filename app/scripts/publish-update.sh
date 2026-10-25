@@ -21,6 +21,11 @@ if env | grep -q '^EXPO_PUBLIC_'; then
   echo "셸에 EXPO_PUBLIC_* 환경변수가 있어요 — 번들에 섞일 수 있어 게시하지 않습니다: $(env | grep '^EXPO_PUBLIC_' | cut -d= -f1 | tr '\n' ' ')" >&2
   exit 1
 fi
+# 개발 변형(REQ-162) — APP_VARIANT가 남은 셸에서 내보내면 업데이트의 앱 설정(이름 · 스킴)이 개발 앱 것이 된다.
+if [ -n "${APP_VARIANT:-}" ]; then
+  echo "셸에 APP_VARIANT($APP_VARIANT)가 있어요 — 개발 앱 설정이 섞일 수 있어 게시하지 않습니다" >&2
+  exit 1
+fi
 if [ -n "$(git status --porcelain)" ]; then
   echo "작업 트리가 깨끗하지 않아요 — 게시할 화면은 커밋돼 있어야 합니다" >&2
   exit 1
