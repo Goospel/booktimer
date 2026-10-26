@@ -173,7 +173,7 @@ export default function Login() {
           ),
         )}
         {mode === 'start' ? (
-          <View style={{ gap: space[2] }}>
+          <View style={{ gap: space[1] }}>
             <Button kind="outline" label="웹에서 쓰던 계정이 있어요" onPress={() => switchMode('link')} />
             <Txt v="L1" style={{ color: color.muted }}>
               웹에서 구글로 가입했거나 구글 계정의 이메일로 가입했다면 위 Google 버튼으로 바로 들어와요
