@@ -15,6 +15,7 @@ import { startMeasure, stopMeasure } from '../../lib/measureStart';
 import { defaultStudyBook, removeStudyBook, studyMeta } from '../../lib/studyShelf';
 import { studyToday } from '../../lib/studyTimer';
 import { syncSurfaces } from '../../lib/surfaces';
+import { useMeasureShortcut } from '../../lib/useMeasureShortcut';
 import { color, layout, line, space } from '../../theme/tokens';
 
 /** 알림 자리는 둘이고 상태는 하나다 — 시작 · 정지 실패는 막대 안, 빼기 실패는 공부 서재 단 맨 위(사양 §8-20). */
@@ -75,7 +76,7 @@ export default function Study() {
     return () => clearTimeout(id);
   }, [measuring, dash, load]);
 
-  // Option+P(PR-P)가 그대로 부를 처리기 둘(사양 §5.1)
+  // Option+P가 그대로 부르는 처리기 둘(사양 §5.1 — 아래 useMeasureShortcut)
   async function start(bookId: number | null) {
     if (busy) return;
     setBusy(true);
@@ -112,6 +113,11 @@ export default function Study() {
     const r = await removeStudyBook({ remove: study.remove, reload: load }, id);
     if (r.error) setNotice({ message: r.error, tone: 'error', at: 'shelf' });
   }
+
+  // 지금 책 — 이른 반환보다 위(아래 단축키 훅이 쓴다)
+  const book = s ? defaultStudyBook(s.books, s.recentBookId, pickedId) : null;
+  // Option+P = 지금 보이는 측정 버튼(REQ-105): 측정 중 「측정 종료」 · 측정 전 「공부 시작」 · 빈 서재 「책 없이 시간만 재기」
+  useMeasureShortcut({ button: !dash || !s ? null : measuring ? stop : book ? () => start(book.id) : () => start(null), busy, covered: false });
 
   if (!dash || !s) {
     return (
@@ -175,7 +181,6 @@ export default function Study() {
   const toScan = () => router.push('/add?shelf=study&scan=1');
 
   // ── 빈 공부 서재 — 「책 없이 시작」은 여기서만(사양 §8-6) ─────────────────────
-  const book = defaultStudyBook(s.books, s.recentBookId, pickedId);
   if (!book) {
     return (
       <Screen scroll>

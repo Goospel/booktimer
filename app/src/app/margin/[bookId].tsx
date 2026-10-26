@@ -10,7 +10,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { ApiError, library, margins as marginApi, NetworkError } from '../../api/client';
 import type { MaterialsView } from '../../api/types';
 import { Sheet } from '../../components/Sheet';
-import { Button, Field, Notice, Txt } from '../../components/ui';
+import { Button, Field, Notice, readColumn, Txt } from '../../components/ui';
 import { canSaveMargin, marginSaveStep, savedNotice } from '../../lib/marginSave';
 import { color, layout, line, space } from '../../theme/tokens';
 
@@ -97,12 +97,15 @@ export default function MarginWrite() {
       <KeyboardAvoidingView behavior="padding" keyboardVerticalOffset={0} style={{ flex: 1 }}>
         <ScrollView
           style={{ flex: 1 }}
-          contentContainerStyle={{
-            paddingHorizontal: layout.gutter,
-            paddingTop: headerHeight + space[6],
-            paddingBottom: space[6],
-            gap: space[4],
-          }}
+          contentContainerStyle={[
+            readColumn,
+            {
+              paddingHorizontal: layout.gutter,
+              paddingTop: headerHeight + space[6],
+              paddingBottom: space[6],
+              gap: space[4],
+            },
+          ]}
           keyboardShouldPersistTaps="handled"
         >
           {data ? (
@@ -159,18 +162,13 @@ export default function MarginWrite() {
           </View>
           {error ? <Notice tone="error" message={error} /> : null}
         </ScrollView>
-        {/* 아래 막대 — InputAccessoryView가 아니라 KeyboardAvoidingView 안의 보통 View(스파이크 통과 꼴) */}
-        <View
-          style={{
-            backgroundColor: color.paper,
-            borderTopWidth: line.thin,
-            borderTopColor: color.line,
-            paddingVertical: space[3],
-            paddingHorizontal: layout.gutter,
-          }}
-        >
-          {/* 책 정보를 못 읽으면(다시 읽기 실패 포함) 꺼 둔다 — 공개 여부를 모르면 확인 판정을 못 한다 */}
-          <Button kind="ink" label="남기기" disabled={!dirty || !data || !!loadError} busy={busy} onPress={onSave} />
+        {/* 아래 막대 — InputAccessoryView가 아니라 KeyboardAvoidingView 안의 보통 View(스파이크 통과 꼴).
+            면(선 · 바탕)은 끝에서 끝, 단추는 안쪽 단(REQ-104 — 글쓰기와 같은 틀) */}
+        <View style={{ backgroundColor: color.paper, borderTopWidth: line.thin, borderTopColor: color.line, paddingVertical: space[3] }}>
+          <View style={[readColumn, { paddingHorizontal: layout.gutter }]}>
+            {/* 책 정보를 못 읽으면(다시 읽기 실패 포함) 꺼 둔다 — 공개 여부를 모르면 확인 판정을 못 한다 */}
+            <Button kind="ink" label="남기기" disabled={!dirty || !data || !!loadError} busy={busy} onPress={onSave} />
+          </View>
         </View>
       </KeyboardAvoidingView>
 
