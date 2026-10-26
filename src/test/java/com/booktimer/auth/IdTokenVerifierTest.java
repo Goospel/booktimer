@@ -10,6 +10,9 @@ import com.nimbusds.jwt.JWTClaimsSet;
 import com.nimbusds.jwt.SignedJWT;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.core.env.PropertiesPropertySource;
+import org.springframework.core.env.StandardEnvironment;
 import org.springframework.http.MediaType;
 import org.springframework.security.oauth2.jwt.JwtDecoder;
 import org.springframework.security.oauth2.jwt.JwtException;
@@ -17,6 +20,12 @@ import org.springframework.test.web.client.ExpectedCount;
 import org.springframework.test.web.client.MockRestServiceServer;
 import org.springframework.web.client.RestTemplate;
 
+import java.io.IOException;
+import java.io.Reader;
+import java.lang.reflect.Parameter;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.security.KeyPair;
 import java.security.KeyPairGenerator;
 import java.security.interfaces.RSAPrivateKey;
@@ -24,6 +33,8 @@ import java.security.interfaces.RSAPublicKey;
 import java.time.Instant;
 import java.util.Date;
 import java.util.List;
+import java.util.Properties;
+import java.util.Set;
 import java.util.function.Consumer;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -40,6 +51,8 @@ class IdTokenVerifierTest {
 
     private static final String CLIENT = "123-ios.apps.googleusercontent.com";
     private static final String APP_KEY = "kakao-native-app-key-1";
+    private static final String DEV_KEY = "kakao-native-app-key-dev";
+    private static final String KAKAO_JWKS = "https://kauth.kakao.com/.well-known/jwks.json";
     private static final String GOOGLE_ISS = "https://accounts.google.com";
     private static final String KAKAO_ISS = "https://kauth.kakao.com";
     private static final String GOOGLE_SUB = "109876543210987654321";
@@ -50,7 +63,7 @@ class IdTokenVerifierTest {
 
     private final IdTokenVerifier verifier = new IdTokenVerifier(
             IdTokenVerifier.googleDecoder(CLIENT, jwks("https://www.googleapis.com/oauth2/v3/certs")),
-            IdTokenVerifier.kakaoDecoder(APP_KEY, jwks("https://kauth.kakao.com/.well-known/jwks.json")));
+            IdTokenVerifier.kakaoDecoder(Set.of(APP_KEY), jwks(KAKAO_JWKS)));
 
     private static KeyPair rsa() {
         try {
@@ -203,14 +216,73 @@ class IdTokenVerifierTest {
     @Test
     @DisplayName("설정값이 비면 그 제공자만 꺼진다 — 기동은 되고 아무 토큰도 통과시키지 않는다(네트워크 0)")
     void blankConfigTurnsProviderOff() {
-        IdTokenVerifier off = new IdTokenVerifier("", " ");
+        IdTokenVerifier off = new IdTokenVerifier("", " ", "");
         assertThat(off.isGoogleConfigured()).isFalse();
         assertThat(off.isKakaoConfigured()).isFalse();
         assertThat(off.verifyGoogle(google(b -> { }))).isEmpty();
         assertThat(off.verifyKakao(kakao(b -> { }))).isEmpty();
 
-        IdTokenVerifier googleOnly = new IdTokenVerifier(CLIENT, "");
+        IdTokenVerifier googleOnly = new IdTokenVerifier(CLIENT, "", "");
         assertThat(googleOnly.isGoogleConfigured()).isTrue(); // 양성 대조 — 값이 있으면 그 제공자만 켜진다
         assertThat(googleOnly.isKakaoConfigured()).isFalse();
+    }
+
+    // ── 카카오 개발 키(REQ-172) ──────────────────────────────────────────────
+
+    @Test
+    @DisplayName("REQ-172 · 카카오 개발 키를 설정하면 그 aud의 토큰도 sub를 준다 — 운영 키는 그대로, 다른 키 · 접두 · 접미만 같은 키는 거부")
+    void kakaoDevKeyAudienceAccepted() {
+        IdTokenVerifier withDev = new IdTokenVerifier(null, IdTokenVerifier.kakaoDecoder(Set.of(APP_KEY, DEV_KEY), jwks(KAKAO_JWKS)));
+        assertThat(withDev.verifyKakao(kakao(b -> b.audience(DEV_KEY)))).as("개발 키").contains(KAKAO_SUB);
+        assertThat(withDev.verifyKakao(kakao(b -> { }))).as("운영 키 그대로").contains(KAKAO_SUB);
+        assertThat(withDev.verifyKakao(kakao(b -> b.audience("another-app-key")))).as("다른 키").isEmpty();
+        assertThat(withDev.verifyKakao(kakao(b -> b.audience(DEV_KEY + "x")))).as("접두만 같은 키").isEmpty();
+        assertThat(withDev.verifyKakao(kakao(b -> b.audience("x" + DEV_KEY)))).as("끝만 같은 키").isEmpty();
+    }
+
+    @Test
+    @DisplayName("REQ-172 · aud에 운영 키와 개발 키가 함께 있으면(원소 둘) 거부한다")
+    void kakaoBothKeysInAudienceRejected() {
+        IdTokenVerifier withDev = new IdTokenVerifier(null, IdTokenVerifier.kakaoDecoder(Set.of(APP_KEY, DEV_KEY), jwks(KAKAO_JWKS)));
+        assertThat(withDev.verifyKakao(kakao(b -> b.audience(List.of(APP_KEY, DEV_KEY))))).as("aud [운영, 개발]").isEmpty();
+        assertThat(withDev.verifyKakao(kakao(b -> b.audience(List.of(DEV_KEY))))).as("양성 대조 — 개발 키 하나(배열)").contains(KAKAO_SUB);
+    }
+
+    @Test
+    @DisplayName("REQ-172 · 운영 조립 — 속성이 디코더까지 간다(개발 키가 비면 개발 aud는 닫히고 앞뒤 공백은 걷으며 운영 키와 같은 값이어도 기동한다)")
+    void kakaoPropertiesReachDecoder() {
+        IdTokenVerifier devUnset = new IdTokenVerifier(null, IdTokenVerifier.kakaoFromProperties(APP_KEY, "", jwks(KAKAO_JWKS)));
+        assertThat(devUnset.verifyKakao(kakao(b -> { }))).as("양성 대조 — 운영 키는 통과").contains(KAKAO_SUB);
+        assertThat(devUnset.verifyKakao(kakao(b -> b.audience(DEV_KEY)))).as("개발 키가 비면 닫힌다").isEmpty();
+
+        IdTokenVerifier devSet = new IdTokenVerifier(null,
+                IdTokenVerifier.kakaoFromProperties(" " + APP_KEY + " ", " " + DEV_KEY + " ", jwks(KAKAO_JWKS)));
+        assertThat(devSet.verifyKakao(kakao(b -> b.audience(DEV_KEY)))).as("개발 키(앞뒤 공백 제거)가 열린다").contains(KAKAO_SUB);
+        assertThat(devSet.verifyKakao(kakao(b -> { }))).as("운영 키(앞뒤 공백 제거)").contains(KAKAO_SUB);
+
+        IdTokenVerifier same = new IdTokenVerifier(null, IdTokenVerifier.kakaoFromProperties(APP_KEY, APP_KEY, jwks(KAKAO_JWKS)));
+        assertThat(same.verifyKakao(kakao(b -> { }))).as("운영 = 개발 같은 값이어도 기동하고 통과").contains(KAKAO_SUB);
+    }
+
+    @Test
+    @DisplayName("REQ-172 · 운영 키가 없으면 개발 키만으로는 카카오가 켜지지 않는다")
+    void kakaoDevKeyAloneDoesNotEnable() {
+        assertThat(IdTokenVerifier.kakaoFromProperties("", DEV_KEY, jwks(KAKAO_JWKS))).isNull();
+        assertThat(new IdTokenVerifier("", " ", DEV_KEY).isKakaoConfigured()).isFalse();
+        assertThat(new IdTokenVerifier("", APP_KEY, "").isKakaoConfigured()).isTrue(); // 양성 대조 — 운영 키만이면 켜진다
+    }
+
+    @Test
+    @DisplayName("REQ-172 · 운영 설정 파일의 booktimer.kakao.native-app-key-dev가 생성자 @Value로 그대로 들어간다 — 테스트 리소스가 메인 파일을 가려 컨텍스트로는 못 잰다")
+    void kakaoDevKeyPropertyWiredFromMainProperties() throws IOException, NoSuchMethodException {
+        Properties props = new Properties();
+        try (Reader r = Files.newBufferedReader(Path.of("src/main/resources/application.properties"), StandardCharsets.UTF_8)) {
+            props.load(r);
+        }
+        StandardEnvironment env = new StandardEnvironment();
+        env.getPropertySources().addFirst(new PropertiesPropertySource("main", props));
+        Parameter[] params = IdTokenVerifier.class.getConstructor(String.class, String.class, String.class).getParameters();
+        String devExpr = params[2].getAnnotation(Value.class).value();
+        assertThat(env.resolvePlaceholders(devExpr)).isEqualTo("bfbfa22db12bfb12770dbac22e8215b0");
     }
 }
