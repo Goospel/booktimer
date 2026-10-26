@@ -200,6 +200,7 @@ test('R-03 · 로그인 SDK import는 Apple · expo-auth-session · 카카오 �
     { rel: join('lib', 'auth', 'planted.ts'), text: "import { GoogleSignin } from '@react-native-google-signin/google-signin';" },
     { rel: join('lib', 'auth', 'planted2.ts'), text: "import * as Google from 'expo-auth-session/providers/google';" },
     { rel: join('lib', 'auth', 'planted3.ts'), text: "import { x } from './google';" }, // 상대 경로는 보지 않는다
+    { rel: join('lib', 'auth', 'planted4.ts'), text: "import OneTap from 'react-native-google-one-tap';" }, // 「google」 갈래만 잡는 이름
   ];
-  expect(loginSdkImports(planted)).toEqual(['@react-native-google-signin/google-signin', 'expo-auth-session/providers/google']);
+  expect(loginSdkImports(planted)).toEqual(['@react-native-google-signin/google-signin', 'expo-auth-session/providers/google', 'react-native-google-one-tap']);
 });
