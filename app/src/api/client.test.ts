@@ -6,7 +6,7 @@ jest.mock('expo-secure-store', () => ({
   deleteItemAsync: jest.fn(async (k: string) => void mockStore.delete(k)),
 }));
 
-import { account, ApiError, appleSignIn, failText, library, margins, NetworkError, request, session, study, UnauthorizedError, writing } from './client';
+import { account, ApiError, appleSignIn, failText, idTokenSignIn, library, margins, NetworkError, request, session, study, UnauthorizedError, writing } from './client';
 
 const fetchMock = jest.fn();
 global.fetch = fetchMock as unknown as typeof fetch;
@@ -90,6 +90,82 @@ describe('Apple 로그인 흐름(v1 §4.3 — LOGIN 먼저, 없으면 같은 토
     expect(fetchMock).toHaveBeenCalledTimes(1);
     expect(r.notice).toContain('그 계정으로 들어왔어요');
     expect(await session.token()).toBe('app');
+  });
+});
+
+describe('구글 · 카카오 로그인 흐름(PR-P ③ — LOGIN 먼저, 없으면 같은 토큰으로 REGISTER · LINK 없음)', () => {
+  const body = (i: number) => JSON.parse(fetchMock.mock.calls[i][1].body);
+  const url = (i: number) => fetchMock.mock.calls[i][0];
+  const unknown = (extra: object = {}) =>
+    reply(200, JSON.stringify({ registered: false, token: null, created: false, webAccount: false, userId: null, authProvider: null, appleLinked: false, googleLinked: false, unverifiedWebAccount: false, ...extra }));
+  const joined = (extra: object = {}) =>
+    reply(200, JSON.stringify({ registered: true, token: 'new', created: true, webAccount: false, userId: 99, authProvider: 'KAKAO', appleLinked: false, googleLinked: false, unverifiedWebAccount: false, ...extra }));
+  const never = async () => { throw new Error('확인 창이 뜨면 안 된다'); };
+
+  test('REQ-86 · 구글 · 카카오도 LOGIN 먼저, 모르는 신원이면 같은 토큰으로 REGISTER(ageConfirmed) 뒤 세션을 저장한다 — 문은 /api/app/auth/{google|kakao}, LINK는 보내지 않는다', async () => {
+    for (const provider of ['google', 'kakao'] as const) {
+      for (const ageConfirmed of [true, false]) {
+        mockStore.clear();
+        fetchMock.mockReset();
+        fetchMock.mockResolvedValueOnce(unknown()).mockResolvedValueOnce(joined());
+        expect(await idTokenSignIn({ provider, identityToken: 'jwt', ageConfirmed, confirmUnverified: never })).toEqual({});
+        expect(fetchMock).toHaveBeenCalledTimes(2);
+        expect([url(0), url(1)]).toEqual([`https://booktimer.app/api/app/auth/${provider}`, `https://booktimer.app/api/app/auth/${provider}`]);
+        expect(body(0)).toEqual({ identityToken: 'jwt', intent: 'LOGIN' });
+        expect(body(1)).toEqual({ identityToken: 'jwt', intent: 'REGISTER', ageConfirmed }); // 화면 값 그대로 — 하드코딩 참이 아니다
+        expect(fetchMock.mock.calls[0][1].headers.Authorization).toBeUndefined();
+        expect(await session.token()).toBe('new');
+        expect(mockStore.get('booktimer.userId')).toBe('99');
+      }
+    }
+    // 이미 있는 신원이면 LOGIN 한 번으로 끝난다
+    mockStore.clear();
+    fetchMock.mockReset();
+    fetchMock.mockResolvedValueOnce(joined({ token: 'old', userId: 5 }));
+    await idTokenSignIn({ provider: 'google', identityToken: 'jwt', ageConfirmed: true, confirmUnverified: never });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(await session.token()).toBe('old');
+  });
+
+  test('REQ-156 · 구글 · 카카오 로그인도 원 가입 경로 · Apple 연결 · 구글 고정 여부를 기기에 남긴다', async () => {
+    fetchMock.mockResolvedValueOnce(joined({ webAccount: true, userId: 17, authProvider: 'GOOGLE', appleLinked: true, googleLinked: true }));
+    await idTokenSignIn({ provider: 'google', identityToken: 'jwt', ageConfirmed: true, confirmUnverified: never });
+    expect(await session.account()).toEqual({ authProvider: 'GOOGLE', appleLinked: true, googleLinked: true, webAccount: true });
+
+    fetchMock.mockReset();
+    fetchMock.mockResolvedValueOnce(unknown()).mockResolvedValueOnce(joined());
+    await idTokenSignIn({ provider: 'kakao', identityToken: 'jwt', ageConfirmed: true, confirmUnverified: never });
+    expect(await session.account()).toEqual({ authProvider: 'KAKAO', appleLinked: false, googleLinked: false, webAccount: false });
+  });
+
+  test('REQ-79 · (앱) 구글 LOGIN이 인증 안 된 웹 계정을 알리면 확인을 받은 뒤에만 REGISTER한다 — 거절이면 REGISTER 0 · 세션 0', async () => {
+    let asked = 0;
+    fetchMock.mockResolvedValueOnce(unknown({ unverifiedWebAccount: true }));
+    const no = await idTokenSignIn({ provider: 'google', identityToken: 'jwt', ageConfirmed: true, confirmUnverified: async () => (asked++, false) });
+    expect(no).toEqual({ cancelled: true });
+    expect(asked).toBe(1);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(mockStore.size).toBe(0);
+
+    fetchMock.mockReset();
+    fetchMock.mockResolvedValueOnce(unknown({ unverifiedWebAccount: true })).mockResolvedValueOnce(joined({ authProvider: 'GOOGLE' }));
+    const yes = await idTokenSignIn({ provider: 'google', identityToken: 'jwt', ageConfirmed: true, confirmUnverified: async () => (asked++, true) });
+    expect(yes).toEqual({});
+    expect(asked).toBe(2);
+    expect(body(1)).toEqual({ identityToken: 'jwt', intent: 'REGISTER', ageConfirmed: true });
+    expect(await session.token()).toBe('new');
+  });
+
+  test('REQ-79 · (앱) 다른 구글 계정에 고정된 이메일(409)이면 서버 문구 그대로 던지고 세션은 그대로다', async () => {
+    await session.save({ token: 'tok', userId: 3, webAccount: false });
+    const msg = '이 이메일은 다른 구글 계정과 이어져 있어요';
+    fetchMock.mockResolvedValueOnce(reply(409, msg));
+    const err = await idTokenSignIn({ provider: 'google', identityToken: 'jwt', ageConfirmed: true, confirmUnverified: never }).catch((e: ApiError) => e);
+    expect(err).toBeInstanceOf(ApiError);
+    expect((err as ApiError).message).toBe(msg);
+    expect((err as ApiError).status).toBe(409);
+    expect(mockStore.get('booktimer.token')).toBe('tok');
+    expect(mockStore.get('booktimer.userId')).toBe('3');
   });
 });
 

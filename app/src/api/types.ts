@@ -17,6 +17,15 @@ export interface AppAuthResponse {
   unverifiedWebAccount: boolean;
 }
 
+/** `AppAccountApiController.ReauthRequest` — APPLE이면 authorizationCode, GOOGLE · KAKAO에 Apple이 붙었으면 apple* 둘(선택 — REQ-111). */
+export interface DeleteRequest {
+  provider: 'APPLE' | 'GOOGLE' | 'KAKAO';
+  identityToken: string;
+  authorizationCode?: string | null;
+  appleIdentityToken?: string;
+  appleAuthorizationCode?: string | null;
+}
+
 /** `DashboardApiController.BookOption` — 손으로 넣은 책이면 coverUrl · author가 null이다. */
 export interface BookOption {
   id: number;
