@@ -13,6 +13,7 @@ import type { ConsentView } from '../../api/types';
 import { base, Button, Notice, Row, Screen, SwitchRow, Txt, useStacked } from '../../components/ui';
 import { buildInfoLine } from '../../lib/buildInfo';
 import { deleteVia } from '../../lib/deleteVia';
+import { kakaoLogout } from '../../lib/auth/kakao';
 import { draftSync } from '../../lib/draftSync';
 import { dateLabel } from '../../lib/format';
 import { logout } from '../../lib/logout';
@@ -150,7 +151,7 @@ export default function Settings() {
 
   async function onLogout() {
     setNotice(null);
-    const userId = await session.userId();
+    const [userId, a] = await Promise.all([session.userId(), session.account()]);
     const drafts = userId === null ? null : draftSync({ kv: AsyncStorage, userId, put: writing.save });
     await logout({
       pending: async () => (drafts ? drafts.pending() : 0),
@@ -171,9 +172,8 @@ export default function Settings() {
         await drafts?.clear();
       },
       clearSession: () => session.clear(), // 루트 세션 구독이 로그인 화면 + 기기 표면 정리
-      // PR-P ③ 로직 단계 — 카카오 로그인 화면이 아직 없어 카카오 세션이 없다(실제 authProvider · kakaoLogout 연결은 피그마 확정 뒤 화면 단계)
-      authProvider: null,
-      kakaoLogout: async () => undefined,
+      authProvider: a.authProvider, // KAKAO면 SDK 로그아웃(REQ-112 — 최선 노력)
+      kakaoLogout,
     });
   }
 
@@ -243,7 +243,7 @@ export default function Settings() {
       <Group
         title="계정"
         help={
-          acc && deleteVia(acc) === 'APPLE'
+          acc && (deleteVia(acc) === 'APPLE' || deleteVia(acc) === 'KAKAO') // 앱에서만 만든 계정 — 웹 계정과 잇는 길은 지운 뒤 다시 로그인뿐
             ? '웹에서 쓰던 계정이 있다면 — 이 계정을 지운 뒤 로그인 화면의 「웹에서 쓰던 계정이 있어요」로 연결할 수 있어요'
             : undefined
         }
