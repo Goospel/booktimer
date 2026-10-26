@@ -392,7 +392,7 @@ PowerShell 5.1 에서 한글 커밋 메시지를 인라인으로 넘기면 깨�
   **(훅 `require-bundle-build.ps1`이 하드 강제 — `frontend/**` 스테이징 커밋 전 재빌드·diff 검사. 10섬 전수 커버(CI의 garden-only 사각 보완). 우회: `SKIP_BUNDLE_CHECK` 토큰.)**
 - **책생글 앱 화면 확인 = 개발 앱 「책생글 개발」 + Metro**(2026-10-25 REQ-164): PR 워크트리의 `app/`에서(`npm --prefix app ci` 먼저 — 정션 금지) 사용자 터미널 탭에 Git Bash `APP_VARIANT=development npx expo start --dev-client --port 8082 --scheme booktimer-dev`(PowerShell은 `$env:APP_VARIANT='development'; npx expo start --dev-client --port 8082 --scheme booktimer-dev` — 그 탭은 Metro 전용, 게시 · 지문 검사는 다른 탭). npm 스크립트로 만들지 않는다 — `package.json` scripts는 production 지문에 해시된다.
   `--scheme booktimer-dev`는 빼지 않는다 — 없으면 QR 스킴이 `exp+chaeksaenggeul`이 되는데 TestFlight 앱도 그 스킴을 가져 카메라 QR이 어느 앱을 열지 정해지지 않는다.
-  개발 앱이 깔린 기기에서는 내 Metro QR 말고는 「책생글 개발」(또는 `exp+chaeksaenggeul`)로 여는 링크·QR을 열지 않는다 — 개발 클라이언트는 딥링크 하나로 남의 JS를 확인 없이 싣고, 그 JS는 기기에 저장된 운영 로그인 토큰을 읽을 수 있다(문서 규칙 — 자동 검사 없음).
+  개발 앱이 깔린 기기에서는 내 Metro QR 말고는 앱을 여는 링크·QR을 (스킴과 무관하게 — 「책생글 개발」 · `exp+chaeksaenggeul` · `booktimer-dev` · 구글 역순 스킴 · 카카오 스킴 모두) 열지 않는다 — 개발 클라이언트는 등록된 어느 스킴으로든 `__expo_*` 매개변수가 붙은 링크 하나로 남의 JS를 확인 없이 싣고(expo-dev-menu `ExpoLauncherURL.swift` — 스킴 검사 없음), 그 JS는 기기에 저장된 운영 로그인 토큰을 읽을 수 있다(문서 규칙 — 자동 검사 없음 · 2026-10-26 넓힘, PR-L 설계 D2).
 
 ### 미니앱 개발 루프 — 기본은 브라우저 목 모드 (2026-08-12 실측 갱신)
 
