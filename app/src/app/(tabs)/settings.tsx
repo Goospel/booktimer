@@ -171,6 +171,9 @@ export default function Settings() {
         await drafts?.clear();
       },
       clearSession: () => session.clear(), // 루트 세션 구독이 로그인 화면 + 기기 표면 정리
+      // PR-P ③ 로직 단계 — 카카오 로그인 화면이 아직 없어 카카오 세션이 없다(실제 authProvider · kakaoLogout 연결은 피그마 확정 뒤 화면 단계)
+      authProvider: null,
+      kakaoLogout: async () => undefined,
     });
   }
 

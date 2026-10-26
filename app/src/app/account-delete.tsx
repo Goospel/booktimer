@@ -32,7 +32,11 @@ export default function AccountDelete() {
     setNotice(null);
     setBusy(true);
     try {
-      const r = await deleteAccount({
+      // PR-P ③ 로직 단계 — 이 화면은 아직 Apple 갈래만 그린다(구글 · 카카오 갈래 · apple 재확인 연결은 피그마 확정 뒤 화면 단계)
+      const r = await deleteAccount({ via: 'APPLE', appleLinked: false }, {
+        apple: async () => null,
+        unlinkKakao: async () => undefined,
+        revokeGoogle: async () => undefined,
         confirm: async () => {
           try {
             // 이메일 · 이름은 받지 않는다 — 신원 재확인만
