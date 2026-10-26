@@ -35,6 +35,8 @@ import java.util.regex.Pattern;
  *
  * <p>제공자마다 설정값(구글 iOS 클라이언트 ID · 카카오 네이티브 앱 키)이 비면 그 제공자만 꺼진 채로 뜬다 — 디코더를 만들지 않고
  * 네트워크도 부르지 않는다. 컨트롤러는 {@link #isGoogleConfigured()} · {@link #isKakaoConfigured()}로 503을 낸다.
+ *
+ * <p>카카오는 개발 앱 「책생글 개발」의 네이티브 앱 키도 대상으로 받는다(REQ-172) — 운영 키가 있을 때만, 원소 하나 규칙은 그대로.
  */
 @Component
 public class IdTokenVerifier {
@@ -61,11 +63,25 @@ public class IdTokenVerifier {
 
     @Autowired
     public IdTokenVerifier(@Value("${booktimer.google.ios-client-id:}") String googleIosClientId,
-                           @Value("${booktimer.kakao.native-app-key:}") String kakaoNativeAppKey) {
-        this(AppleIdentityVerifier.configured(googleIosClientId)
-                        ? googleDecoder(googleIosClientId.strip(), AppleIdentityVerifier.appleRest()) : null,
-                AppleIdentityVerifier.configured(kakaoNativeAppKey)
-                        ? kakaoDecoder(kakaoNativeAppKey.strip(), AppleIdentityVerifier.appleRest()) : null);
+                           @Value("${booktimer.kakao.native-app-key:}") String kakaoNativeAppKey,
+                           @Value("${booktimer.kakao.native-app-key-dev:}") String kakaoNativeAppKeyDev) {
+        this(googleIosClientId, kakaoNativeAppKey, kakaoNativeAppKeyDev, AppleIdentityVerifier.appleRest());
+    }
+
+    /** 속성 조립 — 테스트는 JWKS 응답만 바꿔 끼워 세 속성이 디코더까지 가는지 잰다. */
+    IdTokenVerifier(String googleIosClientId, String kakaoNativeAppKey, String kakaoNativeAppKeyDev, RestOperations rest) {
+        this(AppleIdentityVerifier.configured(googleIosClientId) ? googleDecoder(googleIosClientId.strip(), rest) : null,
+                kakaoFromProperties(kakaoNativeAppKey, kakaoNativeAppKeyDev, rest));
+    }
+
+    /** 속성값 → 카카오 디코더(REQ-172 — REQ-163과 같은 꼴). 운영 키가 없으면 null(꺼짐), 개발 키가 비면 개발 aud는 닫힌다. */
+    static JwtDecoder kakaoFromProperties(String key, String devKey, RestOperations rest) {
+        if (!AppleIdentityVerifier.configured(key)) {
+            return null;
+        }
+        return kakaoDecoder(AppleIdentityVerifier.configured(devKey)
+                ? Set.copyOf(List.of(key.strip(), devKey.strip())) // 같은 값이면 하나 — Set.of는 중복에 예외라 기동이 죽는다
+                : Set.of(key.strip()), rest);
     }
 
     /** 테스트 — 디코더를 바꿔 끼운다(운영 조립은 {@link #googleDecoder} · {@link #kakaoDecoder}로 만든다). */
@@ -146,10 +162,10 @@ public class IdTokenVerifier {
         return Optional.empty();
     }
 
-    /** 대상이 원소 하나이고 그 값이 기대값일 때만. */
-    private static OAuth2TokenValidator<Jwt> singleAudience(String expected) {
+    /** 대상이 원소 하나이고 그 값이 허용 집합 안일 때만 — Apple의 contains처럼 대상 여럿을 받지 않는다. */
+    private static OAuth2TokenValidator<Jwt> singleAudience(Set<String> allowed) {
         return new JwtClaimValidator<List<String>>(JwtClaimNames.AUD,
-                aud -> aud != null && aud.size() == 1 && expected.equals(aud.getFirst()));
+                aud -> aud != null && aud.size() == 1 && allowed.contains(aud.getFirst()));
     }
 
     /** 발급자 집합 — 변환 결과가 문자열이든 URL이든 문자열로 비교한다. */
@@ -167,15 +183,15 @@ public class IdTokenVerifier {
                     : OAuth2TokenValidatorResult.failure(new OAuth2Error("invalid_token", "azp mismatch", null));
         };
         decoder.setJwtValidator(new DelegatingOAuth2TokenValidator<>(JwtValidators.createDefault(),
-                issuerIn(GOOGLE_ISSUERS), singleAudience(iosClientId), azp, new IssuedRecentlyValidator()));
+                issuerIn(GOOGLE_ISSUERS), singleAudience(Set.of(iosClientId)), azp, new IssuedRecentlyValidator()));
         return decoder;
     }
 
-    /** 운영 디코더 조립 — 카카오 JWKS 서명 + 만료 + 발급자 + 대상 하나(네이티브 앱 키) + 발급 10분. */
-    static JwtDecoder kakaoDecoder(String nativeAppKey, RestOperations rest) {
+    /** 운영 디코더 조립 — 카카오 JWKS 서명 + 만료 + 발급자 + 대상 하나(네이티브 앱 키 — 운영 · 개발 중 하나) + 발급 10분. */
+    static JwtDecoder kakaoDecoder(Set<String> nativeAppKeys, RestOperations rest) {
         NimbusJwtDecoder decoder = NimbusJwtDecoder.withJwkSetUri(KAKAO_JWKS_URI).restOperations(rest).build();
         decoder.setJwtValidator(new DelegatingOAuth2TokenValidator<>(JwtValidators.createDefault(),
-                issuerIn(Set.of(KAKAO_ISSUER)), singleAudience(nativeAppKey), new IssuedRecentlyValidator()));
+                issuerIn(Set.of(KAKAO_ISSUER)), singleAudience(nativeAppKeys), new IssuedRecentlyValidator()));
         return decoder;
     }
 }
