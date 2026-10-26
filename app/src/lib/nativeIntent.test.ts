@@ -11,4 +11,9 @@ describe('redirectSystemPath — 카카오톡 로그인 복귀', () => {
     expect(redirectSystemPath({ path: 'booktimer-dev:///book/1', initial: false })).toBe('booktimer-dev:///book/1');
     expect(redirectSystemPath({ path: 'booktimer:///search?q=kakao', initial: true })).toBe('booktimer:///search?q=kakao');
   });
+
+  it('카카오가 아닌 등록 스킴도 그대로 넘긴다 — 허용 목록으로 바꾸면 구글 역순 스킴이 조용히 버려진다', () => {
+    const google = 'com.googleusercontent.apps.20889772436-j1vun6jjup350gg3l26igcc0421tanph:/oauthredirect?code=x';
+    expect(redirectSystemPath({ path: google, initial: false })).toBe(google);
+  });
 });
