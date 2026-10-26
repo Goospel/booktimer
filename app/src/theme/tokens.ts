@@ -63,7 +63,7 @@ export function stageStyle(v: Stage, o: { bold: boolean }): TextStyle {
 }
 
 export const space = { 1: 4, 2: 8, 3: 12, 4: 16, 5: 20, 6: 24, 8: 32, 12: 48 } as const;
-export const layout = { gutter: 20, sectionGap: 32, hit: 44 } as const;
+export const layout = { gutter: 20, sectionGap: 32, hit: 44, readMax: 640 } as const; // readMax = iPad 본문 한 단(REQ-104)
 export const radius = { none: 0, hair: 1, sm: 2, pill: 999 } as const;
 export const line = { thin: 1, bold: 2 } as const;
 

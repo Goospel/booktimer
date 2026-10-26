@@ -165,16 +165,20 @@ function StackedScreen(p: { children: ReactNode; scroll?: boolean }) {
   return <ScreenBody {...p} top={useHeaderHeight() + space[6]} />;
 }
 
+/** 본문 한 단(iPad — REQ-104). 최대 640을 가운데에 — iPhone 폭(≤ 440)에선 아무 일도 없다.
+ *  늘 paddingHorizontal: layout.gutter와 같은 상자에 건다 — 띠 · 본문 · 막대의 글 왼쪽 끝이 한 줄에 선다. */
+export const readColumn = { width: '100%', maxWidth: layout.readMax, alignSelf: 'center' } as const;
+
 function ScreenBody({ children, scroll, top }: { children: ReactNode; scroll?: boolean; top?: number }) {
   const pad = { paddingHorizontal: layout.gutter, paddingVertical: space[6], paddingTop: top ?? space[6], gap: space[4] };
   return (
     <SafeAreaView edges={top === undefined ? undefined : ['bottom', 'left', 'right']} style={{ flex: 1, backgroundColor: color.paper }}>
       {scroll ? (
-        <ScrollView contentContainerStyle={pad} keyboardShouldPersistTaps="handled">
+        <ScrollView contentContainerStyle={[pad, readColumn]} keyboardShouldPersistTaps="handled">
           {children}
         </ScrollView>
       ) : (
-        <View style={[{ flex: 1 }, pad]}>{children}</View>
+        <View style={[{ flex: 1 }, pad, readColumn]}>{children}</View>
       )}
     </SafeAreaView>
   );

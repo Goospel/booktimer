@@ -145,7 +145,7 @@ describe('글자 단계(REQ-51 · 52)', () => {
 // ── 모서리·간격·선(REQ-53) ────────────────────────────────────────────────
 test('REQ-53 · 모서리는 0·1·2·999 · 간격은 4의 배수 · 선은 1·2뿐이다', () => {
   expect(Object.values(radius).sort((a, b) => a - b)).toEqual([0, 1, 2, 999]);
-  for (const v of [...Object.values(space), layout.gutter, layout.sectionGap, layout.hit]) expect(v % 4).toBe(0);
+  for (const v of [...Object.values(space), layout.gutter, layout.sectionGap, layout.hit, layout.readMax]) expect(v % 4).toBe(0);
   expect(Object.values(line).sort()).toEqual([1, 2]);
 });
 

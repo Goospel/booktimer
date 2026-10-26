@@ -26,7 +26,7 @@ import type { DraftView, Question, Step } from '../../api/types';
 import { ConsentSheet } from '../../components/ConsentSheet';
 import { QuestionBand } from '../../components/QuestionBand';
 import { QuestionSheet } from '../../components/QuestionSheet';
-import { Button, Notice, Screen, Txt, useStacked } from '../../components/ui';
+import { Button, Notice, readColumn, Screen, Txt, useStacked } from '../../components/ui';
 import { aiButton, ROUNDS_MAX, sendAiStep } from '../../lib/aiStep';
 import { AUTOSAVE_MS, draftSync, revisionOrThrow, type SaveOutcome, shouldDiscard } from '../../lib/draftSync';
 import { buildExport, shouldMarkExported } from '../../lib/exportText';
@@ -354,11 +354,11 @@ export default function DraftWrite() {
           />
         </View>
         {notice ? (
-          <View style={{ paddingHorizontal: layout.gutter, paddingTop: space[3] }}>
+          <View style={[readColumn, { paddingHorizontal: layout.gutter, paddingTop: space[3] }]}>
             <Notice message={notice.message} tone={notice.tone} action={notice.action} />
           </View>
         ) : null}
-        <View key={editorKey} style={{ flex: 1, paddingHorizontal: layout.gutter, paddingTop: space[3] }}>
+        <View key={editorKey} style={[readColumn, { flex: 1, paddingHorizontal: layout.gutter, paddingTop: space[3] }]}>
           <TextInput
             ref={titleInput}
             accessibilityLabel="글 제목"
@@ -402,31 +402,32 @@ export default function DraftWrite() {
             style={[input, { flex: 1, marginTop: space[3] }]}
           />
         </View>
-        {/* 아래 막대 — KeyboardAvoidingView 안의 보통 View(스파이크 통과 꼴 · REQ-136 가드) */}
-        <View
-          style={{
-            flexDirection: 'row',
-            flexWrap: stacked ? 'wrap' : 'nowrap', // 큰 글자면 글자 단추 둘이 폭을 다 써 알약이 찌그러진다 — 알약을 아래 줄로
-            alignItems: 'center',
-            gap: space[2],
-            backgroundColor: color.paper,
-            borderTopWidth: line.thin,
-            borderTopColor: color.line,
-            paddingVertical: space[3],
-            paddingHorizontal: layout.gutter,
-          }}
-        >
-          {keyboard ? <Button kind="text" label="키보드 내리기" onPress={() => Keyboard.dismiss()} /> : null}
-          {rounds > 0 ? <Button kind="text" label="질문 보기" onPress={openQuestions} /> : null}
-          <View style={stacked ? { flexBasis: '100%' } : { flex: 1 }}>
-            <Button
-              kind="ink"
-              label={ai.label}
-              disabled={ai.disabled}
-              busy={waiting !== null}
-              accessibilityHint={ai.step === 'FOLLOW' && ai.disabled && rounds < ROUNDS_MAX ? '내 생각을 한두 문장 쓰면 켜져요' : undefined}
-              onPress={() => void runAi(ai.step, focus)}
-            />
+        {/* 아래 막대 — KeyboardAvoidingView 안의 보통 View(스파이크 통과 꼴 · REQ-136 가드). 면(선 · 바탕)은 끝에서 끝, 단추 줄은 안쪽 단(REQ-104) */}
+        <View style={{ backgroundColor: color.paper, borderTopWidth: line.thin, borderTopColor: color.line, paddingVertical: space[3] }}>
+          <View
+            style={[
+              readColumn,
+              {
+                flexDirection: 'row',
+                flexWrap: stacked ? 'wrap' : 'nowrap', // 큰 글자면 글자 단추 둘이 폭을 다 써 알약이 찌그러진다 — 알약을 아래 줄로
+                alignItems: 'center',
+                gap: space[2],
+                paddingHorizontal: layout.gutter,
+              },
+            ]}
+          >
+            {keyboard ? <Button kind="text" label="키보드 내리기" onPress={() => Keyboard.dismiss()} /> : null}
+            {rounds > 0 ? <Button kind="text" label="질문 보기" onPress={openQuestions} /> : null}
+            <View style={stacked ? { flexBasis: '100%' } : { flex: 1 }}>
+              <Button
+                kind="ink"
+                label={ai.label}
+                disabled={ai.disabled}
+                busy={waiting !== null}
+                accessibilityHint={ai.step === 'FOLLOW' && ai.disabled && rounds < ROUNDS_MAX ? '내 생각을 한두 문장 쓰면 켜져요' : undefined}
+                onPress={() => void runAi(ai.step, focus)}
+              />
+            </View>
           </View>
         </View>
       </KeyboardAvoidingView>
