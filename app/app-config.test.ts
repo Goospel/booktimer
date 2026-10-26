@@ -2,6 +2,7 @@ import config from './app.config';
 import type { ExpoConfig } from 'expo/config';
 import { existsSync, readFileSync } from 'fs';
 import { join } from 'path';
+import { DEV_BUNDLE_ID, GOOGLE_IOS_CLIENT_ID as KEYS_GOOGLE_CLIENT_ID, GOOGLE_IOS_URL_SCHEME, GOOGLE_REDIRECT_URI, kakaoKeyFor } from './src/lib/auth/keys';
 import { color } from './src/theme/tokens';
 
 // 콘솔 값(개발 변형 §18 — 비밀 아님). 구글 칸은 클라이언트 ID에서 계산한다 — 손으로 옮긴 값이 아니다(PR-L 설계 REQ-166)
@@ -121,7 +122,7 @@ test('REQ-168 · 카카오 두 패키지는 같은 정확 버전 3.x이고 expo-
   const core = pkg.dependencies['@react-native-kakao/core'];
   expect(core).toBe('3.0.0'); // ^ · ~ 없음 — npm latest 태그는 2.x다. 3.0.0 선택은 설계 판단 2 — 올릴 때 설계와 함께 고친다
   expect(pkg.dependencies['@react-native-kakao/user']).toBe(core); // user peer가 core를 정확히 요구한다
-  for (const n of ['expo-font', 'expo-asset']) {
+  for (const n of ['expo-font', 'expo-asset', 'expo-application']) {
     expect([n, pkg.dependencies[n]]).toEqual([n, expect.stringMatching(/^\d+\.\d+\.\d+$/)]);
     expect([n, lock.packages[`node_modules/${n}`]?.version]).toEqual([n, pkg.dependencies[n]]);
   }
@@ -129,6 +130,26 @@ test('REQ-168 · 카카오 두 패키지는 같은 정확 버전 3.x이고 expo-
     const copies = Object.keys(lock.packages).filter((k) => k === `node_modules/${n}` || k.endsWith(`/node_modules/${n}`));
     expect([n, copies]).toEqual([n, [`node_modules/${n}`]]);
   }
+});
+
+// ── 앱 로그인 값(PR-P ③ — REQ-173). keys.ts는 설정이 import하지 않는다(지문 원천이 되지 않게) — 값을 따로 적고 여기서 대조한다 ──
+test('REQ-173 · 카카오 JS 키는 바이너리 번들 ID로 고르고 두 변형 설정의 플러그인 키와 같다', () => {
+  for (const v of [undefined, 'development']) {
+    const c = configWith(v);
+    expect([v, kakaoKeyFor(c.ios?.bundleIdentifier ?? null)]).toEqual([v, kakaoKey(c)]);
+  }
+  expect(kakaoKey(configWith('development'))).not.toBe(kakaoKey(configWith(undefined))); // 두 키가 같으면 위 대조가 공허하다
+  expect(kakaoKeyFor(null)).toBe(kakaoKey(configWith(undefined))); // 못 읽으면 운영 키
+  expect(kakaoKeyFor(DEV_BUNDLE_ID + '.x')).toBe(kakaoKey(configWith(undefined))); // 접두만 같은 번들은 개발이 아니다
+});
+
+test('REQ-173 · 구글 redirectUri는 설정 스킴 둘째 칸(역순 클라이언트 ID) + :/oauthredirect다', () => {
+  for (const v of [undefined, 'development']) {
+    const scheme = configWith(v).scheme as string[];
+    expect([v, GOOGLE_IOS_URL_SCHEME, GOOGLE_REDIRECT_URI]).toEqual([v, scheme[1], `${scheme[1]}:/oauthredirect`]);
+  }
+  expect(KEYS_GOOGLE_CLIENT_ID).toBe(GOOGLE_IOS_CLIENT_ID);
+  expect(GOOGLE_REDIRECT_URI).toBe(`${GOOGLE_SCHEME}:/oauthredirect`);
 });
 
 test('REQ-169 · 스플래시는 expo-splash-screen 한 곳에 image · imageWidth 180 · contain · 종이색으로 있고 dark가 없으며 루트 배경도 종이색이다', () => {
