@@ -41,4 +41,8 @@ test('REQ-105 · 키를 누르고 있어 이어 오는 이벤트는 처음 한 �
   expect(got[0]).toBe(true);
   expect(got.slice(1).every((ok) => !ok)).toBe(true);
   expect(fresh(t - 33 + 1200)).toBe(true);
+  // 첫 반복 전 지연(수백 ms)보다 짧은 간격이면 「시작 → 곧바로 종료」가 되살아난다 — 간격을 1초 근처에 묶는다
+  const slow = repeatGate();
+  slow(0);
+  expect(slow(999)).toBe(false);
 });
