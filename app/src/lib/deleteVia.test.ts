@@ -1,7 +1,7 @@
 jest.mock('expo-secure-store', () => ({ getItemAsync: jest.fn(), setItemAsync: jest.fn(), deleteItemAsync: jest.fn() }));
 
 import { ApiError, NetworkError } from '../api/client';
-import { CAN_CONFIRM, DELETE_FAILED, DELETE_LINE, deleteAccount, deleteCopy, deleteVia, signedOutText, UNLINK_WAIT_MS } from './deleteVia';
+import { CAN_CONFIRM, confirmFor, DELETE_FAILED, DELETE_LINE, deleteAccount, deleteCopy, deleteVia, signedOutText, UNLINK_WAIT_MS } from './deleteVia';
 
 // 탈퇴 갈래(v1 REQ-87 · REQ-156) · Apple 탈퇴 흐름(REQ-157).
 const ALL = new Set<'GOOGLE' | 'KAKAO'>(['GOOGLE', 'KAKAO']);
@@ -208,4 +208,34 @@ test('REQ-87 · LOCAL · TOSS의 구글 갈래는 이메일 가입 문구이고 
   expect(deleteCopy({ via: 'APPLE', authProvider: 'APPLE' })?.line).toBe(DELETE_LINE.APPLE);
   expect(deleteCopy({ via: 'KAKAO', authProvider: 'KAKAO' })?.line).toBe(DELETE_LINE.KAKAO);
   expect(deleteCopy({ via: 'WEB', authProvider: 'LOCAL' })).toBeNull();
+});
+
+// D4 (가) — 탈퇴 확인은 로그인과 다른 창(다시 로그인)이어야 한다. 화면의 익명 함수에 두면 { reauth: true }를 지워도 아무 테스트도 깨지지 않는다
+function confirmDeps() {
+  const calls: unknown[][] = [];
+  const d = {
+    apple: async () => (calls.push(['apple']), { identityToken: 'apple-jwt', authorizationCode: 'apple-code' }),
+    google: async (o: { reauth: true }) => (calls.push(['google', o]), { identityToken: 'g-jwt', accessToken: 'g-at' }),
+    kakao: async (o: { reauth: true }) => (calls.push(['kakao', o]), 'k-jwt'),
+  };
+  return { d, calls };
+}
+
+test('REQ-87 · 탈퇴 확인용 구글 · 카카오 창은 다시 로그인(reauth)으로 열고, Apple은 Apple 신원 재확인 창이다', async () => {
+  const g = confirmDeps();
+  expect(await confirmFor('GOOGLE', g.d)()).toEqual({ identityToken: 'g-jwt', accessToken: 'g-at' });
+  expect(g.calls).toEqual([['google', { reauth: true }]]);
+  const k = confirmDeps();
+  expect(await confirmFor('KAKAO', k.d)()).toEqual({ identityToken: 'k-jwt' });
+  expect(k.calls).toEqual([['kakao', { reauth: true }]]);
+  const a = confirmDeps();
+  expect(await confirmFor('APPLE', a.d)()).toEqual({ identityToken: 'apple-jwt', authorizationCode: 'apple-code' });
+  expect(a.calls).toEqual([['apple']]);
+});
+
+test('REQ-87 · 탈퇴 확인 창을 닫으면 null이고 실패는 그대로 던진다(deleteAccount가 그 제공자 실패 문구로 바꾼다)', async () => {
+  const closed = { apple: async () => null, google: async () => null, kakao: async () => null };
+  for (const via of ['APPLE', 'GOOGLE', 'KAKAO'] as const) expect(await confirmFor(via, closed)()).toBeNull();
+  const boom = new Error('kakao failed');
+  await expect(confirmFor('KAKAO', { ...closed, kakao: async () => { throw boom; } })()).rejects.toBe(boom);
 });

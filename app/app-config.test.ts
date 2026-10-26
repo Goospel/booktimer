@@ -116,7 +116,7 @@ test('REQ-167 · 카카오 플러그인은 한 번만 있고 변형별 네이티
   ]);
 });
 
-test('REQ-168 · 카카오 두 패키지는 같은 정확 버전 3.x이고 expo-font · expo-asset은 정확 핀이며 핵심 네이티브 패키지는 잠금 파일에 한 벌씩이다', () => {
+test('REQ-168 · 카카오 두 패키지는 같은 정확 버전 3.x이고 expo-font · expo-asset · expo-application은 정확 핀이며 핵심 네이티브 패키지는 잠금 파일에 한 벌씩이다', () => {
   const pkg = require('./package.json');
   const lock = require('./package-lock.json');
   const core = pkg.dependencies['@react-native-kakao/core'];
