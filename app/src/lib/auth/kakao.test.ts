@@ -27,6 +27,18 @@ test('REQ-173 · 카카오 SDK는 바이너리 번들 ID로 고른 키로 먼저
   for (const f of [user.login, user.logout, user.unlink]) expect(init).toBeLessThan(f.mock.invocationCallOrder[0]);
 });
 
+test('REQ-173 · 운영 번들이면 운영 키로 초기화한다(양성 대조)', () => {
+  // 위 테스트는 개발 번들 한쪽뿐이라 「번들을 무시하고 개발 키 고정」을 못 잡는다 — 운영 번들로 다시 불러 대조한다.
+  // resetModules가 없으면 맨 위 import가 만든 목 인스턴스를 격리 안에서도 재사용해 doMock이 먹지 않는다(jest 30 · jest-expo 실측).
+  jest.isolateModules(() => {
+    jest.resetModules();
+    jest.doMock('expo-application', () => ({ applicationId: 'com.goospel.chaeksaenggeul' }));
+    const isolatedCore = require('@react-native-kakao/core') as { initializeKakaoSDK: jest.Mock };
+    require('./kakao');
+    expect(isolatedCore.initializeKakaoSDK.mock.calls.map((c) => c[0])).toEqual([KAKAO_NATIVE_APP_KEYS.prod]);
+  });
+});
+
 test('REQ-86 · 카카오 창을 닫거나 동의를 취소하면 null이고, ID 토큰이 없거나 다른 오류면 실패다', async () => {
   for (const code of ['Cancelled', 'AccessDenied']) {
     user.login.mockRejectedValueOnce(kakaoError(code));
