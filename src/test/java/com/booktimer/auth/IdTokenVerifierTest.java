@@ -251,7 +251,7 @@ class IdTokenVerifierTest {
     @Test
     @DisplayName("REQ-172 · 운영 조립 — 속성이 디코더까지 간다(개발 키가 비면 개발 aud는 닫히고 앞뒤 공백은 걷으며 운영 키와 같은 값이어도 기동한다)")
     void kakaoPropertiesReachDecoder() {
-        IdTokenVerifier devUnset = new IdTokenVerifier(null, IdTokenVerifier.kakaoFromProperties(APP_KEY, "", jwks(KAKAO_JWKS)));
+        IdTokenVerifier devUnset = new IdTokenVerifier(null, IdTokenVerifier.kakaoFromProperties(" " + APP_KEY + " ", "", jwks(KAKAO_JWKS)));
         assertThat(devUnset.verifyKakao(kakao(b -> { }))).as("양성 대조 — 운영 키는 통과").contains(KAKAO_SUB);
         assertThat(devUnset.verifyKakao(kakao(b -> b.audience(DEV_KEY)))).as("개발 키가 비면 닫힌다").isEmpty();
 
@@ -273,7 +273,7 @@ class IdTokenVerifierTest {
     }
 
     @Test
-    @DisplayName("REQ-172 · 속성 생성자가 셋째 값(개발 키)을 카카오 디코더까지 넘긴다 — 리뷰 M9")
+    @DisplayName("REQ-172 · 조립 생성자가 셋째 값(개발 키)을 카카오 디코더까지 넘긴다 — 리뷰 M9(@Autowired의 넘기기 한 줄은 U-82 ②가 잰다)")
     void kakaoDevKeyConstructorReachesDecoder() {
         IdTokenVerifier verifier = new IdTokenVerifier("", APP_KEY, " " + DEV_KEY + " ", jwks(KAKAO_JWKS));
         assertThat(verifier.verifyKakao(kakao(b -> b.audience(DEV_KEY)))).as("개발 키 aud").contains(KAKAO_SUB);
