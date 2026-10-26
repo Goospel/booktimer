@@ -16,6 +16,7 @@ import { savedNotice } from '../../lib/marginSave';
 import { startMeasure, stopMeasure } from '../../lib/measureStart';
 import { type DraftRow, recentDrafts } from '../../lib/recentDrafts';
 import { syncSurfaces } from '../../lib/surfaces';
+import { useMeasureShortcut } from '../../lib/useMeasureShortcut';
 import { color, layout, space } from '../../theme/tokens';
 
 const GOAL_CHOICES_MIN = [10, 20, 30, 45, 60, 90, 120]; // 0은 내놓지 않는다(범위 보충 §3.4)
@@ -134,6 +135,13 @@ export default function Home() {
     await load();
   }
 
+  // 읽는 책 — 이른 반환보다 위(아래 단축키 훅이 쓴다)
+  const books = dash ? (dash.readingBooks.length > 0 ? dash.readingBooks : dash.wantToReadBooks) : [];
+  const book = books.find((b) => b.id === pickedId) ?? books.find((b) => b.id === dash?.recentBookId) ?? books[0];
+  // Option+P = 지금 보이는 측정 버튼(REQ-105): 측정 중 「측정 종료」 · 빈 홈 「책 없이 시간만 재기」 · 측정 전 「읽기 시작」
+  const measureButton = !dash || !progress ? null : measuring ? stop : books.length === 0 ? () => start(null) : () => start(book.id);
+  useMeasureShortcut({ button: measureButton, busy, covered: goalOpen });
+
   if (!dash || !progress) {
     return (
       <Screen>
@@ -225,7 +233,6 @@ export default function Home() {
   }
 
   // ── 새 계정 빈 홈 — 심사자가 보는 화면(§1.4-4). 타이머 숫자는 없다 ─────────
-  const books = dash.readingBooks.length > 0 ? dash.readingBooks : dash.wantToReadBooks;
   if (books.length === 0) {
     return (
       <Screen scroll>
@@ -248,7 +255,6 @@ export default function Home() {
   }
 
   // ── 측정 전 — 표제는 읽는 책. 홈-안A(2026-10-23 사용자 선택): 쓰기가 검정 알약 · 읽기 시작은 외곽선 ──
-  const book = books.find((b) => b.id === pickedId) ?? books.find((b) => b.id === dash.recentBookId) ?? books[0];
   const others = books.filter((b) => b.id !== book.id);
   return (
     <Screen scroll>

@@ -4,7 +4,7 @@
 import { ActivityIndicator, Pressable, View } from 'react-native';
 
 import { color, layout, line, space } from '../theme/tokens';
-import { AiBadge, Txt } from './ui';
+import { AiBadge, readColumn, Txt } from './ui';
 
 export function QuestionBand(p: { question: string | null; hint: string; waiting: string | null; onPress?: () => void }) {
   const spinner = p.waiting ? <ActivityIndicator size="small" color={color.muted} /> : null;
@@ -38,15 +38,16 @@ export function QuestionBand(p: { question: string | null; hint: string; waiting
       {chevron}
     </View>
   );
+  // 띠 면(바탕 · 선 · 위아래 여백)은 끝에서 끝, 글은 안쪽 단(readColumn + gutter — iPad 640, REQ-104)
   const band = {
     backgroundColor: color.paper2,
     borderTopWidth: line.thin,
     borderBottomWidth: line.thin,
     borderColor: color.line,
     paddingVertical: space[3],
-    paddingHorizontal: layout.gutter,
   } as const;
-  if (!p.onPress) return <View style={band}>{content}</View>;
+  const inner = <View style={[readColumn, { paddingHorizontal: layout.gutter }]}>{content}</View>;
+  if (!p.onPress) return <View style={band}>{inner}</View>;
   return (
     <Pressable
       accessibilityRole="button"
@@ -55,7 +56,7 @@ export function QuestionBand(p: { question: string | null; hint: string; waiting
       onPress={p.onPress}
       style={({ pressed }) => [band, { minHeight: layout.hit }, pressed && { opacity: 0.7 }]}
     >
-      {content}
+      {inner}
     </Pressable>
   );
 }
