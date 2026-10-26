@@ -65,9 +65,13 @@ public class IdTokenVerifier {
     public IdTokenVerifier(@Value("${booktimer.google.ios-client-id:}") String googleIosClientId,
                            @Value("${booktimer.kakao.native-app-key:}") String kakaoNativeAppKey,
                            @Value("${booktimer.kakao.native-app-key-dev:}") String kakaoNativeAppKeyDev) {
-        this(AppleIdentityVerifier.configured(googleIosClientId)
-                        ? googleDecoder(googleIosClientId.strip(), AppleIdentityVerifier.appleRest()) : null,
-                kakaoFromProperties(kakaoNativeAppKey, kakaoNativeAppKeyDev, AppleIdentityVerifier.appleRest()));
+        this(googleIosClientId, kakaoNativeAppKey, kakaoNativeAppKeyDev, AppleIdentityVerifier.appleRest());
+    }
+
+    /** 속성 조립 — 테스트는 JWKS 응답만 바꿔 끼워 세 속성이 디코더까지 가는지 잰다. */
+    IdTokenVerifier(String googleIosClientId, String kakaoNativeAppKey, String kakaoNativeAppKeyDev, RestOperations rest) {
+        this(AppleIdentityVerifier.configured(googleIosClientId) ? googleDecoder(googleIosClientId.strip(), rest) : null,
+                kakaoFromProperties(kakaoNativeAppKey, kakaoNativeAppKeyDev, rest));
     }
 
     /** 속성값 → 카카오 디코더(REQ-172 — REQ-163과 같은 꼴). 운영 키가 없으면 null(꺼짐), 개발 키가 비면 개발 aud는 닫힌다. */

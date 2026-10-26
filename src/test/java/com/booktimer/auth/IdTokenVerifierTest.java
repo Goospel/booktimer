@@ -273,6 +273,14 @@ class IdTokenVerifierTest {
     }
 
     @Test
+    @DisplayName("REQ-172 · 속성 생성자가 셋째 값(개발 키)을 카카오 디코더까지 넘긴다 — 리뷰 M9")
+    void kakaoDevKeyConstructorReachesDecoder() {
+        IdTokenVerifier verifier = new IdTokenVerifier("", APP_KEY, " " + DEV_KEY + " ", jwks(KAKAO_JWKS));
+        assertThat(verifier.verifyKakao(kakao(b -> b.audience(DEV_KEY)))).as("개발 키 aud").contains(KAKAO_SUB);
+        assertThat(verifier.verifyKakao(kakao(b -> { }))).as("양성 대조 — 운영 키 aud").contains(KAKAO_SUB);
+    }
+
+    @Test
     @DisplayName("REQ-172 · 운영 설정 파일의 booktimer.kakao.native-app-key-dev가 생성자 @Value로 그대로 들어간다 — 테스트 리소스가 메인 파일을 가려 컨텍스트로는 못 잰다")
     void kakaoDevKeyPropertyWiredFromMainProperties() throws IOException, NoSuchMethodException {
         Properties props = new Properties();
