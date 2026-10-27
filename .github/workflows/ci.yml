@@ -32,6 +32,10 @@ jobs:
       # 로컬 수동이면 깨져도 모른다(render-env 선례).
       - name: Verify MySQL backup and binlog contract
         run: bash deploy/tests/test-backup-mysql.sh
+      # 위는 소스 정적 검사라 「덤프를 통째로 적재하면 어디에 무엇이 생기나」는 원리상 못 본다 — 세션 표가
+      # facefit에 생기던 결함(T-275)이 그랬다. 운영 스크립트로 뜬 덤프를 mysql:8.4에 실제로 적재한다. 러너에 Docker 내장.
+      - name: Verify full restore from backup dump
+        run: bash deploy/tests/test-backup-restore.sh
       - uses: actions/setup-node@v7
         with:
           node-version: '20'
