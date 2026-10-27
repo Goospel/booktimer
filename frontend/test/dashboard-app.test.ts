@@ -18,10 +18,11 @@ const GRAPH_INITIAL = {
     totalSeconds: 0,
     activeDays: 0,
     currentStreak: 1,
+    goalStreak: 2, // currentStreak과 다른 값 — 홈 칩이 목표 연속을 읽는지 물을 수 있게(REQ-118)
 };
 
 // 측정 종료 후 — 방금 확정된 세션이 반영돼 연속일·활동일·총시간이 올라간 잔디.
-const GRAPH_AFTER_STOP = { ...GRAPH_INITIAL, currentStreak: 5, activeDays: 1, totalSeconds: 1800 };
+const GRAPH_AFTER_STOP = { ...GRAPH_INITIAL, currentStreak: 5, goalStreak: 3, activeDays: 1, totalSeconds: 1800 };
 
 // 초기 /api/dashboard — 측정 "중" 상태로 시작(종료 버튼이 떠야 하므로 hasActiveSession=true).
 const DASHBOARD_RESPONSE = {
@@ -100,9 +101,9 @@ describe('DashboardApp', () => {
     test('측정 종료 → 연속일이 stop 응답으로 즉시 갱신된다 (새로고침 불필요)', async () => {
         const wrapper = mount(DashboardApp, { attachTo: document.body });
 
-        // 초기 로드 — 연속일 칩이 1
+        // 초기 로드 — 연속일 칩이 목표 연속 2(1초 연속 1이 아니다)
         await vi.waitFor(() => expect(wrapper.find('.dash-margin-card .dash-streak-chip').exists()).toBe(true));
-        expect(wrapper.find('.dash-streak-chip strong').text()).toBe('1');
+        expect(wrapper.find('.dash-streak-chip strong').text()).toBe('2');
 
         // 측정 종료 버튼 클릭
         const stopBtn = wrapper.findAll('button').find(b => b.text().includes('측정 종료'));
@@ -115,8 +116,8 @@ describe('DashboardApp', () => {
             expect(calls.some(u => u.includes('/api/sessions/stop'))).toBe(true);
         });
 
-        // 잔디가 새 graph로 갱신 — 연속일 5로 (현재는 graph 미갱신이라 RED)
-        await vi.waitFor(() => expect(wrapper.find('.dash-streak-chip strong').text()).toBe('5'));
+        // 잔디가 새 graph로 갱신 — 목표 연속 3으로(1초 연속 5가 아니다)
+        await vi.waitFor(() => expect(wrapper.find('.dash-streak-chip strong').text()).toBe('3'));
     });
 
     // 발견 2: 상단 4겹 정리 — 렌더 순서를 헤더 → 타이머 → (잔디 자리) → 바로가기 순으로.

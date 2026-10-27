@@ -1,39 +1,12 @@
-// 기록 카드 stacked↔split 전환 임계폭 판단 — 순수함수 경계 테스트 (node env) + history.html 첫 프레임 클래스.
-// 좁으면 'stacked'(pill 탭 + 한 패널), 임계폭 이상이면 'split'(2단 grid).
+// history.html 첫 프레임 클래스 (node env).
+// 기록 카드의 stacked↔split 판단(chooseLayout)은 「빠뜨린 날」을 걷으며 한 칸이 되어 지웠다(책생글 PR-R · REQ-119).
+// 940 상한(history-wide)은 그대로 둔다 — 넓은 창에서 한 칸 읽기 폭으로도 무해하다(U-54에서 실측).
 import { describe, test, expect } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { chooseLayout, SPLIT_MIN_WIDTH } from '../src/history/layout';
 
 const HISTORY_HTML = join(dirname(fileURLToPath(import.meta.url)), '..', '..', 'src', 'main', 'resources', 'templates', 'history.html');
-
-describe('chooseLayout', () => {
-    test('임계폭 미만은 stacked', () => {
-        expect(chooseLayout(SPLIT_MIN_WIDTH - 1)).toBe('stacked');
-        expect(chooseLayout(460)).toBe('stacked');
-        expect(chooseLayout(0)).toBe('stacked');
-    });
-
-    test('임계폭 정확히는 split (>=)', () => {
-        expect(chooseLayout(SPLIT_MIN_WIDTH)).toBe('split');
-    });
-
-    test('임계폭 초과는 split', () => {
-        expect(chooseLayout(SPLIT_MIN_WIDTH + 1)).toBe('split');
-        expect(chooseLayout(1200)).toBe('split');
-    });
-
-    // 절대값 — 상대값 테스트만으론 경계가 옛 880이어도 통과한다. 바 여백 248을 뺀 852가 2단 최소 폭.
-    test('태블릿 가로(1024)는 stacked, 데스크톱 경계 1100부터 split', () => {
-        expect(chooseLayout(1024)).toBe('stacked');
-        expect(chooseLayout(1100)).toBe('split');
-    });
-
-    test('SPLIT_MIN_WIDTH는 양수 상수', () => {
-        expect(SPLIT_MIN_WIDTH).toBeGreaterThan(0);
-    });
-});
 
 describe('history.html 첫 프레임', () => {
     // 통과 = 첫 HTML의 <body>에 history-wide가 있어 CSS가 첫 레이아웃부터 940 상한을 건다.

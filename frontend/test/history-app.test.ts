@@ -23,6 +23,7 @@ const MOCK_GRAPH = {
     totalSeconds: 12600,
     activeDays: 3,
     currentStreak: 1,
+    goalStreak: 4, // currentStreak과 다른 값 — 칩이 어느 쪽을 읽었는지 물을 수 있게(REQ-118)
 };
 
 const MOCK_MONTHS = [
@@ -143,37 +144,37 @@ describe('MonthlyRecords 월 네비 경계', () => {
         expect((next.element as HTMLButtonElement).disabled).toBe(true);
     });
 
-    test('좁은 폭(stacked): pill 탭 2개 + 클릭 시 active 전환', async () => {
-        window.innerWidth = 500;                              // < SPLIT_MIN_WIDTH → stacked
+});
+
+// 책생글 PR-R — 웹 연속은 목표 기준, 「빠뜨린 날」은 걷는다. 응답엔 weeklyShortfall이 그대로 있어도(미니앱 몫) 그리지 않는다.
+describe('HistoryApp — 목표 연속 · 한 칸 (REQ-118 · 119)', () => {
+    test('REQ-118 · 잔디 칩은 goalStreak을 「N일 연속 목표 달성」으로 보인다(currentStreak 아님)', async () => {
         const wrapper = mount(HistoryApp, { attachTo: document.body });
-        await vi.waitFor(() => expect(wrapper.find('.hist-tab').exists()).toBe(true));
-
-        const tabs = wrapper.findAll('.hist-tab');
-        expect(tabs).toHaveLength(2);
-        // split 컨테이너는 없어야(stacked)
-        expect(wrapper.find('.hist-split').exists()).toBe(false);
-
-        // 초기: 첫 탭(일자별) active
-        expect(tabs[0].classes()).toContain('active');
-        expect(tabs[1].classes()).not.toContain('active');
-
-        // 둘째 탭(빠뜨린날) 클릭 → active 이동
-        await tabs[1].trigger('click');
-        expect(tabs[0].classes()).not.toContain('active');
-        expect(tabs[1].classes()).toContain('active');
+        await vi.waitFor(() => expect(wrapper.find('.grass-streak').exists()).toBe(true));
+        expect(wrapper.find('.grass-streak strong').text()).toBe('4');
+        expect(wrapper.find('.grass-streak').text()).toContain('일 연속 목표 달성');
+        expect(wrapper.find('.grass-summary').text()).toContain('일 독서'); // 요약 줄 문구는 그대로
     });
 
-    test('넓은 폭(split): 탭 없이 2단(일자별/빠뜨린날) 나란히', async () => {
-        window.innerWidth = 1200;                             // >= SPLIT_MIN_WIDTH → split
+    test('REQ-118 · goalStreak이 0이면 칩이 없다(currentStreak이 있어도)', async () => {
+        vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
+            ok: true,
+            json: async () => ({ ...MOCK_RESPONSE, graph: { ...MOCK_GRAPH, goalStreak: 0 } }),
+        }));
         const wrapper = mount(HistoryApp, { attachTo: document.body });
-        await vi.waitFor(() => expect(wrapper.find('.hist-split').exists()).toBe(true));
+        await vi.waitFor(() => expect(wrapper.find('.grass-cell').exists()).toBe(true));
+        expect(wrapper.find('.grass-streak').exists()).toBe(false);
+    });
 
-        // split이면 pill 탭이 없다
+    test.each([500, 1200])('REQ-119 · 창 %ipx에서도 기록 카드는 「일자별 독서 시간」 한 칸이고 「빠뜨린 날」이 없다', async (width) => {
+        window.innerWidth = width;
+        const wrapper = mount(HistoryApp, { attachTo: document.body });
+        await vi.waitFor(() => expect(wrapper.find('.hist-records').exists()).toBe(true));
+        expect(wrapper.findAll('.hist-records')).toHaveLength(1);
+        expect(wrapper.find('.hist-records h2').text()).toBe('일자별 독서 시간');
+        expect(wrapper.text()).not.toContain('빠뜨린 날');
         expect(wrapper.find('.hist-tab').exists()).toBe(false);
-        // 두 패널(일자별 MonthlyRecords·빠뜨린날) 동시 렌더
-        expect(wrapper.findAll('.hist-pane')).toHaveLength(2);
-        // body에 history-wide(컨테이너 확장 트리거) 부착
-        expect(document.body.classList.contains('history-wide')).toBe(true);
+        expect(wrapper.find('.hist-split').exists()).toBe(false);
     });
 });
 

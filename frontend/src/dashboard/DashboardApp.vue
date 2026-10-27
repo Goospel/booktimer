@@ -647,7 +647,7 @@ function onSheetAdded(book: { id: number; title: string; status: string }) {
             :today-goal-seconds="todayGoalSeconds"
             :today-read-seconds="todayReadSeconds"
             :carryover="carryover"
-            :streak="data.graph.currentStreak"
+            :streak="data.graph.goalStreak"
             :has-active-session="hasActiveSession"
             :active-started-at="activeStartedAt"
             :active-book-title="activeBookTitle"
@@ -672,7 +672,7 @@ function onSheetAdded(book: { id: number; title: string; status: string }) {
              그때는 타임라인 스트립을 없애는 맥락이었고, 지금은 잔디가 비운 자리를 「지금 그 책 하나」로
              채우는 것이다(진입은 여전히 책 한 권 단위다). -->
         <MarginCard :login-id="data.loginId" :book="marginBook"
-                    :streak="data.graph.currentStreak" @open-sheet="openStartSheet" />
+                    :streak="data.graph.goalStreak" @open-sheet="openStartSheet" />
         </template>
 
         <!-- 공부 = 타이머 + 필기. 측정 중엔 한 장(.is-merged)이 되고, 이 스택만 독서등 밑 낮 종이(.lamp-page)로 남는다

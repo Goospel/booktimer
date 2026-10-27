@@ -348,14 +348,66 @@ class SettingsControllerTest {
 
     // --- 밀린 부채 합산 표시 토글 (debtCarryover) ---
 
-    @Test
-    @DisplayName("GET /settings: 밀린 부채 합산 표시 토글(체크박스)을 폼에 싣는다")
-    void getSettings_showsDebtCarryoverToggle() throws Exception {
-        register("carryget@booktimer.com"); // 기본 ON
+    // REQ-120(책생글 PR-R): 웹은 합산 체크를 화면에서 뺐다. 그 값은 미니앱 홈의 밀린 시간 · 지우개가 읽으므로
+    // 숨은 칸으로 지금 값을 그대로 돌려보낸다 — 체크만 지우면 웹 설정 저장마다 기본값 false로 덮인다.
 
-        mockMvc.perform(get("/settings").with(user("carryget@booktimer.com")))
-                .andExpect(status().isOk())
-                .andExpect(content().string(containsString("debtCarryover")));
+    private User registerWithCarryover(String email, boolean carryover) {
+        User u = register(email);
+        timerRepository.findByUser(u).orElseThrow().updateSettings(3600L, carryover);
+        return u;
+    }
+
+    /** GET /settings 본문에서 name="debtCarryover"인 input 태그들. */
+    private java.util.List<String> carryoverInputs(String html) {
+        java.util.List<String> tags = new java.util.ArrayList<>();
+        java.util.regex.Matcher m = java.util.regex.Pattern.compile("<input[^>]*name=\"debtCarryover\"[^>]*>").matcher(html);
+        while (m.find()) tags.add(m.group());
+        return tags;
+    }
+
+    @Test
+    @DisplayName("REQ-120 · 설정 화면에 합산 체크가 없고 저장된 합산 값을 숨은 칸에 그대로 싣는다(참 · 거짓)")
+    void getSettings_carriesDebtCarryoverAsHiddenField_noCheckbox() throws Exception {
+        for (boolean carryover : new boolean[]{true, false}) {
+            String email = "carryhidden-" + carryover + "@booktimer.com";
+            registerWithCarryover(email, carryover);
+
+            String html = mockMvc.perform(get("/settings").with(user(email)))
+                    .andExpect(status().isOk())
+                    .andReturn().getResponse().getContentAsString();
+
+            assertThat(carryoverInputs(html)).singleElement().satisfies(tag -> assertThat(tag)
+                    .contains("type=\"hidden\"")
+                    .contains("value=\"" + carryover + "\""));
+            assertThat(html).doesNotContainPattern("<input[^>]*type=\"checkbox\"[^>]*id=\"debtCarryover\"");
+            assertThat(html).doesNotContain("밀린 독서 시간을 타이머에 합쳐 표시");
+        }
+    }
+
+    @Test
+    @DisplayName("REQ-120 · 숨은 칸 값 그대로 저장하면 합산 값이 바뀌지 않는다(참 · 거짓)")
+    void postSettings_roundTripsHiddenCarryover_valueUnchanged() throws Exception {
+        for (boolean carryover : new boolean[]{true, false}) {
+            String email = "carryround-" + carryover + "@booktimer.com";
+            registerWithCarryover(email, carryover);
+
+            String html = mockMvc.perform(get("/settings").with(user(email)))
+                    .andReturn().getResponse().getContentAsString();
+            java.util.regex.Matcher v = java.util.regex.Pattern.compile("value=\"([^\"]*)\"")
+                    .matcher(carryoverInputs(html).get(0));
+            assertThat(v.find()).isTrue();
+
+            mockMvc.perform(post("/settings").with(user(email)).with(csrf())
+                            .param("nickname", "닉")
+                            .param("timezone", "Asia/Seoul")
+                            .param("incrementMinutes", "30")
+                            .param("debtCarryover", v.group(1)))
+                    .andExpect(status().is3xxRedirection());
+
+            ReadingTimer timer = timerRepository.findByUser(userRepository.findByEmail(email).orElseThrow()).orElseThrow();
+            assertThat(timer.isDebtCarryover()).isEqualTo(carryover);
+            assertThat(timer.getDailyIncrementSeconds()).isEqualTo(30 * 60L); // 저장 자체는 일어났다
+        }
     }
 
     @Test

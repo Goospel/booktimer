@@ -3,13 +3,15 @@ import { ref, computed } from 'vue';
 import type { GraphDto, ContributionDay } from './HistoryApp.vue';
 import { cellTooltip } from './grassTooltip';
 
-const props = withDefaults(defineProps<{ graph: GraphDto; mode?: 'reading' | 'study' }>(), { mode: 'reading' });
+// streak = 칩에 보일 연속 일수. 부모가 고른다 — 독서 기록은 목표 연속(goalStreak, REQ-118), 공부 기록은 1초 연속
+// (currentStreak — 공부엔 목표가 없다). 잔디 DTO에서 직접 읽지 않는 이유: 두 화면이 서로 다른 연속을 보인다.
+const props = withDefaults(defineProps<{ graph: GraphDto; streak: number; mode?: 'reading' | 'study' }>(), { mode: 'reading' });
 
-// 문구 묶음 — 독서 값은 옛 리터럴 그대로(마크업 경계도 안 옮겨 렌더 불변). 공부 범례가 「목표 미달/달성」이
-// 아니라 「적게…많이」인 이유: 서버(StudyHistoryService)가 목표가 아니라 고정 절대 눈금 4h로 농도를 매긴다.
+// 문구 묶음 — 공부 범례가 「목표 미달/달성」이 아니라 「적게…많이」인 이유: 서버(StudyHistoryService)가 목표가 아니라
+// 고정 절대 눈금 4h로 농도를 매긴다. 연속 칩 문구(streak)는 요약 줄의 activity와 따로 둔다 — 독서 칩만 「목표 달성」이다.
 const L = computed(() => props.mode === 'study'
-    ? { title: '공부 잔디', activity: '공부', low: '적게', high: '많이', manual: false }
-    : { title: '독서 잔디', activity: '독서', low: '목표 미달', high: '목표 달성', manual: true });
+    ? { title: '공부 잔디', activity: '공부', streak: '공부', low: '적게', high: '많이', manual: false }
+    : { title: '독서 잔디', activity: '독서', streak: '목표 달성', low: '목표 미달', high: '목표 달성', manual: true });
 
 function cellClass(cell: ContributionDay): string[] {
     if (cell.date === null) {
@@ -41,12 +43,12 @@ function onCellLeave(): void {
 <template>
     <div class="grass-head">
         <h2>{{ L.title }}</h2>
-        <!-- 연속 일수 뱃지 — 대시보드(.dash-streak-chip)와 통일: SVG 새싹 + "N일 연속 독서". streak 0이면 숨김. -->
-        <span v-if="graph.currentStreak > 0" class="grass-streak">
+        <!-- 연속 일수 뱃지 — 대시보드(.dash-streak-chip)와 통일: SVG 새싹 + "N일 연속 목표 달성"(공부는 "공부"). 0이면 숨김. -->
+        <span v-if="streak > 0" class="grass-streak">
             <svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
                 <path d="M5 19c0-8 6-13 14-13 0 8-5 14-13 14-1 0-1-.6-1-1z" />
             </svg>
-            <strong>{{ graph.currentStreak }}</strong>일 연속 {{ L.activity }}
+            <strong>{{ streak }}</strong>일 연속 {{ L.streak }}
         </span>
     </div>
 
