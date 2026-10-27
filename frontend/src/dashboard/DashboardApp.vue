@@ -262,7 +262,10 @@ async function refresh(force = false) {
     try {
         const res = await fetch('/api/dashboard', { credentials: 'same-origin' })
         if (!res.ok) return
-        applyDashboard(await res.json() as DashboardResponse)
+        const d = await res.json() as DashboardResponse
+        applyDashboard(d)
+        // 다른 기기에서 정지해 목표를 채웠으면 연속도 바뀐다 — graph도 갈아 끼운다(명언은 그대로).
+        if (data.value) data.value.graph = d.graph
     } catch {
         /* 조용히 — 다음 복귀·클릭에서 다시 시도한다 */
     }

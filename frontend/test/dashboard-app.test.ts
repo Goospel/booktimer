@@ -87,6 +87,7 @@ beforeEach(() => {
 
 afterEach(() => {
     vi.unstubAllGlobals();
+    vi.restoreAllMocks();
     document.body.innerHTML = '';
 });
 
@@ -117,6 +118,26 @@ describe('DashboardApp', () => {
         });
 
         // 잔디가 새 graph로 갱신 — 목표 연속 3으로(1초 연속 5가 아니다)
+        await vi.waitFor(() => expect(wrapper.find('.dash-streak-chip strong').text()).toBe('3'));
+    });
+
+    // 다른 기기(앱)에서 정지해 오늘 목표를 채운 뒤 탭으로 돌아온 경우 — 복귀 재조회가 graph도 갈아야
+    // 목표 연속이 새로고침 없이 오른다(PR-R 리뷰). 재조회가 실제로 돌았는지는 남은 시간으로 함께 묻는다(양성 대조).
+    test('탭 복귀 재조회 → 연속일도 새 graph로 갱신된다 (다른 기기에서 정지)', async () => {
+        const wrapper = mount(DashboardApp, { attachTo: document.body });
+        await vi.waitFor(() => expect(wrapper.find('.dash-streak-chip strong').text()).toBe('2'));
+
+        vi.mocked(fetch).mockImplementation(((url: string) => url.includes('/api/stories/of/')
+            ? fetchImpl(url)
+            : Promise.resolve({ ok: true, status: 200, json: async () => ({
+                ...DASHBOARD_RESPONSE, ...STOP_RESPONSE.timer, graph: GRAPH_AFTER_STOP,
+            }) })) as typeof fetch);
+        const now = Date.now();
+        vi.spyOn(Date, 'now').mockReturnValue(now + 61_000); // 복귀 재조회 스로틀(60초) 밖
+
+        window.dispatchEvent(new Event('focus'));
+
+        await vi.waitFor(() => expect(wrapper.text()).not.toContain('측정 종료'));
         await vi.waitFor(() => expect(wrapper.find('.dash-streak-chip strong').text()).toBe('3'));
     });
 
