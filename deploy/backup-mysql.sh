@@ -44,14 +44,17 @@ dump() { docker compose -f compose.prod.yaml exec -T mysql \
 # 단, --ignore-table 은 구조까지 통째로 빼는데 세션 스키마는 Flyway가 관리하고
 # flyway_schema_history(백업에 포함됨)엔 "이미 적용됨"으로 남아 있다 — 테이블 없이 history만
 # 복원되면 마이그레이션이 재실행되지 않아 앱이 세션 테이블 부재로 기동 실패한다.
-# 그래서 뒤에 --no-data 덤프를 같은 스트림에 이어붙여 빈 테이블 구조는 남긴다
-# (본 덤프의 USE booktimer; 가 먼저 나오므로 뒤 덤프도 같은 DB 컨텍스트에서 실행된다).
+# 그래서 뒤에 --no-data 덤프를 같은 스트림에 이어붙여 빈 테이블 구조는 남긴다.
+# 뒤 덤프는 단일 DB 모드라 USE 줄을 내지 않는다 — 본 덤프의 마지막 USE는 facefit이라서,
+# 사이의 USE booktimer 가 없으면 통째로 적재할 때 세션 표가 facefit에 생긴다(2026-10-27 실측,
+# deploy/tests/test-backup-restore.sh가 실적재로 지킨다).
 #
 # --hex-blob: BLOB(필기 사진)을 16진으로 — 이진 바이트가 덤프의 문자셋 변환을 거치지 않는다. 헥스는 gzip이 잘 눌러 크기는 거의 같다.
 {
     dump --single-transaction --hex-blob --routines --triggers --databases booktimer facefit \
         --ignore-table=booktimer.SPRING_SESSION \
         --ignore-table=booktimer.SPRING_SESSION_ATTRIBUTES
+    echo 'USE `booktimer`;'
     dump --no-data booktimer SPRING_SESSION SPRING_SESSION_ATTRIBUTES
 } | gzip > "$TMP"
 
