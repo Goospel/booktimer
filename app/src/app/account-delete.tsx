@@ -1,9 +1,9 @@
 // 계정 삭제(PR-I · 결정 A ① 쌓는 화면 — 피그마 S-SET-DELETE · S-SET-DELETE-WEB · PR-P S-SET-DELETE-GOOGLE · -GOOGLE-EMAIL · -KAKAO).
-// 확인 둘 = 이 화면 + 그 제공자 창(구글 · 카카오는 다시 로그인 — D4 (가)). 뒤로가 취소다.
-// 토큰은 저장하지 않는다 — 창에서 받자마자 보낸다(서버 발급 10분 검사). 웹 갈래에선 아무것도 지우지 않는다.
+// 확인 셋 = 이 화면 + 그 제공자 창(구글 · 카카오는 다시 로그인 — D4 (가)) + 최종 확인 창(T-276). 뒤로 · 창 닫기 · [취소]가 취소다.
+// 토큰은 저장하지 않는다 — 최종 확인 창 뒤에 바로 보낸다(서버 발급 10분 검사). 웹 갈래에선 아무것도 지우지 않는다.
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useEffect, useState } from 'react';
-import { ActivityIndicator, Linking, View } from 'react-native';
+import { ActivityIndicator, Alert, Linking, View } from 'react-native';
 
 import { account, session, writing } from '../api/client';
 import { Button, Notice, Screen, Txt } from '../components/ui';
@@ -41,6 +41,7 @@ export default function AccountDelete() {
         { via: i.via, appleLinked: i.appleLinked },
         {
           confirm: confirmFor(i.via, { apple: appleCredential, google: googleSignIn, kakao: kakaoIdToken }),
+          alert: Alert.alert, // 최종 확인 창 — 안에서 this를 쓰지 않아 그대로 넘긴다(RN `Libraries/Alert/Alert.js:94-101`)
           apple: appleCredential,
           remove: account.remove,
           unlinkKakao: kakaoUnlink,
