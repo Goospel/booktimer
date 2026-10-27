@@ -42,6 +42,10 @@ function deps(over: Partial<Parameters<typeof deleteAccount>[1]> = {}, cred: Cre
   const notices: string[] = [];
   const d = {
     confirm: async () => (calls.push('confirm'), cred),
+    alert: (_t: string, _m: string, buttons: { style: string; onPress: () => void }[]) => {
+      calls.push('alert');
+      buttons.find((b) => b.style === 'destructive')?.onPress(); // 기본은 [지우기]
+    },
     apple: async () => (calls.push('apple'), { identityToken: 'apple-jwt', authorizationCode: 'apple-code' }),
     remove: async (b: unknown) => (calls.push('remove'), bodies.push(b), undefined),
     unlinkKakao: async () => void calls.push('unlinkKakao'),
@@ -56,7 +60,7 @@ function deps(over: Partial<Parameters<typeof deleteAccount>[1]> = {}, cred: Cre
 test('REQ-157 · 탈퇴가 204면 기기 초안을 지운 뒤 세션을 지운다', async () => {
   const { d, calls, bodies } = deps();
   expect(await deleteAccount(APPLE_P, d)).toEqual({ done: true });
-  expect(calls).toEqual(['confirm', 'remove', 'clearDrafts', 'clearSession']);
+  expect(calls).toEqual(['confirm', 'alert', 'remove', 'clearDrafts', 'clearSession']);
   expect(bodies).toEqual([{ provider: 'APPLE', identityToken: 'jwt', authorizationCode: 'code' }]);
 });
 
@@ -109,7 +113,7 @@ test('REQ-111 · Apple이 붙은 계정은 탈퇴 전에 Apple 창을 한 번 �
   for (const via of ['GOOGLE', 'KAKAO'] as const) {
     const linked = deps({}, credFor(via));
     expect(await deleteAccount({ via, appleLinked: true }, linked.d)).toEqual({ done: true });
-    expect(linked.calls).toEqual(['confirm', 'apple', 'remove', after(via), 'clearDrafts', 'clearSession']);
+    expect(linked.calls).toEqual(['confirm', 'alert', 'apple', 'remove', after(via), 'clearDrafts', 'clearSession']);
     expect(linked.bodies).toEqual([{ provider: via, identityToken: credFor(via).identityToken, appleIdentityToken: 'apple-jwt', appleAuthorizationCode: 'apple-code' }]);
 
     const plain = deps({}, credFor(via));
@@ -196,6 +200,31 @@ test('REQ-87 · 구글 · 카카오 창을 닫거나 실패하면 아무것도 �
   const k = deps({ confirm: async () => { throw new Error('kakao failed'); } });
   expect(await deleteAccount({ via: 'KAKAO', appleLinked: false }, k.d)).toEqual({ error: '카카오 확인에 실패했어요 — 다시 시도해 주세요' });
   expect(k.calls).toEqual([]);
+});
+
+test('REQ-87 · 다시 확인 뒤 최종 확인 창에서 취소하면 아무것도 보내지 않는다(Apple 창 · 탈퇴 요청 · 끊기 · 정리 0)', async () => {
+  const cases = [
+    { via: 'APPLE', appleLinked: false },
+    { via: 'GOOGLE', appleLinked: true }, // 취소면 Apple 창도 열지 않는다
+    { via: 'KAKAO', appleLinked: false },
+  ] as const;
+  for (const p of cases) {
+    const styles: string[][] = [];
+    const { d, calls, bodies, notices } = deps(
+      {
+        alert: (_t, _m, buttons) => {
+          styles.push(buttons.map((b) => b.style).sort());
+          buttons.find((b) => b.style === 'cancel')?.onPress();
+        },
+      },
+      p.via === 'APPLE' ? undefined : credFor(p.via),
+    );
+    expect(await deleteAccount(p, d)).toEqual({ cancelled: true });
+    expect(styles).toEqual([['cancel', 'destructive']]); // 창은 한 번 · 단추는 취소 · 지우기 둘
+    expect(calls).toEqual(['confirm']); // Apple 창 · 탈퇴 요청 · 끊기 · 철회 · 초안 · 세션 0
+    expect(bodies).toEqual([]);
+    expect(notices).toEqual([]);
+  }
 });
 
 test('REQ-87 · LOCAL · TOSS의 구글 갈래는 이메일 가입 문구이고 원 가입 구글 문구와 다르다', () => {
