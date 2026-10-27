@@ -14,10 +14,18 @@ import { describe, expect, it } from 'vitest';
 
 const HERE = new URL('.', import.meta.url).pathname.replace(/^\/([A-Za-z]:)/, '$1');
 
+/** HTML 주석을 더 걷힐 것이 없을 때까지 걷는다 — 한 번만 걷으면 `<!<!---->--`가 `<!--`를 남긴다(CodeQL 경고). */
+function stripHtmlComments(src: string): string {
+    let previous: string;
+    do {
+        previous = src;
+        src = src.replace(/<!--[\s\S]*?-->/g, '');
+    } while (src !== previous);
+    return src;
+}
+
 /** 블록 · HTML · 줄 주석을 걷는다. 줄 주석은 `https://`의 `//`를 건드리지 않게 `:` 바로 뒤는 비켜 간다. */
-const strip = (src: string) => src
-    .replace(/\/\*[\s\S]*?\*\//g, '')
-    .replace(/<!--[\s\S]*?-->/g, '')
+const strip = (src: string) => stripHtmlComments(src.replace(/\/\*[\s\S]*?\*\//g, ''))
     .replace(/(^|[^:])\/\/[^\n]*/g, '$1');
 
 /** `dir` 아래 .vue · .ts 소스(테스트 제외)의 상대 경로. */
@@ -45,6 +53,7 @@ describe('REQ-118 · 독서 화면(dashboard·history)에 currentStreak 읽기�
         expect(hits('<X :streak="data.graph.currentStreak" />', READS_CURRENT_STREAK)).toBe(1);
         expect(hits('// data.graph.currentStreak\n<!-- g.currentStreak -->\n/* x.currentStreak */', READS_CURRENT_STREAK)).toBe(0);
         expect(hits('interface G { currentStreak: number }', READS_CURRENT_STREAK)).toBe(0);
+        expect(hits('<!<!-- -->-- g.currentStreak -->', READS_CURRENT_STREAK)).toBe(0); // 겹친 주석 — 한 번만 걷으면 1
     });
 
     it('dashboard · history 소스에 .currentStreak 읽기 0건', () => {
