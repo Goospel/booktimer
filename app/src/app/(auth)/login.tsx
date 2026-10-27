@@ -10,7 +10,7 @@ import { appleCredential } from '../../lib/auth/apple';
 import { googleSignIn } from '../../lib/auth/google';
 import { kakaoIdToken } from '../../lib/auth/kakao';
 import { type LoginMode, LINK_CODE_LENGTH, loginProviders, type Provider, runLogin } from '../../lib/loginGate';
-import { acceptResult, isResumeFromBackground, RESUME_RELEASE_MS, shouldRelease } from '../../lib/loginResume';
+import { guardOpen, isResumeFromBackground, type LoginTrack, RESUME_RELEASE_MS, shouldRelease } from '../../lib/loginResume';
 import { signedOutNotice } from '../../lib/logout';
 import { brand } from '../../theme/brand';
 import { color, space } from '../../theme/tokens';
@@ -75,11 +75,10 @@ export default function Login() {
   const [code, setCode] = useState('');
   const [notice, setNotice] = useState<{ message: string; tone: 'info' | 'error' } | null>(null);
   const [busy, setBusy] = useState(false);
-  // U-98 ⑤ — 카카오톡에서 그냥 돌아오면 SDK 약속이 끝나지 않는다. 시도 번호로 옛 결과를 버리고, 앱 복귀 2초 뒤 같은 시도가 busy면 푼다
-  const attemptRef = useRef(0);
-  const busyRef = useRef(false);
+  // U-98 ⑤ — 카카오톡에서 그냥 돌아오면 SDK 약속이 끝나지 않는다. 시도 번호로 옛 결과를 버리고, 앱 복귀 2초 뒤 같은 시도가 아직 창을 기다리며 busy면 푼다
+  const track = useRef<LoginTrack>({ attempt: 0, opening: 0, busy: false }).current;
   const markBusy = (v: boolean) => {
-    busyRef.current = v;
+    track.busy = v;
     setBusy(v);
   };
 
@@ -94,10 +93,10 @@ export default function Login() {
     let timer: ReturnType<typeof setTimeout> | undefined;
     const sub = AppState.addEventListener('change', (next) => {
       if (isResumeFromBackground(prev, next)) {
-        const attempt = attemptRef.current;
+        const attempt = track.attempt;
         clearTimeout(timer);
         timer = setTimeout(() => {
-          if (shouldRelease({ attempt, latest: attemptRef.current, busy: busyRef.current })) markBusy(false);
+          if (shouldRelease(track, attempt)) markBusy(false);
         }, RESUME_RELEASE_MS);
       }
       prev = next;
@@ -109,29 +108,28 @@ export default function Login() {
   }, []);
 
   async function onLogin(provider: Provider) {
-    const attempt = ++attemptRef.current;
-    const latest = () => acceptResult(attempt, attemptRef.current);
+    const attempt = ++track.attempt;
+    const isLatest = () => track.attempt === attempt;
     setNotice(null);
     markBusy(true);
     const r = await runLogin(
       { provider, mode, ageOn, code },
       {
-        open: async (pv) => {
-          const token =
-            pv === 'apple'
-              ? ((await appleCredential())?.identityToken ?? null)
-              : pv === 'google'
-                ? ((await googleSignIn())?.identityToken ?? null)
-                : await kakaoIdToken();
-          return latest() ? token : null; // 새 시도가 시작됐으면 늦게 온 토큰은 서버로 보내지 않는다(닫음 처리)
-        },
+        // 새 시도가 시작됐으면 늦게 온 토큰은 서버로 보내지 않는다(닫음 처리) — guardOpen
+        open: guardOpen(track, attempt, async (pv: Provider) =>
+          pv === 'apple'
+            ? ((await appleCredential())?.identityToken ?? null)
+            : pv === 'google'
+              ? ((await googleSignIn())?.identityToken ?? null)
+              : await kakaoIdToken(),
+        ),
         submit: (pv, token) =>
           pv === 'apple'
             ? appleSignIn({ mode, identityToken: token, code })
             : idTokenSignIn({ provider: pv, identityToken: token, ageConfirmed: mode === 'start' && ageOn, confirmUnverified }),
       },
     );
-    if (!latest()) return; // 옛 시도의 늦은 결과 — busy · 알림 · 확인 창은 새 시도의 몫
+    if (!isLatest()) return; // 옛 시도의 늦은 결과 — busy · 알림 · 확인 창은 새 시도의 몫
     markBusy(false);
     if ('gate' in r) {
       setNotice({ message: r.gate === 'needAge' ? '만 14세 이상인지 먼저 확인해 주세요' : '연결 코드 8자리를 먼저 넣어 주세요', tone: 'error' });
