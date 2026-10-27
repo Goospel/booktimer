@@ -9,6 +9,7 @@ import type {
   AppleIntent,
   ConsentView,
   Dashboard,
+  DeleteRequest,
   DraftSummary,
   DraftView,
   MaterialsView,
@@ -156,17 +157,11 @@ export function failText(e: unknown, fallback: string): string {
 const ALREADY_APP_ACCOUNT =
   '이 Apple ID로 만든 책생글 계정이 있어서 그 계정으로 들어왔어요 — 웹 계정과 이으려면 설정에서 이 계정을 지운 뒤 다시 연결해 주세요';
 
-const auth = (identityToken: string, intent: AppleIntent, extra?: object) =>
-  request<AppAuthResponse>('/api/app/auth/apple', { body: { identityToken, intent, ...extra }, anonymous: true });
+type AuthBody = { identityToken: string; intent: AppleIntent; ageConfirmed?: boolean; linkCode?: string };
+const auth = (provider: 'apple' | 'google' | 'kakao', body: AuthBody) =>
+  request<AppAuthResponse>(`/api/app/auth/${provider}`, { body, anonymous: true });
 
-export async function appleSignIn(p: { mode: 'start' | 'link'; identityToken: string; code: string }): Promise<{ notice?: string }> {
-  let res = await auth(p.identityToken, 'LOGIN');
-  const existed = res.registered;
-  if (!existed) {
-    res = p.mode === 'start'
-      ? await auth(p.identityToken, 'REGISTER', { ageConfirmed: true })
-      : await auth(p.identityToken, 'LINK', { linkCode: p.code.trim() });
-  }
+async function saveSession(res: AppAuthResponse) {
   if (!res.registered || res.token === null || res.userId === null) throw new ApiError(500, '요청에 실패했어요 (500)');
   await session.save({
     token: res.token,
@@ -176,7 +171,37 @@ export async function appleSignIn(p: { mode: 'start' | 'link'; identityToken: st
     appleLinked: !!res.appleLinked,
     googleLinked: !!res.googleLinked,
   });
+}
+
+export async function appleSignIn(p: { mode: 'start' | 'link'; identityToken: string; code: string }): Promise<{ notice?: string }> {
+  let res = await auth('apple', { identityToken: p.identityToken, intent: 'LOGIN' });
+  const existed = res.registered;
+  if (!existed) {
+    res = p.mode === 'start'
+      ? await auth('apple', { identityToken: p.identityToken, intent: 'REGISTER', ageConfirmed: true })
+      : await auth('apple', { identityToken: p.identityToken, intent: 'LINK', linkCode: p.code.trim() });
+  }
+  await saveSession(res);
   return existed && p.mode === 'link' ? { notice: ALREADY_APP_ACCOUNT } : {};
+}
+
+/**
+ * 구글 · 카카오(REQ-86 · 79) — LOGIN 먼저, 없으면 같은 토큰으로 REGISTER. 같은 이메일의 인증 안 된 웹 계정이 있으면(구글) 확인 뒤에만. LINK는 없다.
+ * ageConfirmed는 화면 값 그대로 보낸다(호출부 = `mode === 'start' && ageOn`) — 서버가 앱이 보낸 값을 믿는다(AppAuthApiController.java:114 · :147).
+ */
+export async function idTokenSignIn(p: {
+  provider: 'google' | 'kakao';
+  identityToken: string;
+  ageConfirmed: boolean;
+  confirmUnverified: () => Promise<boolean>;
+}): Promise<{ cancelled?: true }> {
+  let res = await auth(p.provider, { identityToken: p.identityToken, intent: 'LOGIN' });
+  if (!res.registered) {
+    if (res.unverifiedWebAccount && !(await p.confirmUnverified())) return { cancelled: true }; // 아무것도 저장 · 삭제하지 않는다
+    res = await auth(p.provider, { identityToken: p.identityToken, intent: 'REGISTER', ageConfirmed: p.ageConfirmed });
+  }
+  await saveSession(res);
+  return {};
 }
 
 // ── 독서 측정 · 하루 목표(PR-F) — 앱은 /api/app/goal 별칭만 부른다(REQ-109) ──────────
@@ -221,8 +246,7 @@ export const writing = {
 // ── 설정 · 로그아웃 · 계정 삭제(PR-I) — 동의 거두기는 writing.consent(false). 탈퇴 토큰은 Apple 창에서 방금 받은 것(저장하지 않는다) ──
 export const account = {
   logout: () => request<void>('/api/app/logout', { method: 'POST' }),
-  remove: (body: { provider: 'APPLE'; identityToken: string; authorizationCode: string | null }) =>
-    request<void>('/api/app/account/delete', { body }),
+  remove: (body: DeleteRequest) => request<void>('/api/app/account/delete', { body }),
   consent: () => request<ConsentView>('/api/app/ai-consent'),
 };
 

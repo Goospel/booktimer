@@ -12,9 +12,32 @@ function deps(pending: number, ok: boolean, revoke: () => Promise<unknown> = asy
     revoke: async () => (calls.push('revoke'), revoke()),
     clearDrafts: async () => void calls.push('clearDrafts'),
     clearSession: async () => void calls.push('clearSession'),
+    authProvider: null as string | null,
+    kakaoLogout: async (): Promise<unknown> => void calls.push('kakaoLogout'),
   };
   return { d, calls };
 }
+
+test('REQ-112 · 카카오 세션 로그아웃은 SDK 로그아웃을 부른다', async () => {
+  const kakao = deps(0, true);
+  kakao.d.authProvider = 'KAKAO';
+  expect(await logout(kakao.d)).toBe('done');
+  expect(kakao.calls).toEqual(['revoke', 'kakaoLogout', 'clearDrafts', 'clearSession']);
+
+  for (const authProvider of ['GOOGLE', 'APPLE', null]) {
+    const other = deps(0, true);
+    other.d.authProvider = authProvider;
+    expect(await logout(other.d)).toBe('done');
+    expect(other.calls).toEqual(['revoke', 'clearDrafts', 'clearSession']); // 구글 · Apple은 기기에 토큰을 두지 않는다
+  }
+
+  // 카카오 쪽이 실패해도 기기에선 로그아웃한다
+  const failed = deps(0, true);
+  failed.d.authProvider = 'KAKAO';
+  failed.d.kakaoLogout = async () => { failed.calls.push('kakaoLogout'); throw new Error('kakao'); };
+  expect(await logout(failed.d)).toBe('done');
+  expect(failed.calls).toEqual(['revoke', 'kakaoLogout', 'clearDrafts', 'clearSession']);
+});
 
 test('REQ-38 · 로그아웃 때 미전송이 있으면 확인 단계, 없으면 바로 지운다', async () => {
   const kept = deps(2, false);

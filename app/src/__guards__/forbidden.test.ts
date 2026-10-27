@@ -151,3 +151,56 @@ test('T-274 · RNHostView matchContents는 양 축을 쓰지 않는다(글이 �
   expect(at('<RNHostView matchContents={{ vertical: true }}>')).toEqual([]);
   expect(at('// matchContents 양 축 금지')).toEqual([]);
 });
+
+// ── 로그인 경로 가드(PR-P ③) — ROWS 밖: 「금지 문자열」 꼴이 아니라 허용 목록이다 ───────────────
+// REQ-174 — 로그인 경로 파일의 console 인자는 문자열 리터럴과 취소 code만. 경로는 join으로 — 윈도에서 rel이 `\`다(SELF와 같은 이유).
+// 토큰을 변수로 쥐는 새 파일은 여기에 더한다.
+const TOKEN_PATHS = [join('lib', 'auth'), join('api', 'client.ts'), join('lib', 'loginGate.ts'), join('lib', 'deleteVia.ts'), join('lib', 'logout.ts'), join('lib', 'loginResume.ts'),
+  join('lib', 'notify.ts'), join('app', '_layout.tsx'), join('app', '(auth)', 'login.tsx'), join('app', 'account-delete.tsx')];
+const SAFE_ARG = /^\s*(?:'[^']*'|"[^"]*"|code|r\.type)\s*$/;
+function consoleLeaks(all = ALL): string[] {
+  const out: string[] = [];
+  for (const f of all.filter((x) => TOKEN_PATHS.some((p) => x.rel.startsWith(p))))
+    // [^)]는 줄바꿈도 넘는다 — 여러 줄 호출도 본다. 인자 안에 괄호 · 쉼표 든 리터럴이 있으면 허용 꼴이 깨져 걸린다(닫힌 쪽으로 실패)
+    for (const m of stripComments(f.text).matchAll(/console\.\w+\(([^)]*)\)/g))
+      if (!m[1].split(',').every((a) => SAFE_ARG.test(a))) out.push(`${f.rel}: ${m[0]}`);
+  return out;
+}
+
+// R-03 — 로그인 SDK 꼴 import 집합이 정확히 넷(허용 목록). 상대 경로는 보지 않는다.
+const LOGIN_SDK = /auth|log-?in|sign-?in|oauth|kakao|naver|facebook|firebase|google/i;
+const IMPORT = /(?:\bfrom\s+|\bimport\s*\(\s*|\brequire\(\s*|^\s*import\s+)['"]([^'"]+)['"]/gm;
+function loginSdkImports(all = ALL): string[] {
+  const found = new Set<string>();
+  for (const f of all.filter((x) => !x.rel.startsWith(SELF)))
+    for (const m of f.text.matchAll(IMPORT)) if (!m[1].startsWith('.') && LOGIN_SDK.test(m[1])) found.add(m[1]);
+  return [...found].sort();
+}
+
+test('REQ-174 · 로그인 경로 파일의 console 호출은 고정 문자열과 취소 code만 싣는다(토큰 이름 · 객체째 · 여러 줄 · 서버 토큰을 심으면 잡힌다)', () => {
+  expect(consoleLeaks()).toEqual([]);
+  // 목록의 경로가 모두 있다 — 이름이 바뀌어 판정 범위에서 조용히 빠지지 않게
+  for (const p of TOKEN_PATHS) expect([p, ALL.some((f) => f.rel.startsWith(p))]).toEqual([p, true]);
+  const at = (text: string) => consoleLeaks([{ rel: join('lib', 'auth', 'planted.ts'), text }]);
+  // 양성 대조 다섯 — 토큰 이름 · 맨 변수 · 여러 줄 · Bearer 템플릿 · 중첩 호출
+  for (const planted of ["console.log('PROBE', cred.identityToken)", 'console.log(t)', 'console.log(\n  res,\n)', 'console.warn(`Bearer ${saved}`)', 'console.log(JSON.stringify(token))']) {
+    expect([planted, at(planted)]).toEqual([planted, [expect.any(String)]]);
+  }
+  // 음성 대조 넷 — 허용 꼴과 주석
+  for (const safe of ["console.log('login closed', 'kakao', code)", "console.log('login closed', 'google', r.type)", "console.warn('kakao unlink failed', code)", '// console.log(t)']) {
+    expect([safe, at(safe)]).toEqual([safe, []]);
+  }
+  // 목록 밖 파일은 판정 범위가 아니다(요구 칸에 적은 범위)
+  expect(consoleLeaks([{ rel: join('lib', 'format.ts'), text: 'console.log(t)' }])).toEqual([]);
+});
+
+test('R-03 · 로그인 SDK import는 Apple · expo-auth-session · 카카오 둘뿐이다(심은 구글 SDK import는 잡힌다)', () => {
+  expect(loginSdkImports()).toEqual(['@react-native-kakao/core', '@react-native-kakao/user', 'expo-apple-authentication', 'expo-auth-session']);
+  const planted = [
+    { rel: join('lib', 'auth', 'planted.ts'), text: "import { GoogleSignin } from '@react-native-google-signin/google-signin';" },
+    { rel: join('lib', 'auth', 'planted2.ts'), text: "import * as Google from 'expo-auth-session/providers/google';" },
+    { rel: join('lib', 'auth', 'planted3.ts'), text: "import { x } from './google';" }, // 상대 경로는 보지 않는다
+    { rel: join('lib', 'auth', 'planted4.ts'), text: "import OneTap from 'react-native-google-one-tap';" }, // 「google」 갈래만 잡는 이름
+  ];
+  expect(loginSdkImports(planted)).toEqual(['@react-native-google-signin/google-signin', 'expo-auth-session/providers/google', 'react-native-google-one-tap']);
+});

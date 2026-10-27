@@ -8,12 +8,21 @@ export async function logout(deps: {
   revoke: () => Promise<unknown>;
   clearDrafts: () => Promise<void>;
   clearSession: () => Promise<void>;
+  authProvider: string | null;
+  kakaoLogout: () => Promise<unknown>;
 }): Promise<'done' | 'kept'> {
   if ((await deps.pending()) > 0 && !(await deps.confirm())) return 'kept';
   try {
     await deps.revoke();
   } catch {
     // 연결 · 401이어도 기기에선 로그아웃한다 — 폐기 못 한 토큰은 기기에서 지워져 아무도 갖지 않는다
+  }
+  if (deps.authProvider === 'KAKAO') {
+    try {
+      await deps.kakaoLogout(); // REQ-112 — 최선 노력. 구글 · Apple은 기기에 토큰을 두지 않는다
+    } catch {
+      // 카카오 쪽이 실패해도 기기에선 로그아웃한다
+    }
   }
   try {
     await deps.clearDrafts();
