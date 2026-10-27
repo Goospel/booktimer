@@ -77,12 +77,12 @@ com.booktimer/
 
 ## 🌱 5. 독서기록 · 잔디(기여그래프) · 히스토리
 
-- **한 줄**: 일자별 독서시간 기록·누적, 잔디 시각화, 월별 기록·주간 부족분.
+- **한 줄**: 일자별 독서시간 기록·누적, 잔디 시각화, 월별 기록(주간 부족분은 기록 API만 보낸다 — 웹 「빠뜨린 날」 목록은 2026-10-27 책생글 PR-R로 걷었다).
 - **진입점**: `/history`(`web/HistoryController`) · `/api/history`(`web/api/HistoryApiController`)
 - **소속 패키지**: `session/`(타이머·부채와 같은 패키지)
 - **핵심**: 잔디 `session/ContributionGraph`·`session/ContributionGraphBuilder`·`session/ContributionDay`·`session/ActiveDayCount` · 기록 `session/DailyReadingRecord`·`session/ReadingHistoryService`·`session/MonthlyReadingSection`·`session/BookReadingDetail` · 통계 `session/BookReadingStatsService`·`session/ReadingContributionService`·`session/BookSecondsRow`
 - **⚠️ 배선 주의**: 잔디·히스토리·부채가 전부 `session/` 한 패키지에 산다. 연속일 성장식물(`session/GrowthStage`)은 2026-08-29에 폐기됐다 — 마을 정원(`garden/`)의 식물과는 처음부터 별개 기능이었다(그 `garden/`도 2026-09-09에 폐기 — §6).
-- **프론트**: `frontend/src/history/`(`ContributionGraph.vue`, `MonthlyRecords.vue`, `WeeklyShortfall.vue`, `grassTooltip.ts`)
+- **프론트**: `frontend/src/history/`(`ContributionGraph.vue`, `MonthlyRecords.vue`, `grassTooltip.ts`)
 - **템플릿**: `history.html`
 - **DB**: 세션 관련 `V4`·`V22`·`V53`
 - **설계**: README §2.4

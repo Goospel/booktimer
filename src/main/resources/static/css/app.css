@@ -3265,11 +3265,9 @@ body.has-rails { padding-bottom: calc(100px + env(safe-area-inset-bottom, 0px));
 .settings-page .set-btn-danger { width: 100%; background: transparent; color: var(--danger); border: 1px solid var(--danger); border-radius: 999px; padding: 12px 24px; font-family: inherit; font-size: 14px; font-weight: 500; cursor: pointer; transition: background .15s; }
 .settings-page .set-btn-danger:hover { background: var(--danger-soft); }
 
-/* 커스텀 체크박스(밀린시간 합산 / 복귀 메일 · 공부 홈 「자리 비우면 멈추기」) — 실제 <input>은 숨기고 박스 span으로 그린다.
+/* 커스텀 체크박스(아이디 변경 확인 / 복귀 메일 · 공부 홈 「자리 비우면 멈추기」) — 실제 <input>은 숨기고 박스 span으로 그린다.
    공부 홈도 같은 규칙을 탄다 — 브라우저 기본 흰 상자는 종이 위에서 혼자 흰 면이었다(에디토리얼 PR-4). */
 .settings-page .set-check { display: flex; align-items: flex-start; gap: 11px; cursor: pointer; }
-.settings-page .set-check--card { background: var(--card-bg); border: 0;
-    border-radius: 0; padding: 14px 0; }
 .settings-page .set-check input[type="checkbox"],
 .dash-away-pref input[type="checkbox"] { position: absolute; opacity: 0; width: 0; height: 0; }
 .settings-page .set-check-box,
