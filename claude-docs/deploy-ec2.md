@@ -159,3 +159,7 @@ RDS 최종 스냅샷(2026-08-03 시점)과 S3 일일 덤프(7일 보존)뿐이�
   휘발성이라 복원해도 의미가 없는데 덤프의 ~95%를 차지해 진짜 데이터의 크기 변화를 가렸다.
   다만 빈 테이블 **스키마는 보존**한다(구조까지 빼면 복원본의 `flyway_schema_history`와 어긋나
   마이그레이션이 재실행되지 않아 앱이 세션 테이블 부재로 기동 실패한다).
+  ⚠️ **2026-10-27 수정 전에 뜬 백업 파일**은 그 구조 덤프 앞에 `USE booktimer`가 없어, 통째로 적재하면
+  세션 표가 facefit에 생기고 booktimer엔 없다(T-275 — 수정 배포 뒤 7일이면 S3에서 사라진다). 그런 파일로
+  전체 복구했다면 facefit의 `SPRING_SESSION_ATTRIBUTES`·`SPRING_SESSION`을 지우고, booktimer에서
+  `src/main/resources/db/migration/V2__spring_session.sql`을 직접 실행한다.
