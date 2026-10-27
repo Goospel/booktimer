@@ -155,7 +155,7 @@ test('T-274 · RNHostView matchContents는 양 축을 쓰지 않는다(글이 �
 // ── 로그인 경로 가드(PR-P ③) — ROWS 밖: 「금지 문자열」 꼴이 아니라 허용 목록이다 ───────────────
 // REQ-174 — 로그인 경로 파일의 console 인자는 문자열 리터럴과 취소 code만. 경로는 join으로 — 윈도에서 rel이 `\`다(SELF와 같은 이유).
 // 토큰을 변수로 쥐는 새 파일은 여기에 더한다.
-const TOKEN_PATHS = [join('lib', 'auth'), join('api', 'client.ts'), join('lib', 'loginGate.ts'), join('lib', 'deleteVia.ts'), join('lib', 'logout.ts'),
+const TOKEN_PATHS = [join('lib', 'auth'), join('api', 'client.ts'), join('lib', 'loginGate.ts'), join('lib', 'deleteVia.ts'), join('lib', 'logout.ts'), join('lib', 'loginResume.ts'),
   join('lib', 'notify.ts'), join('app', '_layout.tsx'), join('app', '(auth)', 'login.tsx'), join('app', 'account-delete.tsx')];
 const SAFE_ARG = /^\s*(?:'[^']*'|"[^"]*"|code|r\.type)\s*$/;
 function consoleLeaks(all = ALL): string[] {

@@ -160,7 +160,8 @@ export default function Login() {
             value={ageOn}
             onChange={(v) => {
               setAgeOn(v);
-              if (v) setNotice(null);
+              // 오류 알림만 걷는다 — 탈퇴 뒤 안내(「… 연결은 …에서 끊어 주세요」)는 한 번만 꺼내므로 지우면 다시 볼 길이 없다
+              if (v) setNotice((n) => (n?.tone === 'error' ? null : n));
             }}
             help="책생글은 만 14세 이상만 쓸 수 있어요"
           />
