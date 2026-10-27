@@ -1,8 +1,8 @@
 // 로그인 첫 화면(시각 보충 §1.6 ② · 문구 §8 (가) · PR-P 피그마 S-LOGIN-3 안A) — 만 14세 스위치 + Apple · Google · 카카오 + 「웹에서 쓰던 계정이 있어요」.
 // 웹 계정 모드만 다음 화면(연결 코드 칸)이 있고 Apple만 보인다(REQ-86 — loginProviders). 나이 스위치는 웹 가입 때 확인해 그 화면엔 없다.
 import * as AppleAuthentication from 'expo-apple-authentication';
-import { useEffect, useState } from 'react';
-import { Alert, Image, type ImageSourcePropType, Linking, Pressable, View } from 'react-native';
+import { useEffect, useRef, useState } from 'react';
+import { Alert, AppState, Image, type ImageSourcePropType, Linking, Pressable, View } from 'react-native';
 
 import { appleSignIn, idTokenSignIn } from '../../api/client';
 import { Button, Field, Notice, Screen, SwitchRow, Txt } from '../../components/ui';
@@ -10,6 +10,7 @@ import { appleCredential } from '../../lib/auth/apple';
 import { googleSignIn } from '../../lib/auth/google';
 import { kakaoIdToken } from '../../lib/auth/kakao';
 import { type LoginMode, LINK_CODE_LENGTH, loginProviders, type Provider, runLogin } from '../../lib/loginGate';
+import { acceptResult, isResumeFromBackground, RESUME_RELEASE_MS, shouldRelease } from '../../lib/loginResume';
 import { signedOutNotice } from '../../lib/logout';
 import { brand } from '../../theme/brand';
 import { color, space } from '../../theme/tokens';
@@ -74,6 +75,13 @@ export default function Login() {
   const [code, setCode] = useState('');
   const [notice, setNotice] = useState<{ message: string; tone: 'info' | 'error' } | null>(null);
   const [busy, setBusy] = useState(false);
+  // U-98 ⑤ — 카카오톡에서 그냥 돌아오면 SDK 약속이 끝나지 않는다. 시도 번호로 옛 결과를 버리고, 앱 복귀 2초 뒤 같은 시도가 busy면 푼다
+  const attemptRef = useRef(0);
+  const busyRef = useRef(false);
+  const markBusy = (v: boolean) => {
+    busyRef.current = v;
+    setBusy(v);
+  };
 
   // 탈퇴 뒤 한 번만 「계정을 지웠어요 …」(PR-I · REQ-111 · 112). 효과에 둔다 — 개발 모드의 두 번 부름에서 둘째(빈 값)는 덮지 않는다
   useEffect(() => {
@@ -81,25 +89,50 @@ export default function Login() {
     if (m) setNotice({ message: m, tone: 'info' });
   }, []);
 
+  useEffect(() => {
+    let prev = AppState.currentState;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const sub = AppState.addEventListener('change', (next) => {
+      if (isResumeFromBackground(prev, next)) {
+        const attempt = attemptRef.current;
+        clearTimeout(timer);
+        timer = setTimeout(() => {
+          if (shouldRelease({ attempt, latest: attemptRef.current, busy: busyRef.current })) markBusy(false);
+        }, RESUME_RELEASE_MS);
+      }
+      prev = next;
+    });
+    return () => {
+      sub.remove();
+      clearTimeout(timer);
+    };
+  }, []);
+
   async function onLogin(provider: Provider) {
+    const attempt = ++attemptRef.current;
+    const latest = () => acceptResult(attempt, attemptRef.current);
     setNotice(null);
-    setBusy(true);
+    markBusy(true);
     const r = await runLogin(
       { provider, mode, ageOn, code },
       {
-        open: async (pv) =>
-          pv === 'apple'
-            ? ((await appleCredential())?.identityToken ?? null)
-            : pv === 'google'
-              ? ((await googleSignIn())?.identityToken ?? null)
-              : kakaoIdToken(),
+        open: async (pv) => {
+          const token =
+            pv === 'apple'
+              ? ((await appleCredential())?.identityToken ?? null)
+              : pv === 'google'
+                ? ((await googleSignIn())?.identityToken ?? null)
+                : await kakaoIdToken();
+          return latest() ? token : null; // 새 시도가 시작됐으면 늦게 온 토큰은 서버로 보내지 않는다(닫음 처리)
+        },
         submit: (pv, token) =>
           pv === 'apple'
             ? appleSignIn({ mode, identityToken: token, code })
             : idTokenSignIn({ provider: pv, identityToken: token, ageConfirmed: mode === 'start' && ageOn, confirmUnverified }),
       },
     );
-    setBusy(false);
+    if (!latest()) return; // 옛 시도의 늦은 결과 — busy · 알림 · 확인 창은 새 시도의 몫
+    markBusy(false);
     if ('gate' in r) {
       setNotice({ message: r.gate === 'needAge' ? '만 14세 이상인지 먼저 확인해 주세요' : '연결 코드 8자리를 먼저 넣어 주세요', tone: 'error' });
     } else if ('error' in r) setNotice({ message: r.error, tone: 'error' });
