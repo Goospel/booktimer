@@ -87,11 +87,38 @@ export function confirmFor(
   };
 }
 
-/** 그 제공자 창에서 방금 받은 토큰을 바로 보낸다(저장하지 않는다 — 서버 발급 10분 검사). 실패 · 취소는 아무것도 지우지 않는다. */
+/** RN `Alert.alert` 꼴 — 화면이 넘긴다(이 파일은 react-native를 불러오지 않는다). */
+type AlertFn = (
+  title: string,
+  message: string,
+  buttons: { text: string; style: 'cancel' | 'destructive'; onPress: () => void }[],
+  options: { cancelable: boolean },
+) => void;
+
+/**
+ * 최종 확인 창(T-276) — 다시 확인 창은 로그인처럼 보이고 Face ID 한 번에 지날 수 있어, 되돌릴 수 없는 자리를 이 [지우기]로 옮긴다.
+ * [지우기]만 참. 「Apple 창을 닫아도 지워져요」는 말하지 않는다(PR-P 설계 §4.8) — 본문이 [지우기]를 되돌릴 수 없는 자리로 못 박는다.
+ */
+function finalConfirm(alert: AlertFn): Promise<boolean> {
+  return new Promise((ok) =>
+    alert(
+      '계정을 지울까요?',
+      '지우기를 누르면 되돌릴 수 없어요',
+      [
+        { text: '취소', style: 'cancel', onPress: () => ok(false) },
+        { text: '지우기', style: 'destructive', onPress: () => ok(true) },
+      ],
+      { cancelable: false }, // 안드로이드 바깥 누르기로 닫혀 약속이 끝나지 않는 일을 막는다(로그아웃 확인과 같은 꼴)
+    ),
+  );
+}
+
+/** 그 제공자 창에서 받은 토큰은 저장하지 않고 최종 확인 창 뒤에 보낸다(서버 발급 10분 검사). 실패 · 취소는 아무것도 지우지 않는다. */
 export async function deleteAccount(
   p: { via: Reauth; appleLinked: boolean },
   deps: {
     confirm: () => Promise<Confirmed | null>;
+    alert: AlertFn; // 최종 확인 창(T-276) — 다시 확인이 토큰을 준 뒤, Apple 창 · 탈퇴 요청 전에 한 번
     apple: () => Promise<AppleCred | null>; // REQ-111 — via가 APPLE이 아니고 appleLinked일 때만 부른다
     remove: (body: DeleteRequest) => Promise<unknown>;
     unlinkKakao: () => Promise<unknown>;
@@ -107,6 +134,7 @@ export async function deleteAccount(
     return { error: CONFIRM_FAILED[p.via] };
   }
   if (cred === null) return { cancelled: true };
+  if (!(await finalConfirm(deps.alert))) return { cancelled: true }; // [취소] — 아무것도 보내지 않는다(Apple 창도 열지 않는다)
   const left: Left[] = [];
   const body: DeleteRequest = { provider: p.via, identityToken: cred.identityToken };
   if (p.via === 'APPLE') body.authorizationCode = cred.authorizationCode ?? null;
