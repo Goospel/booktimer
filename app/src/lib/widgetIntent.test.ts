@@ -15,9 +15,11 @@ test('REQ-181 · 위젯 주소 셋을 동작 · 모드 · 탭 경로로 읽는�
   expect(parseWidgetUrl('booktimer://widget/stop-reading#a')).toEqual({ action: 'stop', mode: 'reading', route: '/' });
 });
 
-test('REQ-181 · 위젯 주소가 아니면 null — 앱 주소 · 빈 앱 주소 · 카카오 복귀 · 구글 역순 · 웹 주소 · widget/startx · widget/start/extra', () => {
+test('REQ-181 · 위젯 주소가 아니면 null — 앱 주소 · 빈 앱 주소 · 위젯 아닌 호스트 · 카카오 복귀 · 구글 역순 · 웹 주소 · widget/startx · widget/start/extra', () => {
   for (const url of [
     'booktimer:///book/1',
+    'booktimer://book/start', // 호스트가 widget이 아니다 — 같은 끝 경로여도
+
     'booktimer://',
     'kakaobfbfa22db12bfb12770dbac22e8215b0://oauth?code=x',
     'com.googleusercontent.apps.20889772436-j1vun6jjup350gg3l26igcc0421tanph:/oauthredirect?code=x',
