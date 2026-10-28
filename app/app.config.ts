@@ -25,7 +25,7 @@ const config: ExpoConfig = {
   slug: 'chaeksaenggeul',
   // 앱 스킴이 맨 앞이어야 한다 — expo-linking이 첫 칸으로 앱 주소를 만든다(개발 변형 §4.7). 둘째 칸 = 구글 역순 클라이언트 ID.
   scheme: [DEV ? 'booktimer-dev' : 'booktimer', GOOGLE_IOS_URL_SCHEME],
-  version: '1.0.0',
+  version: '1.1.0',
   orientation: 'portrait',
   icon: './assets/icon.png',
   userInterfaceStyle: 'light',
@@ -81,8 +81,8 @@ const config: ExpoConfig = {
           {
             name: 'ReadingWidget',
             displayName: '책생글',
-            description: '오늘 읽은 시간',
-            ios: { supportedFamilies: ['systemSmall'] },
+            description: '오늘 읽은 시간과 읽은 날',
+            ios: { supportedFamilies: ['systemSmall', 'systemLarge'] }, // 큰 크기 = 이번 달 달력(위젯 확장 설계 2026-10-28)
           },
         ],
       },
