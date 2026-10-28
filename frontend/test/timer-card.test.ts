@@ -199,3 +199,50 @@ describe('REQ-18 · 목표 달성 표식은 선 새싹·잉크 도장 SVG다', (
         expect(/\.dash-goal-stamp\s*\{[^}]*stroke:\s*var\(--text\)/.test(css)).toBe(true);
     });
 });
+
+// 웹 목표 0(2026-10-28) — 「목표 없음」엔 달성이 없다(서버 GoalMetPushService · 미니앱 crossedGoal과 같은 규칙).
+// REQ 번호는 그 PR 설계의 지역 번호다(위 REQ-16 · 18 · 120과 다른 문서).
+describe('목표 0(목표 없음) — 달성도 진행바도 없다', () => {
+    const goal0 = (read: number) => make({ todayGoalSeconds: 0, remainingSeconds: 0, todayReadSeconds: read });
+
+    test('REQ-02 · 아치에 달성 표시가 없다 — 눈썹 「오늘 읽은 시간」 · 새싹 0 · 시계 기본 색 · 시계는 오늘 읽은 시간', () => {
+        for (const [read, clock] of [[0, '00:00'], [1800, '30:00']] as const) {
+            const w = goal0(read);
+            const pill = w.find('.dash-timer-left .dash-pill');
+            expect(pill.text()).toBe('오늘 읽은 시간');
+            expect(pill.classes()).not.toContain('dash-pill-ok');
+            expect(w.findAll('svg[data-sprout]')).toHaveLength(0);
+            expect(w.find('.dash-timer-num').classes()).not.toContain('dash-timer-num-ok');
+            expect(w.find('.dash-timer-num').text()).toBe(clock);
+            w.unmount(); wrapper = null;
+        }
+    });
+
+    test('REQ-03 · 진행바와 메타 줄이 통째로 없다 — 아치에 「목표」라는 말이 없다', () => {
+        for (const read of [0, 1800]) {
+            const w = goal0(read);
+            expect(w.find('.dash-progress-wrap').exists()).toBe(false);
+            expect(w.find('.dash-timer-left').text()).not.toContain('목표');
+            w.unmount(); wrapper = null;
+        }
+    });
+
+    test('REQ-04 · 측정 전 우측은 대기 패널이다 — 달성 패널 · 도장 없이 측정 시작', () => {
+        for (const read of [0, 1800]) {
+            const w = goal0(read);
+            expect(w.find('.dash-state-achieved').exists()).toBe(false);
+            expect(w.findAll('svg[data-goal-stamp]')).toHaveLength(0);
+            expect(w.findAll('button').some(b => b.text().includes('측정 시작'))).toBe(true);
+            w.unmount(); wrapper = null;
+        }
+    });
+
+    // 위 셋의 「없다」가 선택자 오타로 공짜 통과하지 않게 — 목표가 있으면 같은 선택자가 잡힌다.
+    test('REQ-05 · 양성 대조 — 목표 1시간 · 1시간 읽음이면 진행바 · 달성 색 · 달성 눈썹 · 달성 패널이 선다', () => {
+        const w = make(); // 기본값 = 목표 3600 · 읽음 3600
+        expect(w.find('.dash-progress-wrap').exists()).toBe(true);
+        expect(w.find('.dash-timer-num').classes()).toContain('dash-timer-num-ok');
+        expect(w.find('.dash-timer-left .dash-pill').classes()).toContain('dash-pill-ok');
+        expect(w.find('.dash-state-achieved').exists()).toBe(true);
+    });
+});

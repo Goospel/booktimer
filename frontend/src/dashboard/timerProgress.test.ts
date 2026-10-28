@@ -36,10 +36,17 @@ describe('computeProgress', () => {
         expect(r.isAchieved).toBe(true)
     })
 
-    it('goal=0 → 분모 0 가드: pct=100, 달성', () => {
-        const r = computeProgress(0, 0, 0, false, 0)
-        expect(r.pct).toBe(100)
-        expect(r.isAchieved).toBe(true)
+    it('REQ-01 · goal=0(목표 없음)이면 읽은 시간과 무관하게 달성이 아니고 진행률 0 — 오늘 읽은 시간은 그대로', () => {
+        // 서버 GoalMetPushService · 미니앱 crossedGoal과 같은 규칙 — 목표가 있을 때만 달성이 있다.
+        // 「읽으면 달성」(잔디 lv4 규칙)으로 고치면 1800에서 잡힌다.
+        for (const read of [0, 1800]) {
+            const r = computeProgress(0, 0, 0, false, read)
+            expect(r.isAchieved).toBe(false)
+            expect(r.pct).toBe(0)
+            expect(r.pctStr).toBe('0%')
+            expect(r.remainingToGoal).toBe(0)
+            expect(r.todayRead).toBe(read)
+        }
     })
 
     it('중간 값: remainingNow=1800, goal=3600 → pct=50', () => {
@@ -160,12 +167,6 @@ describe('computeProgress — 히어로 카운트업(todayRead)·목표까지(re
         expect(r.isAchieved).toBe(true)
         expect(r.remainingToGoal).toBe(0)
         expect(r.todayRead).toBe(3700)
-    })
-
-    it('goal=0 가드 → todayRead=0, remainingToGoal=0', () => {
-        const r = computeProgress(0, 0, 0, false, 0)
-        expect(r.todayRead).toBe(0)
-        expect(r.remainingToGoal).toBe(0)
     })
 })
 
