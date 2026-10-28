@@ -1,4 +1,4 @@
-// 독서 알림 · 목표 달성 알림 계획(v1 REQ-33 · REQ-92 · REQ-153). 순수 함수 — 네이티브 import 0(예약은 lib/notify가 한다).
+// 독서 알림 · 목표 달성 알림 계획(v1 REQ-33 · REQ-92 · REQ-153) · 흐름 안 달성 알림 판정 goalMetNotice(REQ-178). 순수 함수 — 네이티브 import 0(예약은 lib/notify가 한다).
 // 독서 알림은 고른 시각에 앞으로 30일 하루 한 통. 오늘 시각이 지났거나 · 오늘 목표를 채웠거나 · 독서를 재는 중이면 내일부터.
 import type { Dashboard } from '../api/types';
 import { goalNotice } from './goalNotice';
