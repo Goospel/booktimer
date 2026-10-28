@@ -67,7 +67,7 @@ describe('홈 여백 카드 — 연속일', () => {
     test('연속일이 있으면 칩으로 뜬다', async () => {
         const wrapper = await mountCard(BOOK, marginResponse([]));
         expect(wrapper.find('.dash-streak-chip').text()).toContain('3');
-        expect(wrapper.text()).toContain('일 연속 독서');
+        expect(wrapper.text()).toContain('일 연속 목표 달성');
     });
 
     test('0일이면 칩 자체가 없다 — 「0일 연속」은 격려가 아니다', async () => {

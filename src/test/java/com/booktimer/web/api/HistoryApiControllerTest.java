@@ -26,7 +26,9 @@ import java.time.LocalDate;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.hamcrest.Matchers.contains;
+import static org.hamcrest.Matchers.containsString;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.user;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
@@ -204,5 +206,58 @@ class HistoryApiControllerTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$..days[?(@.date=='" + today() + "')].goalSeconds").value(contains(1500)))
                 .andExpect(jsonPath("$..days[?(@.date=='" + past + "')].goalSeconds").value(contains(1200)));
+    }
+
+    // ── REQ-117 · 기록 API의 목표 연속(책생글 PR-R) ─────────────────────────────────────
+
+    private void seedReading(User u, Book book, int daysAgo, long seconds) {
+        Instant dayStart = today().minusDays(daysAgo).atStartOfDay(ZoneId.of(SEOUL)).toInstant();
+        sessionService.recordManual(u, dayStart.plusSeconds(3600), dayStart.plusSeconds(3600 + seconds), book);
+    }
+
+    /**
+     * 목표 1시간(가입 기본)에 어제 70분 · 그제 10분 · 사흘 전 70분(오늘은 아직) — 1초 연속은 3, 목표 연속은 1.
+     * 두 값이 달라야 응답이 어느 쪽을 실었는지 물을 수 있다.
+     */
+    private User seedStreakUser(String email) {
+        User u = registrationService.register(email, "rawpw1234", "연속", SEOUL, Role.USER, today().minusDays(7));
+        Book book = bookRepository.save(
+                Book.register(u, "연속책", null, null, null, null, null, BookStatus.READING));
+        seedReading(u, book, 1, 70 * 60L);
+        seedReading(u, book, 2, 10 * 60L);
+        seedReading(u, book, 3, 70 * 60L);
+        return u;
+    }
+
+    @Test
+    @DisplayName("REQ-117 · 기록 API 잔디 DTO 맨 뒤에 goalStreak이 있고 currentStreak과 weeklyShortfall은 그대로다")
+    void history_graphCarriesGoalStreakLast_currentStreakAndShortfallUnchanged() throws Exception {
+        seedStreakUser("histstreak@booktimer.com");
+
+        mockMvc.perform(get("/api/history")
+                        .accept(MediaType.APPLICATION_JSON)
+                        .with(user("histstreak@booktimer.com")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.graph.currentStreak").value(3))
+                .andExpect(jsonPath("$.graph.goalStreak").value(1))
+                .andExpect(content().string(containsString("\"currentStreak\":3,\"goalStreak\":1}")))
+                // 그제(10분 — 50분 모자람)가 빠뜨린 날로 그대로 실린다(미니앱 · 옛 클라이언트)
+                .andExpect(jsonPath("$.weeklyShortfall[?(@.date=='" + today().minusDays(2) + "')].debtSeconds")
+                        .value(contains(50 * 60)));
+    }
+
+    @Test
+    @DisplayName("REQ-117 · 같은 계정의 기록 API와 대시보드 API goalStreak이 같다")
+    void history_goalStreakMatchesDashboard() throws Exception {
+        seedStreakUser("histdash@booktimer.com");
+
+        String history = mockMvc.perform(get("/api/history").with(user("histdash@booktimer.com")))
+                .andExpect(status().isOk()).andReturn().getResponse().getContentAsString();
+        String dashboard = mockMvc.perform(get("/api/dashboard").with(user("histdash@booktimer.com")))
+                .andExpect(status().isOk()).andReturn().getResponse().getContentAsString();
+
+        Integer fromHistory = com.jayway.jsonpath.JsonPath.read(history, "$.graph.goalStreak");
+        Integer fromDashboard = com.jayway.jsonpath.JsonPath.read(dashboard, "$.graph.goalStreak");
+        assertThat(fromHistory).isEqualTo(1).isEqualTo(fromDashboard);
     }
 }

@@ -2004,16 +2004,6 @@ a.shop-count:hover, a.shop-count:hover strong { color: var(--accent); }
 }
 .legal-table th { background: var(--bg); font-weight: 500; }
 
-/* 이번 주 빠뜨린 날 (독서 기록 화면 7일 윈도우 부채 채우기) — 시안: 박스 행 → border-bottom 리스트,
-   날짜 위 / "N분 부족"(옅은 면 + 잉크) 아래 세로 스택 + 우측 채우기 고스트 버튼. */
-.missed-list { list-style: none; padding: 0; margin: 8px 0 0; }
-.missed-list li { display: flex; align-items: center; gap: 12px; padding: 13px 4px; border-bottom: 1px solid var(--line-1-5); }
-.missed-list li:last-child { border-bottom: none; }
-.missed-main { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
-.missed-list .missed-date { font-weight: 500; }
-.missed-list .missed-debt { color: var(--warn-fg-5); font-size: .9rem; font-variant-numeric: tabular-nums; }
-.missed-list .btn-fill { margin-left: auto; padding: 7px 15px; font-size: .85rem; text-decoration: none; white-space: nowrap; }
-
 /* 독서 기록 카드: 헤드의 탭 버튼 2개로 바디를 전환한다(일자별 독서 시간 ↔ 이번 주 빠뜨린 날).
    JS 없이 라디오(:checked) + 형제 선택자(~)로 패널을 토글 — 두 데이터는 서버가 미리 렌더, 보이기만 전환.
    라디오는 시각만 숨기고(off-screen) 키보드 포커스는 살려 탭 전환이 키보드로도 된다. */
@@ -2056,40 +2046,16 @@ a.shop-count:hover, a.shop-count:hover strong { color: var(--accent); }
 .panel-bti, .panel-shelf { clear: both; padding-top: 18px; }
 .panel-missed .muted { margin: 0 0 4px; font-size: .85rem; }
 
-/* === 독서 기록(/history) 반응형 기록 카드 (PR-2) ===
-   좁으면 pill 탭(stacked) 한 카드, 넓으면 좌 일자별 / 우 빠뜨린날 2단(split).
-   분기는 JS chooseLayout(innerWidth)가 하고(layout.ts), CSS는 두 모드의 시각만 담당.
-   ※ 컨테이너 확장은 body.history-wide(JS 토글)로 — @media와 innerWidth의 스크롤바 폭 불일치 회피. */
+/* === 독서 기록(/history) · 공부 기록(/study/history) 기록 카드 ===
+   독서 기록은 「일자별 독서 시간」 한 칸(.hist-records — 책생글 PR-R이 「빠뜨린 날」 칸과 탭을 걷었다),
+   공부 기록은 .hist-pane 한 칸. body.history-wide(history.html이 첫 HTML부터 단다)는 넓은 창 본문을 940으로 둔다. */
 
-/* split이면 940으로 둔다 — 바 있는 화면 기본 1160보다 좁은 2단 읽기 폭(본문 폭 절의 유일한 예외). */
+/* 넓은 창 940 — 바 있는 화면 기본 1160보다 좁은 읽기 폭(본문 폭 절의 유일한 예외). */
 body.history-page.history-wide .container { max-width: 940px; }
 
-/* split: 좌(일자별) 1.45 : 우(빠뜨린날) 1 */
-.hist-split { display: grid; grid-template-columns: 1.45fr 1fr; gap: 22px; align-items: start; }
 .hist-pane { margin: 0; }
-.hist-pane > h2 { margin: 0 0 12px; }
-.hist-pane .muted { margin: 0 0 8px; font-size: .85rem; }
-
-/* stacked: 탭 2개(활성=잉크 2px 밑줄, 비활성=흐린 글자) + 선택 패널 하나 */
-.hist-tabs { display: flex; gap: 8px; margin-bottom: 4px; }
-.hist-tab {
-    width: auto;                              /* 전역 button{width:100%} 상쇄(#286 가드) */
-    flex: 0 0 auto;
-    font-family: inherit;
-    font-size: .9rem;
-    font-weight: 400;
-    padding: 9px 16px;
-    border-radius: 0;
-    border: 0;
-    background: transparent;
-    color: var(--muted-3);
-    cursor: pointer;
-    transition: background .15s ease, color .15s ease, border-color .15s ease;
-}
-.hist-tab:not(.active):hover { color: var(--text); }
-.hist-tab.active { color: var(--text); font-weight: 500; box-shadow: inset 0 -2px 0 var(--text); }   /* 탭 = 잉크 2px 밑줄(채움 없음) */
-.hist-tab:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
-.hist-panel { padding-top: 14px; }
+.hist-pane > h2,
+.hist-records > h2 { margin: 0 0 12px; }
 
 /* 일자별 시간 색 — 잉크(accent-hover). 책장 summary-list 등 타 .record-time는 안 건드리게 스코프. */
 .hist-records .record-time,
@@ -2561,18 +2527,6 @@ body.personality-page #personality-app { gap: 18px; }
 .dash-progress-fill-ok { background: var(--ok); }
 .dash-progress-meta { display: flex; justify-content: space-between; font-size: 13px; color: var(--muted); }
 .dash-progress-pct { color: var(--accent-hover); font-variant-numeric: tabular-nums; }
-/* 밀린 시간 안내 — 오늘 표 끝(주 버튼 아래) 가는 선 위, 톤 다운(밀린 빚을 위협이 아니라 안심으로) */
-.dash-forgive-note {
-    margin: 2px 0 0;
-    padding-top: 12px;
-    border-top: 1px solid var(--border);
-    font-size: 13px;
-    line-height: 1.5;
-    color: var(--muted);
-    word-break: keep-all;      /* 한글 어절(공백) 단위 개행 — 조사 중간 끊김 방지 */
-    overflow-wrap: break-word; /* 긴 불가분 토큰 오버플로 안전장치 */
-    text-wrap: pretty;         /* 마지막 줄 고아 단어 방지 (미지원 브라우저는 무시) */
-}
 
 /* 오늘 표 — 면 없는 줄 표(줄 = 아래 가는 선 · 값 = 명조). 넓으면 아치 옆 칸, 좁으면 아래(경계는 히어로 미디어 쿼리 둘). */
 .dash-timer-right { flex: 1 1 320px; max-width: 560px; min-width: 0; }
@@ -3311,11 +3265,9 @@ body.has-rails { padding-bottom: calc(100px + env(safe-area-inset-bottom, 0px));
 .settings-page .set-btn-danger { width: 100%; background: transparent; color: var(--danger); border: 1px solid var(--danger); border-radius: 999px; padding: 12px 24px; font-family: inherit; font-size: 14px; font-weight: 500; cursor: pointer; transition: background .15s; }
 .settings-page .set-btn-danger:hover { background: var(--danger-soft); }
 
-/* 커스텀 체크박스(밀린시간 합산 / 복귀 메일 · 공부 홈 「자리 비우면 멈추기」) — 실제 <input>은 숨기고 박스 span으로 그린다.
+/* 커스텀 체크박스(아이디 변경 확인 / 복귀 메일 · 공부 홈 「자리 비우면 멈추기」) — 실제 <input>은 숨기고 박스 span으로 그린다.
    공부 홈도 같은 규칙을 탄다 — 브라우저 기본 흰 상자는 종이 위에서 혼자 흰 면이었다(에디토리얼 PR-4). */
 .settings-page .set-check { display: flex; align-items: flex-start; gap: 11px; cursor: pointer; }
-.settings-page .set-check--card { background: var(--card-bg); border: 0;
-    border-radius: 0; padding: 14px 0; }
 .settings-page .set-check input[type="checkbox"],
 .dash-away-pref input[type="checkbox"] { position: absolute; opacity: 0; width: 0; height: 0; }
 .settings-page .set-check-box,
@@ -3909,9 +3861,9 @@ body.has-rails { padding-left: 124px; padding-right: 124px; }   /* 16 + 92 + 16 
    목록·폼·글 한 열짜리 화면만 .narrow-page(720)다 — 1160이면 「팔로우」 버튼·시간이 1100px 밖으로 떨어진다.
    바 없는 화면(에러·약관·비밀번호·온보딩·관리자)은 위 .container 460 그대로 — 이 절은 body.has-rails 접두를 벗지 않는다.
    페이지별 .container max-width는 여기 말고 두지 않는다(ContainerWidthTest가 허용 목록으로 막는다).
-   예외 하나: body.history-page.history-wide .container 940 — JS split(layout.ts)과 짝이라 남긴다(0,3,1이라 이 기본 0,2,1을 이긴다).
-   데스크톱 경계 1100 = 바 여백 248을 뺀 852가 2열(책장 340+목록 2열 · 책방 360+메인 · 기록 1.45fr/1fr)이 서는 최소 폭.
-   books @media · profile isWide(ProfileApp.vue) · history SPLIT_MIN_WIDTH(layout.ts) · 대시보드 안쪽 경계가 전부 이 수다.
+   예외 하나: body.history-page.history-wide .container 940 — 기록 화면 읽기 폭(history.html이 첫 HTML부터 단다)(0,3,1이라 이 기본 0,2,1을 이긴다).
+   데스크톱 경계 1100 = 바 여백 248을 뺀 852가 2열(책장 340+목록 2열 · 책방 360+메인)이 서는 최소 폭.
+   books @media · profile isWide(ProfileApp.vue) · 대시보드 안쪽 경계가 전부 이 수다.
    폼 상한 620은 넓은 화면에서만 — 입력 한 칸이 1100px이면 되레 쓰기 나쁘다. 좁은 단은 카드 안쪽 672라 걸면 아래 목록과 어긋난다. */
 body.has-rails .container { max-width: 1160px; }
 body.has-rails .container.narrow-page { max-width: 720px; }

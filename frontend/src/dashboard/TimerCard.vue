@@ -69,10 +69,6 @@ const goalText = computed(() => goalLabel(props.todayGoalSeconds))
 const remainingLabel = computed(() =>
     progress.value.isAchieved ? '목표 달성' : `목표까지 ${fmtMSS(progress.value.remainingToGoal)}`
 )
-// 밀린 빚 안내 — 있을 때만. 7일 자동 소멸이 폐지됐으니(2026-08-14) "기다리면 사라진다"고 말할 수 없다.
-// 대신 지우는 두 수단(더 읽기·광고)을 제시해 여전히 위협이 아니라 "할 수 있다"로 프레이밍한다.
-const showForgive = computed(() => props.carriedDebtSeconds > 0)
-const forgiveMinutes = computed(() => Math.max(1, Math.round(props.carriedDebtSeconds / 60)))
 
 function totalHM(s: number): string {
     return `${Math.floor(s / 3600)}시간 ${Math.floor((s % 3600) / 60)}분`
@@ -179,10 +175,7 @@ const SPROUT_PATHS = ['M12 20v-6', 'M12 14c0-3.5-2.5-6-6-6 0 3.5 2.5 6 6 6z', 'M
                     />
                 </div>
             </Transition>
-            <!-- 밀린 시간 안내 — 오늘 표 끝(주 버튼 아래). 아치 안에 두면 시계 칸이 비좁아진다. -->
-            <p v-if="showForgive" class="dash-forgive-note">
-                밀린 {{ forgiveMinutes }}분은 목표보다 더 읽으면 줄어들어요 — 천천히 갚아도 괜찮아요.
-            </p>
+            <!-- 「밀린 N분」 안내는 걷었다(책생글 PR-R · REQ-120) — 웹은 밀린 시간을 보이지 않는다. 미니앱은 그대로. -->
         </div>
     </section>
 </template>

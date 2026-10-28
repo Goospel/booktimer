@@ -1,9 +1,7 @@
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted } from 'vue';
+import { ref, onMounted } from 'vue';
 import ContributionGraph from './ContributionGraph.vue';
 import MonthlyRecords from './MonthlyRecords.vue';
-import WeeklyShortfall from './WeeklyShortfall.vue';
-import { chooseLayout, type RecordsLayout } from './layout';
 import BookPickSheet from '../dashboard/BookPickSheet.vue';
 import { getCsrfToken } from '../shared/follow';
 
@@ -24,7 +22,10 @@ export interface GraphDto {
     monthLabels: MonthLabel[];
     totalSeconds: number;
     activeDays: number;
+    /** 1초 연속 — 공부 기록 화면 칩이 읽는다. 독서 기록 화면은 읽지 않는다(REQ-118). */
     currentStreak: number;
+    /** 목표를 채운 날의 연속(REQ-117 · 118) — 독서 기록만 싣는다. 공부 잔디 DTO엔 없는 키라 optional. */
+    goalStreak?: number;
     // 식물 성장 단계는 2026-08-29에 폐기했다 — 서버 응답에도 더 이상 없다.
 }
 
@@ -67,32 +68,15 @@ export interface MonthlyReadingSection {
     days: DailyReadingRecord[];
 }
 
-export interface DayDebt {
-    date: string;
-    debtSeconds: number;
-}
-
+// 서버는 「빠뜨린 날」(weeklyShortfall)도 그대로 보내지만 웹은 읽지 않는다(책생글 PR-R · REQ-119 — 미니앱 · 옛 클라이언트 몫).
 export interface HistoryApiResponse {
     nickname: string;
     months: MonthlyReadingSection[];
     graph: GraphDto;
-    weeklyShortfall: DayDebt[];
 }
 
 const data = ref<HistoryApiResponse | null>(null);
 const error = ref(false);
-const activeTab = ref<'records' | 'missed'>('records');
-
-// 반응형 레이아웃: 좁으면 pill 탭(stacked), 넓으면 2단(split). 판단은 순수함수 chooseLayout에 위임.
-// body.history-wide는 컨테이너를 940으로 묶는다. 첫 프레임은 history.html이 미리 달아 두고(마운트 뒤에 달면
-// 1160→940 이동이 CLS로 잡혔다) 여기선 layout을 따라 토글만 한다 — 940 상한은 창 1188px 이상에서만 걸려
-// 좁을 때 떼어도 폭은 그대로다.
-const layout = ref<RecordsLayout>(chooseLayout(typeof window !== 'undefined' ? window.innerWidth : 0));
-
-function applyLayout(): void {
-    layout.value = chooseLayout(window.innerWidth);
-    document.body.classList.toggle('history-wide', layout.value === 'split');
-}
 
 async function load(): Promise<void> {
     try {
@@ -104,11 +88,7 @@ async function load(): Promise<void> {
     }
 }
 
-onMounted(async () => {
-    applyLayout();
-    window.addEventListener('resize', applyLayout);
-    await load();
-});
+onMounted(load);
 
 // ── 측정 한 건의 책 붙이기·바꾸기·떼기(R2) ─────────────────────────────────────────
 // 시트는 독서 BookPickSheet(assign)를 그대로 쓴다 — 목록은 시트가 /api/books로 받고, 폴백 세 목록은 빈 배열이다
@@ -146,11 +126,6 @@ async function assignBook(bookId: number | null): Promise<void> {
         assignPending.value = false;
     }
 }
-
-onUnmounted(() => {
-    window.removeEventListener('resize', applyLayout);
-    document.body.classList.remove('history-wide');
-});
 </script>
 
 <template>
@@ -164,36 +139,14 @@ onUnmounted(() => {
 
         <!-- 독서 잔디 카드 -->
         <section class="card">
-            <ContributionGraph :graph="data.graph" />
+            <ContributionGraph :graph="data.graph" :streak="data.graph.goalStreak ?? 0" />
         </section>
 
-        <!-- 독서 기록: 넓으면 2단 split, 좁으면 pill 탭 stacked (JS chooseLayout 분기) -->
-        <div v-if="layout === 'split'" class="hist-split">
-            <section class="card hist-pane">
-                <h2>일자별 독서 시간</h2>
-                <MonthlyRecords :months="data.months" @assign="openAssign" />
-            </section>
-            <section class="card hist-pane">
-                <h2>빠뜨린 날</h2>
-                <WeeklyShortfall :weeklyShortfall="data.weeklyShortfall" />
-            </section>
-        </div>
-
-        <section v-else class="card hist-records">
-            <div class="hist-tabs" role="tablist" aria-label="독서 기록 보기">
-                <button type="button" class="hist-tab" :class="{ active: activeTab === 'records' }"
-                        role="tab" :aria-selected="activeTab === 'records'"
-                        @click="activeTab = 'records'">일자별 독서 시간</button>
-                <button type="button" class="hist-tab" :class="{ active: activeTab === 'missed' }"
-                        role="tab" :aria-selected="activeTab === 'missed'"
-                        @click="activeTab = 'missed'">빠뜨린 날</button>
-            </div>
-            <div v-show="activeTab === 'records'" class="hist-panel">
-                <MonthlyRecords :months="data.months" @assign="openAssign" />
-            </div>
-            <div v-show="activeTab === 'missed'" class="hist-panel">
-                <WeeklyShortfall :weeklyShortfall="data.weeklyShortfall" />
-            </div>
+        <!-- 독서 기록 — 한 칸. 「빠뜨린 날」 목록은 걷었다(책생글 PR-R · REQ-119 — 웹 연속은 목표 기준이다).
+             hist-records는 목록 시간 글자색이 걸린 클래스다(app.css 「일자별 시간 색」). -->
+        <section class="card hist-records">
+            <h2>일자별 독서 시간</h2>
+            <MonthlyRecords :months="data.months" @assign="openAssign" />
         </section>
     </template>
 

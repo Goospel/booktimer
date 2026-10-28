@@ -7,6 +7,7 @@ import com.booktimer.session.DayDebt;
 import com.booktimer.session.MonthlyReadingSection;
 import com.booktimer.session.ReadingContributionService;
 import com.booktimer.session.ReadingDebtService;
+import com.booktimer.session.ReadingGraph;
 import com.booktimer.session.ReadingHistoryService;
 import com.booktimer.timer.GoalSchedule;
 import com.booktimer.user.User;
@@ -47,7 +48,9 @@ public class HistoryApiController {
     @Transactional(readOnly = true)
     public HistoryApiResponse history(Principal principal) {
         User user = currentUserService.resolve(principal);
-        ContributionGraph graph = contributionService.contributionGraph(user);
+        // 잔디 + 목표 연속을 대시보드와 같은 함수로 한 번에 만든다(REQ-117 — 조회 수 그대로).
+        ReadingGraph reading = contributionService.readingGraph(user);
+        ContributionGraph graph = reading.graph();
         // 잔디와 같은 리졸버로 각 날의 목표를 실어 준다 — 기록 막대 100%와 잔디 lv4가 같은 날에 같은 답을
         // 해야 한다. 같은 요청 안에서 잔디가 스케줄을 한 번 더 조립한다(리포지토리 2쿼리 중복) — MVP 규모라 허용.
         GoalSchedule schedule = contributionService.goalSchedule(user);
@@ -59,7 +62,8 @@ public class HistoryApiController {
                         graph.monthLabels(),
                         graph.totalSeconds(),
                         graph.activeDays(),
-                        graph.currentStreak()
+                        graph.currentStreak(),
+                        reading.goalStreak()
                 ),
                 // 부채가 무제한 누적되므로 목록도 무한히 자란다 — 화면에 쓰이는 최근 분량만 잘라 보낸다.
                 // 합계(carriedDebtSeconds)는 대시보드가 전량으로 따로 계산하니 여기 상한은 표시에만 영향한다.
@@ -77,12 +81,18 @@ public class HistoryApiController {
             List<DayDebt> weeklyShortfall) {
     }
 
-    /** ContributionGraph의 JSON 표현 — 잔디 그리드와 집계값만 싣는다. */
+    /**
+     * ContributionGraph의 JSON 표현 — 잔디 그리드와 집계값만 싣는다.
+     *
+     * <p>{@code currentStreak}은 1초 연속(값·뜻 그대로 — 미니앱·옛 클라이언트), {@code goalStreak}은 목표를 채운 날의
+     * 연속(REQ-117 — 웹 기록 화면이 읽는다). {@code goalStreak}은 <b>맨 뒤</b>에 둔다 — 모르는 키는 미니앱이 무시한다.
+     */
     public record GraphDto(
             List<List<ContributionDay>> weeks,
             List<ContributionGraph.MonthLabel> monthLabels,
             long totalSeconds,
             int activeDays,
-            int currentStreak) {
+            int currentStreak,
+            int goalStreak) {
     }
 }

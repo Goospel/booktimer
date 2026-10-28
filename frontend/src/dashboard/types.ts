@@ -17,7 +17,10 @@ export interface GraphDto {
     monthLabels: MonthLabel[]
     totalSeconds: number
     activeDays: number
+    /** 1초 연속 — 미니앱 · 옛 클라이언트용. 웹 독서 화면은 읽지 않는다(REQ-118 — `webStreak.test.ts`). */
     currentStreak: number
+    /** 목표를 채운 날(잔디 4단계)의 연속(REQ-89 · 118) — 웹 홈의 연속 숫자 두 자리가 읽는다. */
+    goalStreak: number
     // 식물 성장 단계는 2026-08-29에 폐기했다 — 서버 응답에도 더 이상 없다.
 }
 

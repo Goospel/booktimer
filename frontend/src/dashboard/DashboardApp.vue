@@ -248,8 +248,8 @@ onMounted(async () => {
 
 /**
  * 탭·창 복귀 시 조용한 재조회 — 다른 기기에서 시작·정지하면 이 화면이 낡기 때문(미니앱 silentRefresh와 같은 규칙).
- * 성공했을 때만 덮고 실패는 무시한다(화면 유지). graph·quotes는 안 덮는다 —
- * 명언이 복귀마다 섞이면 어지럽고, 잔디는 stop 응답이 이미 갱신한다.
+ * 성공했을 때만 덮고 실패는 무시한다(화면 유지). quotes는 안 덮는다 — 명언이 복귀마다 섞이면 어지럽다.
+ * graph는 덮는다 — 다른 기기에서 정지해 목표를 채우면 목표 연속이 바뀐다(책생글 PR-R).
  */
 async function refresh(force = false) {
     if (!force) {
@@ -262,7 +262,10 @@ async function refresh(force = false) {
     try {
         const res = await fetch('/api/dashboard', { credentials: 'same-origin' })
         if (!res.ok) return
-        applyDashboard(await res.json() as DashboardResponse)
+        const d = await res.json() as DashboardResponse
+        applyDashboard(d)
+        // 다른 기기에서 정지해 목표를 채웠으면 연속도 바뀐다 — graph도 갈아 끼운다(명언은 그대로).
+        if (data.value) data.value.graph = d.graph
     } catch {
         /* 조용히 — 다음 복귀·클릭에서 다시 시도한다 */
     }
@@ -647,7 +650,7 @@ function onSheetAdded(book: { id: number; title: string; status: string }) {
             :today-goal-seconds="todayGoalSeconds"
             :today-read-seconds="todayReadSeconds"
             :carryover="carryover"
-            :streak="data.graph.currentStreak"
+            :streak="data.graph.goalStreak"
             :has-active-session="hasActiveSession"
             :active-started-at="activeStartedAt"
             :active-book-title="activeBookTitle"
@@ -672,7 +675,7 @@ function onSheetAdded(book: { id: number; title: string; status: string }) {
              그때는 타임라인 스트립을 없애는 맥락이었고, 지금은 잔디가 비운 자리를 「지금 그 책 하나」로
              채우는 것이다(진입은 여전히 책 한 권 단위다). -->
         <MarginCard :login-id="data.loginId" :book="marginBook"
-                    :streak="data.graph.currentStreak" @open-sheet="openStartSheet" />
+                    :streak="data.graph.goalStreak" @open-sheet="openStartSheet" />
         </template>
 
         <!-- 공부 = 타이머 + 필기. 측정 중엔 한 장(.is-merged)이 되고, 이 스택만 독서등 밑 낮 종이(.lamp-page)로 남는다

@@ -152,15 +152,11 @@ describe('REQ-16 · 홈 아치 · 오늘 표', () => {
         expect(long.find('.dash-timer-num').classes()).toContain('is-long');
     });
 
-    test('밀린 시간 안내는 오늘 표(오른쪽) 끝에 선다 — 아치 안엔 없다', () => {
-        const w = make({ carriedDebtSeconds: 600, todayReadSeconds: 0 });
-        expect(w.findAll('.dash-timer-right .dash-forgive-note')).toHaveLength(1);
-        expect(w.findAll('.dash-timer-left .dash-forgive-note')).toHaveLength(0);
-        expect(w.find('.dash-timer-right').element.lastElementChild?.classList.contains('dash-forgive-note')).toBe(true);
-    });
-
-    test('밀린 시간이 없으면 안내도 없다(양성 쌍)', () => {
-        const w = make({ todayReadSeconds: 0 });
+    // 책생글 PR-R · REQ-120 — 웹은 밀린 시간을 보이지 않는다(미니앱은 그대로). 밀린 초가 있어도 「밀린 N분」 안내가 없다.
+    test('REQ-120 · 밀린 시간이 있어도 「밀린 N분」 안내가 없다', () => {
+        const w = make({ carriedDebtSeconds: 600, carryover: true, todayReadSeconds: 0 });
+        expect(w.find('.dash-timer-right').exists()).toBe(true); // 오늘 표는 그렸다(양성)
+        expect(w.text()).not.toContain('밀린');
         expect(w.findAll('.dash-forgive-note')).toHaveLength(0);
     });
 

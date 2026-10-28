@@ -91,7 +91,7 @@ async function assignBook(bookId: number | null): Promise<void> {
             </header>
 
             <section class="card is-study">
-                <ContributionGraph :graph="data.graph" mode="study" />
+                <ContributionGraph :graph="data.graph" :streak="data.graph.currentStreak" mode="study" />
             </section>
 
             <section class="card hist-pane is-study">

@@ -12,7 +12,7 @@ import { mount } from '@vue/test-utils';
 import ContributionGraph from '../src/history/ContributionGraph.vue';
 import MonthlyRecords from '../src/history/MonthlyRecords.vue';
 
-// currentStreak > 0 이어야 연속 뱃지(「N일 연속 독서」)가 렌더된다.
+// streak > 0 이어야 연속 뱃지(「N일 연속 목표 달성」)가 렌더된다 — 연속 숫자는 부모가 넘긴다(REQ-118).
 const READING_GRAPH = {
     weeks: [
         [
@@ -33,11 +33,11 @@ const READING_GRAPH = {
 
 describe('독서 기본값 양성 대조군', () => {
     test('/history 잔디는 독서 문구를 쓴다 — mode 기본값이 뒤집히면 여기서 죽는다', () => {
-        const wrapper = mount(ContributionGraph, { props: { graph: READING_GRAPH } });   // mode 생략
+        const wrapper = mount(ContributionGraph, { props: { graph: READING_GRAPH, streak: 1 } });   // mode 생략
         const text = wrapper.text();
 
         expect(wrapper.findAll('h2').map((h) => h.text())).toContain('독서 잔디');
-        expect(text).toContain('일 연속 독서');
+        expect(text).toContain('일 연속 목표 달성');
         expect(text).toContain('목표 미달');
         expect(text).toContain('목표 달성');
         expect(text).toContain('직접 채움');      // 독서 전용 스와치 — 공부 모드엔 없다

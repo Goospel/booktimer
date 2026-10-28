@@ -75,7 +75,7 @@ function onCreated(): void {
                     <svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
                         <path d="M5 19c0-8 6-13 14-13 0 8-5 14-13 14-1 0-1-.6-1-1z" />
                     </svg>
-                    <strong>{{ streak }}</strong>일 연속 독서
+                    <strong>{{ streak }}</strong>일 연속 목표 달성
                 </span>
                 <span v-if="book" class="dash-card-sub">《{{ book.title }}》</span>
             </div>
