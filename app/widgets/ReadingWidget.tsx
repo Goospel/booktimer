@@ -10,6 +10,15 @@ export type ReadingWidgetProps = {
   bookTitle?: string;
   /** 측정 중일 때 무엇을 재는가 — 대기 값(오늘 분)은 늘 독서다(REQ-106) */
   mode: 'reading' | 'study';
+  // 위젯 확장(2026-10-28) — 새 칸은 모두 선택이다: 옛 JS가 남긴 값으로도 지금 그림을 그린다(REQ-187).
+  /** 측정 전 큰 글(REQ-184) — 없으면 todayMinutes로 그린다(옛 값) */
+  idleTitle?: string;
+  /** 측정 전 작은 글(목표 · 연속) — idleTitle이 있는데 없으면 안 읽은 날 문장(큰 글 자리) */
+  idleNote?: string;
+  /** 독서 측정 중 머리(목표 · 연속) — 없으면 「읽는 중」 · 「공부 중」 */
+  runNote?: string;
+  /** 측정 단추(REQ-180) — 앱을 여는 링크. 없으면 단추 없음(로그아웃 — REQ-186) */
+  action?: { label: string; url: string };
 };
 
 // 시각 보충 §5.3 — 시스템 외형을 따른다. 배경만 paper · desk 리터럴(REQ-60 — widgetColors.test.ts가 토큰과 대조),
