@@ -13,11 +13,12 @@ import { Button, Notice, Row, Screen, Txt, useStacked } from '../../components/u
 import { clockLabel, dateLabel, durationLabel } from '../../lib/format';
 import { goalChoices, goalProgress, goalStatus, isStaleDay, nextMidnightOf, SESSION_CAP_MS } from '../../lib/goalProgress';
 import { savedNotice } from '../../lib/marginSave';
-import { startMeasure, stopMeasure } from '../../lib/measureStart';
+import { ALREADY_STOPPED, startMeasure, stopMeasure } from '../../lib/measureStart';
 import { type DraftRow, recentDrafts } from '../../lib/recentDrafts';
 import { goalMetNotice } from '../../lib/reminders';
 import { syncSurfaces } from '../../lib/surfaces';
 import { useMeasureShortcut } from '../../lib/useMeasureShortcut';
+import { useWidgetIntent } from '../../lib/useWidgetIntent';
 import { color, layout, space } from '../../theme/tokens';
 
 type NoticeState = { message: string; tone?: 'info' | 'error' } | null;
@@ -142,6 +143,8 @@ export default function Home() {
   // Option+P = 지금 보이는 측정 버튼(REQ-105): 측정 중 「측정 종료」 · 빈 홈 「책 없이 시간만 재기」 · 측정 전 「읽기 시작」
   const measureButton = !dash || !progress ? null : measuring ? stop : books.length === 0 ? () => start(null) : () => start(book.id);
   useMeasureShortcut({ button: measureButton, busy, covered: goalOpen });
+  // 위젯 [읽기 시작] · [측정 종료](위젯 확장 REQ-183) — 새로 읽은 대시보드로 판정해 같은 버튼을 누른다. 목표 시트가 열려 있어도 누른다(판단 J8)
+  useWidgetIntent({ mode: 'reading', fresh: dash, measuring, button: measureButton, onAlreadyStopped: () => setNotice({ message: ALREADY_STOPPED }) });
 
   if (!dash || !progress) {
     return (
