@@ -54,6 +54,8 @@ const ROWS: Row[] = [
   // 달성 순간 알림 글은 lib(goalMetNotice · goalBody)만 만든다 — 화면이 조건을 스스로 달면 목표 0의 헛 알림이 돌아온다(REQ-178).
   // goalBody도 lib 밖에선 금지 — 화면이 글을 빌려 와 조건을 스스로 달아도 같은 헛 알림이다(리뷰 M11b).
   { id: 'REQ-178', pattern: /오늘 목표를 채웠어요|\bgoalBody\b/, skip: ['lib'], planted: "setNotice({ message: `오늘 목표를 채웠어요 · ${progress.streak}일째` })", strip: true },
+  // 목표 줄 단서는 「바꾸기」 하나다 — 「목표 없음」을 고른 사람에게 목표를 권하지 않는다(REQ-177). 미니앱(동결)의 「정하기」는 앱 소스 밖이다.
+  { id: 'REQ-177', pattern: /정하기/, skip: [], planted: "const goalCue = dash.todayGoalSeconds > 0 ? '바꾸기' : '정하기';", strip: true },
 ];
 
 // 블록 주석 · 줄 주석을 걷는다. URL의 //(앞이 :)는 주석이 아니다.
@@ -164,6 +166,12 @@ test('REQ-178 · 달성 순간 알림 글은 lib만 만든다 — 화면이 스�
   // lib 안 · 주석은 걸리지 않는다
   expect(hits(row!, [{ rel: join('lib', 'reminders.ts'), text: 'goalBody(progress.streak)' }])).toEqual([]);
   expect(hits(row!, [{ rel: join('app', 'planted.tsx'), text: '// goalBody는 lib만 부른다' }])).toEqual([]);
+});
+
+test('REQ-177 · 목표 줄 단서는 「바꾸기」 하나다 — 앱 소스에 「정하기」가 없다(심은 픽스처는 잡힌다)', () => {
+  const row = ROWS.find((r) => r.id === 'REQ-177');
+  expect(row).toBeDefined();
+  expect(hits(row!)).toEqual([]);
 });
 
 // ── 로그인 경로 가드(PR-P ③) — ROWS 밖: 「금지 문자열」 꼴이 아니라 허용 목록이다 ───────────────
