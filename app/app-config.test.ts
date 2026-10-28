@@ -96,9 +96,28 @@ test('REQ-103 · iPad를 지원하고 전체 화면을 강제하지 않으며 iP
   expect(c.orientation).toBe('portrait');
 });
 
-test('REQ-103 · version은 1.0.0이고 지문 잠금 파일의 version과 같다', () => {
-  expect(configWith(undefined).version).toBe('1.0.0');
-  expect(require('./fingerprint.lock.json').version).toBe('1.0.0');
+test('REQ-188 · version은 1.1.0이고 지문 잠금 파일의 version과 같다', () => {
+  expect(configWith(undefined).version).toBe('1.1.0');
+  expect(require('./fingerprint.lock.json').version).toBe('1.1.0');
+});
+
+test('REQ-188 · 위젯은 ReadingWidget 하나 · 작은 · 큰 두 크기 · 설명 「오늘 읽은 시간과 읽은 날」이고 두 변형이 같다', () => {
+  // 위젯 옵션은 네이티브 문자열(갤러리 이름 · 설명 · 크기 목록)이라 바꾸면 빌드다 — 옵션 객체 전체를 잠근다(위젯 확장 설계 §5.8)
+  const widget = {
+    enablePushNotifications: false,
+    frequentUpdates: false,
+    widgets: [
+      {
+        name: 'ReadingWidget',
+        displayName: '책생글',
+        description: '오늘 읽은 시간과 읽은 날',
+        ios: { supportedFamilies: ['systemSmall', 'systemLarge'] },
+      },
+    ],
+  };
+  for (const v of [undefined, 'development']) {
+    expect([v, pluginProps(configWith(v), 'expo-widgets')]).toEqual([v, [widget]]);
+  }
 });
 
 test('REQ-166 · 스킴은 [앱 스킴, 구글 역순 클라이언트 ID] 두 칸이고 앱 스킴이 맨 앞이다', () => {
