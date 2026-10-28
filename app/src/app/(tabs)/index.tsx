@@ -11,15 +11,14 @@ import { Cover } from '../../components/Cover';
 import { Sheet } from '../../components/Sheet';
 import { Button, Notice, Row, Screen, Txt, useStacked } from '../../components/ui';
 import { clockLabel, dateLabel, durationLabel } from '../../lib/format';
-import { goalProgress, isStaleDay, nextMidnightOf, SESSION_CAP_MS } from '../../lib/goalProgress';
+import { goalChoices, goalProgress, goalStatus, isStaleDay, nextMidnightOf, SESSION_CAP_MS } from '../../lib/goalProgress';
 import { savedNotice } from '../../lib/marginSave';
 import { startMeasure, stopMeasure } from '../../lib/measureStart';
 import { type DraftRow, recentDrafts } from '../../lib/recentDrafts';
+import { goalMetNotice } from '../../lib/reminders';
 import { syncSurfaces } from '../../lib/surfaces';
 import { useMeasureShortcut } from '../../lib/useMeasureShortcut';
 import { color, layout, space } from '../../theme/tokens';
-
-const GOAL_CHOICES_MIN = [10, 20, 30, 45, 60, 90, 120]; // 0은 내놓지 않는다(범위 보충 §3.4)
 
 type NoticeState = { message: string; tone?: 'info' | 'error' } | null;
 
@@ -96,14 +95,16 @@ export default function Home() {
 
   // 달성 순간 — 앱이 앞에 있을 때 흐름 안 Notice(모달 · 축하 효과 없음). 처음 읽은 값이 이미 채움이면 알리지 않는다.
   // 낡은 날(전날 끝난 몫 + 자정부터의 몫)로는 판정하지 않는다 — 새날 첫 값은 다시 「처음 읽은 값」이다.
+  // 판정은 goalMetNotice 하나(REQ-178 — 목표 0엔 달성이 없다). deps에 목표가 없어도 된다: 판정 축은 filled 전환이고 그 렌더의 목표를 읽는다.
   const wasFilled = useRef<boolean | null>(null);
   useEffect(() => {
-    if (!progress) return;
+    if (!dash || !progress) return;
     if (staleDay) {
       wasFilled.current = null;
       return;
     }
-    if (wasFilled.current === false && progress.filled) setNotice({ message: `오늘 목표를 채웠어요 · ${progress.streak}일째` });
+    const message = goalMetNotice(wasFilled.current, progress, dash.todayGoalSeconds);
+    if (message) setNotice({ message });
     wasFilled.current = progress.filled;
   }, [progress?.filled, progress?.streak, staleDay]);
 
@@ -125,10 +126,10 @@ export default function Home() {
     setBusy(false);
   }
 
-  async function chooseGoal(minutes: number) {
+  async function chooseGoal(seconds: number) {
     setGoalOpen(false);
     try {
-      await reading.setGoal(minutes * 60);
+      await reading.setGoal(seconds);
     } catch (e) {
       setNotice({ message: e instanceof Error ? e.message : String(e), tone: 'error' });
     }
@@ -159,14 +160,11 @@ export default function Home() {
     );
   }
 
-  const status = `오늘 ${durationLabel(progress.todaySeconds)} · ${
-    dash.todayGoalSeconds > 0 ? `목표 ${durationLabel(dash.todayGoalSeconds)}` : '목표 없음'
-  }${progress.streak > 0 ? ` · ${progress.streak}일째` : ''}`;
-  const goalCue = dash.todayGoalSeconds > 0 ? '바꾸기' : '정하기'; // 목표 0(웹에서 끈 계정)이면 「정하기」 — 미니앱 목표 타일과 같은 말
+  const status = goalStatus({ progress, goal: dash.todayGoalSeconds, measuring });
   const goalLine = (
     <Pressable
       accessibilityRole="button"
-      accessibilityLabel={`${status}, ${goalCue}`} // 보이는 단서를 이름에도 — 음성 제어가 「바꾸기」로 찾는다
+      accessibilityLabel={`${status}, 바꾸기`} // 보이는 단서를 이름에도 — 음성 제어가 「바꾸기」로 찾는다
       accessibilityHint="하루 목표를 바꿔요"
       onPress={() => setGoalOpen(true)}
       style={({ pressed }) => [
@@ -180,7 +178,7 @@ export default function Home() {
         {status}
       </Txt>
       <Txt v="L1" style={{ color: color.muted }} accessible={false}>
-        {goalCue} ›
+        바꾸기 ›
       </Txt>
     </Pressable>
   );
@@ -191,12 +189,9 @@ export default function Home() {
         오늘부터 바뀌어요 — 오늘 채웠는지도 새 목표로 봐요
       </Txt>
       <View>
-        {GOAL_CHOICES_MIN.map((m) => {
-          const selected = dash.todayGoalSeconds === m * 60;
-          return (
-            <Row key={m} title={durationLabel(m * 60)} meta={selected ? '지금 목표' : undefined} selected={selected} onPress={() => void chooseGoal(m)} />
-          );
-        })}
+        {goalChoices(dash.todayGoalSeconds).map((c) => (
+          <Row key={c.seconds} title={c.title} meta={c.meta} selected={c.selected} onPress={() => void chooseGoal(c.seconds)} />
+        ))}
       </View>
     </Sheet>
   );

@@ -2,10 +2,21 @@
 // 독서 알림은 고른 시각에 앞으로 30일 하루 한 통. 오늘 시각이 지났거나 · 오늘 목표를 채웠거나 · 독서를 재는 중이면 내일부터.
 import type { Dashboard } from '../api/types';
 import { goalNotice } from './goalNotice';
-import { goalProgress, nextMidnightOf } from './goalProgress';
+import { goalProgress, type GoalProgress, nextMidnightOf } from './goalProgress';
 
 export const REMINDER_BODY = '오늘 읽을 시간이에요 — 목표를 채우면 연속이 이어져요';
-export const goalBody = (streak: number) => `오늘 목표를 채웠어요 · ${streak}일째`;
+/** 목표 없음(0)이면 목표 · 연속을 말하지 않는다(REQ-179) */
+export const REMINDER_BODY_NO_GOAL = '오늘 읽을 시간이에요';
+export const goalBody = (streak: number) => `오늘 목표를 채웠어요 · ${streak}일째`; // 흐름 안 달성 알림도 이 글을 쓴다
+
+/**
+ * 달성 순간 흐름 안 알림(REQ-178) — 홈 effect가 관측마다 부른다. 직전 관측이 미달(false)이고 이번이 채움이며 지금 목표 > 0일 때만 글.
+ * 처음 읽은 값(null — 첫 값 · 낡은 날 다음 첫 값)은 알리지 않는다. 목표 0엔 달성이 없다(서버 GoalMetPushService · 미니앱 crossedGoal).
+ * 목표 0의 채움(읽은 날)은 목표 G의 채움을 늘 품으므로, 목표를 0 → G로 바꾸는 것만으로는 미달 → 채움이 생기지 않는다.
+ */
+export function goalMetNotice(wasFilled: boolean | null, progress: GoalProgress, goal: number): string | null {
+  return wasFilled === false && progress.filled && goal > 0 ? goalBody(progress.streak) : null;
+}
 
 export interface ReminderSetting {
   on: boolean;
@@ -50,12 +61,15 @@ export function planNotifications(p: {
   };
   const todayAt = new Date(today.getFullYear(), today.getMonth(), today.getDate(), hour, minute).getTime();
   const skipToday = todayAt <= p.now || (input !== null && (goalProgress(input).filled || input.activeStartedAt !== null));
+  // 글이 바뀌면 id도 바뀌어야 이미 걸린 30통을 바꿔 끼운다(scheduleDiff는 id만 본다 · ours()는 접두어 'reminder-'만 본다 — 꼬리표는 끝에).
+  // 대시보드를 모르면(null) 목표 있는 글 — 다음 대시보드 읽기가 바꿔 끼운다.
+  const noGoal = input !== null && input.goal === 0;
 
   const out: Planned[] = [];
   for (let i = skipToday ? 1 : 0; out.length < REMINDER_DAYS; i++) {
     const d = new Date(today.getFullYear(), today.getMonth(), today.getDate() + i, hour, minute);
-    const id = `reminder-${d.getFullYear()}${pad(d.getMonth() + 1)}${pad(d.getDate())}${pad(hour)}${pad(minute)}`;
-    out.push({ id, at: d.getTime(), body: REMINDER_BODY });
+    const id = `reminder-${d.getFullYear()}${pad(d.getMonth() + 1)}${pad(d.getDate())}${pad(hour)}${pad(minute)}${noGoal ? '-nogoal' : ''}`;
+    out.push({ id, at: d.getTime(), body: noGoal ? REMINDER_BODY_NO_GOAL : REMINDER_BODY });
   }
   const goal = input && goalNotice({ ...input, remindersOn: true, permitted: true });
   if (goal && input) out.push({ id: goal.id, at: goal.at, body: goalBody(input.goalStreak + 1) });

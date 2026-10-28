@@ -1,5 +1,6 @@
 import type { Dashboard } from '../api/types';
-import { clampTime, DEFAULT_REMINDER, planNotifications, REMINDER_DAYS, scheduleDiff } from './reminders';
+import { type GoalInput, goalProgress } from './goalProgress';
+import { clampTime, DEFAULT_REMINDER, goalMetNotice, planNotifications, REMINDER_DAYS, scheduleDiff } from './reminders';
 
 // 독서 알림 · 목표 달성 알림 계획(v1 REQ-33 · REQ-92 · REQ-153). 시계는 2026-10-24 기기 시간대로 고정한다.
 const at = (h: number, m: number, day = 24) => new Date(2026, 9, day, h, m).getTime();
@@ -88,4 +89,53 @@ test('REQ-153 · 예약 차이는 id로 고르고 목표 달성 알림은 늘 �
   const d = scheduleDiff(['reminder-202610252000', 'reminder-202610252130', 'goal-20261024', 'other-1'], next);
   expect(d.cancel).toEqual(['reminder-202610252130']); // 다른 시각 id만 · 우리 것이 아닌 id는 건드리지 않는다
   expect(d.add.map((x) => x.id)).toEqual(['reminder-202610262000', 'goal-20261024']); // 같은 독서 id는 그대로 · 목표 달성은 이미 있어도 다시
+});
+
+// 달성 순간 흐름 안 알림(REQ-178) — 홈 effect처럼 관측을 차례로 접는다(직전 채움 = 앞 관측의 filled). 뜬 글만 모은다.
+const obs = (todayRead: number, goal: number, o: Partial<GoalInput> = {}): GoalInput => ({ todayRead, goal, activeStartedAt: null, now: at(20, 0), nextMidnight: at(0, 0, 25), goalStreak: 4, ...o });
+function notices(steps: GoalInput[]): string[] {
+  let was: boolean | null = null;
+  const out: string[] = [];
+  for (const s of steps) {
+    const p = goalProgress(s);
+    const m = goalMetNotice(was, p, s.goal);
+    if (m) out.push(m);
+    was = p.filled;
+  }
+  return out;
+}
+
+test('REQ-178 · 목표 0엔 달성 알림이 없다 — 오늘 0초에서 읽기 시작 1초 뒤 · 30분 → 0으로 내린 순간', () => {
+  expect(notices([obs(0, 0), obs(0, 0, { activeStartedAt: at(20, 0), now: at(20, 0) + 1000 })])).toEqual([]);
+  expect(notices([obs(10 * 60, 30 * 60), obs(10 * 60, 0)])).toEqual([]);
+});
+test('REQ-178 · 목표를 바꾸는 것만으로 알림이 새로 생기지 않는다 — 「목표 없음」 → 30분(이미 40분) · 같은 날 30 → 0 → 30분(이미 채움)', () => {
+  expect(notices([obs(40 * 60, 0), obs(40 * 60, 30 * 60)])).toEqual([]);
+  expect(notices([obs(40 * 60, 30 * 60), obs(40 * 60, 0), obs(40 * 60, 30 * 60)])).toEqual([]);
+});
+test('REQ-178 · 목표가 있으면 미달 → 채움 순간 한 번이고 처음 읽은 값은 알리지 않는다 — 글은 목표 달성 알림과 같다', () => {
+  const run = (m: number) => obs(20 * 60, 30 * 60, { activeStartedAt: at(20, 0), now: at(20, m) });
+  expect(notices([run(9), run(10), run(11)])).toEqual(['오늘 목표를 채웠어요 · 5일째']); // 양성 대조 — 끝난 20분 + 재는 10분 = 30분에 닿는 순간
+  expect(notices([run(10)])).toEqual([]); // 처음 읽은 값(낡은 날 다음 첫 값도 화면이 null로 되돌린다)이 이미 채움
+  expect(notices([obs(40 * 60, 60 * 60), obs(40 * 60, 30 * 60, { goalStreak: 5 })])).toEqual(['오늘 목표를 채웠어요 · 5일째']); // 목표 > 0끼리 내려 바로 채우면 한 번 — 지금 동작 그대로
+});
+
+test('REQ-179 · 목표 없음이면 독서 알림 글은 「오늘 읽을 시간이에요」이고 id 끝에 -nogoal이 붙는다', () => {
+  const list = reminders(plan({ dash: idle(0, 0) }));
+  expect(list).toHaveLength(30);
+  expect(new Set(list.map((x) => x.body))).toEqual(new Set(['오늘 읽을 시간이에요']));
+  expect(list[0].id).toBe('reminder-202610242000-nogoal');
+  // 양성 대조 — 목표가 있으면 지금 글 · 지금 id 그대로
+  expect(reminders(plan({ dash: idle(0) }))[0]).toMatchObject({ id: 'reminder-202610242000', body: '오늘 읽을 시간이에요 — 목표를 채우면 연속이 이어져요' });
+});
+test('REQ-179 · 목표를 0으로 바꾸면 걸려 있던 독서 알림 30통을 새 글로 바꿔 끼운다', () => {
+  const before = reminders(plan({ dash: idle(0) })).map((x) => x.id);
+  const d = scheduleDiff(before, plan({ dash: idle(0, 0) }));
+  expect(d.cancel).toHaveLength(30);
+  expect(reminders(d.add)).toHaveLength(30);
+  expect(scheduleDiff(before, plan({ dash: idle(0) })).cancel).toEqual([]); // 목표가 그대로면 0
+});
+test('REQ-179 · 목표 없음에서도 오늘 1초라도 읽었으면 오늘 독서 알림은 뺀다', () => {
+  expect(plan({ dash: idle(0, 0) }).map((x) => x.id)).toContain('reminder-202610242000-nogoal'); // 양성 대조
+  expect(plan({ dash: idle(5 * 60, 0) }).map((x) => x.id)).not.toContain('reminder-202610242000-nogoal');
 });
