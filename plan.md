@@ -202,7 +202,8 @@ HTTP→HTTPS 301 리다이렉트 + Route 53 alias. 배경 개념 **N-021**.
       `root` 실행 + 버킷 계정ID 유도로 해소. 실백업 1건(6.6MB·30테이블·gzip OK) S3 검증, 회귀 가드 8단언 신설.
 - [x] **백업 통째 적재 결함 수정** ✅ 2026-10-27 — 세션 표 구조 덤프에 USE가 없어 통째로 적재하면 세션 표가
       facefit에 생겼다(T-275 — 운영자 계정 행 단위 복구 준비 중 발견). ``USE `booktimer`;`` 한 줄 + 실적재 가드
-      `deploy/tests/test-backup-restore.sh`(CI). 남은 것: 수정 배포 뒤 첫 18:00Z 백업에서 USE 줄 확인(운영 읽기 — 사용자 승인 뒤).
+      `deploy/tests/test-backup-restore.sh`(CI). ✅ 운영 확인 2026-10-28 — 배포 뒤 첫 백업 `booktimer-20261027T180004Z`에서
+      세션 표 바로 위가 ``USE `booktimer`;``(수정 전 `20261026T180004Z`는 `USE facefit`). 수정 전 파일은 10-26분까지 S3에 7일 남는다.
 - [x] **정리** ✅ 2026-08-03 — ALB·리스너·타깃그룹 / ECS 서비스·클러스터 / RDS(최종 스냅샷
       `booktimer-db-final-20260803` 보존) 삭제, autoscaling 등록 해제, `task-definition.json`·
       `autoscaling-config.yml`·`zero-downtime-config.yml` 제거. 되돌릴 수 없는 작업이라
