@@ -20,8 +20,10 @@ export function computeProgress(
     carryover: boolean,
     todayRead: number
 ): { todayRead: number; remainingToGoal: number; pct: number; pctStr: string; isAchieved: boolean } {
+    // 목표 0 = 「목표 없음」 — 채울 것이 없으니 달성도 진행률도 없다(서버 GoalMetPushService · 미니앱
+    // crossedGoal과 같은 규칙). 0으로 나누지 않는 가드이기도 하다. 진행바는 TimerCard가 목표가 있을 때만 그린다.
     if (goal <= 0) {
-        return { todayRead, remainingToGoal: 0, pct: 100, pctStr: '100%', isAchieved: true }
+        return { todayRead, remainingToGoal: 0, pct: 0, pctStr: '0%', isAchieved: false }
     }
     // 목표까지 남은 초(히어로 보조·진행바 메타 우측)는 그대로 부채 스냅샷에서 만든다 — 카운트다운이라
     // 0에서 멈추는 게 맞다. 카운트업(todayRead)만 출처가 갈린다.

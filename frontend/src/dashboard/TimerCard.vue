@@ -89,7 +89,8 @@ const SPROUT_PATHS = ['M12 20v-6', 'M12 14c0-3.5-2.5-6-6-6 0 3.5 2.5 6 6 6z', 'M
                 {{ progress.isAchieved ? '오늘 목표 달성' : '오늘 읽은 시간' }}
             </span>
             <div class="dash-timer-num" :class="{ 'dash-timer-num-ok': progress.isAchieved, 'is-long': todayReadDisplay.length > 5 }"><ClockDigits :text="todayReadDisplay" /></div>
-            <div class="dash-progress-wrap">
+            <!-- 목표 0(목표 없음)이면 진행바 · 메타 줄을 통째로 안 그린다 — 채울 분모가 없다(미니앱 게이지와 같은 규칙). -->
+            <div v-if="todayGoalSeconds > 0" class="dash-progress-wrap">
                 <div class="dash-progress-track">
                     <div class="dash-progress-fill" :class="{ 'dash-progress-fill-ok': progress.isAchieved }"
                          :style="{ width: progress.pctStr }"></div>
