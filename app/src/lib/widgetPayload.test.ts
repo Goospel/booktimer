@@ -1,7 +1,8 @@
-import type { ReadingWidgetProps } from '../../widgets/ReadingWidget';
+import type { ReadingWidgetProps, WidgetMonth } from '../../widgets/ReadingWidget';
+import type { ContributionDay } from '../api/types';
 import { goalProgress, goalStatus, nextMidnightOf } from './goalProgress';
 import { WIDGET_URL } from './widgetIntent';
-import { widgetPayload, type WidgetSource, widgetTimeline } from './widgetPayload';
+import { signedOutWidget, widgetMonth, widgetPayload, type WidgetSource, widgetTimeline } from './widgetPayload';
 
 // v1 REQ-34 · 범위 보충 REQ-106 — 위젯은 스스로 갱신하지 못해 앱이 값을 밀어 넣는다. 날짜를 항상 싣는다.
 // 위젯 확장(2026-10-28) REQ-184 — 목표 · 연속 글은 홈 목표 줄과 같은 조각(goalParts)에서 온다. 「목표 채움」 글은 없다.
@@ -169,4 +170,158 @@ test('REQ-185 · 공부 측정 · 이미 채움 · 목표 없음 · 자정 너�
 test('REQ-187 · 새 칸은 선택이다 — 옛 값 {dateLabel, todayMinutes, mode}도 ReadingWidgetProps다', () => {
   const old: ReadingWidgetProps = { dateLabel: '10월 23일', todayMinutes: 32, mode: 'reading' };
   expect(Object.keys(old)).toHaveLength(3);
+});
+
+// ── W③ 큰 위젯 이번 달 달력(REQ-189 · 190) — 일요일 시작 · 날짜로 찾는다 ──
+// 서버 잔디는 weeks[0] = 최신 주(뒤집힘 — CLAUDE.md 「잔디 방향 규약」). 픽스처도 서버 순서 그대로 최신 주가 앞이고, 앞날은 날짜 null.
+// 가짜 자료 = 피그마 시안(2026년 10월 · 오늘 28일): 꽉 찬 점 8일(2 · 9 · 10 · 23~27) · 빈 원 4일(5 · 13 · 22 · 오늘 28 — 12분).
+const iso = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+function serverWeeks(today: Date, levels: Record<string, number>, n = 10): ContributionDay[][] {
+  const sunday = new Date(today.getFullYear(), today.getMonth(), today.getDate() - today.getDay());
+  const out: ContributionDay[][] = [];
+  for (let w = 0; w < n; w++) {
+    const week: ContributionDay[] = [];
+    for (let i = 0; i < 7; i++) {
+      const d = new Date(sunday.getFullYear(), sunday.getMonth(), sunday.getDate() - 7 * w + i);
+      const level = levels[iso(d)] ?? 0;
+      week.push(d > today ? { date: null, totalSeconds: 0, level: 0, manual: false } : { date: iso(d), totalSeconds: level * 600, level, manual: false });
+    }
+    out.push(week);
+  }
+  return out;
+}
+const oct28 = new Date(2026, 9, 28, 21, 0);
+const octLevels: Record<string, number> = {
+  '2026-09-30': 4, // 다른 달 — 무시
+  '2026-10-02': 4,
+  '2026-10-05': 1,
+  '2026-10-09': 4,
+  '2026-10-10': 4,
+  '2026-10-13': 3,
+  '2026-10-22': 2,
+  '2026-10-23': 4,
+  '2026-10-24': 4,
+  '2026-10-25': 4,
+  '2026-10-26': 4,
+  '2026-10-27': 4,
+  '2026-10-28': 2, // 오늘 — 서버 칸이 아니라 진행 중 몫을 얹은 판정이 정한다
+};
+const octIdle = { ...idle, todayReadSeconds: 12 * MIN, graph: { goalStreak: 5, currentStreak: 9, weeks: serverWeeks(oct28, octLevels) } };
+const cells = (m: Pick<WidgetMonth, 'rows'>) => m.rows.flat();
+const marksOf = (m: Pick<WidgetMonth, 'rows'>) => Object.fromEntries(cells(m).filter((c) => c.day > 0).map((c) => [c.day, c.mark]));
+const blanksBefore = (m: Pick<WidgetMonth, 'rows'>) => cells(m).findIndex((c) => c.day > 0);
+const blank = { seconds: 0, filled: false };
+
+test('REQ-189 · 달력 줄 — 2026년 10월은 앞 빈칸 4 · 31일 · 5줄, 8월은 앞 빈칸 6 · 6줄, 2028년 2월은 29일(윤년) · 모든 줄이 7칸', () => {
+  const months: [Date, number, number, number][] = [
+    [oct28, 4, 31, 5],
+    [new Date(2026, 7, 31, 12), 6, 31, 6],
+    [new Date(2028, 1, 15, 12), 2, 29, 5],
+    [new Date(2026, 1, 15, 12), 0, 28, 4], // 1일이 일요일인 28일 달 — 가장 적은 4줄(레이아웃 최소 높이)
+  ];
+  for (const [n, before, days, rows] of months) {
+    const m = widgetMonth([], n, blank);
+    expect(blanksBefore(m)).toBe(before);
+    expect(cells(m).filter((c) => c.day > 0).map((c) => c.day)).toEqual(Array.from({ length: days }, (_, i) => i + 1));
+    expect(m.rows).toHaveLength(rows);
+    for (const row of m.rows) expect(row).toHaveLength(7);
+    // 빈칸은 날 0 · 표식 0 — 위젯이 숫자 없는 자리로 그린다
+    for (const c of cells(m).filter((c) => c.day === 0)) expect(c).toEqual({ day: 0, mark: 0, today: false });
+  }
+});
+
+test('REQ-189 · 표식 — 4단계 = 2 · 1~3단계 = 1 · 0 = 0 · 앞날 = 0 · 다른 달(9월 30일 4단계) 무시 · 날짜 없는 칸 무시', () => {
+  const m = widgetPayload(octIdle, oct28).month!;
+  const marks = marksOf(m);
+  for (const d of [2, 9, 10, 23, 24, 25, 26, 27]) expect(marks[d]).toBe(2);
+  for (const d of [5, 13, 22, 28]) expect(marks[d]).toBe(1);
+  expect(Object.entries(marks).filter(([, k]) => k > 0)).toHaveLength(12);
+  expect(marks[1]).toBe(0); // 9월 30일이 앞 칸에 섞이지 않는다
+  // 앞날 — 기기 날짜가 서버보다 늦어 앞날 칸에 날짜 · 단계가 와도 표식은 없다
+  const ahead = serverWeeks(new Date(2026, 9, 30), { ...octLevels, '2026-10-29': 4, '2026-10-30': 4 });
+  expect(marksOf(widgetMonth(ahead, oct28, blank))[29]).toBe(0);
+});
+
+test('REQ-189 · 날짜로 찾는다 — weeks 순서를 뒤집어도(가장 옛 주가 앞) 같은 달력이다', () => {
+  const weeks = octIdle.graph.weeks;
+  const flipped = [...weeks].reverse().map((w) => [...w].reverse());
+  expect(widgetMonth(flipped, oct28, { seconds: 12 * MIN, filled: false })).toEqual(widgetMonth(weeks, oct28, { seconds: 12 * MIN, filled: false }));
+  // 양성 대조 — 단계를 하나 바꾸면 달력이 달라진다(같은 결과가 우연이 아니다)
+  const changed = serverWeeks(oct28, { ...octLevels, '2026-10-02': 1 });
+  expect(marksOf(widgetMonth(changed, oct28, blank))[2]).toBe(1);
+});
+
+test('REQ-189 · 오늘 칸은 진행 중 몫 — 서버 칸이 0단계여도 진행 중으로 채우면 2 · 읽기만 했으면 1 · 0초면 0 · 오늘만 today', () => {
+  const weeks = serverWeeks(oct28, { ...octLevels, '2026-10-28': 0 });
+  // 끝난 20분 + 20:45 시작 15분 = 35분 ≥ 30분
+  const run = widgetPayload({ ...octIdle, todayReadSeconds: 20 * MIN, hasActiveSession: true, activeStartedAt: new Date(2026, 9, 28, 20, 45).toISOString(), activeBookTitle: '데미안', graph: { goalStreak: 5, weeks } }, oct28);
+  expect(marksOf(run.month!)[28]).toBe(2);
+  expect(marksOf(widgetPayload({ ...octIdle, graph: { goalStreak: 5, weeks } }, oct28).month!)[28]).toBe(1);
+  // 서버 칸이 2단계라도 오늘 0초면(다른 기기 시간대 등) 진행 판정을 따른다
+  expect(marksOf(widgetPayload({ ...octIdle, todayReadSeconds: 0 }, oct28).month!)[28]).toBe(0);
+  const todays = cells(widgetPayload(octIdle, oct28).month!).filter((c) => c.today);
+  expect(todays.map((c) => c.day)).toEqual([28]);
+  // 목표 없음(0)이면 읽은 날 = 서버 4단계와 같은 뜻 — 오늘 12분도 꽉 찬 점이고 머리 연속은 없다(설계 §4.2 · §8-7)
+  const noGoal = widgetPayload({ ...octIdle, todayGoalSeconds: 0, graph: { goalStreak: 5, weeks: octIdle.graph.weeks } }, oct28).month!;
+  expect(marksOf(noGoal)[28]).toBe(2);
+  expect(noGoal).not.toHaveProperty('streak');
+});
+
+test('REQ-189 · 달이 바뀐 날 — 11월 1일(일요일)엔 11월 한 장 · 앞 빈칸 0 · 10월 칸은 안 보인다', () => {
+  const nov1 = new Date(2026, 10, 1, 0, 30);
+  const weeks = serverWeeks(nov1, octLevels);
+  const m = widgetPayload({ ...idle, todayReadSeconds: 0, graph: { goalStreak: 0, weeks } }, nov1).month!;
+  expect(m.title).toBe('11월');
+  expect(blanksBefore(m)).toBe(0);
+  expect(m.rows).toHaveLength(5);
+  expect(Object.values(marksOf(m)).filter((k) => k > 0)).toEqual([]);
+  expect(m.a11y).toBe('11월, 목표 채운 날 0일, 읽은 날 0일');
+});
+
+test('REQ-185 · 목표에 닿는 시각 항목에서는 오늘 칸이 2다 · 머리 연속 「6일째」', () => {
+  const d = { ...octIdle, todayReadSeconds: 10 * MIN, hasActiveSession: true, activeStartedAt: new Date(2026, 9, 28, 20, 50).toISOString(), activeBookTitle: '데미안' };
+  const t = widgetTimeline(d, oct28);
+  expect(t).toHaveLength(2);
+  expect(marksOf(t[0].props.month!)[28]).toBe(1);
+  expect(t[0].props.month!.streak).toBe('5일째');
+  expect(marksOf(t[1].props.month!)[28]).toBe(2);
+  expect(t[1].props.month!.streak).toBe('6일째');
+  expect(t[1].props.month!.a11y).toBe('10월, 목표 채운 날 9일, 읽은 날 12일');
+});
+
+// 둘째 줄 원문 = 설계 §4.4a 표 큰 위젯 열(홈 압박 PR 화해 — 「목표 채움」 없음). 글은 goalParts 조각 — 홈 목표 줄과 같은 출처다.
+test('REQ-190 · 둘째 줄 — 측정 전 · 채운 날 · 안 읽은 날 · 목표 없음 · 독서 측정 중(목표에 닿은 뒤도) · 책 없이 · 공부 — §4.4a 원문', () => {
+  const line = (d: WidgetSource, n = oct28) => widgetPayload(d, n).month!.line;
+  const run = { ...octIdle, todayReadSeconds: 10 * MIN, hasActiveSession: true, activeStartedAt: new Date(2026, 9, 28, 20, 50).toISOString(), activeBookTitle: '데미안' };
+  expect(line(octIdle)).toBe('10월 28일 · 오늘 12분 · 목표 30분');
+  expect(line({ ...octIdle, todayReadSeconds: 40 * MIN })).toBe('10월 28일 · 오늘 40분 · 목표 30분');
+  expect(line({ ...octIdle, todayReadSeconds: 59 })).toBe('10월 28일 · 하루 목표 30분');
+  expect(line({ ...octIdle, todayGoalSeconds: 0 })).toBe('10월 28일 · 오늘 12분 · 목표 없음');
+  expect(line({ ...octIdle, todayGoalSeconds: 0, todayReadSeconds: 0 })).toBe('10월 28일 · 하루 목표 없음');
+  expect(line(run)).toBe('읽는 중 · 목표 30분 · 『데미안』');
+  expect(widgetTimeline(run, oct28)[1].props.month!.line).toBe('읽는 중 · 목표 30분 · 『데미안』');
+  expect(line({ ...run, todayGoalSeconds: 0 })).toBe('읽는 중 · 목표 없음 · 『데미안』');
+  expect(line({ ...run, activeBookTitle: null })).toBe('읽는 중 · 목표 30분');
+  expect(line({ ...octIdle, study: studying })).toBe('공부 중 · 『선형대수학』');
+  // 같은 출처 — 측정 전 둘째 줄은 「날짜 · 홈 목표 줄(연속 뺌)」이다
+  const progress = goalProgress({ todayRead: 12 * MIN, goal: 30 * MIN, activeStartedAt: null, now: oct28.getTime(), nextMidnight: nextMidnightOf(oct28.getTime()), goalStreak: 5 });
+  expect(line(octIdle)).toBe(`10월 28일 · ${goalStatus({ progress, goal: 30 * MIN, measuring: false }).replace(' · 5일째', '')}`);
+});
+
+test('REQ-190 · 머리 「10월」 · 연속 「5일째」(goalStreak — 9가 아니다) · VoiceOver 한 문장 「10월, 목표 채운 날 8일, 읽은 날 12일」(읽은 날 = 빈 원 + 꽉 찬 점)', () => {
+  const m = widgetPayload(octIdle, oct28).month!;
+  expect(m.title).toBe('10월');
+  expect(m.streak).toBe('5일째');
+  expect(m.a11y).toBe('10월, 목표 채운 날 8일, 읽은 날 12일');
+});
+
+test('REQ-190 · 안 읽은 날 · 목표 없음이면 머리 연속 없음(REQ-184 규칙) · weeks가 없으면(옛 서버) 달력 없음', () => {
+  expect(widgetPayload({ ...octIdle, todayReadSeconds: 59 }, oct28).month).not.toHaveProperty('streak');
+  expect(widgetPayload({ ...octIdle, todayGoalSeconds: 0, graph: { ...octIdle.graph, goalStreak: 4 } }, oct28).month).not.toHaveProperty('streak');
+  expect(widgetPayload(idle, now)).not.toHaveProperty('month'); // 큰 위젯도 작은 배치(REQ-187)
+});
+
+test('REQ-186 · 로그아웃 값에는 달력이 없다', () => {
+  expect(signedOutWidget(oct28)).not.toHaveProperty('month');
+  expect(widgetPayload(octIdle, oct28)).toHaveProperty('month'); // 양성 대조
 });

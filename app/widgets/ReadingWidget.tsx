@@ -1,5 +1,7 @@
-import { HStack, Link, Spacer, Text, VStack } from '@expo/ui/swift-ui';
+import { Circle, HStack, Link, Spacer, Text, VStack } from '@expo/ui/swift-ui';
 import {
+  accessibilityElement,
+  accessibilityLabel,
   containerBackground,
   font,
   foregroundStyle,
@@ -29,6 +31,17 @@ export type ReadingWidgetProps = {
   runNote?: string;
   /** 측정 단추(REQ-180) — 앱을 여는 링크. 없으면 단추 없음(로그아웃 — REQ-186) */
   action?: { label: string; url: string };
+  /** 큰 위젯 이번 달 달력(REQ-189 · 190) — 없으면 큰 위젯도 작은 배치(옛 값 · 로그아웃) */
+  month?: WidgetMonth;
+};
+
+/** 칸: day 0 = 빈칸 · mark 2 꽉 찬 점(목표를 채운 날) · 1 빈 원(읽었지만 목표 전) · 0 없음. rows = 일요일 시작 7칸 줄. */
+export type WidgetMonth = {
+  title: string;
+  streak?: string;
+  line: string;
+  rows: { day: number; mark: 0 | 1 | 2; today: boolean }[][];
+  a11y: string;
 };
 
 // 시각 보충 §5.3 — 시스템 외형을 따른다. 배경만 paper · desk 리터럴(REQ-60 — widgetColors.test.ts가 토큰과 대조),
@@ -48,16 +61,82 @@ const ReadingWidget = (props: ReadingWidgetProps, environment: WidgetEnvironment
   const headline = [font({ textStyle: 'headline', weight: 'medium' }), primary];
   // 측정 단추(위젯 확장 REQ-180) — 앱을 여는 링크다. 위젯 런타임은 서버를 못 불러 누르는 쪽 단추(onPress)를 쓰지 않는다(설계 §3.2).
   // 주소는 값(props.action)에서만 온다 — 이 파일엔 주소 글이 없다(widgetIntent.test 가드). 테두리 알약 · 아래 오른쪽(큰 위젯 끝 줄과 같은 꼴).
-  const action = props.action ? (
+  const link = props.action ? (
+    <Link destination={props.action.url}>
+      <HStack modifiers={[padding({ horizontal: 14 }), frame({ height: 32 }), strokeBorder({ shape: 'capsule', style: { lineWidth: 1.5 } }), primary]}>
+        <Text modifiers={[font({ textStyle: 'subheadline', weight: 'medium' }), primary]}>{props.action.label}</Text>
+      </HStack>
+    </Link>
+  ) : null;
+  const action = link ? (
     <HStack>
       <Spacer />
-      <Link destination={props.action.url}>
-        <HStack modifiers={[padding({ horizontal: 14 }), frame({ height: 32 }), strokeBorder({ shape: 'capsule', style: { lineWidth: 1.5 } }), primary]}>
-          <Text modifiers={[font({ textStyle: 'subheadline', weight: 'medium' }), primary]}>{props.action.label}</Text>
-        </HStack>
-      </Link>
+      {link}
     </HStack>
   ) : null;
+  const month = props.month;
+  if (environment.widgetFamily === 'systemLarge' && month) {
+    // 큰 위젯 이번 달 달력(REQ-189 · 190 — 피그마 F-W2 · F-W3 안A 확정 배치). Grid는 위젯 렌더러에 없다 — 줄 HStack · 칸 VStack.
+    // 표식은 모양으로 가른다(REQ-191): 꽉 찬 점 = 목표를 채운 날 · 빈 원 = 읽었지만 목표 전 · 없음 = 같은 7pt 빈 자리(줄 높이가 흔들리지 않게).
+    // 빈 원은 빈 자리(Spacer)에 테두리를 얹는다 — Circle은 칠해져서 strokeBorder(= overlay)를 얹어도 꽉 찬 점이 된다(ExpoUI StrokeBorderModifier).
+    const cell = frame({ maxWidth: Infinity });
+    const dot = frame({ width: 7, height: 7 });
+    const secondary = foregroundStyle({ type: 'hierarchical', style: 'secondary' });
+    const upper = props.activeStartedAt ? new Date(props.activeStartedAt + 22200000) : null;
+    return (
+      <VStack alignment="leading" spacing={0} modifiers={box}>
+        <HStack>
+          <Text modifiers={[font({ textStyle: 'headline' }), primary]}>{month.title}</Text>
+          <Spacer />
+          {month.streak ? <Text modifiers={[font({ textStyle: 'subheadline', weight: 'medium' }), secondary]}>{month.streak}</Text> : null}
+        </HStack>
+        <Text modifiers={[font({ textStyle: 'footnote' }), secondary, lineLimit(1), padding({ top: 2 })]}>{month.line}</Text>
+        <Spacer />
+        <VStack spacing={4} modifiers={[accessibilityElement('ignore'), accessibilityLabel(month.a11y)]}>
+          <HStack spacing={0} modifiers={[padding({ bottom: 2 })]}>
+            {['일', '월', '화', '수', '목', '금', '토'].map((w) => (
+              <Text key={w} modifiers={[...caption, cell]}>
+                {w}
+              </Text>
+            ))}
+          </HStack>
+          {month.rows.map((row, i) => (
+            <HStack key={'r' + i} spacing={0}>
+              {row.map((c, j) =>
+                c.day === 0 ? (
+                  <Spacer key={'c' + j} modifiers={[cell]} />
+                ) : (
+                  <VStack key={'c' + j} spacing={3} modifiers={[cell]}>
+                    <Text modifiers={[font({ textStyle: 'subheadline', weight: c.today ? 'bold' : 'regular' }), monospacedDigit(), primary]}>{c.day + ''}</Text>
+                    {c.mark === 2 ? (
+                      <Circle modifiers={[dot, primary]} />
+                    ) : c.mark === 1 ? (
+                      <Spacer modifiers={[dot, strokeBorder({ shape: 'circle', style: { lineWidth: 1.5 } }), primary]} />
+                    ) : (
+                      <Spacer modifiers={[dot]} />
+                    )}
+                  </VStack>
+                ),
+              )}
+            </HStack>
+          ))}
+        </VStack>
+        <Spacer />
+        <HStack modifiers={[frame({ height: 32 })]}>
+          {upper ? (
+            <Text
+              timerInterval={{ lower: new Date(props.activeStartedAt!), upper }}
+              countsDown={false}
+              pauseTime={upper}
+              modifiers={[font({ textStyle: 'title2', weight: 'medium' }), monospacedDigit(), primary]}
+            />
+          ) : null}
+          <Spacer />
+          {link}
+        </HStack>
+      </VStack>
+    );
+  }
   if (props.activeStartedAt) {
     // 상한(시작 + 6시간 10분 = 22,200,000ms)에서 멈춘다 — Live Activity와 같은 방식(시각 보충 §5.3).
     const lower = new Date(props.activeStartedAt);
