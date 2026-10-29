@@ -77,8 +77,9 @@ test('REQ-158 · 개발 변형은 이름 · 앱 스킴 · 번들 ID · 카카오
 test('REQ-159 · APP_VARIANT가 정확히 development가 아니면 production 값이다', () => {
   for (const v of [undefined, '', 'production', 'preview', 'dev', 'Development']) {
     const c = configWith(v);
-    expect([v, c.name, (c.scheme as string[])[0], c.ios?.bundleIdentifier, kakaoKey(c)]).toEqual([
+    expect([v, c.name, c.ios?.infoPlist?.CFBundleName, (c.scheme as string[])[0], c.ios?.bundleIdentifier, kakaoKey(c)]).toEqual([
       v,
+      '책생글',
       '책생글',
       'booktimer',
       'com.goospel.chaeksaenggeul',
