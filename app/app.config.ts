@@ -18,14 +18,16 @@ const GOOGLE_IOS_URL_SCHEME = 'com.googleusercontent.apps.20889772436-j1vun6jjup
 const KAKAO_NATIVE_APP_KEY = DEV ? 'bfbfa22db12bfb12770dbac22e8215b0' : '0fb70962dd03100ad2d0efa10c947c31';
 // 종이색 = tokens.ts color.paper(app-config.test.ts가 대조한다 — 여기서 import하면 tokens.ts가 지문 원천이 된다).
 const PAPER = '#F5F0E6';
+// 한글 name은 Expo sanitizedName에서 'app'이 되어 CFBundleName = $(PRODUCT_NAME) = app → 구글 로그인 시스템 창에 「app」(2026-10-29) — CFBundleName을 이 값으로 덮는다.
+const NAME = DEV ? '책생글 개발' : '책생글';
 
 const config: ExpoConfig = {
   owner: 'goospels-app',
-  name: DEV ? '책생글 개발' : '책생글',
+  name: NAME,
   slug: 'chaeksaenggeul',
   // 앱 스킴이 맨 앞이어야 한다 — expo-linking이 첫 칸으로 앱 주소를 만든다(개발 변형 §4.7). 둘째 칸 = 구글 역순 클라이언트 ID.
   scheme: [DEV ? 'booktimer-dev' : 'booktimer', GOOGLE_IOS_URL_SCHEME],
-  version: '1.1.0',
+  version: '1.2.0',
   orientation: 'portrait',
   icon: './assets/icon.png',
   userInterfaceStyle: 'light',
@@ -44,6 +46,9 @@ const config: ExpoConfig = {
       tinted: './assets/icon-ios-tinted.png',
     },
     usesAppleSignIn: true,
+    infoPlist: {
+      CFBundleName: NAME,
+    },
     config: {
       usesNonExemptEncryption: false,
     },

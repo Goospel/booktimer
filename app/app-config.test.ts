@@ -60,13 +60,13 @@ test('REQ-158 · 개발 변형은 이름 · 앱 스킴 · 번들 ID · 카카오
   expect((dev.scheme as string[])[0]).toBe('booktimer-dev');
   expect(dev.ios?.bundleIdentifier).toBe('com.goospel.chaeksaenggeul.dev');
   expect(kakaoKey(dev)).toBe(KAKAO.dev);
-  // 바뀌어도 되는 칸 = 이름 · 앱 스킴(첫 칸) · 번들 ID · 카카오 키 한 칸(개발 변형 §4.7). 구글 역순 스킴(둘째 칸)은 같아야 한다.
+  // 바뀌어도 되는 칸 = 이름(과 같은 값인 CFBundleName — REQ-192) · 앱 스킴(첫 칸) · 번들 ID · 카카오 키 한 칸(개발 변형 §4.7). 구글 역순 스킴(둘째 칸)은 같아야 한다.
   // 플러그인 · 권한 문구 · version · runtimeVersion · updates · 위젯 설정이 갈라지면 개발 빌드가 TF 바이너리의 예행이 아니게 된다
   const rest = (c: ExpoConfig) => ({
     ...c,
     name: null,
     scheme: (c.scheme as string[]).slice(1),
-    ios: { ...c.ios, bundleIdentifier: null },
+    ios: { ...c.ios, bundleIdentifier: null, infoPlist: { ...c.ios?.infoPlist, CFBundleName: null } },
     plugins: c.plugins?.map((p) =>
       Array.isArray(p) && p[0] === '@react-native-kakao/core' ? [p[0], { ...(p[1] as object), nativeAppKey: null }] : p,
     ),
@@ -77,8 +77,9 @@ test('REQ-158 · 개발 변형은 이름 · 앱 스킴 · 번들 ID · 카카오
 test('REQ-159 · APP_VARIANT가 정확히 development가 아니면 production 값이다', () => {
   for (const v of [undefined, '', 'production', 'preview', 'dev', 'Development']) {
     const c = configWith(v);
-    expect([v, c.name, (c.scheme as string[])[0], c.ios?.bundleIdentifier, kakaoKey(c)]).toEqual([
+    expect([v, c.name, c.ios?.infoPlist?.CFBundleName, (c.scheme as string[])[0], c.ios?.bundleIdentifier, kakaoKey(c)]).toEqual([
       v,
+      '책생글',
       '책생글',
       'booktimer',
       'com.goospel.chaeksaenggeul',
@@ -96,9 +97,18 @@ test('REQ-103 · iPad를 지원하고 전체 화면을 강제하지 않으며 iP
   expect(c.orientation).toBe('portrait');
 });
 
-test('REQ-188 · version은 1.1.0이고 지문 잠금 파일의 version과 같다', () => {
-  expect(configWith(undefined).version).toBe('1.1.0');
-  expect(require('./fingerprint.lock.json').version).toBe('1.1.0');
+test('REQ-188 · REQ-192 · version은 1.2.0이고 지문 잠금 파일의 version과 같다', () => {
+  expect(configWith(undefined).version).toBe('1.2.0');
+  expect(require('./fingerprint.lock.json').version).toBe('1.2.0');
+});
+
+test('REQ-192 · 두 변형 모두 ios.infoPlist.CFBundleName이 그 변형의 이름이고 Apple 한도 15자 이하다', () => {
+  // 한글 name은 Expo sanitizedName에서 'app'이 되어 CFBundleName = $(PRODUCT_NAME) = app → 구글 로그인 시스템 창에 「app」(2026-10-29)
+  for (const [v, name] of [[undefined, '책생글'], ['development', '책생글 개발']] as const) {
+    const c = configWith(v);
+    expect([v, c.name, c.ios?.infoPlist?.CFBundleName]).toEqual([v, name, name]);
+    expect([...name].length).toBeLessThanOrEqual(15);
+  }
 });
 
 test('REQ-188 · 위젯은 ReadingWidget 하나 · 작은 · 큰 두 크기 · 설명 「오늘 읽은 시간과 읽은 날」이고 두 변형이 같다', () => {
