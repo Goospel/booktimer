@@ -35,6 +35,17 @@ export interface BookOption {
 }
 
 /**
+ * `ContributionDay` — 잔디 한 칸 = 하루. date null = 빈 칸(앞날 · 가장자리). level 0 안 읽음 · 1~3 목표 미만 · 4 그날 목표를 채운 날.
+ * ⚠️ `weeks[0]` = 최신 주(서버가 뒤집는다) — 순서를 가정하지 말고 날짜로 찾는다.
+ */
+export interface ContributionDay {
+  date: string | null;
+  totalSeconds: number;
+  level: number;
+  manual: boolean;
+}
+
+/**
  * `GET /api/dashboard`(`DashboardResponse`) 중 앱이 읽는 것만. 밀린 시간 필드는 일부러 없다(REQ-91 — 금지 표).
  * `todayReadSeconds`는 끝난 세션만이다 — 진행 중 몫은 앱이 얹는다(lib/goalProgress).
  */
@@ -48,8 +59,8 @@ export interface Dashboard {
   readingBooks: BookOption[];
   wantToReadBooks: BookOption[];
   recentBookId: number | null;
-  /** 목표를 채운 날의 연속(REQ-89 — 서버 PR-F). 옛 서버엔 없다. */
-  graph: { goalStreak?: number };
+  /** 목표를 채운 날의 연속(REQ-89 — 서버 PR-F). 옛 서버엔 없다. weeks = 잔디 53주(큰 위젯 달력 — REQ-189) */
+  graph: { goalStreak?: number; weeks?: ContributionDay[][] };
   /** 공부 모드(PR-S1 — `StudyApiController.StudyState`). 독서 · 공부는 서로를 막는다(409). */
   study: StudyState;
 }
