@@ -217,6 +217,7 @@ test('REQ-189 · 달력 줄 — 2026년 10월은 앞 빈칸 4 · 31일 · 5줄, 
     [oct28, 4, 31, 5],
     [new Date(2026, 7, 31, 12), 6, 31, 6],
     [new Date(2028, 1, 15, 12), 2, 29, 5],
+    [new Date(2026, 1, 15, 12), 0, 28, 4], // 1일이 일요일인 28일 달 — 가장 적은 4줄(레이아웃 최소 높이)
   ];
   for (const [n, before, days, rows] of months) {
     const m = widgetMonth([], n, blank);
@@ -260,6 +261,10 @@ test('REQ-189 · 오늘 칸은 진행 중 몫 — 서버 칸이 0단계여도 �
   expect(marksOf(widgetPayload({ ...octIdle, todayReadSeconds: 0 }, oct28).month!)[28]).toBe(0);
   const todays = cells(widgetPayload(octIdle, oct28).month!).filter((c) => c.today);
   expect(todays.map((c) => c.day)).toEqual([28]);
+  // 목표 없음(0)이면 읽은 날 = 서버 4단계와 같은 뜻 — 오늘 12분도 꽉 찬 점이고 머리 연속은 없다(설계 §4.2 · §8-7)
+  const noGoal = widgetPayload({ ...octIdle, todayGoalSeconds: 0, graph: { goalStreak: 5, weeks: octIdle.graph.weeks } }, oct28).month!;
+  expect(marksOf(noGoal)[28]).toBe(2);
+  expect(noGoal).not.toHaveProperty('streak');
 });
 
 test('REQ-189 · 달이 바뀐 날 — 11월 1일(일요일)엔 11월 한 장 · 앞 빈칸 0 · 10월 칸은 안 보인다', () => {

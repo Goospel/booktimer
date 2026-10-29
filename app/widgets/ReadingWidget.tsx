@@ -78,6 +78,7 @@ const ReadingWidget = (props: ReadingWidgetProps, environment: WidgetEnvironment
   if (environment.widgetFamily === 'systemLarge' && month) {
     // 큰 위젯 이번 달 달력(REQ-189 · 190 — 피그마 F-W2 · F-W3 안A 확정 배치). Grid는 위젯 렌더러에 없다 — 줄 HStack · 칸 VStack.
     // 표식은 모양으로 가른다(REQ-191): 꽉 찬 점 = 목표를 채운 날 · 빈 원 = 읽었지만 목표 전 · 없음 = 같은 7pt 빈 자리(줄 높이가 흔들리지 않게).
+    // 빈 원은 빈 자리(Spacer)에 테두리를 얹는다 — Circle은 칠해져서 strokeBorder(= overlay)를 얹어도 꽉 찬 점이 된다(ExpoUI StrokeBorderModifier).
     const cell = frame({ maxWidth: Infinity });
     const dot = frame({ width: 7, height: 7 });
     const secondary = foregroundStyle({ type: 'hierarchical', style: 'secondary' });
