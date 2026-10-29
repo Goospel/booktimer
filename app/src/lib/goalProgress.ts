@@ -68,14 +68,25 @@ export function goalChoices(current: number): { seconds: number; title: string; 
 /**
  * 홈 목표 줄 글(REQ-176 · 177). 안 읽은 날(측정 전 · 분 아래를 버려 「0분」이 찍힐 초)이면 「오늘 0분」도, 오늘 걸린 연속도 쓰지 않는다
  * — 0/목표 꼴과 이어 가야 할 연속이 점수로 읽힌다. 목표 없음이면 연속을 보이지 않는다(점수를 고르지 않은 사람).
- * 단서는 어느 상태든 「바꾸기」라 화면이 붙인다.
+ * 단서는 어느 상태든 「바꾸기」라 화면이 붙인다. 글은 goalParts 조각을 잇기만 한다 — 위젯이 같은 조각을 자리별로 쓴다(REQ-184).
  */
 export function goalStatus(p: { progress: GoalProgress; goal: number; measuring: boolean }): string {
+  const s = goalParts(p);
+  return [s.today && `오늘 ${s.today}`, s.goal, s.streak].filter(Boolean).join(' · ');
+}
+
+export interface GoalParts {
+  today?: string;
+  goal: string;
+  streak?: string;
+}
+
+/** 홈 목표 줄의 조각(REQ-176 · 177 · 184) — 홈은 잇고 위젯은 나눠 쓴다. 안 읽은 날(측정 전 · 1분 미만)엔 goal 하나(「하루 목표 30분」). */
+export function goalParts(p: { progress: GoalProgress; goal: number; measuring: boolean }): GoalParts {
   const target = p.goal > 0 ? `목표 ${durationLabel(p.goal)}` : NO_GOAL;
-  if (!p.measuring && p.progress.todaySeconds < 60) return `하루 ${target}`;
-  const parts = [`오늘 ${durationLabel(p.progress.todaySeconds)}`, target];
-  if (p.goal > 0 && p.progress.streak > 0) parts.push(`${p.progress.streak}일째`);
-  return parts.join(' · ');
+  if (!p.measuring && p.progress.todaySeconds < 60) return { goal: `하루 ${target}` };
+  const streak = p.goal > 0 && p.progress.streak > 0 ? `${p.progress.streak}일째` : undefined;
+  return { today: durationLabel(p.progress.todaySeconds), goal: target, streak };
 }
 
 /** 대시보드를 읽은 뒤 자정을 넘겼는가 — 끝난 몫 · 연속이 전날 값이라 다시 읽어야 한다. */

@@ -11,11 +11,12 @@ import { Cover } from '../../components/Cover';
 import { Badge, Button, Notice, Screen, Txt, useStacked } from '../../components/ui';
 import { clockLabel, durationLabel, objectParticle } from '../../lib/format';
 import { isStaleDay, nextMidnightOf, SESSION_CAP_MS } from '../../lib/goalProgress';
-import { startMeasure, stopMeasure } from '../../lib/measureStart';
+import { ALREADY_STOPPED, startMeasure, stopMeasure } from '../../lib/measureStart';
 import { defaultStudyBook, removeStudyBook, studyMeta } from '../../lib/studyShelf';
 import { studyToday } from '../../lib/studyTimer';
 import { syncSurfaces } from '../../lib/surfaces';
 import { useMeasureShortcut } from '../../lib/useMeasureShortcut';
+import { useWidgetIntent } from '../../lib/useWidgetIntent';
 import { color, layout, line, space } from '../../theme/tokens';
 
 /** 알림 자리는 둘이고 상태는 하나다 — 시작 · 정지 실패는 막대 안, 빼기 실패는 공부 서재 단 맨 위(사양 §8-20). */
@@ -118,6 +119,8 @@ export default function Study() {
   const book = s ? defaultStudyBook(s.books, s.recentBookId, pickedId) : null;
   // Option+P = 지금 보이는 측정 버튼(REQ-105): 측정 중 「측정 종료」 · 측정 전 「공부 시작」 · 빈 서재 「책 없이 시간만 재기」
   useMeasureShortcut({ button: !dash || !s ? null : measuring ? stop : book ? () => start(book.id) : () => start(null), busy, covered: false });
+  // 위젯 「공부 중」 [측정 종료](위젯 확장 REQ-183) — 시작 처리기는 넘기지 않는다(위젯엔 공부 시작 주소가 없다)
+  useWidgetIntent({ mode: 'study', fresh: dash, measuring, button: measuring ? stop : null, onAlreadyStopped: () => setNotice({ message: ALREADY_STOPPED, at: 'bar' }) });
 
   if (!dash || !s) {
     return (

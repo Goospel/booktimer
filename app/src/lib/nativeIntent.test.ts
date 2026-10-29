@@ -1,5 +1,17 @@
 // 라우트 폴더(src/app) 안의 파일은 화면으로 잡히므로 테스트는 여기에 둔다.
 import { redirectSystemPath } from '../app/+native-intent';
+import { widgetIntent } from './widgetIntent';
+
+describe('redirectSystemPath — 위젯 단추(REQ-181)', () => {
+  test('REQ-181 · redirectSystemPath — 위젯 주소는 요청을 걸고 탭 경로를 낸다', () => {
+    widgetIntent.take('study', 0); // 앞 칸 비우기
+    expect(redirectSystemPath({ path: 'booktimer://widget/stop-study', initial: false })).toBe('/study');
+    const i = widgetIntent.take('study', Date.now());
+    expect(i).toMatchObject({ action: 'stop', mode: 'study' });
+    expect(redirectSystemPath({ path: 'booktimer-dev://widget/start', initial: true })).toBe('/');
+    expect(widgetIntent.take('reading', Date.now())).toMatchObject({ action: 'start', mode: 'reading' });
+  });
+});
 
 describe('redirectSystemPath — 카카오톡 로그인 복귀', () => {
   it('카카오 복귀 주소는 라우터에 넘기지 않는다(카카오 SDK 몫 — 넘기면 Unmatched Route)', () => {
