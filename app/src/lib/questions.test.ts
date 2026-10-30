@@ -7,12 +7,16 @@ const round = (step: Step, n: number, focus: string | null = null): Round => ({
   questions: [{ text: `${step} ${n}번째 질문인가요?`, anchor: null }],
 });
 
-test('REQ-137 · 띠 빈 문구는 책이 없으면 책 없음 · 라운드 0에 보낼 여백이 0이면 여백 안내 · 그 밖은 「질문을 고르거나, 그냥 써도 돼요」다', () => {
-  expect(bandHint({ rounds: 0, aiIncluded: 3, hasBook: false })).toBe('책이 지워진 글이라 첫 질문은 받을 수 없어요');
-  expect(bandHint({ rounds: 0, aiIncluded: 0, hasBook: true })).toBe('이 책에 여백을 하나 남기면 질문을 받을 수 있어요');
-  expect(bandHint({ rounds: 0, aiIncluded: 3, hasBook: true })).toBe('질문을 고르거나, 그냥 써도 돼요');
-  // 라운드를 받은 뒤에는 책이 풀려도 · 여백이 0이어도 꼬리 질문은 된다
-  expect(bandHint({ rounds: 2, aiIncluded: 0, hasBook: false })).toBe('질문을 고르거나, 그냥 써도 돼요');
+test('REQ-225 · 읽을 것이 없을 때만 빈 띠 문구 「문장이나 생각을 적으면 질문을 받을 수 있어요」', () => {
+  const EMPTY = '문장이나 생각을 적으면 질문을 받을 수 있어요';
+  const OTHER = '질문을 고르거나, 그냥 써도 돼요';
+  expect(bandHint({ rounds: 0, quote: null, thought: '', boxes: 0 })).toBe(EMPTY);
+  expect(bandHint({ rounds: 0, quote: ' ', thought: '.', boxes: 0 })).toBe(EMPTY); // 문장부호 · 공백뿐
+  expect(bandHint({ rounds: 0, quote: null, thought: '남은 생각', boxes: 0 })).toBe(OTHER);
+  expect(bandHint({ rounds: 0, quote: '옮긴 문장', thought: '', boxes: 0 })).toBe(OTHER);
+  expect(bandHint({ rounds: 0, quote: null, thought: '', boxes: 1 })).toBe(OTHER);
+  // 라운드를 받은 뒤엔 꼬리 질문 차례 — 빈 문구가 아니다
+  expect(bandHint({ rounds: 2, quote: null, thought: '', boxes: 0 })).toBe(OTHER);
 });
 
 test('REQ-139 · 펼치는 것은 마지막 라운드이고 지난 라운드는 최근 것부터 하나로 접는다', () => {

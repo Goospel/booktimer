@@ -329,9 +329,9 @@ export default function DraftWrite() {
   }
 
   const rounds = draft.questions.rounds.length;
-  const hasBook = draft.bookId !== null;
-  const included = materials?.included ?? 0;
-  const ai = aiButton({ rounds, body: bodyText, aiIncluded: included, hasBook });
+  // 옛 글 화면 — A1 화면 몫이 이 파일을 지운다(§6.2). 그때까지 쪽지와 같은 판정(J98)에 본문만 넘긴다.
+  const aiInput = { rounds, quote: null, thought: bodyText, boxes: 0 };
+  const ai = aiButton(aiInput);
   const again = againArgs(draft.questions);
   const waitingText = waiting === 'ASK' ? '여백을 읽고 질문을 고르는 중이에요' : waiting === 'FOLLOW' ? '내 글을 읽고 질문을 고르는 중이에요' : null;
   const openQuestions = () => {
@@ -348,7 +348,7 @@ export default function DraftWrite() {
         <View style={{ paddingTop: headerHeight + space[3] }}>
           <QuestionBand
             question={focus}
-            hint={bandHint({ rounds, aiIncluded: included, hasBook })}
+            hint={bandHint(aiInput)}
             waiting={waitingText}
             onPress={rounds > 0 ? openQuestions : undefined}
           />

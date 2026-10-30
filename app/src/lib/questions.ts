@@ -1,10 +1,10 @@
 // 질문 띠 · 질문 시트의 보기 모양(PR-H 사양 REQ-137 · 139 · §8-9 · §8-11).
 import type { Question, QuestionLog, Round, Step } from '../api/types';
+import { hasMaterial, type NoteAiInput } from './aiStep';
 
-/** 빈 띠 문구 — 라운드 0에서만 책 · 여백 사정을 알린다(꼬리 질문은 내 글을 읽는다). */
-export function bandHint(p: { rounds: number; aiIncluded: number; hasBook: boolean }): string {
-  if (p.rounds === 0 && !p.hasBook) return '책이 지워진 글이라 첫 질문은 받을 수 없어요';
-  if (p.rounds === 0 && p.aiIncluded === 0) return '이 책에 여백을 하나 남기면 질문을 받을 수 있어요';
+/** 빈 띠 문구 — 라운드 0에 지금 쪽지에 읽을 것이 없을 때만 알린다(J98 · F1 §4.5 — 꼬리 질문은 내 글을 읽는다). */
+export function bandHint(p: NoteAiInput): string {
+  if (p.rounds === 0 && !hasMaterial(p)) return '문장이나 생각을 적으면 질문을 받을 수 있어요';
   return '질문을 고르거나, 그냥 써도 돼요';
 }
 

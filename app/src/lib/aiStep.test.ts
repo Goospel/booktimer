@@ -185,15 +185,15 @@ test('REQ-140 · /ai가 403이면 알림 문구가 아니라 동의 상태를 �
 });
 
 describe('REQ-138 · 아래 막대 AI 단추', () => {
-  const base = { rounds: 0, body: '', aiIncluded: 3, hasBook: true };
+  const base = { rounds: 0, quote: null as string | null, thought: '남은 생각', boxes: 0 };
 
   test('REQ-138 · 라운드 0이면 질문 받기(ASK), 1 이상이면 꼬리 질문(FOLLOW)이다', () => {
     expect(aiButton(base)).toEqual({ step: 'ASK', label: '질문 받기', disabled: false });
-    expect(aiButton({ ...base, rounds: 1, body: 'ㄱ'.repeat(30) })).toEqual({ step: 'FOLLOW', label: '꼬리 질문', disabled: false });
+    expect(aiButton({ ...base, rounds: 1, thought: 'ㄱ'.repeat(30) })).toEqual({ step: 'FOLLOW', label: '꼬리 질문', disabled: false });
   });
 
   test('REQ-138 · 꼬리 질문은 앞뒤 공백 뺀 본문 29자면 꺼지고 30자면 켜진다', () => {
-    const at = (body: string) => aiButton({ ...base, rounds: 1, body }).disabled;
+    const at = (thought: string) => aiButton({ ...base, rounds: 1, thought }).disabled;
     expect(at('가'.repeat(29))).toBe(true);
     expect(at('가'.repeat(30))).toBe(false);
     expect(at(`     ${'가'.repeat(29)}     `)).toBe(true); // 29자 + 앞뒤 공백 10 — 서버 strip()과 같다
@@ -201,14 +201,18 @@ describe('REQ-138 · 아래 막대 AI 단추', () => {
   });
 
   test('REQ-138 · 라운드 8이면 꺼지고 7이면 켜진다', () => {
-    const body = '가'.repeat(40);
-    expect(aiButton({ ...base, rounds: 8, body }).disabled).toBe(true);
-    expect(aiButton({ ...base, rounds: 7, body }).disabled).toBe(false);
+    const thought = '가'.repeat(40);
+    expect(aiButton({ ...base, rounds: 8, thought }).disabled).toBe(true);
+    expect(aiButton({ ...base, rounds: 7, thought }).disabled).toBe(false);
   });
 
-  test('REQ-138 · 질문 받기는 보낼 여백이 0개이거나 책이 없으면 꺼진다', () => {
-    expect(aiButton({ ...base, aiIncluded: 0 }).disabled).toBe(true);
-    expect(aiButton({ ...base, hasBook: false }).disabled).toBe(true);
-    expect(aiButton(base).disabled).toBe(false);
+  // J98 — 묻는 대상은 지금 쪽지다: 책 유무 · 같은 책 다른 쪽지 수와 무관하게 지금 쪽지에 읽을 것이 있으면 켜진다.
+  test('REQ-225 · 질문 받기는 지금 쪽지의 글만 본다 — 생각만 · 옮긴 문장만 · 박스만이어도 켜짐 · 빈 쪽지 · 문장부호뿐이면 꺼짐', () => {
+    const off = (p: Partial<typeof base>) => aiButton({ ...base, ...p }).disabled;
+    expect(off({ thought: '남은 생각' })).toBe(false); // 생각만(책 없는 쪽지도 같은 입력)
+    expect(off({ thought: '', quote: '새는 알에서 나오려고 투쟁한다.' })).toBe(false); // 옮긴 문장만
+    expect(off({ thought: '.', boxes: 1 })).toBe(false); // 건 블로그 문장 박스만(B1)
+    expect(off({ thought: '' })).toBe(true); // 빈 쪽지
+    expect(off({ thought: '  …?! ', quote: '   ' })).toBe(true); // 문장부호 · 공백뿐
   });
 });
