@@ -217,14 +217,15 @@ public class StoryService {
 
     /** 옛 API 응답의 생각 — {@value #LEGACY_TEXT_MAX}자를 넘으면 잘라 끝에 「…」(J85 — 옛 상한 안으로). */
     static String legacyText(String text) {
-        if (text.length() <= LEGACY_TEXT_MAX) {
+        return text.length() <= LEGACY_TEXT_MAX ? text : cut(text, LEGACY_TEXT_MAX - 1) + "…";
+    }
+
+    /** 앞 {@code max}자까지 — 이모지 같은 서로게이트 쌍을 반으로 가르지 않는다(반쪽 글자 → �). 자르는 자리에 걸리면 쌍째 뺀다. */
+    public static String cut(String text, int max) {
+        if (text.length() <= max) {
             return text;
         }
-        int end = LEGACY_TEXT_MAX - 1;
-        if (Character.isHighSurrogate(text.charAt(end - 1))) {
-            end--; // 이모지 같은 서로게이트 쌍을 반으로 가르지 않는다(반쪽 글자 → �)
-        }
-        return text.substring(0, end) + "…";
+        return text.substring(0, Character.isHighSurrogate(text.charAt(max - 1)) ? max - 1 : max);
     }
 
     // ── 함께 걸기 · 좋아요(옛 경로 — 본인만) ────────────────────────────────────

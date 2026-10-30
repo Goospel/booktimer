@@ -99,7 +99,7 @@ class MarginLedgerMigrationTest {
     }
 
     @Test
-    @DisplayName("REQ-215 · 픽스처 8행 대조 — 다 빈 글만 0행 · 10,102자 그대로 · 책 없음은 book null · 원가 · 시각 · 내보낸 시각 · story_id 되적기")
+    @DisplayName("REQ-215 · 픽스처 10행 대조 — 다 빈 글 · 공백뿐인 글만 0행 · 10,102자 그대로 · 책 없음은 book null · 원가 · 시각 · 내보낸 시각 · story_id 되적기")
     void v105_copiesDraftsToNotes() throws Exception {
         String url = freshDb();
         Flyway.configure().dataSource(url, "sa", "").target("103").load().migrate();
@@ -119,14 +119,20 @@ class MarginLedgerMigrationTest {
             draft.put("exported", insert(st, cols + bookId + ", null, '내보낸 글', 2, null, null, 0, timestamp '2026-10-23 00:00:00', " + at));
             draft.put("noBook", insert(st, cols + "null, null, '책이 풀린 글', 1, null, null, 0, null, " + at));
             draft.put("max", insert(st, cols + bookId + ", '" + TITLE_100 + "', '" + BODY_10000 + "', 9, null, null, 0, null, " + at));
+            // 공백뿐인 본문은 빈 것으로 친다(isBlank) — 줄바꿈 섞인 공백만 남은 글은 안 옮기고, 제목이 있으면 제목만
+            draft.put("blankBody", insert(st, cols + bookId + ", null, '  \n ', 1, null, null, 0, null, " + at));
+            draft.put("titleBlankBody", insert(st, cols + bookId + ", '제목', '   ', 1, null, null, 0, null, " + at));
         }
 
         Flyway.configure().dataSource(url, "sa", "").load().migrate();
 
         try (Connection c = DriverManager.getConnection(url, "sa", ""); Statement st = c.createStatement()) {
-            assertThat(count(st, "select count(*) from story")).as("8행 중 다 빈 글만 빠진다").isEqualTo(7);
+            assertThat(count(st, "select count(*) from story")).as("10행 중 다 빈 글 · 공백뿐인 글만 빠진다").isEqualTo(8);
             assertThat(count(st, "select count(*) from writing_draft where id = " + draft.get("empty") + " and story_id is null"))
                     .isEqualTo(1);
+            assertThat(count(st, "select count(*) from writing_draft where id = " + draft.get("blankBody") + " and story_id is null"))
+                    .as("공백뿐인 본문은 옮기지 않는다").isEqualTo(1);
+            assertThat(text(st, draft.get("titleBlankBody"))).as("공백 본문은 붙이지 않는다").isEqualTo("제목");
             assertThat(text(st, draft.get("both"))).isEqualTo("제목\n\n본문");
             assertThat(text(st, draft.get("bodyOnly"))).isEqualTo("본문만");
             assertThat(text(st, draft.get("titleOnly"))).isEqualTo("제목만");
