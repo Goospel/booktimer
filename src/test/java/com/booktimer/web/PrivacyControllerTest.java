@@ -183,7 +183,7 @@ class PrivacyControllerTest {
      * 책생글 K2 개정 공지일(KST) = K2 머지 예정일. 머지가 이 날을 넘기면 두 문서의 「개정 공지」 날짜와 이 값을 실제 머지일로 고치고,
      * E2 − 이 값 &lt; 31이면 E2({@code WritingService.AI_EXPANDED_EFFECTIVE})와 두 문서의 E2 자리도 다시 센다.
      */
-    private static final String K2_NOTICE = "2026-10-31";
+    private static final String K2_NOTICE = "2026-10-30";
 
     /** 넓어진 AI · 블로그 시행일 — 한 곳({@code WritingService.AI_EXPANDED_EFFECTIVE})에서 읽는다(WritingNoticeDateTest가 두 문서와 대조). */
     private static final String E2 = com.booktimer.writing.WritingService.AI_EXPANDED_EFFECTIVE.toString();
@@ -400,6 +400,59 @@ class PrivacyControllerTest {
                 .doesNotContain("게시자는 아래 문의처로 알림 받을 수단을 미리 정할 수 있고")
                 .contains("여백은 본인만 보며(여백 공개를 없앤 뒤)")
                 .contains("로그인하지 않고 웹 공개 페이지로 보면 보입니다");
+    }
+
+    /** 다른 이용자의 글에 이미 인용된 문장 · 차단 전에 내 여백에 건 문장은 차단해도 남는다(M-2) — privacy 4절과 terms 제12조 ⑤가 같은 문장. */
+    private static final String BLOCK_EXCEPTION = "다른 이용자의 글에 이미 인용된 문장과, 차단 전에 내 여백에 건 문장도 보일 수 있습니다";
+
+    /**
+     * 6회차 — 사용자 결정(2026-10-30) D-A 운영자 메일함(8절 위탁 · 국외 이전 · 5절 3년) · D-C 임시조치 30일 뒤 삭제(5절) ·
+     * M-2 차단 반례 · M-1 잠금 4개(이미 있는 문장 — 지워지면 Red).
+     */
+    @Test
+    @DisplayName("K2 6회차 · GET /privacy: 8절 운영자 메일함(Gmail) 위탁 · 국외 이전 고지 · 다섯 곳 · 5절 문의 메일 3년 · 임시조치 이의 없으면 삭제 · 차단 반례 · 13절 · 빠진 잠금 4개")
+    void getPrivacy_round6Fixes() throws Exception {
+        String html = squash(render("/privacy"));
+        String s2margin = between(html, "<strong>여백</strong>", "<strong>앱 글쓰기</strong>");
+        String s4 = between(html, "<h2>4.", "<h2>5.");
+        String s5 = between(html, "<h2>5.", "<h2>6.");
+        String s63 = between(html, "<h2>6-3.", "<h2>6-4.");
+        String s65 = between(html, "<h2>6-5.", "<h2>7.");
+        String s8 = between(html, "<h2>8.", "<h2>9.");
+        String s13 = between(html, "<h2>13.", "</section>");
+        // D-A — 위탁 표 Google 행 · 28조의8 ② 1~5호 · 곳 수
+        assertThat(s8).contains("운영자 메일함(Gmail — 문의와 권리침해 요청의 수신·보관, 보유는 5절)")
+                .contains("<strong>운영자 메일함의 국외 이전</strong>")
+                .contains("<strong>이전받는 자</strong>: Google LLC (Gmail)")
+                .contains("이용자가 문의처로 메일을 보내는 시점에")
+                .contains("(" + E2 + "부터) 권리침해 요청")
+                .contains("메일을 보내지 않으면 이전되지 않습니다")
+                .contains("소명 자료가 필요한 저작권 중단 요구와 회원이 아닌 사람의 요청은 지금 메일로만 받습니다")
+                .contains("<strong>운영자 메일함</strong>(Gmail — 문의·권리침해 요청) 다섯 곳")
+                .doesNotContain("네 곳");
+        // D-A 5 · D-C — 5절
+        assertThat(s5).contains("문의처(운영자 메일함)로 받은 메일은 처리가 끝난 뒤 <strong>3년</strong>(분쟁 대비)까지 보관한 뒤 지웁니다")
+                .contains("임시조치로 가린 것은 그 기간(30일 이내)이 끝날 때까지 게시자의 이의가 없으면 삭제합니다 — 약관 제12조 ⑥");
+        // M-2
+        assertThat(s4).contains(BLOCK_EXCEPTION);
+        // 13절 개정 공지 줄
+        assertThat(s13).contains(K2_NOTICE + " 개정 공지").contains("8절 운영자 메일함");
+        // M-1 잠금 4개
+        assertThat(s65).contains("「올리기 준비」 화면에 들어갈 때(동의했고 몫이 남았으면 자동으로 한 번)");
+        assertThat(s8).contains("블로그 글쓰기 AI(" + E2 + "부터, 동의한 이용자가 쓰는 경우에 한함)");
+        assertThat(between(s8, "블로그 글쓰기 AI(" + E2, "</td>")).isNotEmpty().doesNotContain("동의하고 직접 요청한");
+        assertThat(s2margin).contains("쪽지에서 쓴 AI의 하루 사용 횟수");
+        assertThat(s63).contains("블로그 글에 인용한 설명은 그 글을 지우거나 회원 탈퇴할 때 파기");
+    }
+
+    @Test
+    @DisplayName("K2 6회차 · GET /terms: 제12조 ⑥ 임시조치 기간 안에 이의가 없으면 삭제 · ⑤ 차단 반례 · 개정 공지일")
+    void getTerms_round6Fixes() throws Exception {
+        String html = squash(render("/terms"));
+        String a12 = between(html, "<h2>제12조 (블로그와 게시물)</h2>", "<h2>제13조");
+        assertThat(a12).contains("임시조치 기간이 끝날 때까지 게시자의 이의가 없으면 그 게시물(임시조치한 단위 그대로)을 삭제하고 게시자에게 알립니다")
+                .contains(BLOCK_EXCEPTION);
+        assertThat(html).contains(K2_NOTICE + " 개정 공지");
     }
 
     @Test

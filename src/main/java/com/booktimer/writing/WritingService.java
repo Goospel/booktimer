@@ -39,7 +39,7 @@ public class WritingService {
 
     /**
      * E2 — 넓어진 AI(여백 설명 · 블로그 글쓰기 AI)와 블로그가 열리는 날(KST) = 처리방침 6-5절 · 약관 제12조 시행일(책생글 K2 REQ-200).
-     * K2 머지 예정일(개정 공지일) + 31. 머지가 밀리면 이 값과 두 문서의 E2 자리를 함께 다시 센다 — WritingNoticeDateTest ·
+     * K2 머지일(= 개정 공지일 2026-10-30) + 32(31 이상). 머지가 밀리면 이 값과 두 문서의 E2 자리를 함께 다시 센다 — WritingNoticeDateTest ·
      * PrivacyControllerTest가 대조한다. 이 날짜를 쓰는 동작(2판 동의 · 503 문구)은 B3가 붙인다.
      */
     public static final LocalDate AI_EXPANDED_EFFECTIVE = LocalDate.of(2026, 12, 1);
