@@ -12,56 +12,57 @@ import jakarta.persistence.Id;
 import jakarta.persistence.JoinColumn;
 import jakarta.persistence.ManyToOne;
 import jakarta.persistence.Table;
+import org.hibernate.annotations.DynamicUpdate;
 
+import java.time.Instant;
 import java.util.Set;
 
 /**
- * 여백에 남긴 글 한 장 — 읽다가 인상 깊은 문장·생각을 적어 두는 텍스트 카드 (sns-design §13).
+ * 여백의 쪽지 한 장 — 읽다가 옮긴 문장과 내 생각을 적어 두는 자리 (sns-design §13 · 책생글 「여백 + 블로그」 §5.1).
  *
- * <p>「여백」은 <b>책에 딸린 자리</b>고, 이 클래스는 거기 쌓이는 <b>글</b>이다. 그래서 {@code book}은
- * 선택이 아니라 <b>필수</b>다(2026-08-16 재설계 — V71이 DB에도 NOT NULL로 못 박았다). 도달 경로가
- * 「책방 격자 → 책 → 그 책의 글」뿐이라, 책 없는 글은 표시 표면이 0인 유령 행이 된다.
+ * <p><b>책은 선택이다</b>(2026-10-30 책생글 M1 — C9). 사용자 말로 「여백은 말 그대로 빈 공간에 독자가 마음껏 글을 끄적이는
+ * 공간」이라, 책 없는 쪽지도 앱({@code /api/app/margins})에서 만든다. 책을 지우면 쪽지는 남고 연결만 풀린다
+ * ({@code BookService.delete} → {@code StoryRepository.unlinkBook}). 웹 · 미니앱의 옛 경로({@code /api/stories})는 여전히
+ * 책을 요구하고, 그쪽 목록 쿼리는 전부 {@code join s.book}이라 책 없는 쪽지가 실리지 않는다(웹 여백 화면은 책 단위 — J64).
  *
- * <p>2026-08-16까지는 사람에게 딸린 24시간짜리 「스토리」였다 — 시간 만료도, 사람 단위 스트립도 함께
- * 폐기됐다. 클래스·테이블 이름은 {@code Story}로 남았다: 어휘만 바꾸고 스키마는 두는 게 싸다.
+ * <p>2026-08-16까지는 사람에게 딸린 24시간짜리 「스토리」였다. 클래스·테이블 이름은 {@code Story}로 남았다 — 어휘만 바꾸고
+ * 스키마는 두는 게 싸다. 앱의 「이 책으로 글쓰기」 글({@code writing_draft})은 M1에서 이 표로 합쳤다(V105 — J2 · J4).
  *
- * <p>글은 <b>두 층</b>이다(2026-08-20): 책에서 옮긴 {@code quote}(선택)와 그에 다는 {@code text}.
- * 위계는 뒤집지 않는다 — 인용이 主가 되면 여백이 「내 독서 기록」이 아니라 명언 카드가 되고, 정당한
- * 인용의 요건(내 글이 主·인용이 從)에서도 멀어진다. 그래서 <b>인용만 남긴 글은 나만 보는 여백이다</b>
- * (2026-10-22 개정, 책생글 REQ-93~95): 생각({@code text})이 {@code ""}인 글은 만들 수 있지만
- * 「모두의 여백」에 올릴 수 없고({@code StoryService.create}·{@code setShared}), 남의 읽기 경로
- * ({@code feedRecent}·남이 보는 {@code recentByUser}·{@code marginOf}·{@code assertVisible})에서
- * 빠진다. 남에게 명언 카드로 보이지 않는다는 목적은 그대로다.
+ * <p>글은 <b>두 층</b>이다(2026-08-20): 책에서 옮긴 {@code quote}(선택, 200자)와 내 생각 {@code text}(1만 200자 — J3).
+ * 위계는 뒤집지 않는다 — 「인용은 從」. 옮긴 문장은 <b>책이나 출처 스냅샷({@code quoteSource})이 있을 때만</b> 둘 수 있다:
+ * 출처 없는 책 문장이 블로그로 나가지 않게(저작권법 37조 — J84).
  *
- * <p>책은 <b>본인 소유만</b> — 공개 여부는 묻지 않는다(2026-08-16 결정 2). 비공개 책의 여백은
- * 「나만 보는 메모」라서 쓰기를 막을 이유가 없다.
+ * <p><b>가시성 불변식</b>(2026-10-30 책생글 M1 — C3 · J9 · D1): <b>노출 = 본인만</b>. 여백은 각 사용자의 비공개 공간이고
+ * 공개는 블로그가 맡는다. 남이 부르는 읽기 경로(사람축 · 책축 · 홈 소식 · 「여백」 탭 · 검색 배지 · 좋아요 · 명단 · 프로필 발광)는
+ * 전부 0건 · 404다. 판정은 {@code StoryService.assertVisible}(단건 — 본인 검사만, 책을 읽지 않는다)과 각 목록의 「본인이
+ * 아니면 빈 목록」이 진다. 옛 불변식(노출 = {@code book.isPublic()})보다 더 닫힌 쪽이다 — 남에게 다시 여는 코드는 블로그가
+ * 맡을 공개를 여백으로 되돌리는 것이라 설계 위반이다.
  *
- * <p><b>가시성 불변식</b>(2026-08-22 팔로우 축 제거로 재정의): 가시성은 <b>읽기 시점</b>에 판정하며,
- * <b>노출 = {@code book.isPublic()}</b> — 단 생각 빈 여백(인용만)은 본인에게만(REQ-95, 위 2026-08-20
- * 문단). 쓰기 시점엔 아무것도 검사하지 않는다 — 비공개
- * 책에도 글을 남길 수 있고(결정 2), 그 글은 책이 공개되는 순간부터 보인다.
- * <b>공개 검사를 지우거나 우회하는 코드는 이 불변식 위반이다</b> — 예전엔 팔로우 게이트가 한 겹 더
- * 받쳤지만 지금은 이것이 <b>유일한 방어</b>라, 뚫리면 곧바로 비공개 메모가 낯선 사람에게 샌다.
+ * <p>{@code shared}(옛 「함께 걸기」)는 V104가 전부 꺼 두었고 다시 켜지지 않는다({@code StoryService.setShared} 400 ·
+ * 만들기의 값은 무시 — 동결 미니앱 호환). 열은 미니앱 동결이 끝날 때까지 남긴다.
  *
- * <p><b>{@code shared}는 권한이 아니다</b>(같은 날 개정). 「모두의 여백」에 올릴지를 정하는 <b>배치
- * 값</b>이고, 안 올린 글도 공개 책이면 읽힌다 — 열람 여부가 아니라 <b>발견 경로</b>를 가른다.
- * 옛 문서는 노출을 {@code isPublic() AND (팔로워 OR shared)}라 적었는데 두 항 모두 게이트에서 빠졌다.
- *
- * <p>읽기 게이트가 사는 곳: 단건 {@code StoryService.assertVisible}(좋아요·명단이 공유) · 사람축 목록
- * {@code StoryService.marginOf} · 책축 목록 {@code StoryRepository.sharedByIsbn} · 홈 소식
- * {@code StoryRepository.feedRecent} · 프로필 격자(PUBLIC 책만 목록에 있음). 앞의 셋은 <b>미러가
- * 아니다</b> — 책축 목록만 {@code shared = true}를 추가로 진다(올린 글만 거기 실리므로 의도된 차이다).
- * <b>미러로 착각해 그 술어를 걷으면 올리지 않은 글이 통째로 「모두의 여백」에 실린다.</b>
- * 팔로우는 {@code feedRecent}(소식 구독)에만 남았고, 그것은 권한이 아니라 <b>피드 선택</b>이다.
+ * <p><b>{@code @DynamicUpdate}</b>: AI 결과 저장은 호출 뒤 다시 읽어 <b>AI 열만</b> 바꾼다 — 그사이 사용자가 저장한 생각을
+ * 옛 값으로 덮지 않게({@code WritingDraft}와 같은 이유 · v1 REQ-19).
  */
 @Entity
+@DynamicUpdate
 @Table(name = "story")
 public class Story extends BaseTimeEntity {
 
     /** 배경 팔레트 닫힌 코드 — 자유 문자열(hex 등) 금지: 스타일 주입 차단. 프론트 CSS 스와치와 코드 일치. */
     public static final Set<String> BG_CODES = Set.of("paper", "night", "forest", "sunset", "sea", "plum");
 
-    private static final int MAX_TEXT_LENGTH = 500;
+    /**
+     * 생각 상한 — 옛 글의 제목 100 + 빈 줄 + 본문 10,000이 늘 들어가는 값(J3 — 기기 칸 옮기기가 10,102자를 보낸다).
+     * 앱 입력칸은 1만 자다. {@code @Lob} 금지 — 마이그레이션의 text를 H2가 CHARACTER VARYING으로 보고한다(V85 · V89).
+     */
+    public static final int TEXT_MAX = 10_200;
+
+    /** 질문 기록 JSON 상한 — v1 {@code WritingDraft.QUESTIONS_JSON_MAX}와 같다. */
+    static final int AI_LOG_MAX = 20_000;
+
+    /** 출처 스냅샷 상한 — 『제목 300』 · 저자 200 + 꾸밈 5자. */
+    static final int QUOTE_SOURCE_MAX = 510;
 
     /** 인용은 주석보다 짧다 — 시각 위계이자 「인용은 從」이라는 규칙의 수치 표현. */
     private static final int MAX_QUOTE_LENGTH = 200;
@@ -75,12 +76,12 @@ public class Story extends BaseTimeEntity {
     @JoinColumn(name = "user_id")
     private User user;
 
-    /** 글이 놓인 여백의 책 (필수) — 책이 사라지면 그 자리도 사라진다({@code BookService.delete}가 함께 지운다). */
-    @ManyToOne(fetch = FetchType.LAZY, optional = false)
-    @JoinColumn(name = "book_id", nullable = false)
+    /** 쪽지가 놓인 책 (선택 — C9). 책이 사라지면 연결만 풀린다({@code BookService.delete} → {@code unlinkBook}). */
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "book_id")
     private Book book;
 
-    @Column(nullable = false, length = 500)
+    @Column(nullable = false, length = TEXT_MAX)
     private String text;
 
     /**
@@ -95,8 +96,30 @@ public class Story extends BaseTimeEntity {
     @Column(length = 200)
     private String quote;
 
+    /** 옮긴 문장의 『제목』 · 저자 스냅샷 — 책을 지워도 출처가 남는다(J84). 옮긴 문장이 없으면 null. */
+    @Column(name = "quote_source", length = QUOTE_SOURCE_MAX)
+    private String quoteSource;
+
     @Column(name = "bg_code", length = 20)
     private String bgCode;
+
+    /** 고치기 판 — 앱 PUT이 대조한다(낡은 판 409 · 아무것도 안 바꿈). AI 저장은 올리지 않는다. */
+    @Column(nullable = false)
+    private int revision;
+
+    /** 이 쪽지의 AI 질문 기록(v1 {@code QuestionLog} JSON) — 없으면 null. */
+    @Column(name = "ai_log", length = AI_LOG_MAX)
+    private String aiLog;
+
+    @Column(name = "ai_updated_at")
+    private Instant aiUpdatedAt;
+
+    @Column(name = "ai_cost_micro_usd", nullable = false)
+    private long aiCostMicroUsd;
+
+    /** 공유 시트로 처음 내보낸 시각(C8 · v1 REQ-37) — 내보낸 적 없으면 null. */
+    @Column(name = "exported_at")
+    private Instant exportedAt;
 
     /**
      * 「함께 걸기」 — 이 글을 <b>같은 책(isbn13)을 보는 누구에게나</b> 열지(팔로우 무관) 여부.
@@ -120,6 +143,7 @@ public class Story extends BaseTimeEntity {
         this.book = book;
         this.bgCode = bgCode;
         this.quote = quote;
+        this.quoteSource = quote == null ? null : sourceLine(book);
     }
 
     /**
@@ -133,44 +157,118 @@ public class Story extends BaseTimeEntity {
     }
 
     /**
-     * 여백에 글을 남긴다. 문장은 최대 500자, 책은 <b>필수</b>이고 작성자 소유만(공개 여부 무관),
-     * 배경은 닫힌 팔레트 코드만, 인용은 선택이고 최대 200자.
+     * 쪽지를 남긴다. 생각은 최대 {@value #TEXT_MAX}자, 책은 <b>선택</b>이고 있으면 작성자 소유만(공개 여부 무관),
+     * 배경은 닫힌 팔레트 코드만, 옮긴 문장은 선택이고 최대 200자이며 <b>책이 있을 때만</b>(J84).
      *
-     * <p><b>생각({@code text})은 인용이 있을 때만 비울 수 있다</b>(REQ-93) — 공백뿐이면 {@code ""}로
-     * 저장한다. 그런 글은 나만 보는 여백이다(클래스 javadoc).
+     * <p><b>생각({@code text})은 옮긴 문장이 있을 때만 비울 수 있다</b>(REQ-93) — 공백뿐이면 {@code ""}로 저장한다.
      *
-     * @throws IllegalArgumentException author/책이 없거나, 생각·인용이 둘 다 비었거나, 501자 초과, 남의 책,
-     *                                  팔레트 밖 bgCode, 201자 초과 인용
+     * @throws IllegalArgumentException author가 없거나, 생각·옮긴 문장이 둘 다 비었거나, 길이 초과, 남의 책,
+     *                                  팔레트 밖 bgCode, 책 없는 옮긴 문장 — 문구는 앱 400 본문으로 그대로 나간다
      */
     public static Story of(User author, String text, Book book, String bgCode, String quote) {
         if (author == null) {
             throw new IllegalArgumentException("author must not be null");
         }
-        // 공백뿐인 생각은 "" — 인용이 있을 때만 통과한다(REQ-93). 공백 그대로 두지 않는 건 남의 읽기
-        // 경로가 「생각 빈 여백」을 s.text <> '' 하나로 거르기 때문이다
-        boolean hasQuote = quote != null && !quote.isBlank();
-        if ((text == null || text.isBlank()) && !hasQuote) {
-            throw new IllegalArgumentException("text must not be blank");
-        }
-        String stripped = text == null ? "" : text.strip();
-        if (stripped.length() > MAX_TEXT_LENGTH) {
-            throw new IllegalArgumentException("text must be at most " + MAX_TEXT_LENGTH + " chars");
-        }
-        if (book == null) {
-            throw new IllegalArgumentException("book must not be null"); // 여백은 책에 귀속된다
-        }
-        if (!isSameUser(book.getUser(), author)) {
+        if (book != null && !isSameUser(book.getUser(), author)) {
             throw new IllegalArgumentException("book must be owned by the author");
         }
         if (bgCode != null && !BG_CODES.contains(bgCode)) {
             throw new IllegalArgumentException("unknown bgCode: " + bgCode);
         }
-        // 공백뿐인 인용은 「인용 없음」이다 — 빈 문자열을 저장하면 화면에 글 없는 인용선이 남는다
-        String strippedQuote = (quote == null || quote.isBlank()) ? null : quote.strip();
-        if (strippedQuote != null && strippedQuote.length() > MAX_QUOTE_LENGTH) {
-            throw new IllegalArgumentException("quote must be at most " + MAX_QUOTE_LENGTH + " chars");
+        String strippedQuote = normalizeQuote(quote, book != null);
+        String stripped = normalizeText(text);
+        if (stripped.isEmpty() && strippedQuote == null) {
+            throw new IllegalArgumentException("옮긴 문장이나 생각을 하나는 적어 주세요");
         }
         return new Story(author, stripped, book, bgCode, strippedQuote);
+    }
+
+    /**
+     * 쪽지를 고친다(앱 PUT) — 판 대조가 먼저다(낡은 판이면 아무것도 바꾸지 않는다 — {@code WritingDraft.edit}와 같은 규칙).
+     *
+     * <p>생각·옮긴 문장이 둘 다 비어도 <b>AI 기록이 있으면</b> 받는다 — 질문 기록만 남은 옮긴 쪽지(원가가 든 글 — J4 · v1 REQ-142).
+     * 옮긴 문장은 책이나 출처 스냅샷이 있을 때만 둘 수 있다(J84). 처음 옮긴 문장을 붙이면 지금 책으로 출처를 채운다.
+     *
+     * @throws StaleMarginException     낡은 판
+     * @throws IllegalArgumentException 길이 · 빈 쪽지 · 출처 없는 옮긴 문장
+     */
+    public void edit(String quote, String text, int expectedRevision) {
+        if (expectedRevision != this.revision) {
+            throw new StaleMarginException(expectedRevision, this.revision);
+        }
+        String nextQuote = normalizeQuote(quote, book != null || quoteSource != null);
+        String nextText = normalizeText(text);
+        if (nextText.isEmpty() && nextQuote == null && aiLog == null) {
+            throw new IllegalArgumentException("옮긴 문장이나 생각을 하나는 적어 주세요");
+        }
+        if (nextQuote != null && quoteSource == null) {
+            quoteSource = sourceLine(book);
+        }
+        this.quote = nextQuote;
+        this.text = nextText;
+        this.revision++;
+    }
+
+    /** AI 한 라운드 저장 — AI 열만 바꾼다(생각·옮긴 문장·판은 그대로 — v1 REQ-47). */
+    public void recordRound(String aiLogJson, long microUsd, Instant now) {
+        this.aiLog = aiLogJson;
+        this.aiUpdatedAt = now;
+        this.aiCostMicroUsd += microUsd;
+    }
+
+    /** 결과 없는 AI 실패의 원가만 더한다. */
+    public void addAiCost(long microUsd) {
+        this.aiCostMicroUsd += microUsd;
+    }
+
+    /** 처음 한 번만 내보낸 시각을 박는다(C8). */
+    public void markExported(Instant now) {
+        if (this.exportedAt == null) {
+            this.exportedAt = now;
+        }
+    }
+
+    /**
+     * 옮긴 문장의 출처 줄 — 『제목』 · 저자(저자가 없으면 『제목』). V104 백필 SQL과 {@code BookService.delete}(→
+     * {@code StoryRepository.unlinkBook})가 같은 꼴을 쓴다 — 바꾸면 셋을 함께 고친다.
+     */
+    public static String sourceLine(Book book) {
+        if (book == null) {
+            return null;
+        }
+        String author = book.getAuthor();
+        return "『" + book.getTitle() + "』" + (author == null || author.isEmpty() ? "" : " · " + author);
+    }
+
+    /** 낡은 판으로 고치려 했다 — 앱에는 409. */
+    public static class StaleMarginException extends RuntimeException {
+        public StaleMarginException(int expected, int actual) {
+            super("stale revision: expected=" + expected + " actual=" + actual);
+        }
+    }
+
+    // 공백뿐인 생각은 "" — 옛 남의 읽기 경로가 「생각 빈 여백」을 s.text <> '' 하나로 걸렀다(REQ-93)
+    private static String normalizeText(String text) {
+        String stripped = text == null ? "" : text.strip();
+        if (stripped.length() > TEXT_MAX) {
+            throw new IllegalArgumentException("생각은 " + String.format("%,d", TEXT_MAX) + "자까지 쓸 수 있어요");
+        }
+        return stripped;
+    }
+
+    // 공백뿐인 인용은 「인용 없음」이다 — 빈 문자열을 저장하면 화면에 글 없는 인용선이 남는다
+    private static String normalizeQuote(String quote, boolean sourced) {
+        String stripped = (quote == null || quote.isBlank()) ? null : quote.strip();
+        if (stripped == null) {
+            return null;
+        }
+        if (stripped.length() > MAX_QUOTE_LENGTH) {
+            throw new IllegalArgumentException("옮긴 문장은 " + MAX_QUOTE_LENGTH + "자까지 옮길 수 있어요");
+        }
+        if (!sourced) {
+            throw new IllegalArgumentException("책 없는 쪽지엔 옮긴 문장을 둘 수 없어요 — 책을 골라 주세요");
+        }
+        return stripped;
     }
 
     private static boolean isSameUser(User a, User b) {
@@ -206,19 +304,40 @@ public class Story extends BaseTimeEntity {
         return quote;
     }
 
+    public String getQuoteSource() {
+        return quoteSource;
+    }
+
+    public int getRevision() {
+        return revision;
+    }
+
+    public String getAiLog() {
+        return aiLog;
+    }
+
+    public Instant getAiUpdatedAt() {
+        return aiUpdatedAt;
+    }
+
+    public long getAiCostMicroUsd() {
+        return aiCostMicroUsd;
+    }
+
+    public Instant getExportedAt() {
+        return exportedAt;
+    }
+
     public String getBgCode() {
         return bgCode;
     }
 
-    /** 「함께 걸림」인가 — 책축 목록·좋아요 게이트가 읽는 두 번째 통행증(책 게이트는 여전히 상위). */
+    /** 옛 「함께 걸기」 값 — M1부터 늘 false다(V104 · {@code StoryService.setShared} 400). 읽는 경로는 없다. */
     public boolean isShared() {
         return shared;
     }
 
-    /**
-     * 「함께 걸기」를 켜거나 끈다. <b>책 공개 여부를 검사하지 않는다</b> — 비공개 책에서 미리 켜 두는
-     * 것도 유효하고, 그 글은 책이 공개되는 순간부터만 보인다(불변식은 읽기 시점 판정이다).
-     */
+    /** 「함께 걸기」 값을 바꾼다 — 켜는 문({@code StoryService.setShared(true)})은 M1부터 400이라 끄기만 지난다. */
     public void markShared(boolean shared) {
         this.shared = shared;
     }

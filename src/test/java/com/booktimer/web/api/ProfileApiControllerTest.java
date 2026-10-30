@@ -703,7 +703,7 @@ class ProfileApiControllerTest {
     // 하나로 모았다 — v.books()가 늘 PUBLIC만 담으므로(ProfileService) 비공개 책은 여기 닿지 않는다.
 
     @Test
-    @DisplayName("GET /api/profile 팔로워 → 글 있는 책만 lastStoryAt(최신 글 시각), 글 없는 책은 null")
+    @DisplayName("GET /api/profile 본인 → 글 있는 책만 lastStoryAt(최신 글 시각), 글 없는 책은 null(남에게는 빈 맵 — REQ-212)")
     void profile_follower_getsLastStoryAtOnlyForBooksWithEntries() throws Exception {
         User viewer = register("rc-viewer@booktimer.com", "rcviewer", "열람자");
         User owner = register("rc-owner@booktimer.com", "rcowner", "주인");
@@ -714,7 +714,7 @@ class ProfileApiControllerTest {
         storyAt(owner, withEntries, "최신 글", Instant.parse("2026-08-10T09:00:00Z"));
 
         mockMvc.perform(get("/api/profile").param("loginId", "rcowner")
-                        .with(user("rc-viewer@booktimer.com")))
+                        .with(user("rc-owner@booktimer.com")))
                 .andExpect(status().isOk())
                 // 이름순 공급 — 「가 …」이 먼저
                 .andExpect(jsonPath("$.books[0].title").value("가 글 있는 책"))
@@ -724,7 +724,7 @@ class ProfileApiControllerTest {
     }
 
     @Test
-    @DisplayName("GET /api/profile 비팔로워 → 공개 책이면 lastStoryAt이 실린다 (목록이 열렸으니 발광도 연다)")
+    @DisplayName("REQ-212 · GET /api/profile 비팔로워 → 공개 책이어도 lastStoryAt이 없다(여백은 본인만)")
     void profile_nonFollower_getsRecency() throws Exception {
         register("rc-nfviewer@booktimer.com", "rcnfviewer", "비팔로워");
         User owner = register("rc-nfowner@booktimer.com", "rcnfowner", "주인");
@@ -735,7 +735,7 @@ class ProfileApiControllerTest {
                         .with(user("rc-nfviewer@booktimer.com")))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.books[0].title").value("글 있는 책"))
-                .andExpect(jsonPath("$.books[0].lastStoryAt").value("2026-08-10T09:00:00Z"));
+                .andExpect(jsonPath("$.books[0].lastStoryAt").doesNotExist());
     }
 
     @Test
@@ -752,7 +752,7 @@ class ProfileApiControllerTest {
     }
 
     @Test
-    @DisplayName("GET /api/profile/books 팔로워 → 목록 필터 경로에도 lastStoryAt이 실린다")
+    @DisplayName("GET /api/profile/books 본인 → 목록 필터 경로에도 lastStoryAt이 실린다(남에게는 없다 — REQ-212)")
     void books_follower_getsRecency() throws Exception {
         User viewer = register("rc-bviewer@booktimer.com", "rcbviewer", "열람자");
         User owner = register("rc-bowner@booktimer.com", "rcbowner", "주인");
@@ -761,7 +761,7 @@ class ProfileApiControllerTest {
         storyAt(owner, book, "글", Instant.parse("2026-08-10T09:00:00Z"));
 
         mockMvc.perform(get("/api/profile/books").param("loginId", "rcbowner")
-                        .with(user("rc-bviewer@booktimer.com")))
+                        .with(user("rc-bowner@booktimer.com")))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.books[0].lastStoryAt").value("2026-08-10T09:00:00Z"));
     }
@@ -788,7 +788,7 @@ class ProfileApiControllerTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.books", hasSize(1)))
                 .andExpect(jsonPath("$.books[0].title").value("가 공개 책"))
-                .andExpect(jsonPath("$.books[0].lastStoryAt").value("2026-08-10T09:00:00Z"));
+                .andExpect(jsonPath("$.books[0].lastStoryAt").doesNotExist()); // 여백은 본인만 — 남에게 발광 0(REQ-212)
     }
 
     @Test

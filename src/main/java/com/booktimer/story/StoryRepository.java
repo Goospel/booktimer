@@ -1,17 +1,26 @@
 package com.booktimer.story;
 
 import com.booktimer.book.Book;
-import com.booktimer.book.BookVisibility;
 import com.booktimer.user.User;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
 import java.time.Instant;
 import java.util.Collection;
 import java.util.List;
+import java.util.Optional;
 
+/**
+ * 여백 쪽지 저장소.
+ *
+ * <p><b>남이 부르는 읽기 쿼리는 없다</b>(2026-10-30 책생글 M1 — C3). 옛 {@code feedRecent}(홈 소식) · {@code sharedRecent}(「여백」 탭) ·
+ * {@code sharedByIsbn}·{@code countSharedByIsbn}(책축) · {@code sharedCountsByIsbn}(검색 배지)는 여백이 본인만의 공간이 되면서
+ * 지웠다 — 쿼리가 남아 있으면 누군가 다시 잇는다. 아래 목록은 전부 본인 것만 묻는 데 쓴다(호출부가 본인 판정을 진다).
+ * 웹 · 미니앱 목록 쿼리는 {@code join s.book}(inner)이라 책 없는 쪽지가 실리지 않는다(J64).
+ */
 public interface StoryRepository extends JpaRepository<Story, Long> {
 
     /** 책 한 권 → 그 여백의 최근 글 시각. {@link #recencyByBook} 투영. */
@@ -22,16 +31,10 @@ public interface StoryRepository extends JpaRepository<Story, Long> {
     }
 
     /**
-     * 책방 격자 발광용 배치 집계 — 책 여럿의 「마지막 글 시각」을 한 쿼리로 (N+1 금지).
-     *
-     * <p>작성자가 아니라 <b>책 id 목록</b>으로 좁힌다: 화면이 그리는 책만 물어보게 되고, 호출부
-     * ({@code ProfileApiController})가 손에 쥔 것도 {@code ProfileView.books()}뿐이라 그게 가장 곧다.
-     * 책의 주인과 글 작성자는 언제나 같으므로({@code Story.of} 불변식) 작성자 기준 집계와 결과가 같다.
+     * 책방 격자 발광용 배치 집계 — 책 여럿의 「마지막 글 시각」을 한 쿼리로 (N+1 금지). <b>본인 프로필에서만</b> 부른다
+     * ({@code ProfileApiController.recencyOf} — 남에게는 빈 맵, C3).
      *
      * <p>빈 목록이면 호출하지 않는다 — {@code in ()}은 DB마다 취급이 다르고, 물어볼 것도 없다.
-     *
-     * <p>ponytail: 생각 빈 여백(나만 보는 여백, REQ-95)도 센다 — 남의 프로필 격자 정렬에 「언제 썼나」만
-     * 드러나고 내용은 안 샌다. 그 시각까지 감춰야 하면 {@code and s.text <> ''}를 viewer별로 단다.
      */
     @Query("""
             select s.book.id as bookId, max(s.createdAt) as lastAt
@@ -49,17 +52,8 @@ public interface StoryRepository extends JpaRepository<Story, Long> {
     }
 
     /**
-     * 내 서재 목록용 배치 집계 — {@link #recencyByBook}과 같은 모양으로 책 여럿의 글 수를 한 쿼리에.
-     *
-     * <p>쓰임은 하나: 서재 관리 시트가 「공개로 바꾸기」 전에 <b>「여백에 남긴 글 N개가 팔로워에게
-     * 보여요」</b>를 고지하는 것(2026-08-16 결정 B). 비공개 책에도 글을 쓸 수 있게 된 뒤로 공개 전환은
-     * "안 보이던 메모가 한꺼번에 노출되는 순간"이 됐다.
-     *
-     * <p>글이 없는 책은 <b>행이 아예 없다</b>(group by) — 호출부가 0으로 채운다. 빈 목록이면 호출하지
-     * 않는다(recencyByBook과 동일 가드 — {@code in ()}은 DB마다 취급이 다르다).
-     *
-     * <p>ponytail: 생각 빈 여백(나만 보는 여백, REQ-95)도 센다 — 개수만 드러나고 내용은 안 샌다. 그래서
-     * 공개 전환 고지의 N이 실제로 남에게 보일 글 수보다 클 수 있다. 정확히 맞춰야 하면 같은 술어를 단다.
+     * 내 서재 목록용 배치 집계 — 책 여럿의 쪽지 수를 한 쿼리에. 글이 없는 책은 행이 없다(호출부가 0으로 채운다).
+     * 빈 목록이면 호출하지 않는다.
      */
     @Query("""
             select s.book.id as bookId, count(s) as count
@@ -69,203 +63,39 @@ public interface StoryRepository extends JpaRepository<Story, Long> {
             """)
     List<BookStoryCount> countByBook(@Param("bookIds") Collection<Long> bookIds);
 
-    /**
-     * 홈 소식용 — viewer가 팔로우한 사람들이 <b>최근에</b> 여백에 남긴 글 (최신순).
-     *
-     * <p>Follow와는 매핑된 연관이 없어 theta 조인({@code f.followee = u})으로 묶는다
-     * ({@code BookRepository.feedStarted} 미러). 차단 필터는 쿼리에 불필요 — "팔로우 존재 → 차단 없음"
-     * write-시점 불변식(차단 시 팔로우 양방향 해제)이 보장하고, 행동 회귀 테스트가 못 박는다.
-     * ADMIN·공개핸들(login_id) 미설정 작성자는 노출 불변식대로 제외(N-055).
-     *
-     * <p><b>책 공개 여부는 여기가 주 방어다</b>({@code b.visibility = PUBLIC}). 2026-08-16 결정 2로
-     * PRIVATE 책에도 글을 남길 수 있게 된 뒤로, 이 한 줄이 「비공개 책 여백 = 소유자 전용 메모」를
-     * 소식 피드에서 지키는 유일한 장치가 됐다(예전엔 {@code Story.of} 불변식이 앞을 막아 이건 전환 창
-     * 백업이었다). 지우면 남의 비공개 메모가 팔로워 홈에 실린다.
-     *
-     * <p><b>생각 빈 여백은 뺀다</b>({@code s.text <> ''}, REQ-95) — 인용만 남긴 글은 나만 보는 여백이고
-     * ({@code Story} javadoc), 소식은 언제나 남(팔로우한 사람)의 글이라 조건 없이 거른다.
-     *
-     * <p>작성자·책은 fetch로 즉시 초기화 — 소식 한 줄이 닉네임·책 제목을 읽으므로 홈 진입 핫패스의
-     * N+1을 막는다. ToOne fetch만 쓴다.
-     */
-    @Query("""
-            select s from Story s join fetch s.user u join fetch s.book b, com.booktimer.follow.Follow f
-            where f.followee = u and f.follower = :viewer
-              and s.createdAt > :cutoff
-              and s.text <> ''
-              and b.visibility = com.booktimer.book.BookVisibility.PUBLIC
-              and u.role <> com.booktimer.user.Role.ADMIN
-              and u.loginId is not null
-            order by s.createdAt desc, s.id desc
-            """)
-    List<Story> feedRecent(@Param("viewer") User viewer, @Param("cutoff") Instant cutoff);
-
-    /**
-     * 홈 「여백」 탭용 — <b>팔로우와 무관하게</b> 「모두의 여백」에 올라온 최근 글 (최신순).
-     *
-     * <p>술어는 {@link #sharedByIsbn}과 같고 축만 다르다: 거기는 책(isbn13) 하나로 좁히고 여기는
-     * <b>어떤 책으로도 좁히지 않는다</b>. 그래서 「올린 글만」({@code s.shared = true})·책 PUBLIC·
-     * ADMIN/핸들 없는 작성자 제외(N-055)·<b>차단 양방향 제외</b>를 그대로 진다. 특히 차단은,
-     * 이 목록에 {@code feedRecent}가 기댔던 "팔로우 존재 → 차단 없음" 불변식이 <b>없으므로</b>
-     * 쿼리가 유일한 방어다.
-     *
-     * <p><b>내 글은 뺀다</b>({@code u.id <> :viewerId}) — 발견 목록에서 내 글을 발견할 일은 없다.
-     *
-     * <p>날짜 창(cutoff)이 없다: 공개 여백 풀 자체가 작아 14일 창을 두면 탭이 늘 빈다. 대신 호출부가
-     * {@code pageable}로 최신 N건만 받아 인메모리로 섞는다 — {@code order by rand()}는 H2·MySQL로
-     * 방언이 갈려 이식성이 없다.
-     *
-     * <p>작성자·책은 fetch로 즉시 초기화 — 줄마다 닉네임·책 제목·표지를 읽으므로 홈 진입 핫패스의
-     * N+1을 막는다({@code feedRecent} 선례). ToOne fetch만 쓴다.
-     */
-    @Query("""
-            select s from Story s join fetch s.user u join fetch s.book b
-            where s.shared = true
-              and b.visibility = com.booktimer.book.BookVisibility.PUBLIC
-              and u.id <> :viewerId
-              and u.role <> com.booktimer.user.Role.ADMIN
-              and u.loginId is not null
-              and not exists (select 1 from com.booktimer.block.Block bl
-                              where (bl.blocker.id = :viewerId and bl.blocked.id = u.id)
-                                 or (bl.blocker.id = u.id and bl.blocked.id = :viewerId))
-            order by s.createdAt desc, s.id desc
-            """)
-    List<Story> sharedRecent(@Param("viewerId") Long viewerId, Pageable pageable);
-
-    /**
-     * 한 책의 여백에 쌓인 글 — <b>최신순</b>이라 {@code pageable} 상한이 최근 것을 남긴다.
-     * 동시각 tie는 id로 갈라 상한 경계가 호출마다 흔들리지 않게 한다.
-     *
-     * <p>{@code user}까지 조건에 두는 이유: 책 소유자와 글 작성자가 어긋난 행이 생기면(불변식 파손)
-     * 조용히 남의 글이 실리는 대신 안 보이는 쪽으로 실패한다.
-     *
-     * <p>book은 fetch하지 않는다 — 호출부가 이미 책을 손에 쥐고 있고({@code marginOf}의 게이트가
-     * 조회한 그 책) 카드에는 책 라벨이 없다(헤더에 한 번만 실린다).
-     */
+    /** 책 한 권의 쪽지 — 최근순(같은 시각이면 id 내림차순). 본인 책에만 쓴다. */
     List<Story> findByUserAndBookOrderByCreatedAtDescIdDesc(User user, Book book, Pageable pageable);
 
+    /** 책 없는 쪽지 — 최근순(앱 {@code GET /api/app/margins?book=none} — C9). */
+    List<Story> findByUserAndBookIsNullOrderByCreatedAtDescIdDesc(User user, Pageable pageable);
+
     /**
-     * 사람축 전체 목록 — 한 사람이 남긴 글 전부(책 구분 없이 최신순). 책방 「여백」 탭이 이 문을 지난다.
-     *
-     * <p><b>{@code marginOf}에서 책 좌표만 뺀 것</b>이다 — {@code sharedRecent}/{@code sharedByIsbn}류의
-     * 미러가 아니다. 거기엔 {@code shared}·차단·ADMIN이 쿼리에 있지만, 여기선 대상이 <b>한 사람</b>이라
-     * 그 셋을 {@code ProfileService.resolveVisibleTarget}이 통째로 진다(호출부 {@code allMarginsOf}).
-     * 술어 미러의 짝은 {@code StoryService.assertVisible}(사람 게이트 → 책 PUBLIC)이므로, <b>거기에
-     * 술어가 늘면 이 쿼리의 {@code visibilities} 계산에도 같이 늘려야 한다</b>.
-     *
-     * <p>{@code visibilities}가 공개 판정을 진다: 남이 보면 {@code {PUBLIC}}, 본인이 보면
-     * {@code {PUBLIC, PRIVATE}} — {@code marginOf}의 {@code !isPublic && !self}를 컬렉션 파라미터로
-     * 옮긴 것이다. 이 한 줄이 빠지면 남의 비공개 메모가 그의 책방 탭에 통째로 실린다.
-     *
-     * <p>{@code s.shared}는 보지 않는다 — 사람축은 올리든 말든 다 보인다({@code marginOf}와 같다).
-     *
-     * <p>{@code includeQuoteOnly}가 생각 빈 여백(나만 보는 여백, REQ-95)을 가른다: 본인이 보면 {@code true},
-     * 남이 보면 {@code false}({@code s.text <> ''}). {@code visibilities}와 같은 「본인이면 넓힌다」 축이다.
-     *
-     * <p>book은 <b>fetch한다</b>({@code findByUserAndBook…}과 반대) — 카드마다 책 라벨을 그리므로
-     * 안 하면 100장 × 책 조회(N+1)다. {@code s.user}는 fetch하지 않는다(전부 target 한 사람이고
-     * 카드에 작성자 줄이 없다). ToOne fetch + Pageable은 {@code sharedRecent}가 이미 쓰는 조합.
+     * 한 사람의 여백 전체 — 책 구분 없이 최신순(웹 책방 「여백」 탭 · 동결 미니앱 「내 여백 전체」). <b>본인만</b> 부른다.
+     * {@code join fetch s.book}(inner)이라 책 없는 쪽지는 빠진다 — 옛 화면은 책 라벨 없는 카드를 그릴 줄 모른다(J64).
      */
     @Query("""
             select s from Story s join fetch s.book b
             where s.user = :target
-              and b.visibility in :visibilities
-              and (:includeQuoteOnly = true or s.text <> '')
             order by s.createdAt desc, s.id desc
             """)
-    List<Story> recentByUser(@Param("target") User target,
-                             @Param("visibilities") Collection<BookVisibility> visibilities,
-                             @Param("includeQuoteOnly") boolean includeQuoteOnly,
-                             Pageable pageable);
+    List<Story> recentByUser(@Param("target") User target, Pageable pageable);
+
+    /** 본인 쪽지 하나 — 책을 함께 읽는다(AI 단계는 트랜잭션 밖이라 지연 로딩이 안 된다 — {@code WritingAiService}). */
+    @Query("select s from Story s left join fetch s.book where s.id = :id and s.user = :user")
+    Optional<Story> findWithBook(@Param("id") Long id, @Param("user") User user);
 
     /**
-     * 책축(isbn13) 목록 — 같은 책을 보는 <b>누구에게나</b> 열린 글(「함께 걸기」). 최신순, 동시각 tie는 id로.
-     *
-     * <p><b>{@code StoryService.assertVisible}의 미러가 아니다 — 의도적으로 더 좁다</b>(2026-08-22
-     * 개정). 열람 권한은 책 PUBLIC 하나이고 그것이 {@code assertVisible}의 주 판정인데(생각 빈 여백 404는
-     * 별도 — 여기선 REQ-94가 {@code shared = true}로 미리 막는다), 이 목록은 거기에
-     * {@code s.shared = true}를 <b>더</b> 진다: 「모두의 여백」에는 <b>올린 글만</b> 실리기 때문이다
-     * (안 올린 글도 읽히기는 한다 — 사람축 목록으로 도달한다). <b>미러로 착각해 이 술어를 걷으면
-     * 올리지 않은 글이 통째로 여기 실린다.</b> 옛 주석이 「미러다, 둘은 같이 고친다」라고 지시했는데,
-     * 팔로우 축이 사라진 지금 그 지시를 따르는 것이 곧 사고다.
-     *
-     * <p><b>{@code b.visibility = PUBLIC}은 그대로 진다</b> — 이 한 줄이 빠지면 남의 비공개 메모가
-     * 낯선 사람에게 통째로 샌다({@code Story} 불변식). 행 단위로 {@code assertVisible}을 부르지 않는 건
-     * 100장 × 게이트 = N+1이라서다({@code feedRecent}가 목록 방어를 쿼리에 두는 것과 같은 구조).
-     *
-     * <p><b>차단 필터가 쿼리에 필수</b>다 — {@code feedRecent}는 "팔로우 존재 → 차단 없음" write-시점
-     * 불변식 덕에 생략했지만, 이 목록은 <b>팔로우 무관</b>이라 그 불변식이 통하지 않는다. 양방향 제외
-     * 패턴은 {@code BookRepository.findCoReadCandidates}와 동형. ADMIN·핸들(login_id) 없는 작성자
-     * 제외도 노출 불변식 그대로(N-055).
-     *
-     * <p>작성자는 fetch로 즉시 초기화 — 카드마다 닉네임·핸들을 그리므로(사람축 카드와 다른 점).
+     * 책을 지울 때 쪽지는 남기고 연결만 푼다(C9 — v1 REQ-13을 여백까지). 옮긴 문장이 있는데 출처가 비어 있는 쪽지는 먼저 그 책의
+     * 출처 줄({@code Story.sourceLine})로 채운다 — 책이 사라져도 『제목』 · 저자가 남는다(J84). 이미 있는 출처는 그대로다.
      */
+    @Modifying(flushAutomatically = true, clearAutomatically = true)
     @Query("""
-            select s from Story s join fetch s.user u join s.book b
-            where b.isbn13 = :isbn
-              and s.shared = true
-              and b.visibility = com.booktimer.book.BookVisibility.PUBLIC
-              and u.role <> com.booktimer.user.Role.ADMIN
-              and u.loginId is not null
-              and not exists (select 1 from com.booktimer.block.Block bl
-                              where (bl.blocker.id = :viewerId and bl.blocked.id = u.id)
-                                 or (bl.blocker.id = u.id and bl.blocked.id = :viewerId))
-            order by s.createdAt desc, s.id desc
+            update Story s
+            set s.quoteSource = case when s.quote is not null and s.quoteSource is null then :line else s.quoteSource end,
+                s.book = null
+            where s.book = :book
             """)
-    List<Story> sharedByIsbn(@Param("isbn") String isbn, @Param("viewerId") Long viewerId, Pageable pageable);
-
-    /**
-     * 「함께 걸린 글 N」 — {@link #sharedByIsbn}과 <b>같은 술어</b>의 count다. 목록은 상한 100장에서
-     * 잘리지만 이 값은 자르지 않는다(헤더가 진짜 개수를 말한다). 술어가 갈라지면 헤더의 N과 카드 수가
-     * 설명 없이 어긋나므로 둘은 같이 고친다.
-     */
-    @Query("""
-            select count(s) from Story s join s.user u join s.book b
-            where b.isbn13 = :isbn
-              and s.shared = true
-              and b.visibility = com.booktimer.book.BookVisibility.PUBLIC
-              and u.role <> com.booktimer.user.Role.ADMIN
-              and u.loginId is not null
-              and not exists (select 1 from com.booktimer.block.Block bl
-                              where (bl.blocker.id = :viewerId and bl.blocked.id = u.id)
-                                 or (bl.blocker.id = u.id and bl.blocked.id = :viewerId))
-            """)
-    long countSharedByIsbn(@Param("isbn") String isbn, @Param("viewerId") Long viewerId);
-
-    /** isbn13 하나 → 그 책에 함께 걸린 글 수. {@link #sharedCountsByIsbn} 투영. */
-    interface IsbnStoryCount {
-        String getIsbn13();
-
-        long getCount();
-    }
-
-    /**
-     * 검색 결과 행의 「여백 N」 배지 — <b>페이지당 1쿼리</b> 배치 집계(N+1 금지, {@code recencyByBook} 관례).
-     *
-     * <p><b>차단은 걸러 내지 않는다</b>(viewer 무관) — {@code likers}의 likeCount와 같은 선례다.
-     * 배지 숫자가 목록보다 한둘 많을 수 있지만 눈에 띄지 않고, 집계까지 관계를 태우면 검색 응답이
-     * 비싸진다. 이 어긋남은 버그가 아니라 의도된 트레이드오프다.
-     *
-     * <p>글이 없는 isbn은 <b>행이 아예 없다</b>(group by) — 호출부가 키 없음으로 두면 화면이 배지를
-     * 안 그린다(0 배지 금지). 빈 목록이면 호출하지 않는다({@code in ()}은 DB마다 취급이 다르다).
-     */
-    @Query("""
-            select b.isbn13 as isbn13, count(s) as count
-            from Story s join s.user u join s.book b
-            where b.isbn13 in :isbns
-              and s.shared = true
-              and b.visibility = com.booktimer.book.BookVisibility.PUBLIC
-              and u.role <> com.booktimer.user.Role.ADMIN
-              and u.loginId is not null
-            group by b.isbn13
-            """)
-    List<IsbnStoryCount> sharedCountsByIsbn(@Param("isbns") Collection<String> isbns);
-
-    /**
-     * 책 삭제 시 그 책 여백의 글을 함께 지운다 — 여백은 책에 딸린 자리라, 책이 사라지면 자리도 사라진다.
-     * {@code story.book_id}가 NOT NULL이 된 뒤로 「첨부만 풀기」(옛 {@code unlinkBook})는 불가능하다.
-     */
-    void deleteByBook(Book book);
+    int unlinkBook(@Param("book") Book book, @Param("line") String sourceLine);
 
     /** 회원 탈퇴 정리용 — {@code story.book_id} 때문에 책 삭제보다 앞서야 한다(AccountService.purge). */
     void deleteByUser(User user);

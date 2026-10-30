@@ -209,11 +209,8 @@ async function changeStatus(book: MyBookSummary, newStatus: string) {
 async function toggleVisibility(book: MyBookSummary) {
     const prev = { isPublic: book.isPublic, visibility: book.visibility, visibilityLabel: book.visibilityLabel }
     const newVis = book.isPublic ? 'PRIVATE' : 'PUBLIC'
-    // 공개로 바꿀 때만, 남긴 글이 있을 때만 고지한다 — 되돌리는 방향엔 묻지 않는다.
-    // 낙관 갱신보다 **앞**에 둔다: confirm 은 동기 블로킹이라 "확인 전에 공개로 보이는 순간"이 생기지 않는다.
-    // 「누구에게나」다 — 옛 문구 「팔로워에게」는 2026-08-22에 고쳤다(팔로우 축 제거로 실제보다 좁은 고지가 됐다).
-    if (newVis === 'PUBLIC' && (book.storyCount ?? 0) > 0
-        && !confirm(`여백에 남긴 글 ${book.storyCount}개가 누구에게나 보여요. 공개로 바꿀까요?`)) return
+    // 공개 전환 고지(「여백에 남긴 글 N개가 누구에게나 보여요」)는 걷었다 — 책생글 M1(2026-10-30)부터 여백은
+    // 책 공개와 무관하게 나만 본다(서버가 남에게 0건). 거짓 고지가 공개를 망설이게 하지 않게.
     book.isPublic = !book.isPublic
     book.visibility = newVis
     book.visibilityLabel = book.isPublic ? '공개' : '비공개'

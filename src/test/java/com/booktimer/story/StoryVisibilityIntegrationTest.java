@@ -24,12 +24,12 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 /**
- * REQ-95 — 생각 빈 여백(인용만 남긴 글)은 남에게 어느 읽기 경로로도 안 보이고, 본인에게는 그대로 보인다.
+ * REQ-95 → REQ-212(책생글 M1) — 여백은 본인만이다. 생각 빈 여백뿐 아니라 생각 있는 여백도 남에게는 어느 읽기 경로로도
+ * 안 보이고(옛 REQ-95를 넓혔다 — C3), 본인에게는 그대로 보인다.
  * 실 H2 + 실제 빈(쿼리 술어를 목으로는 못 잰다). 컨텍스트는 {@code StoryFkIntegrationTest}와 같은 맨
  * {@code @SpringBootTest} 세계를 공유한다(T-235 — 새 세계를 띄우지 않는다).
  *
- * <p>같은 공개 책에 A(생각 빈 여백)와 B(생각 있는 여백)를 나란히 둔다 — B가 남에게 보이는 것이 양성
- * 대조라, 「아무것도 안 보인다」로 통과하는 공허한 게이트를 가른다.
+ * <p>같은 공개 책에 A(생각 빈 여백)와 B(생각 있는 여백)를 나란히 둔다 — 양성 대조는 본인 테스트(둘 다 보인다)가 맡는다.
  */
 @SpringBootTest
 @Transactional
@@ -78,18 +78,12 @@ class StoryVisibilityIntegrationTest {
     }
 
     @Test
-    @DisplayName("REQ-95 · 생각 빈 여백은 남의 소식·책방·여백 목록에 없고 좋아요는 404다")
-    void quoteOnly_isHiddenFromOthers() {
-        assertThat(quoteOnly.getText()).isEqualTo(""); // 전제 — 거르는 기준이 이 값이다
+    @DisplayName("REQ-212 · 생각 빈 여백도 생각 있는 여백도 남의 책방 · 여백 목록에 없고 좋아요는 404다")
+    void margins_areHiddenFromOthers() {
+        assertThat(quoteOnly.getText()).isEqualTo("");
 
-        List<Story> feed = storyRepository.feedRecent(stranger, Instant.now().minusSeconds(3600));
-        assertThat(feed).extracting(Story::getId).containsExactly(withThought.getId());
-
-        assertThat(storyService.allMarginsOf(stranger, "visowner"))
-                .extracting(ProfileMarginEntry::id).containsExactly(withThought.getId());
-
-        assertThat(storyService.marginOf(stranger, "visowner", book.getId()).entries())
-                .extracting(MarginEntry::id).containsExactly(withThought.getId());
+        assertThat(storyService.allMarginsOf(stranger, "visowner")).isEmpty();
+        assertThat(storyService.marginOf(stranger, "visowner", book.getId()).entries()).isEmpty();
 
         assertThatThrownBy(() -> storyService.like(stranger, quoteOnly.getId()))
                 .isInstanceOf(ResponseStatusException.class)
@@ -97,12 +91,13 @@ class StoryVisibilityIntegrationTest {
         assertThatThrownBy(() -> storyService.likers(stranger, quoteOnly.getId()))
                 .isInstanceOf(ResponseStatusException.class)
                 .satisfies(t -> assertThat(statusOf(t)).isEqualTo(HttpStatus.NOT_FOUND));
-        // 양성 대조 — 같은 책의 생각 있는 여백은 눌린다
-        assertThat(storyService.like(stranger, withThought.getId()).liked()).isTrue();
+        assertThatThrownBy(() -> storyService.like(stranger, withThought.getId()))
+                .isInstanceOf(ResponseStatusException.class)
+                .satisfies(t -> assertThat(statusOf(t)).isEqualTo(HttpStatus.NOT_FOUND));
     }
 
     @Test
-    @DisplayName("REQ-95 · 본인은 생각 빈 여백을 그대로 본다")
+    @DisplayName("REQ-212 · 본인은 생각 빈 여백 · 생각 있는 여백을 그대로 본다(양성 대조)")
     void quoteOnly_isVisibleToOwner() {
         assertThat(storyService.allMarginsOf(owner, "visowner"))
                 .extracting(ProfileMarginEntry::id)

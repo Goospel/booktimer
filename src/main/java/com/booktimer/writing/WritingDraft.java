@@ -80,6 +80,10 @@ public class WritingDraft extends BaseTimeEntity {
     @Column(name = "exported_at")
     private Instant exportedAt;
 
+    /** 옮긴 쪽지 id(V105 — 책생글 M1) — 옛 JS의 GET이 {@code movedTo}로 갈 곳을 찾는다(J5). 안 옮긴 빈 글이면 null. 읽기 전용. */
+    @Column(name = "story_id", insertable = false, updatable = false)
+    private Long storyId;
+
     protected WritingDraft() {
         // JPA
     }
@@ -193,5 +197,9 @@ public class WritingDraft extends BaseTimeEntity {
 
     public Instant getExportedAt() {
         return exportedAt;
+    }
+
+    public Long getStoryId() {
+        return storyId;
     }
 }
