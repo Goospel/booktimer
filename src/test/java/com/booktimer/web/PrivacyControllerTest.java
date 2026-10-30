@@ -421,17 +421,17 @@ class PrivacyControllerTest {
         String s8 = between(html, "<h2>8.", "<h2>9.");
         String s13 = between(html, "<h2>13.", "</section>");
         // D-A — 위탁 표 Google 행 · 28조의8 ② 1~5호 · 곳 수
-        assertThat(s8).contains("운영자 메일함(Gmail — 문의와 권리침해 요청의 수신·보관, 보유는 5절)")
+        assertThat(s8).contains("운영자 메일함(Gmail — 문의와 (" + E2 + "부터) 권리침해 요청의 수신·회신·보관, 보유는 5절)")
                 .contains("<strong>운영자 메일함의 국외 이전</strong>")
                 .contains("<strong>이전받는 자</strong>: Google LLC (Gmail)")
                 .contains("이용자가 문의처로 메일을 보내는 시점에")
                 .contains("(" + E2 + "부터) 권리침해 요청")
                 .contains("메일을 보내지 않으면 이전되지 않습니다")
                 .contains("소명 자료가 필요한 저작권 중단 요구와 회원이 아닌 사람의 요청은 지금 메일로만 받습니다")
-                .contains("<strong>운영자 메일함</strong>(Gmail — 문의·권리침해 요청) 다섯 곳")
+                .contains("<strong>운영자 메일함</strong>(Gmail — 문의·(" + E2 + "부터) 권리침해 요청) 다섯 곳")
                 .doesNotContain("네 곳");
         // D-A 5 · D-C — 5절
-        assertThat(s5).contains("문의처(운영자 메일함)로 받은 메일은 처리가 끝난 뒤 <strong>3년</strong>(분쟁 대비)까지 보관한 뒤 지웁니다")
+        assertThat(s5).contains("<strong>3년</strong>(분쟁 대비)까지 보관한 뒤 지웁니다")
                 .contains("임시조치로 가린 것은 그 기간(30일 이내)이 끝날 때까지 게시자의 이의가 없으면 삭제합니다 — 약관 제12조 ⑥");
         // M-2
         assertThat(s4).contains(BLOCK_EXCEPTION);
@@ -443,6 +443,32 @@ class PrivacyControllerTest {
         assertThat(between(s8, "블로그 글쓰기 AI(" + E2, "</td>")).isNotEmpty().doesNotContain("동의하고 직접 요청한");
         assertThat(s2margin).contains("쪽지에서 쓴 AI의 하루 사용 횟수");
         assertThat(s63).contains("블로그 글에 인용한 설명은 그 글을 지우거나 회원 탈퇴할 때 파기");
+    }
+
+    /**
+     * 7회차 — 운영자 메일함이 보내는 회신 · 통지의 국외 이전 · 2절 문의 메일 · 거부 효과(일반 문의 · 권리 행사도 메일로만) ·
+     * 5절 문의 메일과 탈퇴의 관계 · Gmail 블록 잠금 3개(이미 있는 문장 — 지워지면 Red).
+     */
+    @Test
+    @DisplayName("K2 7회차 · GET /privacy: 8절 운영자 회신·통지 국외 이전 · 거부 효과 · 2절 문의 메일 · 5절 탈퇴와 관계없이 3년 · 13절 · Gmail 블록 잠금 3개")
+    void getPrivacy_round7Fixes() throws Exception {
+        String html = squash(render("/privacy"));
+        String s2 = between(html, "<h2>2.", "<h2>3.");
+        String s5 = between(html, "<h2>5.", "<h2>6.");
+        String s8 = between(html, "<h2>8.", "<h2>9.");
+        String s13 = between(html, "<h2>13.", "</section>");
+        String gmail = between(s8, "운영자 메일함의 국외 이전", "</ul>");
+        assertThat(gmail).isNotEmpty()
+                .contains("운영자가 문의처(운영자 메일함)에서 회신·통지를 보내는 시점에")
+                .contains("운영자가 보내는 회신·통지(받는 사람의 메일 주소와 그 내용 — (" + E2 + "부터) 권리침해 처리 결과·게시자 통지와 첨부한 요청서 포함)")
+                .contains("일반 문의와 화면에서 직접 할 수 없는 권리 행사 요구(9절)도 지금은 메일로만 받습니다")
+                // 잠금 3개
+                .contains("<strong>이전되는 국가</strong>: 미국")
+                .contains("<strong>이전되는 항목</strong>: 보낸 사람의 메일 주소")
+                .contains("<strong>보유·이용 기간</strong>: 처리가 끝난 뒤 <strong>3년</strong>(5절)");
+        assertThat(s2).contains("<strong>문의 메일</strong> — 문의처로 메일을 보낸 경우 보낸 주소 · 본문 · 첨부");
+        assertThat(s5).contains("문의처(운영자 메일함)로 받은 메일과 거기서 보낸 회신·통지는 회원 탈퇴와 관계없이 처리가 끝난 뒤 <strong>3년</strong>");
+        assertThat(s13).contains("2절 문의 메일");
     }
 
     @Test
