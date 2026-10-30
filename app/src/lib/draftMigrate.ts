@@ -1,0 +1,71 @@
+// 기기 칸 옮기기(책생글 「여백 + 블로그」 §5.1 · J5 · REQ-222) — 옛 글 화면의 dirty `draft:` 칸을 여백 쪽지로 옮긴다.
+// 앱이 켜질 때 한 번. 서버가 받은 뒤에만 칸을 지우고, 실패(연결 · 서버 오류)면 칸을 남겨 다음에 다시 한다.
+// 옛 JS가 사라지면(M2 뒤 확인) 이 파일을 지운다 — 앱에서 /api/app/drafts를 부르는 곳은 여기뿐이다(금지 표 REQ-224).
+import { ApiError, margins, request } from '../api/client';
+import type { CreateMargin, DraftView, EditMargin, MarginView } from '../api/types';
+import { type KV, type Slot } from './draftSync';
+
+export interface MigrateDeps {
+  kv: KV;
+  userId: number;
+  getDraft: (id: number) => Promise<DraftView>;
+  getNote: (id: number) => Promise<MarginView>;
+  editNote: (id: number, body: EditMargin) => Promise<MarginView>;
+  createNote: (body: CreateMargin) => Promise<MarginView>;
+}
+
+/** 칸 글 = 서버 옮기기(V105)와 같은 꼴 — 제목 · 본문이 둘 다 있으면 「제목 + 빈 줄 + 본문」, 하나면 그것. */
+const slotText = (s: Slot) => [s.title.trim(), s.body].filter((x) => x.trim() !== '').join('\n\n');
+const norm = (s: string) => s.replace(/\s+/g, ' ').trim();
+
+async function migrateOne(d: MigrateDeps, key: string, id: number, slot: Slot): Promise<void> {
+  const text = slotText(slot);
+  if (!slot.dirty || text === '') return d.kv.removeItem(key); // 보낼 글이 없다
+
+  let bookId: number | null = null;
+  let movedTo: number | null = null;
+  try {
+    const draft = await d.getDraft(id);
+    if (!('movedTo' in draft)) return; // M1 전 서버(J96) — 칸을 건드리지 않고 다음에 다시
+    bookId = draft.bookId;
+    movedTo = draft.movedTo ?? null;
+  } catch (e) {
+    if (!(e instanceof ApiError && (e.status === 404 || e.status === 410))) throw e; // 지운 글 · M2 뒤 — 책을 알 수 없어 책 없는 쪽지
+  }
+
+  if (movedTo !== null) {
+    const note = await d.getNote(movedTo);
+    if (norm(note.text) === norm(text)) return d.kv.removeItem(key);
+    if (note.revision === 0) {
+      await d.editNote(movedTo, { quote: note.quote, text, revision: 0 });
+      return d.kv.removeItem(key);
+    }
+    // 이미 고친 쪽지 — 덮어쓰지 않고 새 쪽지로
+  }
+  await d.createNote({ bookId, quote: null, text });
+  await d.kv.removeItem(key);
+}
+
+export async function migrateDraftSlots(d: MigrateDeps): Promise<void> {
+  const prefix = `draft:${d.userId}:`;
+  for (const key of (await d.kv.getAllKeys()).filter((k) => k.startsWith(prefix))) {
+    const raw = await d.kv.getItem(key);
+    if (raw === null) continue;
+    try {
+      await migrateOne(d, key, Number(key.slice(prefix.length)), JSON.parse(raw) as Slot);
+    } catch {
+      // 연결 실패 · 서버 오류 — 칸을 남긴다(다음에 켜질 때 다시)
+    }
+  }
+}
+
+/** 앱이 켜질 때 부르는 연결 — 실제 서버 경로. */
+export const migrateDrafts = (kv: KV, userId: number) =>
+  migrateDraftSlots({
+    kv,
+    userId,
+    getDraft: (id) => request<DraftView>(`/api/app/drafts/${id}`),
+    getNote: margins.get,
+    editNote: margins.edit,
+    createNote: margins.add,
+  });

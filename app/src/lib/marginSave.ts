@@ -13,6 +13,11 @@ export function showsThought(text: string | null | undefined): boolean {
   return !/^[\p{P}\p{Z}\s]*$/u.test(text ?? '');
 }
 
+/** 쪽지 생각 입력칸 상한 — 1만 자, 불러온 글이 더 긴 옮긴 쪽지(옛 글 최대 10,102자)는 그 길이까지(REQ-210 · J3). 서버 상한은 10,200. */
+export function noteMaxLength(loaded: string): number {
+  return Math.max(10_000, loaded.length);
+}
+
 /** 공개 책 && 생각 있음 && 그 책에 남에게 보이는 여백(생각 있는 것)이 아직 없음 → 확인 시트. */
 export function marginSaveStep(p: { isPublic: boolean; thought: string; margins: { text: string | null }[] }): 'confirm' | 'save' {
   return p.isPublic && has(p.thought) && !p.margins.some((m) => has(m.text)) ? 'confirm' : 'save';

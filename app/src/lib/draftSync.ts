@@ -31,17 +31,57 @@ export type SaveOutcome =
   | { kind: 'error'; message: string; cause?: unknown }; // cause = 원래 오류(AI 보내기가 다시 던져 문구를 고른다)
 
 export const AUTOSAVE_MS = 1_500;
-export const slotKey = (userId: number, draftId: number) => `draft:${userId}:${draftId}`;
+/** 기기 칸 접두어 셋(J80) — 옛 글 `draft:` · 여백 쪽지 `margin:` · 블로그 초안 `blog:`. 로그아웃 · 탈퇴는 셋을 다 센다 · 지운다. */
+export const SLOT_PREFIXES = ['draft', 'margin', 'blog'] as const;
+export type SlotPrefix = (typeof SLOT_PREFIXES)[number];
+
+export const slotKey = (userId: number, id: number, prefix: SlotPrefix = 'draft') => `${prefix}:${userId}:${id}`;
 
 const fromServer = (d: DraftView, focus: string | null): Slot => ({ title: d.title ?? '', body: d.body, focus, base: d.revision, dirty: false });
 
-export function draftSync(p: { kv: KV; userId: number; put: (id: number, b: SaveDraft) => Promise<DraftView> }) {
-  const prefix = `draft:${p.userId}:`;
+const userKeys = async (kv: KV, userId: number, prefixes: readonly SlotPrefix[]) =>
+  (await kv.getAllKeys()).filter((k) => prefixes.some((x) => k.startsWith(`${x}:${userId}:`)));
+
+async function countDirty(kv: KV, keys: readonly string[]): Promise<number> {
+  const slots = await Promise.all(keys.map((k) => kv.getItem(k)));
+  return slots.filter((raw) => raw !== null && (JSON.parse(raw) as { dirty?: boolean }).dirty === true).length;
+}
+
+/** 이 userId의 미전송 칸 수 — 세 접두어 합(로그아웃 · 탈퇴 확인 — J80). */
+export async function pendingAll(kv: KV, userId: number): Promise<number> {
+  return countDirty(kv, await userKeys(kv, userId, SLOT_PREFIXES));
+}
+
+/** 이 userId의 칸 전부 — 세 접두어(로그아웃 · 탈퇴 — J80). */
+export async function clearAll(kv: KV, userId: number): Promise<void> {
+  await Promise.all((await userKeys(kv, userId, SLOT_PREFIXES)).map((k) => kv.removeItem(k)));
+}
+
+/** 첫 저장 전 새 쪽지 칸(J80) — 로컬 무작위 id라 같은 책 새 쪽지 둘을 오프라인에서 써도 칸이 겹치지 않는다. */
+export const newNoteKey = (userId: number, localId: string) => `margin:${userId}:new:${localId}`;
+
+/** 새 쪽지 칸을 만들고 로컬 id를 돌려준다. 칸 안에 bookId(책 없는 쪽지면 null)를 둔다 — 앱이 꺼져도 어느 책 쪽지인지 남게. */
+export async function startNewNote<T extends { bookId: number | null }>(kv: KV, userId: number, slot: T): Promise<string> {
+  const localId = `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 10)}`;
+  await kv.setItem(newNoteKey(userId, localId), JSON.stringify(slot));
+  return localId;
+}
+
+/** 첫 POST가 돌아오면 새 쪽지 칸을 id 칸(`margin:${userId}:${storyId}`)으로 옮긴다. */
+export async function adoptNewNote(kv: KV, userId: number, localId: string, storyId: number): Promise<void> {
+  const raw = await kv.getItem(newNoteKey(userId, localId));
+  if (raw !== null) await kv.setItem(slotKey(userId, storyId, 'margin'), raw);
+  await kv.removeItem(newNoteKey(userId, localId));
+}
+
+export function draftSync(p: { kv: KV; userId: number; put: (id: number, b: SaveDraft) => Promise<DraftView>; prefix?: SlotPrefix }) {
+  const kind = p.prefix ?? 'draft';
+  const key = (id: number) => slotKey(p.userId, id, kind);
   const read = async (id: number): Promise<Slot | null> => {
-    const raw = await p.kv.getItem(slotKey(p.userId, id));
+    const raw = await p.kv.getItem(key(id));
     return raw === null ? null : (JSON.parse(raw) as Slot);
   };
-  const write = (id: number, s: Slot) => p.kv.setItem(slotKey(p.userId, id), JSON.stringify(s));
+  const write = (id: number, s: Slot) => p.kv.setItem(key(id), JSON.stringify(s));
   const chain = new Map<number, Promise<SaveOutcome>>();
   // 칸 읽고 쓰기는 한 줄로 세운다 — 화면은 글자마다 edit를 기다리지 않고 부른다(엇갈리면 앞 편집이 사라진다). 네트워크는 줄 밖이다.
   let tail: Promise<unknown> = Promise.resolve();
@@ -62,7 +102,7 @@ export function draftSync(p: { kv: KV; userId: number; put: (id: number, b: Save
       if (e instanceof NetworkError) return { kind: 'offline' };
       if (e instanceof ApiError && e.status === 409) return { kind: 'conflict' };
       if (e instanceof ApiError && e.status === 404) {
-        await serial(() => p.kv.removeItem(slotKey(p.userId, id)));
+        await serial(() => p.kv.removeItem(key(id)));
         return { kind: 'gone' };
       }
       return { kind: 'error', message: failText(e, '글을 저장하지 못했어요 — 잠시 뒤 다시 해 주세요'), cause: e };
@@ -114,19 +154,8 @@ export function draftSync(p: { kv: KV; userId: number; put: (id: number, b: Save
         await write(id, next);
         return next;
       }),
-    drop: (id: number) => serial(() => p.kv.removeItem(slotKey(p.userId, id))),
-    /** 이 userId의 미전송 칸 수 — 로그아웃 확인(PR-I). */
-    async pending(): Promise<number> {
-      const keys = (await p.kv.getAllKeys()).filter((k) => k.startsWith(prefix));
-      const slots = await Promise.all(keys.map((k) => p.kv.getItem(k)));
-      return slots.filter((raw) => raw !== null && (JSON.parse(raw) as Slot).dirty).length;
-    },
-    /** 이 userId 칸 전부 — 로그아웃(PR-I). */
-    clear: (): Promise<void> =>
-      serial(async () => {
-        const keys = (await p.kv.getAllKeys()).filter((k) => k.startsWith(prefix));
-        await Promise.all(keys.map((k) => p.kv.removeItem(k)));
-      }),
+    drop: (id: number) => serial(() => p.kv.removeItem(key(id))),
+    // 미전송 수 · 전부 지우기는 접두어 셋을 함께 보는 pendingAll · clearAll(J80).
   };
   return api;
 }

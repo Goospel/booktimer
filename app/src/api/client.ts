@@ -8,10 +8,14 @@ import type {
   AiView,
   AppleIntent,
   ConsentView,
+  CreateMargin,
   Dashboard,
   DeleteRequest,
   DraftSummary,
   DraftView,
+  EditMargin,
+  MarginSummary,
+  MarginView,
   MaterialsView,
   MyBookSummary,
   SaveDraft,
@@ -231,6 +235,18 @@ export const margins = {
   create: (p: { bookId: number; quote: string; thought: string }) =>
     request<unknown>('/api/stories', { body: { bookId: p.bookId, quote: p.quote.trim() || null, text: p.thought.trim() } }),
   remove: (id: number) => request<void>(`/api/stories/${id}`, { method: 'DELETE' }),
+  // ↑ 옛 /api/stories 둘은 지금 화면이 쓴다 — 쪽지 화면(A1 화면 몫)이 아래로 옮기면 지운다.
+  // ↓ 쪽지(책생글 M1 — /api/app/margins). 응답은 늘 revision을 준다. 오류는 평문(404 남의·없는 쪽지 · 409 낡은 판).
+  ofBook: (bookId: number) => request<MarginSummary[]>(`/api/app/books/${bookId}/margins`),
+  /** 책 없는 쪽지(C9) */
+  bookless: () => request<MarginSummary[]>('/api/app/margins?book=none'),
+  get: (id: number) => request<MarginView>(`/api/app/margins/${id}`),
+  /** 첫 저장 때 행을 만든다(J6) — 201 */
+  add: (body: CreateMargin) => request<MarginView>('/api/app/margins', { body }),
+  edit: (id: number, body: EditMargin) => request<MarginView>(`/api/app/margins/${id}`, { method: 'PUT', body }),
+  delete: (id: number) => request<void>(`/api/app/margins/${id}`, { method: 'DELETE' }),
+  /** v1 /drafts/{id}/ai와 같은 몸 · 같은 상태 코드 — 응답에 생각 · revision이 없다(REQ-47) */
+  ai: (id: number, body: { step: Step; revision: number; focus: string | null }) => request<AiView>(`/api/app/margins/${id}/ai`, { body }),
 };
 
 // ── 글쓰기 · AI 질문 · 동의(PR-H) — /ai 응답에는 본문이 없다(REQ-47). 동의는 시행일 전이면 503(서버 문구가 날짜를 낸다) ──

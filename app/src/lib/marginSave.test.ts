@@ -1,6 +1,12 @@
 // 여백 저장 단계(v1 REQ-44 · REQ-96 — PR-G 사양 §5.6 · §5.7 · §11-1).
 // 확인 판정의 「생각」(trim)과 목록 그리기의 「생각」(showsThought)은 일부러 다르다.
-import { canSaveMargin, marginSaveStep, savedNotice, showsThought } from './marginSave';
+import { canSaveMargin, marginSaveStep, noteMaxLength, savedNotice, showsThought } from './marginSave';
+
+test('REQ-210 · 입력칸 상한 = max(10,000, 불러온 글 길이)', () => {
+  expect(noteMaxLength('')).toBe(10_000);
+  expect(noteMaxLength('가'.repeat(9_999))).toBe(10_000);
+  expect(noteMaxLength('가'.repeat(10_102))).toBe(10_102); // 옮긴 옛 글(제목 100 + 빈 줄 + 본문 10,000)은 그 길이까지
+});
 
 test('REQ-44 · 공개 책 첫 저장은 confirm', () => {
   expect(marginSaveStep({ isPublic: true, thought: '좋다', margins: [] })).toBe('confirm');

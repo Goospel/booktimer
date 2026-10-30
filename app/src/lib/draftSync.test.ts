@@ -7,7 +7,7 @@ jest.mock('expo-secure-store', () => ({
 
 import { ApiError, NetworkError } from '../api/client';
 import type { DraftView, SaveDraft } from '../api/types';
-import { draftSync, type KV, shouldDiscard, slotKey } from './draftSync';
+import { adoptNewNote, clearAll, draftSync, type KV, newNoteKey, pendingAll, shouldDiscard, slotKey, startNewNote } from './draftSync';
 
 function memoryKV(): KV & { map: Map<string, string> } {
   const map = new Map<string, string>();
@@ -90,10 +90,10 @@ test('REQ-38 · 다른 userId로 로그인하면 앞 사람 초안을 보지도 
   await second.sync.flush(7);
   expect(second.calls.map((c) => c.body)).toEqual(['서버 본문']);
   expect(JSON.stringify(second.calls)).not.toContain('앞 사람');
-  expect(await second.sync.pending()).toBe(0);
-  expect(await first.sync.pending()).toBe(1);
-  await second.sync.clear();
-  expect(await first.sync.pending()).toBe(1); // 남의 칸은 지우지 않는다
+  expect(await pendingAll(kv, 2)).toBe(0);
+  expect(await pendingAll(kv, 1)).toBe(1);
+  await clearAll(kv, 2);
+  expect(await pendingAll(kv, 1)).toBe(1); // 남의 칸은 지우지 않는다
 });
 
 test('REQ-38 · 404면 그 기기 초안을 버린다', async () => {
@@ -134,6 +134,76 @@ test('REQ-37 · 내보낸 표시 PUT은 고친 것이 없어도 가고 칸의 �
   await sync.edit(7, { body: '내보낸 뒤 고침' });
   await sync.flush(7);
   expect(calls[1]).toEqual({ title: '서버 제목', body: '내보낸 뒤 고침', revision: 4 });
+});
+
+test('U-137 · 410(옮긴 글)이면 칸을 지우지 않고 서버 평문 그대로 「저장하지 못함」 갈래', async () => {
+  const moved = '이 글은 여백으로 옮겨졌어요 — 앱을 닫았다가 다시 열어 주세요';
+  const { kv, sync } = setup(1, async () => { throw new ApiError(410, moved); });
+  await sync.open(server());
+  await sync.edit(7, { body: '옮기기 전에 쓴 글' });
+  expect(await sync.flush(7)).toMatchObject({ kind: 'error', message: moved });
+  expect(JSON.parse(kv.map.get(slotKey(1, 7))!)).toMatchObject({ body: '옮기기 전에 쓴 글', dirty: true });
+});
+
+describe('REQ-229 · 기기 칸 접두어 셋(J80)', () => {
+  const dirty = JSON.stringify({ dirty: true });
+  const clean = JSON.stringify({ dirty: false });
+
+  test('REQ-229 · 접두어 인자 — margin · blog 칸은 그 접두어로 쓰고 셈도 그 접두어만', async () => {
+    const kv = memoryKV();
+    const m = draftSync({ kv, userId: 1, put: async () => { throw new NetworkError(); }, prefix: 'margin' });
+    await m.open(server({ id: 70 }));
+    await m.edit(70, { body: '쪽지' });
+    expect(slotKey(1, 70, 'margin')).toBe('margin:1:70');
+    expect(slotKey(1, 5, 'blog')).toBe('blog:1:5');
+    expect(kv.map.has('margin:1:70')).toBe(true);
+    expect(kv.map.has(slotKey(1, 70))).toBe(false);
+    expect(JSON.parse(kv.map.get('margin:1:70')!)).toMatchObject({ body: '쪽지', dirty: true });
+    await m.drop(70);
+    expect(kv.map.size).toBe(0);
+  });
+
+  test('REQ-229 · pendingAll = draft · margin · blog dirty 칸 합(다른 userId 0)', async () => {
+    const kv = memoryKV();
+    kv.map.set('draft:1:7', dirty);
+    kv.map.set('margin:1:70', dirty);
+    kv.map.set('margin:1:new:abc', dirty);
+    kv.map.set('blog:1:5', dirty);
+    kv.map.set('blog:1:6', clean);
+    kv.map.set('draft:10:7', dirty); // userId 10 — 「1:」 접두로 걸리면 안 된다
+    kv.map.set('margin:2:70', dirty);
+    kv.map.set('booktimer.other', dirty);
+    expect(await pendingAll(kv, 1)).toBe(4);
+    expect(await pendingAll(kv, 3)).toBe(0);
+  });
+
+  test('REQ-229 · clearAll이 그 userId의 세 접두어를 다 지운다(남의 칸 · 다른 키는 남는다)', async () => {
+    const kv = memoryKV();
+    for (const k of ['draft:1:7', 'margin:1:70', 'margin:1:new:abc', 'blog:1:5', 'draft:10:7', 'margin:2:70', 'booktimer.other']) kv.map.set(k, clean);
+    await clearAll(kv, 1);
+    expect([...kv.map.keys()].sort()).toEqual(['booktimer.other', 'draft:10:7', 'margin:2:70']);
+  });
+
+  test('REQ-229 · 같은 책 새 쪽지 둘(오프라인)이 서로 다른 칸 · 칸 안에 bookId(책 없으면 null)', async () => {
+    const kv = memoryKV();
+    const a = await startNewNote(kv, 1, { bookId: 3, text: '첫째', dirty: true });
+    const b = await startNewNote(kv, 1, { bookId: 3, text: '둘째', dirty: true });
+    const c = await startNewNote(kv, 1, { bookId: null, text: '책 없음', dirty: true });
+    expect(new Set([a, b, c]).size).toBe(3);
+    expect(newNoteKey(1, a)).toMatch(/^margin:1:new:/);
+    expect(JSON.parse(kv.map.get(newNoteKey(1, a))!)).toEqual({ bookId: 3, text: '첫째', dirty: true });
+    expect(JSON.parse(kv.map.get(newNoteKey(1, b))!).text).toBe('둘째');
+    expect(JSON.parse(kv.map.get(newNoteKey(1, c))!).bookId).toBeNull();
+    expect(await pendingAll(kv, 1)).toBe(3);
+  });
+
+  test('REQ-229 · 새 쪽지 칸이 첫 POST 뒤 id 칸으로 옮겨진다', async () => {
+    const kv = memoryKV();
+    const local = await startNewNote(kv, 1, { bookId: 3, text: '오프라인에서 쓴 쪽지', dirty: true });
+    await adoptNewNote(kv, 1, local, 70);
+    expect(kv.map.has(newNoteKey(1, local))).toBe(false);
+    expect(JSON.parse(kv.map.get(slotKey(1, 70, 'margin'))!)).toEqual({ bookId: 3, text: '오프라인에서 쓴 쪽지', dirty: true });
+  });
 });
 
 test('REQ-142 · 제목·본문이 공백뿐이고 받은 질문이 0인 글만 나갈 때 지운다', () => {

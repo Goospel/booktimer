@@ -56,6 +56,8 @@ const ROWS: Row[] = [
   { id: 'REQ-178', pattern: /오늘 목표를 채웠어요|\bgoalBody\b/, skip: ['lib'], planted: "setNotice({ message: `오늘 목표를 채웠어요 · ${progress.streak}일째` })", strip: true },
   // 목표 줄 단서는 「바꾸기」 하나다 — 「목표 없음」을 고른 사람에게 목표를 권하지 않는다(REQ-177). 미니앱(동결)의 「정하기」는 앱 소스 밖이다.
   { id: 'REQ-177', pattern: /정하기/, skip: [], planted: "const goalCue = dash.todayGoalSeconds > 0 ? '바꾸기' : '정하기';", strip: true },
+  // 글은 여백 쪽지로 합쳤다(D9) — 앱은 /api/app/drafts를 부르지 않는다. 옛 기기 칸을 옮기는 draftMigrate만 예외(J5 — 옛 JS가 사라지면 함께 지운다).
+  { id: 'REQ-224', pattern: /\/api\/app\/drafts\b/, skip: [join('lib', 'draftMigrate.ts')], planted: "request<DraftView>(`/api/app/drafts/${id}`)", strip: true },
 ];
 
 // 블록 주석 · 줄 주석을 걷는다. URL의 //(앞이 :)는 주석이 아니다.
@@ -166,6 +168,18 @@ test('REQ-178 · 달성 순간 알림 글은 lib만 만든다 — 화면이 스�
   // lib 안 · 주석은 걸리지 않는다
   expect(hits(row!, [{ rel: join('lib', 'reminders.ts'), text: 'goalBody(progress.streak)' }])).toEqual([]);
   expect(hits(row!, [{ rel: join('app', 'planted.tsx'), text: '// goalBody는 lib만 부른다' }])).toEqual([]);
+});
+
+// A1 화면 몫(피그마 F1 뒤)이 draft 화면 · 홈 reading.drafts()와 client.ts의 drafts 함수를 지우면 기대를 []로 바꾼다 — 그때까지는 새 호출이 늘지 않게 지금 집합에 묶는다.
+test('REQ-224 · 앱이 /api/app/drafts를 부르지 않는다 — draftMigrate만 예외(심은 픽스처는 잡힌다)', () => {
+  const row = ROWS.find((r) => r.id === 'REQ-224');
+  expect(row).toBeDefined();
+  expect(hits(row!)).toEqual([join('api', 'client.ts')]);
+  const at = (rel: string, text: string) => hits(row!, [{ rel, text }]);
+  expect(at(join('app', 'planted.tsx'), "request('/api/app/drafts')")).toHaveLength(1); // 목록 꼴도 잡힌다
+  expect(at(join('lib', 'draftMigrate.ts'), row!.planted)).toEqual([]); // 예외 파일
+  expect(at(join('lib', 'draftMigrateX.ts'), row!.planted)).toHaveLength(1); // 예외는 그 파일 하나뿐
+  expect(at(join('app', 'planted.tsx'), '// 옛 /api/app/drafts는 410이다')).toEqual([]); // 주석의 「왜」는 남겨도 된다
 });
 
 test('REQ-177 · 목표 줄 단서는 「바꾸기」 하나다 — 앱 소스에 「정하기」가 없다(심은 픽스처는 잡힌다)', () => {
