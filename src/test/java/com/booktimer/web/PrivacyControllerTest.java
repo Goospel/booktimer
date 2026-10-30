@@ -461,7 +461,6 @@ class PrivacyControllerTest {
         assertThat(gmail).isNotEmpty()
                 .contains("운영자가 문의처(운영자 메일함)에서 회신·통지를 보내는 시점에")
                 .contains("운영자가 보내는 회신·통지(받는 사람의 메일 주소와 그 내용 — (" + E2 + "부터) 권리침해 처리 결과·게시자 통지와 첨부한 요청서 포함)")
-                .contains("일반 문의와 화면에서 직접 할 수 없는 권리 행사 요구(9절)도 지금은 메일로만 받습니다")
                 // 잠금 3개
                 .contains("<strong>이전되는 국가</strong>: 미국")
                 .contains("<strong>이전되는 항목</strong>: 보낸 사람의 메일 주소")
@@ -469,6 +468,36 @@ class PrivacyControllerTest {
         assertThat(s2).contains("<strong>문의 메일</strong> — 문의처로 메일을 보낸 경우 보낸 주소 · 본문 · 첨부");
         assertThat(s5).contains("문의처(운영자 메일함)로 받은 메일과 거기서 보낸 회신·통지는 회원 탈퇴와 관계없이 처리가 끝난 뒤 <strong>3년</strong>");
         assertThat(s13).contains("2절 문의 메일");
+    }
+
+    /**
+     * 8회차 — 거부 효과의 거짓 단정(「일반 문의도 메일로만」 — 웹 「문의」 화면이 있다) 정정 · 통지 수신자의 거부 효과 ·
+     * 2절 웹 문의 · 3절 문의 접수·처리 목적 · 7회차 문장 잠금 4개(이미 있는 문장 — 지워지면 Red).
+     */
+    @Test
+    @DisplayName("K2 8회차 · GET /privacy: 8절 거부 효과(웹 「문의」 화면 · 통지는 거부 불가) · 2절 웹 문의 · 3절 문의 접수·처리 · 13절 · 7회차 잠금 4개")
+    void getPrivacy_round8Fixes() throws Exception {
+        String html = squash(render("/privacy"));
+        String s2 = between(html, "<h2>2.", "<h2>3.");
+        String s3 = between(html, "<h2>3.", "<h2>4.");
+        String s5 = between(html, "<h2>5.", "<h2>6.");
+        String s8 = between(html, "<h2>8.", "<h2>9.");
+        String s13 = between(html, "<h2>13.", "</section>");
+        String gmail = between(s8, "운영자 메일함의 국외 이전", "</ul>");
+        assertThat(gmail).isNotEmpty()
+                .contains("일반 문의는 웹에 로그인해 「문의」 화면으로도 보낼 수 있으며, 그 내용은 서울 리전 서버에 저장됩니다")
+                .contains("화면에서 직접 할 수 없는 권리 행사 요구(9절)는 메일로 받습니다")
+                .doesNotContain("지금은 메일로만 받습니다")
+                .contains("게시자 통지는 받는 사람이 거부할 수 없습니다")
+                .contains("메일을 정하지 않으면 그 몫은 이전되지 않습니다")
+                // 7회차 잠금
+                .contains("(" + E2 + "부터) 권리침해 요청(약관 제12조)의 접수·처리(회신·통지 포함)와")
+                .contains("이용자가 보낸 메일과 운영자가 보내는 회신·통지는");
+        assertThat(s13).contains("(Gmail — 그중 권리침해 요청 몫은 " + E2 + " 시행)")
+                .contains("2절 웹 「문의」 화면의 문의 · 3절 문의·권리 행사 요구의 접수·처리와 회신");
+        assertThat(s5).contains("이 절 첫 문단의 탈퇴 시 파기는 서비스 계정의 정보에 대한 것입니다");
+        assertThat(s2).contains("<strong>문의</strong> — 웹 「문의」 화면으로 보낸 경우 유형·제목·내용과 처리 상태·운영자 답장(본인이 지우거나 회원 탈퇴하면 파기)");
+        assertThat(s3).contains("문의·권리 행사 요구(9절)·(" + E2 + "부터) 권리침해 요청(약관 제12조)의 접수·처리와 회신");
     }
 
     @Test
