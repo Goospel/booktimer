@@ -327,6 +327,46 @@ class PrivacyControllerTest {
                 .contains("<li>글에 넣은 인용(남의 블로그 문장·내 여백에서 가져온 글)</li>");
     }
 
+    /** 줄바꿈 · 들여쓰기를 공백 하나로 — 문장이 줄을 넘어가도 금지 문장 검사가 공허하게 통과하지 않게. */
+    private static String squash(String s) {
+        return s.replaceAll("\\s+", " ");
+    }
+
+    /** 4회차 리뷰(K1 · K5 · K6 · F1-1 · F1-10 · F1-11 · F2-1 · F3-1 · F3-4)가 짚은 문장 — 머지 뒤에 더하면 30일 재공지가 걸리는 것들. */
+    @Test
+    @DisplayName("K2 4회차 · GET /privacy: 남이 건 · 인용한 블로그 문장의 전송(4절 · 6-3 · 6-5) · 올리기 준비 자동 검토 · 권리침해 요청(2 · 5 · 6절) · 공개 날짜 · 남의 여백에 남는 인용 · 차단은 로그인 상태만 · 여백 공개 없애는 날짜 약속 없음")
+    void getPrivacy_round4Fixes() throws Exception {
+        String html = squash(render("/privacy"));
+        String s2 = between(html, "<h2>2.", "<h2>3.");
+        String s4 = between(html, "<h2>4.", "<h2>5.");
+        String s5 = between(html, "<h2>5.", "<h2>6.");
+        String s63 = between(html, "<h2>6-3.", "<h2>6-4.");
+        String s65 = between(html, "<h2>6-5.", "<h2>7.");
+        assertThat(s4).contains("그 이용자의 요청에 담겨 함께 국외로 전송될 수 있습니다").contains("올리거나 고쳐 올린 날짜")
+                .contains("로그인하지 않고").doesNotContain("차단하면 서로의 블로그 글과 댓글이 보이지 않습니다.");
+        assertThat(s63).contains("쪽지에 건 뒤 그 이용자가 여백 AI를 요청하면")
+                .doesNotContain("요청하지 않으면 쓴 글과 여백은 서비스 서버에만 저장되고 국외로 전송되지 않습니다.");
+        assertThat(s65).contains("그 이용자의 요청에 담겨 함께 국외로 전송될 수 있습니다").contains("「올리기 준비」 화면에 들어가면")
+                .doesNotContain("직접 요청하는 경우에 한해")
+                .doesNotContain("요청하지 않으면 쓴 글은 서비스 서버에만 저장되고 국외로 전송되지 않습니다.");
+        assertThat(s2).contains("저작권 중단 요구").contains("쪽지를 공유(내보내기)한 시각").doesNotContain(E2 + " 전에 없애며");
+        assertThat(s5).contains("권리침해 요청서").contains("그 이용자의 여백(쪽지에 건 문장").contains("블로그 글에 인용한 설명(「AI의 답」)");
+        assertThat(between(html, "<h2>6.", "<h2>6-1.")).contains("시행령 제41조");
+    }
+
+    @Test
+    @DisplayName("K2 4회차 · GET /terms: 남이 인용 · 건 문장을 AI 요청에 담는 이용 범위 · 임시조치 단위에 댓글 · 「AI의 답」 공개 · 읽는 화면의 AI 표시 · 직접 적은 책 문장의 출처 · 통지 수단 지정")
+    void getTerms_round4Fixes() throws Exception {
+        String html = squash(render("/terms"));
+        String a11 = between(html, "<h2>제11조 (생성형 AI 기능)</h2>", "<h2>제12조");
+        String a12 = between(html, "<h2>제12조 (블로그와 게시물)</h2>", "<h2>제13조");
+        assertThat(a11).contains("「AI의 답」으로 인용하면 그 부분은 공개됩니다")
+                .doesNotContain("물은 내용과 받은 설명은 그 이용자만 봅니다.").doesNotContain("블로그 글을 읽는 화면에는 AI가 없습니다");
+        assertThat(a12).contains("그 요청에 담아").contains("(댓글 하나, 인용 하나 또는 글 전체)")
+                .contains("본문에 직접 적은 책 문장에는 출처가 자동으로 붙지 않으니").contains("받을 수단(메일 등)을 정할 수 있습니다")
+                .contains("그 글이나 여백에는");
+    }
+
     @Test
     @DisplayName("REQ-200 · REQ-201 · GET /terms: 제12조 블로그와 게시물 — 시행일 E2 · 게시물 책임 · 금지 행위(무관용) · 신고 24시간 검토 · 임시조치 30일 · 게시자 통지 · 이의 · 저작권 중단 요구 수령인 · 운영자 조치")
     void getTerms_blogArticle() throws Exception {
