@@ -56,6 +56,8 @@ class StoryServiceTest {
     private StoryLikeRepository storyLikeRepository;
     @Mock
     private UserRowAssembler rowAssembler;
+    @Mock
+    private com.booktimer.writing.WritingDraftRepository writingDraftRepository;
 
     private StoryService service;
 
@@ -64,7 +66,7 @@ class StoryServiceTest {
     @BeforeEach
     void setUp() {
         service = new StoryService(storyRepository, bookRepository, rateLimitService,
-                profileService, storyLikeRepository, rowAssembler, java.time.Clock.systemUTC());
+                profileService, storyLikeRepository, rowAssembler, writingDraftRepository, java.time.Clock.systemUTC());
         me = userWithId(1L, "meuser", "나");
     }
 
@@ -303,6 +305,16 @@ class StoryServiceTest {
         assertThat(response.self()).isTrue();
         assertThat(response.entries()).extracting(MarginEntry::text).containsExactly("내 글");
         assertThat(response.book().coverUrl()).isEqualTo("https://img/cover.jpg");
+    }
+
+    // --- legacyText ---
+
+    @Test
+    @DisplayName("legacyText: 자르는 자리에 이모지(서로게이트 쌍)가 걸리면 쌍째 뺀다 — 반쪽 글자(�) 0")
+    void legacyText_doesNotSplitSurrogatePair() {
+        String text = "가".repeat(StoryService.LEGACY_TEXT_MAX - 2) + "😀" + "나".repeat(10);
+
+        assertThat(StoryService.legacyText(text)).isEqualTo("가".repeat(StoryService.LEGACY_TEXT_MAX - 2) + "…");
     }
 
     // --- delete ---

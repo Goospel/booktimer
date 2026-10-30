@@ -53,12 +53,13 @@ public interface StoryRepository extends JpaRepository<Story, Long> {
 
     /**
      * 내 서재 목록용 배치 집계 — 책 여럿의 쪽지 수를 한 쿼리에. 글이 없는 책은 행이 없다(호출부가 0으로 채운다).
-     * 빈 목록이면 호출하지 않는다.
+     * 빈 목록이면 호출하지 않는다. 옛 API가 그리는 쪽지만 센다 — 생각 · 옮긴 문장이 다 빈 쪽지는 빼서 패널 카드 수와 맞춘다
+     * ({@code StoryService.legacyVisible}과 같은 정의 · J85).
      */
     @Query("""
             select s.book.id as bookId, count(s) as count
             from Story s
-            where s.book.id in :bookIds
+            where s.book.id in :bookIds and (s.text <> '' or s.quote is not null)
             group by s.book.id
             """)
     List<BookStoryCount> countByBook(@Param("bookIds") Collection<Long> bookIds);

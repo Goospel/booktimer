@@ -50,6 +50,8 @@ class StoryServiceShareTest {
     private StoryLikeRepository storyLikeRepository;
     @Mock
     private UserRowAssembler rowAssembler;
+    @Mock
+    private com.booktimer.writing.WritingDraftRepository writingDraftRepository;
 
     private StoryService service;
     private User me;
@@ -58,7 +60,7 @@ class StoryServiceShareTest {
     @BeforeEach
     void setUp() {
         service = new StoryService(storyRepository, bookRepository, rateLimitService,
-                profileService, storyLikeRepository, rowAssembler, java.time.Clock.systemUTC());
+                profileService, storyLikeRepository, rowAssembler, writingDraftRepository, java.time.Clock.systemUTC());
         me = User.of("me@booktimer.com", "$2a$10$abcdefghijklmnopqrstuv", "나", "Asia/Seoul", Role.USER);
         ReflectionTestUtils.setField(me, "id", 1L);
         book = Book.register(me, "공개 책", null, null, null, null, null, BookStatus.READING);

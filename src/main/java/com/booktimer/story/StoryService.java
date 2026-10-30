@@ -9,6 +9,7 @@ import com.booktimer.search.UserSearchResult;
 import com.booktimer.security.RateLimitAction;
 import com.booktimer.security.RateLimitService;
 import com.booktimer.user.User;
+import com.booktimer.writing.WritingDraftRepository;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
@@ -52,6 +53,7 @@ public class StoryService {
     private final ProfileService profileService;
     private final StoryLikeRepository storyLikeRepository;
     private final UserRowAssembler rowAssembler;
+    private final WritingDraftRepository writingDraftRepository;
     private final Clock clock;
 
     public StoryService(StoryRepository storyRepository,
@@ -60,6 +62,7 @@ public class StoryService {
                         ProfileService profileService,
                         StoryLikeRepository storyLikeRepository,
                         UserRowAssembler rowAssembler,
+                        WritingDraftRepository writingDraftRepository,
                         Clock clock) {
         this.storyRepository = storyRepository;
         this.bookRepository = bookRepository;
@@ -67,6 +70,7 @@ public class StoryService {
         this.profileService = profileService;
         this.storyLikeRepository = storyLikeRepository;
         this.rowAssembler = rowAssembler;
+        this.writingDraftRepository = writingDraftRepository;
         this.clock = clock;
     }
 
@@ -127,12 +131,13 @@ public class StoryService {
         return story;
     }
 
-    /** 본인 글 즉시 삭제(실수 게시 회수 — §13.6). 없거나 타인 것이면 404(IDOR — 존재 비노출). */
+    /** 본인 글 즉시 삭제(실수 게시 회수 — §13.6). 없거나 타인 것이면 404(IDOR — 존재 비노출). 옮긴 쪽지면 원본 {@code writing_draft} 행도 함께 지운다. */
     public void delete(User actor, Long storyId) {
         Story story = storyRepository.findById(storyId)
                 .filter(s -> isSameUser(s.getUser(), actor))
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "글을 찾을 수 없습니다"));
         storyLikeRepository.deleteByStory(story); // story_like.story_id FK — 글보다 먼저
+        writingDraftRepository.deleteByStoryId(storyId); // 옮긴 쪽지면 원본 글도 파기(U-154 ⑤ · 처리방침 5절) — M2가 지운다
         storyRepository.delete(story);
     }
 
@@ -212,7 +217,14 @@ public class StoryService {
 
     /** 옛 API 응답의 생각 — {@value #LEGACY_TEXT_MAX}자를 넘으면 잘라 끝에 「…」(J85 — 옛 상한 안으로). */
     static String legacyText(String text) {
-        return text.length() <= LEGACY_TEXT_MAX ? text : text.substring(0, LEGACY_TEXT_MAX - 1) + "…";
+        if (text.length() <= LEGACY_TEXT_MAX) {
+            return text;
+        }
+        int end = LEGACY_TEXT_MAX - 1;
+        if (Character.isHighSurrogate(text.charAt(end - 1))) {
+            end--; // 이모지 같은 서로게이트 쌍을 반으로 가르지 않는다(반쪽 글자 → �)
+        }
+        return text.substring(0, end) + "…";
     }
 
     // ── 함께 걸기 · 좋아요(옛 경로 — 본인만) ────────────────────────────────────

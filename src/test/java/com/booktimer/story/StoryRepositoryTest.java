@@ -70,6 +70,22 @@ class StoryRepositoryTest {
     }
 
     @Test
+    @DisplayName("countByBook: 옛 API가 그리는 쪽지만 센다 — 생각 · 옮긴 문장이 다 빈 쪽지는 빠진다(legacyVisible과 같은 정의 · J85)")
+    void countByBook_skipsLegacyInvisible() {
+        User me = user("me@booktimer.com", "meuser");
+        Book book = publicBookOf(me, "책");
+        storyRepository.save(Story.of(me, "생각", book, null));
+        storyRepository.save(Story.of(me, "", book, null, "옮긴 문장"));
+        Story blank = storyRepository.save(Story.of(me, "곧 비울 글", book, null));
+        em.flush();
+        em.createNativeQuery("update story set text = '' where id = ?1").setParameter(1, blank.getId()).executeUpdate();
+        em.clear();
+
+        assertThat(storyRepository.countByBook(List.of(book.getId())))
+                .extracting(StoryRepository.BookStoryCount::getCount).containsExactly(2L);
+    }
+
+    @Test
     @DisplayName("책별 목록: 그 책의 여백만 — 같은 사람의 다른 책 글은 섞이지 않는다")
     void marginList_isScopedToOneBook() {
         User me = user("me@booktimer.com", "meuser");
