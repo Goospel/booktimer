@@ -6,8 +6,8 @@ jest.mock('expo-secure-store', () => ({
 }));
 
 import { ApiError, NetworkError } from '../api/client';
-import type { DraftView, SaveDraft } from '../api/types';
-import { adoptNewNote, clearAll, draftSync, type KV, newNoteKey, pendingAll, shouldDiscard, slotKey, startNewNote } from './draftSync';
+import type { CreateMargin, DraftView, SaveDraft } from '../api/types';
+import { adoptNewNote, clearAll, draftSync, type KV, newNoteKey, pendingAll, sendNewNotes, shouldDiscard, slotKey, startNewNote } from './draftSync';
 
 function memoryKV(): KV & { map: Map<string, string> } {
   const map = new Map<string, string>();
@@ -186,12 +186,12 @@ describe('REQ-229 · 기기 칸 접두어 셋(J80)', () => {
 
   test('REQ-229 · 같은 책 새 쪽지 둘(오프라인)이 서로 다른 칸 · 칸 안에 bookId(책 없으면 null)', async () => {
     const kv = memoryKV();
-    const a = await startNewNote(kv, 1, { bookId: 3, text: '첫째', dirty: true });
-    const b = await startNewNote(kv, 1, { bookId: 3, text: '둘째', dirty: true });
-    const c = await startNewNote(kv, 1, { bookId: null, text: '책 없음', dirty: true });
+    const a = await startNewNote(kv, 1, { bookId: 3, quote: null, text: '첫째', dirty: true });
+    const b = await startNewNote(kv, 1, { bookId: 3, quote: null, text: '둘째', dirty: true });
+    const c = await startNewNote(kv, 1, { bookId: null, quote: null, text: '책 없음', dirty: true });
     expect(new Set([a, b, c]).size).toBe(3);
     expect(newNoteKey(1, a)).toMatch(/^margin:1:new:/);
-    expect(JSON.parse(kv.map.get(newNoteKey(1, a))!)).toEqual({ bookId: 3, text: '첫째', dirty: true });
+    expect(JSON.parse(kv.map.get(newNoteKey(1, a))!)).toEqual({ bookId: 3, quote: null, text: '첫째', dirty: true });
     expect(JSON.parse(kv.map.get(newNoteKey(1, b))!).text).toBe('둘째');
     expect(JSON.parse(kv.map.get(newNoteKey(1, c))!).bookId).toBeNull();
     expect(await pendingAll(kv, 1)).toBe(3);
@@ -199,10 +199,35 @@ describe('REQ-229 · 기기 칸 접두어 셋(J80)', () => {
 
   test('REQ-229 · 새 쪽지 칸이 첫 POST 뒤 id 칸으로 옮겨진다', async () => {
     const kv = memoryKV();
-    const local = await startNewNote(kv, 1, { bookId: 3, text: '오프라인에서 쓴 쪽지', dirty: true });
+    const local = await startNewNote(kv, 1, { bookId: 3, quote: null, text: '오프라인에서 쓴 쪽지', dirty: true });
     await adoptNewNote(kv, 1, local, 70);
     expect(kv.map.has(newNoteKey(1, local))).toBe(false);
-    expect(JSON.parse(kv.map.get(slotKey(1, 70, 'margin'))!)).toEqual({ bookId: 3, text: '오프라인에서 쓴 쪽지', dirty: true });
+    expect(JSON.parse(kv.map.get(slotKey(1, 70, 'margin'))!)).toEqual({ bookId: 3, quote: null, text: '오프라인에서 쓴 쪽지', dirty: true });
+  });
+
+  // J100 — 앱이 꺼져 남은 새 쪽지 칸은 목록에 안 보여 다시 열 길이 없다 → 앱이 켜질 때(draftMigrate 다음) 보낸다.
+  test('REQ-229 · 앱이 켜질 때 dirty 새 쪽지 칸을 보내고 지운다 · 빈 칸은 보내지 않고 지운다 · 실패(연결 · 404)면 그대로 · 다른 userId 칸은 건드리지 않는다', async () => {
+    const kv = memoryKV();
+    const put = (k: string, v: object) => kv.map.set(k, JSON.stringify(v));
+    put(newNoteKey(1, 'sent'), { bookId: 3, quote: '옮긴 문장', text: '생각', dirty: true });
+    put(newNoteKey(1, 'bookless'), { bookId: null, quote: null, text: '책 없는 생각', dirty: true });
+    put(newNoteKey(1, 'empty'), { bookId: 3, quote: '  ', text: '\n', dirty: true });
+    put(newNoteKey(1, 'offline'), { bookId: 4, quote: null, text: '끊긴 쪽지', dirty: true });
+    put(newNoteKey(1, 'gone'), { bookId: 5, quote: null, text: '책이 지워진 쪽지', dirty: true });
+    put(newNoteKey(2, 'other'), { bookId: 3, quote: null, text: '남의 칸', dirty: true });
+    put('margin:1:70', { dirty: true }); // id 칸 — 화면이 연다(여기 몫 아님)
+    const sent: CreateMargin[] = [];
+    await sendNewNotes(kv, 1, async (b) => {
+      sent.push(b);
+      if (b.bookId === 4) throw new NetworkError();
+      if (b.bookId === 5) throw new ApiError(404, '책을 찾을 수 없어요');
+    });
+    expect(sent).toEqual(expect.arrayContaining([
+      { bookId: 3, quote: '옮긴 문장', text: '생각' },
+      { bookId: null, quote: null, text: '책 없는 생각' },
+    ]));
+    expect(sent).toHaveLength(4); // 빈 칸 · 남의 칸은 보내지 않는다
+    expect([...kv.map.keys()].sort()).toEqual(['margin:1:70', newNoteKey(1, 'gone'), newNoteKey(1, 'offline'), newNoteKey(2, 'other')].sort());
   });
 });
 

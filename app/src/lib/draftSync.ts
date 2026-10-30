@@ -1,7 +1,7 @@
 // 기기 초안 · 자동저장(v1 REQ-38 · PR-H 사양 REQ-141 · 142). 저장 안 된 제목 · 본문과 띠의 질문은 userId · 글별 칸에 둔다.
 // 서버가 원본이고, 칸은 서버가 확인하기 전까지의 안전망이다. 저장 요청은 글마다 한 번에 하나(응답 뒤 그사이 바뀌었으면 칸이 dirty로 남는다).
-import { ApiError, failText, NetworkError } from '../api/client';
-import type { DraftView, SaveDraft } from '../api/types';
+import { ApiError, failText, margins, NetworkError } from '../api/client';
+import type { CreateMargin, DraftView, SaveDraft } from '../api/types';
 
 export interface Slot {
   title: string;
@@ -60,8 +60,16 @@ export async function clearAll(kv: KV, userId: number): Promise<void> {
 /** 첫 저장 전 새 쪽지 칸(J80) — 로컬 무작위 id라 같은 책 새 쪽지 둘을 오프라인에서 써도 칸이 겹치지 않는다. */
 export const newNoteKey = (userId: number, localId: string) => `margin:${userId}:new:${localId}`;
 
+/** 새 쪽지 칸의 최소 필드(J99 ③) — pendingAll이 dirty를 세고 sendNewNotes가 앞의 셋을 보낸다. 그 밖의 필드는 화면 몫. */
+export interface NewNoteSlot {
+  bookId: number | null;
+  quote: string | null;
+  text: string;
+  dirty: boolean;
+}
+
 /** 새 쪽지 칸을 만들고 로컬 id를 돌려준다. 칸 안에 bookId(책 없는 쪽지면 null)를 둔다 — 앱이 꺼져도 어느 책 쪽지인지 남게. */
-export async function startNewNote<T extends { bookId: number | null }>(kv: KV, userId: number, slot: T): Promise<string> {
+export async function startNewNote<T extends NewNoteSlot>(kv: KV, userId: number, slot: T): Promise<string> {
   const localId = `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 10)}`;
   await kv.setItem(newNoteKey(userId, localId), JSON.stringify(slot));
   return localId;
@@ -72,6 +80,31 @@ export async function adoptNewNote(kv: KV, userId: number, localId: string, stor
   const raw = await kv.getItem(newNoteKey(userId, localId));
   if (raw !== null) await kv.setItem(slotKey(userId, storyId, 'margin'), raw);
   await kv.removeItem(newNoteKey(userId, localId));
+}
+
+/**
+ * 앱이 꺼져 남은 dirty 새 쪽지 칸을 보낸다(J100 — 앱이 켜질 때 draftMigrate 다음). 옮긴 문장 · 생각이 다 비었으면 지우기만,
+ * 아니면 POST해 서버가 받은 뒤 칸을 지운다. 실패(연결 · 5xx · 401 · 429 · 404 — 칸의 책이 그사이 지워짐)는 칸을 남긴다.
+ * ponytail: 응답을 잃은 POST를 다시 보내면 쪽지가 둘이 된다(J6과 같은 한계 — 하나를 지우면 된다).
+ */
+export async function sendNewNotes(kv: KV, userId: number, create: (b: CreateMargin) => Promise<unknown> = margins.add): Promise<void> {
+  const prefix = newNoteKey(userId, '');
+  for (const key of (await kv.getAllKeys()).filter((k) => k.startsWith(prefix))) {
+    const raw = await kv.getItem(key);
+    if (raw === null) continue;
+    const s = JSON.parse(raw) as NewNoteSlot;
+    if (!s.dirty) continue;
+    if ((s.quote ?? '').trim() === '' && s.text.trim() === '') {
+      await kv.removeItem(key);
+      continue;
+    }
+    try {
+      await create({ bookId: s.bookId, quote: s.quote, text: s.text });
+      await kv.removeItem(key);
+    } catch {
+      // 칸을 남긴다 — 다음에 켜질 때 다시(로그아웃 · 탈퇴 확인이 미전송으로 센다)
+    }
+  }
 }
 
 export function draftSync(p: { kv: KV; userId: number; put: (id: number, b: SaveDraft) => Promise<DraftView>; prefix?: SlotPrefix }) {
