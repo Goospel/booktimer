@@ -36,7 +36,13 @@ const note = (p: Partial<MarginView> = {}): MarginView => ({
   createdAt: '2026-11-05T00:00:00Z', updatedAt: '2026-11-05T00:00:00Z', ...p,
 });
 
-function setup(p: { getDraft?: () => Promise<DraftView>; getNote?: () => Promise<MarginView>; slots?: Record<string, Slot> } = {}) {
+function setup(p: {
+  getDraft?: () => Promise<DraftView>;
+  getNote?: () => Promise<MarginView>;
+  editNote?: () => Promise<MarginView>;
+  createNote?: () => Promise<MarginView>;
+  slots?: Record<string, Slot>;
+} = {}) {
   const kv = memoryKV();
   for (const [k, v] of Object.entries(p.slots ?? { [slotKey(1, 7)]: slot() })) kv.map.set(k, JSON.stringify(v));
   const calls = { getDraft: [] as number[], getNote: [] as number[], edit: [] as [number, EditMargin][], create: [] as CreateMargin[] };
@@ -45,8 +51,10 @@ function setup(p: { getDraft?: () => Promise<DraftView>; getNote?: () => Promise
     userId: 1,
     getDraft: async (id: number) => (calls.getDraft.push(id), (p.getDraft ?? (async () => draft()))()),
     getNote: async (id: number) => (calls.getNote.push(id), (p.getNote ?? (async () => note()))()),
-    editNote: async (id: number, b: EditMargin) => (calls.edit.push([id, b]), note({ text: b.text, revision: b.revision + 1 })),
-    createNote: async (b: CreateMargin) => (calls.create.push(b), note({ id: 99, bookId: b.bookId, text: b.text })),
+    editNote: async (id: number, b: EditMargin) =>
+      (calls.edit.push([id, b]), (p.editNote ?? (async () => note({ text: b.text, revision: b.revision + 1 })))()),
+    createNote: async (b: CreateMargin) =>
+      (calls.create.push(b), (p.createNote ?? (async () => note({ id: 99, bookId: b.bookId, text: b.text })))()),
   };
   return { kv, calls, run: () => migrateDraftSlots(deps) };
 }
@@ -82,7 +90,7 @@ test('REQ-222 · revision > 0(이미 고친 쪽지) → 덮어쓰지 않고 새 
   expect(s.kv.map.has(slotKey(1, 7))).toBe(false);
 });
 
-test('REQ-222 · movedTo null · 404 · 410 → 새 쪽지(책 없는 쪽지 포함)', async () => {
+test('REQ-222 · movedTo null · 410 → 새 쪽지(책 없는 쪽지 포함)', async () => {
   const unmoved = setup({ getDraft: async () => draft({ movedTo: null, bookId: 5 }) });
   await unmoved.run();
   expect(unmoved.calls.getNote).toEqual([]);
@@ -94,13 +102,59 @@ test('REQ-222 · movedTo null · 404 · 410 → 새 쪽지(책 없는 쪽지 포
   await bookless.run();
   expect(bookless.calls.create).toEqual([{ bookId: null, quote: null, text: '칸 제목\n\n칸 본문' }]);
 
-  // 404(지운 글) · 410(M2 뒤) — 책을 알 수 없어 책 없는 쪽지
-  for (const e of [new ApiError(404, '글을 찾을 수 없어요'), new ApiError(410, MOVED)]) {
-    const gone = setup({ getDraft: async () => { throw e; } });
-    await gone.run();
-    expect([e.status, gone.calls.create]).toEqual([e.status, [{ bookId: null, quote: null, text: '칸 제목\n\n칸 본문' }]]);
-    expect(gone.kv.map.has(slotKey(1, 7))).toBe(false);
-  }
+  // 410(M2 뒤) — 책을 알 수 없어 책 없는 쪽지
+  const gone = setup({ getDraft: async () => { throw new ApiError(410, MOVED); } });
+  await gone.run();
+  expect(gone.calls.create).toEqual([{ bookId: null, quote: null, text: '칸 제목\n\n칸 본문' }]);
+  expect(gone.kv.map.has(slotKey(1, 7))).toBe(false);
+});
+
+// J97 — 지운 뜻이 이긴다: 404는 「지운 글」(쪽지를 지우면 원본도 함께 파기 — U-154 ⑤)이라 되살리지 않는다.
+test('REQ-222 · 원본 404(지운 쪽지와 함께 파기) → 칸만 지움 · 만들기 0', async () => {
+  const s = setup({ getDraft: async () => { throw new ApiError(404, '글을 찾을 수 없어요'); } });
+  await s.run();
+  expect(s.calls.getNote).toEqual([]);
+  expect(s.calls.create).toEqual([]);
+  expect(s.kv.map.has(slotKey(1, 7))).toBe(false);
+});
+
+test('REQ-222 · movedTo 쪽지 GET 404 · PUT 404 → 칸만 지움 · 만들기 0', async () => {
+  const atGet = setup({ getNote: async () => { throw new ApiError(404, '여백을 찾을 수 없어요'); } });
+  await atGet.run();
+  expect([atGet.calls.edit, atGet.calls.create]).toEqual([[], []]);
+  expect(atGet.kv.map.has(slotKey(1, 7))).toBe(false);
+
+  const atPut = setup({ editNote: async () => { throw new ApiError(404, '여백을 찾을 수 없어요'); } });
+  await atPut.run();
+  expect(atPut.calls.edit).toHaveLength(1);
+  expect(atPut.calls.create).toEqual([]);
+  expect(atPut.kv.map.has(slotKey(1, 7))).toBe(false);
+});
+
+test('REQ-222 · PUT 409 → 칸 그대로 · 다음 실행(쪽지 revision > 0)에 새 쪽지 하나', async () => {
+  let fixed = false; // 첫 실행 사이에 다른 기기가 고쳤다 — 다음 실행은 고친 판을 읽는다
+  const s = setup({
+    getNote: async () => (fixed ? note({ revision: 1, text: '다른 기기에서 고친 쪽지' }) : note()),
+    editNote: async () => { fixed = true; throw new ApiError(409, '다른 기기에서 이 글이 바뀌었어요'); },
+  });
+  await s.run();
+  expect(s.calls.create).toEqual([]);
+  expect(JSON.parse(s.kv.map.get(slotKey(1, 7))!)).toEqual(slot());
+
+  await s.run();
+  expect(s.calls.edit).toHaveLength(1); // 둘째 실행은 revision > 0이라 덮어쓰지 않는다
+  expect(s.calls.create).toEqual([{ bookId: 1, quote: null, text: '칸 제목\n\n칸 본문' }]);
+  expect(s.kv.map.has(slotKey(1, 7))).toBe(false);
+});
+
+test('REQ-222 · 만들기 404(책이 그사이 지워짐) → 칸 그대로', async () => {
+  const s = setup({
+    getDraft: async () => draft({ movedTo: null, bookId: 5 }),
+    createNote: async () => { throw new ApiError(404, '책을 찾을 수 없어요'); },
+  });
+  await s.run();
+  expect(s.calls.create).toHaveLength(1);
+  expect(JSON.parse(s.kv.map.get(slotKey(1, 7))!)).toEqual(slot());
 });
 
 test('REQ-222 · 연결 실패 → 칸 그대로(다음에 다시)', async () => {
