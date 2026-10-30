@@ -367,6 +367,41 @@ class PrivacyControllerTest {
                 .contains("그 글이나 여백에는");
     }
 
+    /** 5회차 리뷰 — 인용 박스에 남는 원 글 제목 · 게시자 통지 수단 · 단정 문장의 반례 · 글쓴이가 전송을 막는 길 · 빠진 잠금. */
+    @Test
+    @DisplayName("K2 5회차 · GET /privacy: 인용에 원 글 제목이 남는다(2 · 4 · 5절) · 3년 보관 · 6-3 · 6-5 단정의 예외 · 글쓴이가 전송을 막는 길 · 여백 비공개는 공개를 없앤 뒤")
+    void getPrivacy_round5Fixes() throws Exception {
+        String html = squash(render("/privacy"));
+        String s2 = between(html, "<h2>2.", "<h2>3.");
+        String s4 = between(html, "<h2>4.", "<h2>5.");
+        String s5 = between(html, "<h2>5.", "<h2>6.");
+        String s63 = between(html, "<h2>6-3.", "<h2>6-4.");
+        String s65 = between(html, "<h2>6-5.", "<h2>7.");
+        assertThat(s2).contains("그 출처 이름·원 글 제목");
+        assertThat(s4).contains("여백은 본인만 보며(여백 공개를 없앤 뒤");
+        assertThat(s5).contains("원 글쓴이의 블로그 이름과 원 글의 제목(인용할 때의 것이 남을 수 있습니다)이 출처로")
+                .contains("<strong>3년</strong>");
+        assertThat(s63).contains("블로그 글쓰기 AI를 쓰면 그 글에 인용한 여백이 6-5절대로 전송될 수 있고")
+                .contains("내 문장이 다른 이용자의 AI 요청에 담기지 않게 하는 방법은 6-5절과 같습니다");
+        assertThat(s65).contains("(글쓴이가 자기 쪽지에 건 경우 포함)")
+                .contains("블로그에 올린 내 문장이 다른 이용자의 AI 요청에 담기지 않게 하려면 그 문장을 블로그에 올리지 않아야 합니다");
+    }
+
+    @Test
+    @DisplayName("K2 5회차 · GET /terms: 인용에 원 글 제목 · 게시자 통지는 앱 표시와 메일(미리 정하는 수단 없음) · 독자는 여백에서 AI에게 물을 수 있다 · 여백 비공개는 공개를 없앤 뒤 · 차단의 로그인 예외 잠금")
+    void getTerms_round5Fixes() throws Exception {
+        String html = squash(render("/terms"));
+        String a11 = between(html, "<h2>제11조 (생성형 AI 기능)</h2>", "<h2>제12조");
+        String a12 = between(html, "<h2>제12조 (블로그와 게시물)</h2>", "<h2>제13조");
+        assertThat(a11).contains("문장을 자기 여백에 걸어 여백에서 AI에게 물을 수는 있습니다")
+                .doesNotContain("AI를 부르지 않으며, 독자가 AI와 이야기하는 기능은 없습니다.");
+        assertThat(a12).contains("인용에는 원 글쓴이의 블로그 이름과 원 글의 제목이 출처로 표시됩니다")
+                .contains("게시자에게는 앱 안 「가려졌어요」 표시로")
+                .doesNotContain("게시자는 아래 문의처로 알림 받을 수단을 미리 정할 수 있고")
+                .contains("여백은 본인만 보며(여백 공개를 없앤 뒤)")
+                .contains("로그인하지 않고 웹 공개 페이지로 보면 보입니다");
+    }
+
     @Test
     @DisplayName("REQ-200 · REQ-201 · GET /terms: 제12조 블로그와 게시물 — 시행일 E2 · 게시물 책임 · 금지 행위(무관용) · 신고 24시간 검토 · 임시조치 30일 · 게시자 통지 · 이의 · 저작권 중단 요구 수령인 · 운영자 조치")
     void getTerms_blogArticle() throws Exception {
