@@ -187,6 +187,25 @@ class WritingApiControllerTest {
     }
 
     @Test
+    @DisplayName("U-154 ⑤ · 옮긴 쪽지를 지우면 writing_draft 원본도 0행 · GET drafts/{id} 404 · 목록에서 빠짐(처리방침 5절 파기)")
+    void deletingMovedNoteDeletesSourceDraft() throws Exception {
+        User me = register("wdelsrc", Role.USER);
+        String token = apiTokenService.issue(me);
+        Book book = book(me, "책");
+        WritingDraft moved = draft(me, book, "제목", "옮긴 글");
+        Story note = margin(me, book, null, "제목\n\n옮긴 글");
+        movedTo(moved, note);
+        WritingDraft other = draft(me, book, null, "남은 글");
+
+        call(delete("/api/app/margins/" + note.getId()), token).andExpect(status().isNoContent());
+
+        assertThat(draftRepository.findById(moved.getId())).isEmpty();
+        call(get("/api/app/drafts/" + moved.getId()), token).andExpect(status().isNotFound());
+        call(get("/api/app/drafts"), token).andExpect(status().isOk()).andExpect(jsonPath("$.length()").value(1));
+        assertThat(draftRepository.findById(other.getId())).isPresent();
+    }
+
+    @Test
     @DisplayName("REQ-216 · materials drafts = [] — 그 책에 옛 글이 있어도(옛 책 화면이 drafts.length를 읽는다)")
     void materialsDraftsEmpty() throws Exception {
         User me = register("wmatdrafts", Role.USER);

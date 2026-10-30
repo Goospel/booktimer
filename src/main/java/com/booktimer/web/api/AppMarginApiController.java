@@ -153,7 +153,7 @@ public class AppMarginApiController {
         static MarginSummary from(Story s) {
             String line = s.getText().lines().map(String::strip).filter(l -> !l.isEmpty()).findFirst().orElse("");
             return new MarginSummary(s.getId(), s.getBook() == null ? null : s.getBook().getId(), s.getQuote(),
-                    line.length() > 80 ? line.substring(0, 80) : line, s.getText().length(), s.getAiLog() != null,
+                    StoryService.cut(line, 80), s.getText().length(), s.getAiLog() != null,
                     s.getExportedAt() != null, s.getCreatedAt(), s.getUpdatedAt());
         }
     }

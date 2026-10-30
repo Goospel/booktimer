@@ -30,6 +30,8 @@ import java.time.ZoneId;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.hamcrest.Matchers.hasSize;
+import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.csrf;
+import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.user;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
@@ -193,6 +195,16 @@ class AppMarginApiControllerTest {
     }
 
     @Test
+    @DisplayName("M1 · 목록 미리보기 80자 자르기가 이모지(서로게이트 쌍)를 반으로 가르지 않는다")
+    void previewDoesNotSplitSurrogatePair() throws Exception {
+        String token = apiTokenService.issue(register("mprev"));
+        create(token, note(null, null, "가".repeat(79) + "😀" + "나"));
+
+        call(get("/api/app/margins").param("book", "none"), token).andExpect(status().isOk())
+                .andExpect(jsonPath("$[0].preview").value("가".repeat(79)));
+    }
+
+    @Test
     @DisplayName("REQ-219 · 남의 쪽지는 조회 · 고치기 · 지우기 모두 404(AI는 동의 문턱이 먼저 — WritingApiControllerAiTest status404)")
     void othersNoteIs404() throws Exception {
         User owner = register("mowner");
@@ -204,6 +216,16 @@ class AppMarginApiControllerTest {
         json(put("/api/app/margins/" + id), thief, edit(null, "덮어쓰기", 0, null)).andExpect(status().isNotFound());
         call(delete("/api/app/margins/" + id), thief).andExpect(status().isNotFound());
         assertThat(storyRepository.findById(id).orElseThrow().getText()).isEqualTo("주인의 생각");
+        // 책 없는 쪽지도 같은 판정 — 책을 거쳐 주인을 고르지 않는다(옛 좋아요 경로 포함)
+        Long bookless = create(ownerToken, note(null, null, "주인의 책 없는 쪽지"));
+        call(get("/api/app/margins/" + bookless), thief).andExpect(status().isNotFound());
+        json(put("/api/app/margins/" + bookless), thief, edit(null, "덮어쓰기", 0, null)).andExpect(status().isNotFound());
+        call(delete("/api/app/margins/" + bookless), thief).andExpect(status().isNotFound());
+        mvc.perform(post("/api/stories/" + bookless + "/like").with(user("mthief@booktimer.com")).with(csrf()))
+                .andExpect(status().isNotFound());
+        assertThat(storyRepository.findById(bookless).orElseThrow().getText()).isEqualTo("주인의 책 없는 쪽지");
+        mvc.perform(post("/api/stories/" + bookless + "/like").with(user("mowner@booktimer.com")).with(csrf()))
+                .andExpect(status().isOk()); // 양성 대조 — 주인은 누를 수 있다
         // 양성 대조 — 주인은 읽고 지울 수 있다
         call(get("/api/app/margins/" + id), ownerToken).andExpect(status().isOk()).andExpect(jsonPath("$.text").value("주인의 생각"));
         call(delete("/api/app/margins/" + id), ownerToken).andExpect(status().isNoContent());
