@@ -168,19 +168,15 @@ public class ProfileApiController {
     }
 
     /**
-     * 책 id → 그 책 여백의 마지막 글 시각.
+     * 책 id → 그 책 여백의 마지막 글 시각 — <b>본인 프로필에서만</b> 채운다.
      *
-     * <p><b>팔로우 게이트를 걷었다</b>(2026-08-22). 예전엔 본인·팔로워에게만 채웠는데, 여백 목록
-     * 자체가 공개 책이면 누구에게나 열린 지금은 발광만 막아 두면 「글은 보이는데 격자는 안 빛나는」
-     * 어긋남이 된다. 방어는 <b>책 가시성</b>이 진다 — {@code v.books()}가 언제나 PUBLIC만
-     * 담으므로({@link com.booktimer.profile.ProfileService}) 비공개 책은 여기 닿지 않는다.
-     *
-     * <p>실은 그 필터를 걷어도 <b>한 겹이 더 있다</b>: 이 맵은 {@code recency.get(b.getId())}로만
-     * 읽히고 그 {@code b}는 다시 {@code v.books()}를 순회한 것이라, PUBLIC 집합 밖의 키는 응답에
-     * 닿는 경로가 없다. 그래도 쿼리를 좁혀 두는 이유는 <b>안 쓸 행을 읽지 않기 위해서</b>다 —
-     * 우연한 이중 방어에 기대 필터를 지우지 말 것.
+     * <p>2026-10-30 책생글 M1(C3)부터 여백은 본인만의 공간이라, 남의 프로필 · 책 목록에는 빈 맵이다 — 「언제 썼나」
+     * 발광만으로도 남의 비공개 쪽지 활동이 샌다. {@code /api/profile}과 {@code /api/profile/books}가 이 함수 하나를 지난다.
      */
     private Map<Long, Instant> recencyOf(ProfileView v) {
+        if (!v.self()) {
+            return Map.of(); // 여백은 본인만(책생글 M1 — C3) — 「언제 썼나」 발광도 남에게 새지 않는다
+        }
         List<Long> bookIds = v.books().stream().map(Book::getId).toList();
         if (bookIds.isEmpty()) {
             return Map.of(); // 공개 책이 없으면 물어볼 것도 없다 (null-state — 빈 in 절 회피)

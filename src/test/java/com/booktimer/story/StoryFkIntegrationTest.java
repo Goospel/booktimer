@@ -23,8 +23,8 @@ import static org.assertj.core.api.Assertions.assertThatCode;
  *
  * <p>story는 users·book을, story_like는 story·users를 FK 참조한다(cascade 없음). 부모 삭제 경로 둘(회원 탈퇴·책 삭제)이 자식을
  * 먼저 정리하지 않으면 제약 위반으로 500이 난다 — mock 단위테스트는 FK 제약을 검증하지 못하므로
- * 실 스키마로 못 박는다. 특히 {@code story.book_id}가 NOT NULL이 된 뒤로는 「첨부만 풀기」가 불가능해
- * 책 삭제가 글 삭제를 <b>반드시</b> 동반해야 한다(2026-08-16 재설계 — 옛 unlinkBook 경로 폐기).
+ * 실 스키마로 못 박는다. 책 삭제는 2026-10-30 책생글 M1(C9)부터 쪽지를 지우지 않고 연결만 푼다({@code unlinkBook}) —
+ * 쪽지 · 좋아요가 남고 {@code book_id}만 null이 되어야 FK 위반이 없다.
  */
 @SpringBootTest
 @Transactional
@@ -82,18 +82,18 @@ class StoryFkIntegrationTest {
     }
 
     @Test
-    @DisplayName("책을 삭제하면 그 책 여백의 글도 함께 사라진다 — 여백은 책에 딸린 자리(FK 위반 없음)")
-    void deleteBook_withMarginStories_deletesThemToo() {
+    @DisplayName("REQ-219 · 책을 삭제해도 그 책 쪽지는 남고 연결만 풀린다 — 다른 책의 쪽지는 그대로(FK 위반 없음)")
+    void deleteBook_withMarginStories_unlinksThem() {
         User author = user("book-owner@booktimer.com", "bookowner");
         Book book = publicBookOf(author, "삭제될 책");
         Book keeper = publicBookOf(author, "남을 책");
-        Story doomed = storyRepository.saveAndFlush(Story.of(author, "책과 함께 사라질 문장", book, null));
+        Story orphan = storyRepository.saveAndFlush(Story.of(author, "책이 사라져도 남을 문장", book, null));
         Story survivor = storyRepository.saveAndFlush(Story.of(author, "다른 책의 문장", keeper, null));
 
         assertThatCode(() -> bookService.delete(author, book.getId())).doesNotThrowAnyException();
 
-        assertThat(storyRepository.findById(doomed.getId())).isEmpty();
-        assertThat(storyRepository.findById(survivor.getId())).isPresent(); // 다른 책의 여백은 무사
+        assertThat(storyRepository.findById(orphan.getId()).orElseThrow().getBook()).isNull();
+        assertThat(storyRepository.findById(survivor.getId()).orElseThrow().getBook()).isNotNull(); // 다른 책의 여백은 무사
         assertThat(bookRepository.findById(book.getId())).isEmpty();
     }
 
@@ -122,7 +122,7 @@ class StoryFkIntegrationTest {
     }
 
     @Test
-    @DisplayName("좋아요 달린 글이 있는 책을 지워도 FK 위반이 없다 (좋아요 → 글 → 책 순서)")
+    @DisplayName("좋아요 달린 글이 있는 책을 지워도 FK 위반이 없다 — 쪽지 · 좋아요가 남고 책 연결만 풀린다")
     void deleteBook_withLikedStories_succeeds() {
         User author = user("liked-book@booktimer.com", "likedbook");
         User liker = user("book-liker@booktimer.com", "booklikera");
@@ -132,8 +132,8 @@ class StoryFkIntegrationTest {
 
         assertThatCode(() -> bookService.delete(author, book.getId())).doesNotThrowAnyException();
 
-        assertThat(storyLikeRepository.findById(given.getId())).isEmpty();
-        assertThat(storyRepository.findById(story.getId())).isEmpty();
+        assertThat(storyLikeRepository.findById(given.getId())).isPresent();
+        assertThat(storyRepository.findById(story.getId()).orElseThrow().getBook()).isNull();
     }
 
     @Test

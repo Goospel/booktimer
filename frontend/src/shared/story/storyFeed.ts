@@ -74,11 +74,11 @@ export function hasFreshStory(lastStoryAt: string | null, now: number): boolean 
 }
 
 /**
- * 리스트 행에 「여백」 손잡이를 세울지 — 프라이버시 게이트는 서버가 이미 했다(비공개 책은 목록에 아예 없다).
- * 본인은 글이 없어도 노출(작성 진입), 남의 책은 글이 있을 때만(눌러도 빈 버튼을 안 만든다 — 이 집 관례).
+ * 리스트 행에 「여백」 손잡이(= 여백 패널 진입)를 세울지 — <b>본인 책방에서만</b>(책생글 M1 · 2026-10-30 — 여백은 나만 본다).
+ * 본인은 글이 없어도 노출(작성 진입). 남의 책방엔 손잡이도 패널도 없다 — 서버가 남에게 글 0건을 주므로 세우면 빈 패널이 된다.
  */
-export function showMarginHandle(self: boolean, lastStoryAt: string | null): boolean {
-    return self || lastStoryAt !== null
+export function showMarginHandle(self: boolean): boolean {
+    return self
 }
 
 /** 신고 detail 접두 — `[글#id] 원문 발췌(≤200자)` (§13.5 — 운영자가 id로 원문 대조). */

@@ -27,8 +27,6 @@ import java.util.List;
 
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
-import static org.mockito.Mockito.times;
-import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.user;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
@@ -36,7 +34,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 /**
- * GET /api/books/search — 검색 행의 「여백 N」 배지 집계({@code marginCounts}).
+ * GET /api/books/search — 검색 행의 「여백 N」 배지({@code marginCounts}) — 책생글 M1부터 늘 비어 있다(여백은 나만, REQ-212).
  *
  * <p>{@code BookSearchClient}는 {@link com.booktimer.testsupport.MockedBoundaryTest} 세계의 목이다(이 세계의
  * 모든 클래스가 공유) — 목의 {@code search()}는 null이라 검색을 타는 테스트는 직접 스텁한다.
@@ -88,34 +86,20 @@ class BookSearchMarginCountApiControllerTest {
     }
 
     @Test
-    @DisplayName("검색 응답에 isbn별 「여백 N」이 실린다 — 함께 걸린 글이 없는 책은 키 자체가 없다(배지 미표시)")
-    void search_carriesMarginCounts() throws Exception {
+    @DisplayName("REQ-212 · 검색 행 「여백 N」 배지 0 — 남의 공개 책에 「함께 걸기」 켠 옛 여백이 있어도 marginCounts가 비어 있다")
+    void search_hasNoMarginBadge() throws Exception {
         User author = register("margincount-author@booktimer.com", "margincountauthor", "글쓴이");
         register("margincount-viewer@booktimer.com", "margincountviewer", "보는이");
         Book bookA = publicBookWithIsbn(author, "함께 걸린 책", ISBN_A);
         sharedStory(author, bookA, "함께 건 글 1");
         sharedStory(author, bookA, "함께 건 글 2");
-        Book bookB = publicBookWithIsbn(author, "안 걸린 책", ISBN_B);
-        storyRepository.save(Story.of(author, "안 건 글", bookB, null));
         stubSearchWith(ISBN_A, ISBN_B);
 
         mockMvc.perform(get("/api/books/search").param("q", "책")
                         .with(user("margincount-viewer@booktimer.com")))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.marginCounts." + ISBN_A).value(2))
-                .andExpect(jsonPath("$.marginCounts." + ISBN_B).doesNotExist());
-    }
-
-    @Test
-    @DisplayName("배지 집계는 페이지당 1쿼리다 — 행마다 세는 N+1 금지")
-    void search_aggregatesInOneQuery() throws Exception {
-        register("margincount-solo@booktimer.com", "margincountsolo", "보는이");
-        stubSearchWith(ISBN_A, ISBN_B, "9788936434120");
-
-        mockMvc.perform(get("/api/books/search").param("q", "책")
-                        .with(user("margincount-solo@booktimer.com")))
-                .andExpect(status().isOk());
-
-        verify(storyRepository, times(1)).sharedCountsByIsbn(any());
+                .andExpect(jsonPath("$.results.length()").value(2)) // 양성 대조 — 검색 자체는 돈다
+                .andExpect(jsonPath("$.marginCounts").isMap())
+                .andExpect(jsonPath("$.marginCounts." + ISBN_A).doesNotExist());
     }
 }

@@ -14,7 +14,11 @@ public enum RateLimitAction {
     SEARCH(20, Duration.ofMinutes(1)),
     RECOMMEND(20, Duration.ofMinutes(1)),
     REPORT(10, Duration.ofHours(1)),
-    STORY_CREATE(10, Duration.ofHours(1)),
+    /**
+     * 여백 쪽지 <b>만들기</b>(웹 {@code POST /api/stories} · 앱 {@code POST /api/app/margins}). 고치기는 걸지 않는다.
+     * 시간당 10 → 30(2026-10-30 책생글 M1 — J7): 여백은 「마음껏 끄적이는」 자리라(D8) 짧은 쪽지를 몰아 쓰는 것이 정상이다.
+     */
+    STORY_CREATE(30, Duration.ofHours(1)),
 
     /**
      * 공부 필기 <b>생성</b>({@code POST /api/study/notes}). 갱신·삭제·조회에는 걸지 않는다 — 자동저장이
@@ -25,7 +29,7 @@ public enum RateLimitAction {
      * (분당 약 40행). 서버엔 멱등도 자연 상한도 없고({@code study_recall}의 {@code UNIQUE(user, date)} 같은
      * 것이 없다) 목록은 페이징도 없어, 그 사용자의 목록 왕복이 끝없이 커진다.
      *
-     * <p><b>여백 글(시간당 10)보다 넉넉한 이유</b>: 필기는 한 공부 세션에 1~3장, 하루 5~10장이 정상이고
+     * <p><b>옛 여백 글 상한(시간당 10)보다 넉넉했던 이유</b>(여백도 2026-10-30부터 30이다): 필기는 한 공부 세션에 1~3장, 하루 5~10장이 정상이고
      * 여러 책을 오가면 더 는다. 시간당 30이면 그 위로 넉넉하고, 위의 분당 40행 폭주는 1분 안에 걸린다.
      */
     STUDY_NOTE_CREATE(30, Duration.ofHours(1)),

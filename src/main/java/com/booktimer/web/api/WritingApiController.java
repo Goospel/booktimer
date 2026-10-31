@@ -8,7 +8,6 @@ import com.booktimer.writing.BookLine;
 import com.booktimer.writing.QuestionLog;
 import com.booktimer.writing.Step;
 import com.booktimer.writing.WritingAiService;
-import com.booktimer.writing.WritingAiService.AiView;
 import com.booktimer.writing.WritingDraft;
 import com.booktimer.writing.WritingMaterial;
 import com.booktimer.writing.WritingService;
@@ -37,6 +36,11 @@ import java.util.List;
  * {@link ResponseStatusException}의 사유는 평문 본문(404·409·503).
  *
  * <p>응답 record의 필드 이름이 앱 {@code types.ts}의 단일 출처다 — 이름을 바꾸면 앱이 조용히 {@code undefined}를 읽는다.
+ *
+ * <p><b>글(drafts)은 여백 쪽지로 옮겼다</b>(2026-10-30 책생글 M1 — D9 · J2 · J5). 옛 JS 호환 표(설계 §5.1): 쓰기(POST · PUT · ai ·
+ * DELETE)는 행과 무관하게 410 평문, GET 한 편은 {@code movedTo}(옮긴 쪽지 id), 목록은 읽기 전용 200, materials의 {@code drafts}는
+ * 늘 {@code []}. <b>404를 쓰지 않는다</b> — 옛 {@code draftSync}는 404에서 기기 칸을 지우고 410에서는 남긴다(새 JS가 옮긴다).
+ * 쪽지 API는 {@link AppMarginApiController}.
  */
 @RestController
 public class WritingApiController {
@@ -52,42 +56,48 @@ public class WritingApiController {
         this.aiService = aiService;
     }
 
-    /** 최근 고친 글 20편(책이 풀린 글 포함, 본문 없음). */
+    /** 옛 JS 쓰기 응답 — 평문(앱 {@code errorMessage}가 본문 글자를 그대로 화면 문구로 쓴다 — JSON이면 괄호가 화면에 뜬다). */
+    static final String MOVED = "이 글은 여백으로 옮겨졌어요 — 앱을 닫았다가 다시 열어 주세요";
+
+    private static ResponseStatusException gone() {
+        return new ResponseStatusException(HttpStatus.GONE, MOVED);
+    }
+
+    /** 최근 고친 글 20편(책이 풀린 글 포함, 본문 없음) — 읽기 전용(옛 홈의 「이어 쓰기」 — M2 뒤 410). */
     @GetMapping("/api/app/drafts")
     public List<DraftSummary> recent(Principal principal) {
         return writingService.recent(currentUserService.resolve(principal)).stream().map(DraftSummary::from).toList();
     }
 
-    /** @return 201 새 글 / 400 bookId 없음 / 404 남의·없는 책·공부 서재 id(REQ-48) */
+    /** @return 410 — 새 글은 여백 쪽지로({@code POST /api/app/margins}) */
     @PostMapping("/api/app/drafts")
-    public ResponseEntity<DraftView> create(@RequestBody CreateDraft request, Principal principal) {
-        User user = currentUserService.resolve(principal);
-        return ResponseEntity.status(HttpStatus.CREATED).body(view(user, writingService.create(user, request.bookId())));
+    public void create() {
+        throw gone();
     }
 
-    /** @return 200 / 404 남의·없는 글 */
+    /** @return 200({@code movedTo} = 옮긴 쪽지 id · 안 옮긴 빈 글은 null) / 404 남의·없는 글 */
     @GetMapping("/api/app/drafts/{id}")
     public DraftView get(@PathVariable Long id, Principal principal) {
         User user = currentUserService.resolve(principal);
         return view(user, writingService.get(user, id));
     }
 
-    /** @return 200(revision +1) / 400 길이 / 404 남의·없는 글 / 409 낡은 revision(덮어쓰지 않는다) */
+    /** @return 410 — 옮긴 글이든 아니든(옛 {@code draftSync}는 410에 칸을 남긴다 · 칸은 새 JS가 옮긴다) */
     @PutMapping("/api/app/drafts/{id}")
-    public DraftView save(@PathVariable Long id, @RequestBody SaveDraft request, Principal principal) {
-        User user = currentUserService.resolve(principal);
-        return view(user, writingService.save(user, id, request.title(), request.body(), request.revision(),
-                request.exported()));
+    public void save(@PathVariable Long id) {
+        throw gone();
     }
 
-    /** @return 204 / 404 남의·없는 글 */
+    /** @return 410 — 표를 얼린다(M2 전 따라잡기 검사가 셀 수 있게) */
     @DeleteMapping("/api/app/drafts/{id}")
-    public ResponseEntity<Void> delete(@PathVariable Long id, Principal principal) {
-        writingService.delete(currentUserService.resolve(principal), id);
-        return ResponseEntity.noContent().build();
+    public void delete(@PathVariable Long id) {
+        throw gone();
     }
 
-    /** 그 책의 여백·글·AI 재료 개수 — 본인 책이면 ADMIN·핸들 없는 계정도(REQ-11). @return 200 / 404 남의·없는 책 */
+    /**
+     * 그 책의 여백·AI 재료 개수 — 본인 책이면 ADMIN·핸들 없는 계정도(REQ-11). {@code drafts}는 늘 {@code []}(REQ-216 — 옛 책 화면이
+     * {@code data.drafts.length}를 읽어 필드를 빼면 깨진다). @return 200 / 404 남의·없는 책
+     */
     @GetMapping("/api/app/books/{id}/materials")
     public MaterialsView materials(@PathVariable Long id, Principal principal) {
         User user = currentUserService.resolve(principal);
@@ -97,22 +107,13 @@ public class WritingApiController {
         return new MaterialsView(writingService.bookLine(user, book),
                 margins.stream().map(MarginItem::from).toList(),
                 material.included().size(), material.excludedCount(),
-                writingService.draftsOf(user, book).stream().map(DraftSummary::from).toList(),
-                writingService.aiConsent(user));
+                List.of(), writingService.aiConsent(user));
     }
 
-    /**
-     * AI 질문(ASK)·꼬리 질문(FOLLOW) 한 번(PR-C) — 응답에 본문·제목·revision이 없다(REQ-47).
-     *
-     * @return 200 / 400 전제조건 / 403 동의 없음 / 404 남의·없는 글 / 409 revision 다름 / 422 거절 / 429 내 하루 몫 /
-     *         503 키·월 예산·전역 하루 몫·응답 없음
-     */
+    /** @return 410 — AI 질문은 쪽지에서({@code POST /api/app/margins/{id}/ai}) */
     @PostMapping("/api/app/drafts/{id}/ai")
-    public AiView ai(@PathVariable Long id, @RequestBody AiStep request, Principal principal) {
-        if (request.step() == null) {
-            throw new IllegalArgumentException("단계를 골라 주세요");
-        }
-        return aiService.run(currentUserService.resolve(principal), id, request.step(), request.revision(), request.focus());
+    public void ai(@PathVariable Long id) {
+        throw gone();
     }
 
     /** @return 200 / 503 처리방침 6-3절 시행일 전(REQ-15) */
@@ -133,7 +134,7 @@ public class WritingApiController {
         Book book = draft.getBook();
         return new DraftView(draft.getId(), book == null ? null : book.getId(), book == null ? null : book.getTitle(),
                 draft.getTitle(), draft.getBody(), draft.getRevision(), QuestionLog.parse(draft.getQuestionsJson()),
-                draft.getAiUpdatedAt(), aiService.remainingToday(user), writingService.aiConsent(user));
+                draft.getAiUpdatedAt(), aiService.remainingToday(user), writingService.aiConsent(user), draft.getStoryId());
     }
 
     /** IAE 문구가 그대로 400 본문(text/plain — 반사 XSS 방지, charset 명시는 한글 깨짐 방지). */
@@ -150,15 +151,6 @@ public class WritingApiController {
     }
 
     // ── DTO (엔티티 직렬화 금지 — 평탄 record 화이트리스트) ───────────────────
-
-    /** @param bookId 독서 서재 책 id — 공부 서재 id는 404(REQ-48) */
-    public record CreateDraft(Long bookId) {}
-
-    /**
-     * @param revision 클라가 마지막으로 받은 판 — 서버 값과 다르면 409
-     * @param exported 공유 시트 sharedAction일 때만 true. 래퍼 Boolean — 빠진 요청이 실패하지 않게
-     */
-    public record SaveDraft(String title, String body, int revision, Boolean exported) {}
 
     public record ConsentRequest(boolean agree) {}
 
@@ -186,9 +178,12 @@ public class WritingApiController {
      *
      * @param questions        받은 질문 기록 — 없으면 rounds = []
      * @param aiRemainingToday 오늘 남은 글쓰기 AI 몫({@code Kind.WRITE} — UTC 날짜, KST 오전 9시에 다시 채워진다)
+     * @param movedTo          옮긴 쪽지 id(V105 — 책생글 M1) · 안 옮긴 빈 글은 null. 새 JS의 기기 칸 옮기기가 이 필드의 <b>유무</b>로
+     *                         M1 전 서버를 가린다(필드가 없으면 칸을 건드리지 않는다 — J96)
      */
     public record DraftView(Long id, Long bookId, String bookTitle, String title, String body, int revision,
-                            QuestionLog questions, Instant aiUpdatedAt, int aiRemainingToday, boolean aiConsent) {}
+                            QuestionLog questions, Instant aiUpdatedAt, int aiRemainingToday, boolean aiConsent,
+                            Long movedTo) {}
 
     public record MarginItem(Long id, String quote, String text, Instant createdAt) {
         static MarginItem from(Story s) {

@@ -107,25 +107,12 @@ describe('BooksApp 검색 결과 — 이미 책장에 있는 책', () => {
 });
 
 describe('BooksApp 공개 전환 고지', () => {
-    test('여백 글이 있는 비공개 책을 공개로 바꾸면 개수를 담아 확인을 묻는다', async () => {
-        await mountAndToggle(book({ storyCount: 3 }));
-
-        expect(vi.mocked(confirm)).toHaveBeenCalledTimes(1);
-        expect(vi.mocked(confirm).mock.calls[0][0]).toContain('3');
-        // 2026-08-22 — 옛 문구 「팔로워에게 보여요」는 실제보다 좁은 고지였다(팔로우 축 제거).
-        expect(vi.mocked(confirm).mock.calls[0][0]).toContain('누구에게나 보여요');
-        expect(vi.mocked(confirm).mock.calls[0][0]).not.toContain('팔로워');
-    });
-
-    test('취소하면 화면이 공개로 바뀌지 않고 서버 요청도 안 나간다', async () => {
-        vi.mocked(confirm).mockReturnValue(false);
-
+    test('REQ-217 · 여백 글이 있는 비공개 책을 공개로 바꿔도 묻지 않는다 — 여백은 책 공개와 무관하게 나만 본다(책생글 M1)', async () => {
         const wrapper = await mountAndToggle(book({ storyCount: 3 }));
 
-        // 낙관 갱신이 confirm 보다 앞서면 여기서 깨진다 — 삽입 위치를 못 박는 계측기.
-        expect(chipLabel(wrapper)).toContain('비공개');
-        // 목록 로드 1회뿐 — visibility POST 는 나가지 않았다.
-        expect(vi.mocked(fetch)).toHaveBeenCalledTimes(1);
+        expect(vi.mocked(confirm)).not.toHaveBeenCalled();
+        await vi.waitFor(() => expect(vi.mocked(fetch)).toHaveBeenCalledTimes(2));
+        expect(chipLabel(wrapper)).toContain('공개');
     });
 
     test('확인하면 기존 경로대로 공개로 전환된다', async () => {

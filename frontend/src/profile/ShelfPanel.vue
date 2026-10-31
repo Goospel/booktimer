@@ -128,9 +128,8 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onNoteKeydown))
                         <span v-if="formatReadingTime(b.seconds)" class="shop-time">
                             <ShopIcon name="clock" :size="13" />{{ formatReadingTime(b.seconds) }}
                         </span>
-                        <!-- 「여백」 진입 — 본인은 전 책(작성 진입), 남의 책방은 글이 있는 책만.
-                             프라이버시 게이트는 서버가 이미 했다(비공개 책은 목록에 없다). -->
-                        <button v-if="showMarginHandle(self, b.lastStoryAt)" type="button" class="shop-margin-btn"
+                        <!-- 「여백」 진입 — 본인 책방에서만(전 책 — 작성 진입). 여백은 나만 본다(책생글 M1). -->
+                        <button v-if="showMarginHandle(self)" type="button" class="shop-margin-btn"
                                 :aria-label="b.title + ' 여백 보기'" @click="$emit('openMargin', b)">여백</button>
                     </div>
                     <!-- 구매 — 활성 제공자 리스트(알라딘/쿠팡/Yes24). 2개↑면 드롭다운, 1개면 제공자명 단일 버튼.

@@ -24,11 +24,10 @@ describe('hasFreshStory', () => {
 // ── 「여백」 손잡이 노출 — 프라이버시 게이트는 서버(비공개 책은 목록에 없다) ──
 describe('showMarginHandle', () => {
     it('본인 책은 글이 없어도 노출(작성 진입)', () => {
-        expect(showMarginHandle(true, null)).toBe(true)
+        expect(showMarginHandle(true)).toBe(true)
     })
-    it('남의 책은 글이 있을 때만 — 죽은 버튼을 세우지 않는다', () => {
-        expect(showMarginHandle(false, null)).toBe(false)
-        expect(showMarginHandle(false, '2026-07-01T12:00:00Z')).toBe(true)
+    it('REQ-217 · 남의 프로필에 여백 패널 없음 — 손잡이(패널의 유일한 진입)가 서지 않는다', () => {
+        expect(showMarginHandle(false)).toBe(false)
     })
 })
 

@@ -19,7 +19,8 @@ public record ProfileMarginEntry(Long id, String text, String quote, String bgCo
                                  Long bookId, String bookTitle) {
 
     public static ProfileMarginEntry of(Story story, long likeCount, boolean liked) {
-        return new ProfileMarginEntry(story.getId(), story.getText(), story.getQuote(), story.getBgCode(),
+        // 옛 API(웹 · 동결 미니앱)는 500자 카드만 그린다 — 넘는 쪽지는 잘라 준다(J85)
+        return new ProfileMarginEntry(story.getId(), StoryService.legacyText(story.getText()), story.getQuote(), story.getBgCode(),
                 story.getCreatedAt(), likeCount, liked, story.isShared(),
                 story.getBook().getId(), story.getBook().getTitle());
     }
