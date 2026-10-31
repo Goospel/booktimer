@@ -7,7 +7,7 @@ jest.mock('expo-secure-store', () => ({
 
 import { ApiError, NetworkError } from '../api/client';
 import type { CreateMargin, DraftView, SaveDraft } from '../api/types';
-import { adoptNewNote, clearAll, draftSync, type KV, newNoteKey, pendingAll, sendNewNotes, shouldDiscard, slotKey, startNewNote } from './draftSync';
+import { adoptNewNote, clearAll, deleteNote, draftSync, type KV, newNoteKey, pendingAll, sendNewNotes, shouldDiscard, slotKey, startNewNote } from './draftSync';
 
 function memoryKV(): KV & { map: Map<string, string> } {
   const map = new Map<string, string>();
@@ -264,6 +264,23 @@ describe('REQ-229 · 기기 칸 접두어 셋(J80)', () => {
     expect(sent).toHaveLength(4); // 빈 칸 · 남의 칸은 보내지 않는다
     expect([...kv.map.keys()].sort()).toEqual(['margin:1:70', newNoteKey(1, 'gone'), newNoteKey(1, 'offline'), newNoteKey(2, 'other')].sort());
   });
+});
+
+// A1 리뷰 8 — 목록에서 지운 쪽지의 기기 칸이 남으면 로그아웃 · 탈퇴 확인이 거짓 「저장 안 된 글」을 센다(다시 열 길도 없다).
+test('목록에서 쪽지 지우기 — 서버가 지운 뒤 그 쪽지 칸도 지운다 · 서버가 실패하면 칸을 남기고 던진다', async () => {
+  const kv = memoryKV();
+  kv.map.set(slotKey(1, 70, 'margin'), JSON.stringify({ title: '', body: '떠날 때 못 보낸 글', focus: null, base: 2, dirty: true }));
+  kv.map.set(slotKey(1, 71, 'margin'), JSON.stringify({ title: '', body: '다른 쪽지', focus: null, base: 1, dirty: true }));
+  const deleted: number[] = [];
+  await deleteNote(kv, 1, 70, async (id) => void deleted.push(id));
+  expect(deleted).toEqual([70]);
+  expect(kv.map.has(slotKey(1, 70, 'margin'))).toBe(false);
+  expect(await pendingAll(kv, 1)).toBe(1); // 다른 쪽지 칸은 그대로
+
+  await expect(deleteNote(kv, 1, 71, async () => { throw new NetworkError(); })).rejects.toBeInstanceOf(NetworkError);
+  expect(kv.map.has(slotKey(1, 71, 'margin'))).toBe(true);
+  await deleteNote(kv, null, 71, async () => undefined); // 로그인 정보가 없으면 칸은 건드리지 않는다
+  expect(kv.map.has(slotKey(1, 71, 'margin'))).toBe(true);
 });
 
 test('REQ-142 · 제목·본문이 공백뿐이고 받은 질문이 0인 글만 나갈 때 지운다', () => {

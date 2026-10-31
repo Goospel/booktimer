@@ -359,3 +359,23 @@ test('A1 리뷰 14 · _layout이 signedIn 게이트 안에서 startSlotSync를 �
   expect(START.test(s.replace('return startSlotSync(AsyncStorage, userId);', ''))).toBe(false);
   expect(START.test(s.replace('if (!signedIn) return;', 'if (!signedIn || true) return;'))).toBe(false);
 });
+
+// A1 리뷰 2 · 8 — 쪽지 지우기(확인 창 · 서버 지우기 · 기기 칸 지우기)는 한 곳(NoteRow.confirmRemoveNote)을 책 화면 · 서재가 같이 쓴다.
+test('A1 리뷰 2 · 서재 「책 없는 여백」 줄도 지운다 — 확인 창은 한 곳 · 책 화면과 서재가 같이 부른다(복붙 · 빠짐을 심으면 잡힌다)', () => {
+  const dialogs = (all: { rel: string; text: string }[]) => all.filter((f) => !f.rel.startsWith(SELF) && stripComments(f.text).includes("'이 여백을 지울까요?'")).map((f) => f.rel);
+  expect(dialogs(ALL)).toEqual([join('components', 'NoteRow.tsx')]);
+  expect(dialogs([...ALL, { rel: BOOK, text: "Alert.alert('이 여백을 지울까요?', '지우면 되돌릴 수 없어요')" }])).toHaveLength(2);
+  const wired = (s: string) => count(s, 'onDelete={() => confirmRemoveNote(');
+  expect(wired(srcOf(BOOK))).toBe(1);
+  expect(wired(srcOf(LIBRARY))).toBe(1);
+  expect(wired('<NoteRow key={m.id} m={m} source onPress={() => router.push(noteHref(null, m.id))} />')).toBe(0);
+});
+
+// A1 리뷰 4 — 서재에서 연 쪽지의 「여백을 남겼어요」 표시는 서재가 소비만 한다(알림 화면은 홈 · 책 — F1 §4.4-7). 안 하면 나중에 엉뚱한 화면에 뜬다.
+test('A1 리뷰 4 · 서재 포커스가 savedNotice를 소비한다 · 알림은 띄우지 않는다(빼면 잡힌다)', () => {
+  const focus = (s: string) => bodyOf(s, 'useFocusEffect(');
+  const lib = focus(srcOf(LIBRARY));
+  expect(lib).toContain('savedNotice.take()');
+  expect(lib).not.toContain('여백을 남겼어요');
+  expect(focus('useFocusEffect(useCallback(() => { void load(); }, [load]))')).not.toContain('savedNotice.take()');
+});

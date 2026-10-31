@@ -3,12 +3,12 @@
 // 쪽지 줄은 길게 누르거나 VoiceOver 동작 「지우기」로 지운다.
 import { router, useFocusEffect, useLocalSearchParams } from 'expo-router';
 import { useCallback, useState } from 'react';
-import { ActivityIndicator, Alert, Image, Pressable, View } from 'react-native';
+import { ActivityIndicator, Image, Pressable, View } from 'react-native';
 
 import { ApiError, failText, library, margins } from '../../api/client';
 import type { BookLine, MarginSummary, ShelfStatus } from '../../api/types';
 import { Cover } from '../../components/Cover';
-import { NoteRow } from '../../components/NoteRow';
+import { confirmRemoveNote, NoteRow } from '../../components/NoteRow';
 import { Badge, base, Button, Notice, Screen, Txt, useStacked } from '../../components/ui';
 import { durationLabel } from '../../lib/format';
 import { noteHref, pendingLeave, savedNotice } from '../../lib/marginSave';
@@ -56,22 +56,6 @@ export default function Book() {
       setNotice({ message: failText(e, '상태를 바꾸지 못했어요 — 잠시 뒤 다시 해 주세요'), tone: 'error' });
     }
     setStatusBusy(false);
-  }
-
-  function confirmRemove(m: MarginSummary) {
-    Alert.alert('이 여백을 지울까요?', '지우면 되돌릴 수 없어요', [
-      { text: '취소', style: 'cancel' },
-      { text: '지우기', style: 'destructive', onPress: () => void remove(m.id) },
-    ]);
-  }
-
-  async function remove(noteId: number) {
-    try {
-      await margins.delete(noteId);
-      setNotes((list) => list.filter((x) => x.id !== noteId));
-    } catch (e) {
-      setNotice({ message: failText(e, '여백을 지우지 못했어요 — 잠시 뒤 다시 해 주세요'), tone: 'error' });
-    }
   }
 
   if (!book) {
@@ -173,7 +157,12 @@ export default function Book() {
         {notes.length > 0 ? (
           <View>
             {notes.map((m) => (
-              <NoteRow key={m.id} m={m} onPress={() => router.push(noteHref(book.id, m.id))} onDelete={() => confirmRemove(m)} />
+              <NoteRow
+                key={m.id}
+                m={m}
+                onPress={() => router.push(noteHref(book.id, m.id))}
+                onDelete={() => confirmRemoveNote(m.id, { removed: () => setNotes((l) => l.filter((x) => x.id !== m.id)), failed: (message) => setNotice({ message, tone: 'error' }) })}
+              />
             ))}
           </View>
         ) : (

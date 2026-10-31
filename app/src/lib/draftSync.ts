@@ -128,6 +128,12 @@ export async function sendNewNotes(
   }
 }
 
+/** 목록에서 쪽지 지우기 — 서버가 지운 뒤 그 쪽지 칸도 지운다(남으면 로그아웃 · 탈퇴 확인이 거짓 미전송을 센다 — A1 리뷰 8). 실패는 던진다. */
+export async function deleteNote(kv: KV, userId: number | null, id: number, del: (id: number) => Promise<unknown> = margins.delete): Promise<void> {
+  await del(id);
+  if (userId !== null) await kv.removeItem(slotKey(userId, id, 'margin'));
+}
+
 export function draftSync(p: { kv: KV; userId: number; put: (id: number, b: SaveDraft) => Promise<SyncDoc>; prefix?: SlotPrefix }) {
   const kind = p.prefix ?? 'draft';
   const key = (id: number) => slotKey(p.userId, id, kind);
