@@ -147,13 +147,18 @@ public class AppMarginApiController {
      */
     public record EditMargin(String quote, String text, int revision, Boolean exported) {}
 
-    /** 목록 한 줄 — 생각 본문 없이 미리보기만(쪽지가 1만 자까지라 목록이 무거워지지 않게). @param preview 첫 비공백 줄 80자 */
-    public record MarginSummary(Long id, Long bookId, String quote, String preview, int chars, boolean hasAi,
-                                boolean exported, Instant createdAt, Instant updatedAt) {
+    /**
+     * 목록 한 줄 — 생각 본문 없이 미리보기만(쪽지가 1만 자까지라 목록이 무거워지지 않게).
+     *
+     * @param quoteSource 서재 「책 없는 여백」 줄의 출처(J84 — F1 확인 질문 3)
+     * @param preview     생각의 공백 · 줄바꿈 덩어리를 공백 하나로 접은 앞 80자(옮긴 글의 「옛 제목 + 빈 줄 + 본문」이 첫 줄에서 끊기지 않게)
+     */
+    public record MarginSummary(Long id, Long bookId, String quote, String quoteSource, String preview, int chars,
+                                boolean hasAi, boolean exported, Instant createdAt, Instant updatedAt) {
         static MarginSummary from(Story s) {
-            String line = s.getText().lines().map(String::strip).filter(l -> !l.isEmpty()).findFirst().orElse("");
+            String folded = s.getText().strip().replaceAll("\\s+", " ");
             return new MarginSummary(s.getId(), s.getBook() == null ? null : s.getBook().getId(), s.getQuote(),
-                    StoryService.cut(line, 80), s.getText().length(), s.getAiLog() != null,
+                    s.getQuoteSource(), StoryService.cut(folded, 80), s.getText().length(), s.getAiLog() != null,
                     s.getExportedAt() != null, s.getCreatedAt(), s.getUpdatedAt());
         }
     }

@@ -205,6 +205,33 @@ class AppMarginApiControllerTest {
     }
 
     @Test
+    @DisplayName("F1 확인 질문 3 · 목록 미리보기는 생각의 공백 · 줄바꿈 덩어리를 공백 하나로 접은 앞 80자(옮긴 글의 옛 제목 + 빈 줄 + 본문)")
+    void previewCollapsesLineBreaks() throws Exception {
+        String token = apiTokenService.issue(register("mfold"));
+        create(token, note(null, null, "  익숙한 길에서 벗어나기\\n\\n퇴근길을 바꿔 본 건\\t 지난주였다  "));
+        create(token, note(null, null, "가\\n".repeat(50)));
+
+        call(get("/api/app/margins").param("book", "none"), token).andExpect(status().isOk())
+                .andExpect(jsonPath("$[1].preview").value("익숙한 길에서 벗어나기 퇴근길을 바꿔 본 건 지난주였다"))
+                .andExpect(jsonPath("$[0].preview").value("가 ".repeat(40))); // 접은 뒤에 80자를 자른다
+    }
+
+    @Test
+    @DisplayName("F1 확인 질문 3 · 목록 한 줄에 quoteSource — 옮긴 문장이 없는 쪽지는 null")
+    void summaryCarriesQuoteSource() throws Exception {
+        User me = register("msrc");
+        String token = apiTokenService.issue(me);
+        Long bookId = book(me).getId();
+        create(token, note(bookId, "새는 알에서 나오려고 투쟁한다", null));
+        create(apiTokenService.issue(me), note(null, null, "책 없는 생각"));
+
+        call(get("/api/app/books/" + bookId + "/margins"), token).andExpect(status().isOk())
+                .andExpect(jsonPath("$[0].quoteSource").value("『데미안』 · 헤르만 헤세"));
+        call(get("/api/app/margins").param("book", "none"), token).andExpect(status().isOk())
+                .andExpect(jsonPath("$[0].quoteSource").doesNotExist());
+    }
+
+    @Test
     @DisplayName("REQ-219 · 남의 쪽지는 조회 · 고치기 · 지우기 모두 404(AI는 동의 문턱이 먼저 — WritingApiControllerAiTest status404)")
     void othersNoteIs404() throws Exception {
         User owner = register("mowner");
