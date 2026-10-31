@@ -458,13 +458,19 @@ test('A1 리뷰 11 · 쪽지 화면 put 어댑터는 keptBody로 비교한다(tr
 test('재리뷰 B · save는 만드는 중이면 flush 대신 createFirst를 기다린다(옛 꼴을 심으면 잡힌다)', () => {
   // 3차 1 — 만든 뒤 「만드는 동안 더 쓴 것」을 flush까지 해야 AI가 그 PUT 뒤의 판으로 나간다(v1 REQ-36 「비우기 → 그 revision으로 /ai」).
   // POST 중(id === null) · adopt 창(creating) 둘 다 같은 갈래다. not-dirty면 flush는 PUT 없이 칸의 판(= takeTheirs가 넣은 서버 판)을 돌려준다.
+  // 4차 — 만드는 동안 다 지웠으면 flush하지 않는다(빈 PUT → 서버 400 오류 알림). 떠날 때 runLeave가 지운다.
   const waits = (s: string) =>
-    /const r =\s*id === null \|\| creating\.current\s*\?\s*await createFirst\(\)\.then\(\(c\) => \(c\.kind === 'saved' && noteId\.current !== null \? s\.flush\(noteId\.current, opts\) : c\)\)\s*:\s*await s\.flush\(id, opts\);/.test(
+    /const r =\s*id === null \|\| creating\.current\s*\?\s*await createFirst\(\)\.then\(\(c\) =>\s*\(c\.kind === 'saved' && noteId\.current !== null && !shouldDiscard\(\{ title: quoteRef\.current, body: textRef\.current, rounds: roundsRef\.current \}\)\s*\? s\.flush\(noteId\.current, opts\)\s*: c\),?\s*\)\s*:\s*await s\.flush\(id, opts\);/.test(
       bodyOf(s, 'async function save('),
     );
   expect(waits(srcOf(NOTE))).toBe(true);
   expect(waits('async function save(opts) {\n    const r = id === null ? await createFirst() : await s.flush(id, opts);\n  }')).toBe(false); // B 전
   expect(waits('async function save(opts) {\n    const r = id === null || creating.current ? await createFirst() : await s.flush(id, opts);\n  }')).toBe(false); // 67026ad6(만든 뒤 flush 없음)
+  expect(
+    waits(
+      "async function save(opts) {\n    const r =\n      id === null || creating.current\n        ? await createFirst().then((c) => (c.kind === 'saved' && noteId.current !== null ? s.flush(noteId.current, opts) : c))\n        : await s.flush(id, opts);\n  }",
+    ),
+  ).toBe(false); // 2ff8b9af(빈 쪽지 재판정 없음)
 });
 
 // 재리뷰 G2 — 공용 지우기가 기기 칸을 지우려면 userId를 넘겨야 한다(null이면 칸이 남는다).

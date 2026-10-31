@@ -259,24 +259,29 @@ describe('3차 2 · runLeave 약속은 그 갈래의 마지막 효과까지 기�
     await new Promise((r) => setTimeout(r, 0));
   };
   type Dep = 'dropNewSlot' | 'del' | 'drop' | 'flush';
-  const cases: { act: LeaveAction; id: number | null; on: Dep }[] = [
+  const cases: { act: LeaveAction; id: number | null; on: Dep; gone?: boolean }[] = [
     { act: 'create', id: null, on: 'flush' },
     { act: 'delete', id: 9, on: 'del' },
     { act: 'delete', id: 9, on: 'drop' },
+    { act: 'delete', id: 9, on: 'drop', gone: true }, // 4차 — DELETE 404 갈래의 drop도 기다린다
     { act: 'delete-after-create', id: null, on: 'dropNewSlot' },
     { act: 'delete-after-create', id: null, on: 'del' },
     { act: 'delete-after-create', id: null, on: 'drop' },
     { act: 'drop-slot', id: null, on: 'dropNewSlot' },
     { act: 'flush', id: 9, on: 'flush' },
   ];
-  test.each(cases)('$act · $on을 붙잡으면 그동안 안 풀리고 · 열면 풀린다', async ({ act, id: start, on }) => {
+  test.each(cases)('$act · $on을 붙잡으면 그동안 안 풀리고 · 열면 풀린다(404: $gone)', async ({ act, id: start, on, gone }) => {
     const g = gate();
     let id = start;
     const dep = (name: Dep) => async () => (name === on ? g.p : undefined);
     const p = runLeave(act, {
       dropNewSlot: dep('dropNewSlot'),
       createFirst: async () => ((id = id ?? 70), { kind: 'saved' }),
-      del: dep('del'),
+      del: gone
+        ? async () => {
+            throw new ApiError(404, '글을 찾을 수 없습니다');
+          }
+        : dep('del'),
       drop: dep('drop'),
       flush: dep('flush'),
       noteId: () => id,
