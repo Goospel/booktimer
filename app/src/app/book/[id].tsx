@@ -11,7 +11,7 @@ import { Cover } from '../../components/Cover';
 import { NoteRow } from '../../components/NoteRow';
 import { Badge, base, Button, Notice, Screen, Txt, useStacked } from '../../components/ui';
 import { durationLabel } from '../../lib/format';
-import { noteHref, savedNotice } from '../../lib/marginSave';
+import { noteHref, pendingLeave, savedNotice } from '../../lib/marginSave';
 import { SECTIONS } from '../../lib/shelf';
 import { color, line, space } from '../../theme/tokens';
 
@@ -28,7 +28,8 @@ export default function Book() {
 
   const load = useCallback(async () => {
     try {
-      const [m, list] = await Promise.all([library.materials(id), margins.ofBook(id)]);
+      // 방금 떠난 쪽지의 저장(첫 POST · 남은 PUT · 빈 쪽지 지우기)을 상한까지 기다린 뒤 목록을 읽는다 — 「여백을 남겼어요」 아래가 비지 않게
+      const [m, list] = await Promise.all([library.materials(id), pendingLeave.wait().then(() => margins.ofBook(id))]);
       setBook(m.book);
       setNotes(list);
       setLoadError(null);

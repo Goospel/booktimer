@@ -80,3 +80,33 @@ export const savedNotice = {
     return v;
   },
 };
+
+export type LeaveAction = 'none' | 'drop-slot' | 'create' | 'delete-after-create' | 'delete' | 'flush';
+
+/**
+ * 쪽지 화면을 떠날 때 할 일(F1 §4.4-7). loaded = 기존 쪽지를 GET으로 불러왔는가(새 쪽지는 참) — 불러오기 전이면 지우지도 보내지도 않는다
+ * (편집기가 빈 채라 「빈 쪽지」로 보인다 — A1 리뷰 1). empty = 두 칸이 비고 받은 질문 0 · waiting = 질문을 보내는 중(서버가 몫을 깎았다).
+ * 새 쪽지 첫 POST가 나가는 중에 다 지우고 떠나면 만든 뒤 지운다(A1 리뷰 7).
+ */
+export function leaveAction(p: { loaded: boolean; empty: boolean; waiting: boolean; noteId: number | null; creating: boolean }): LeaveAction {
+  const discard = p.empty && !p.waiting;
+  if (p.noteId === null) return discard ? (p.creating ? 'delete-after-create' : 'drop-slot') : 'create';
+  if (!p.loaded) return 'none';
+  return discard ? 'delete' : 'flush';
+}
+
+export const LEAVE_WAIT_MS = 2_000;
+let leaving: Promise<unknown> = Promise.resolve();
+/** 떠날 때 보낸 저장 한 칸 — 돌아간 책 화면 · 서재가 목록을 읽기 전에 상한까지만 기다린다(떠나는 화면은 기다리지 않는다 — A1 리뷰 12). */
+export const pendingLeave = {
+  set(p: Promise<unknown>) {
+    leaving = p.catch(() => undefined);
+  },
+  wait(ms = LEAVE_WAIT_MS): Promise<void> {
+    let t: ReturnType<typeof setTimeout> | undefined;
+    const cap = new Promise<void>((r) => {
+      t = setTimeout(r, ms);
+    });
+    return Promise.race([leaving, cap]).then(() => clearTimeout(t));
+  },
+};

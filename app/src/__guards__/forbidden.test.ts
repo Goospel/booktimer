@@ -291,3 +291,50 @@ test('R-03 · 로그인 SDK import는 Apple · expo-auth-session · 카카오 �
   ];
   expect(loginSdkImports(planted)).toEqual(['@react-native-google-signin/google-signin', 'expo-auth-session/providers/google', 'react-native-google-one-tap']);
 });
+
+// ── 화면 배선 — lib 판정을 화면이 실제로 쓰는가(A1 리뷰). 렌더러가 없어(들이면 package.json 지문이 바뀐다) 소스로 본다 ─────────
+const srcOf = (rel: string) => {
+  const f = ALL.find((x) => x.rel === rel);
+  if (!f) throw new Error(`없는 파일: ${rel}`);
+  return stripComments(f.text);
+};
+const count = (s: string, needle: string) => s.split(needle).length - 1;
+/** 함수 본문(여는 { 부터 짝 맞는 }까지) — 없으면 ''. */
+const bodyOf = (s: string, head: string) => {
+  const at = s.indexOf(head);
+  if (at < 0) return '';
+  const open = s.indexOf('{', s.indexOf(')', at));
+  let depth = 0;
+  for (let i = open; i < s.length; i++) {
+    if (s[i] === '{') depth++;
+    else if (s[i] === '}' && --depth === 0) return s.slice(open, i + 1);
+  }
+  return '';
+};
+const NOTE = join('app', 'margin', '[bookId].tsx');
+const BOOK = join('app', 'book', '[id].tsx');
+const LIBRARY = join('app', '(tabs)', 'library.tsx');
+
+/** 기존 쪽지 갈래에서 sync.current 대입이 GET · open · applyText 뒤에 있다(A1 리뷰 1 — 불러오기 전 정리는 일찍 빠진다). */
+const syncAfterLoad = (s: string) => {
+  const branch = bodyOf(s, 'if (route.noteId !== null)');
+  const assign = branch.indexOf('sync.current = s');
+  return assign > branch.indexOf('margins.get(id)') && assign > branch.indexOf('applyText(') && assign > 0;
+};
+test('A1 리뷰 1 · 12 · 쪽지 화면 정리는 leaveAction대로 · 떠날 때 저장을 pendingLeave에 · 기존 쪽지는 불러온 뒤에 sync를 잡는다(옛 꼴을 심으면 잡힌다)', () => {
+  const s = srcOf(NOTE);
+  const cleanup = bodyOf(s.slice(s.indexOf("AppState.addEventListener('change'")), 'return () =>'); // 떠날 때 정리(AppState effect)
+  expect(cleanup).toContain('leaveAction(');
+  expect(cleanup).toContain('pendingLeave.set(');
+  expect(syncAfterLoad(s)).toBe(true);
+  // 양성 대조 — 리뷰 때 꼴(GET 전에 대입)은 잡힌다
+  const old = 'const load = async () => { sync.current = s;\n if (route.noteId !== null) { const v = await margins.get(id); applyText({ quote: slot.title, text: slot.body }); } }';
+  expect(syncAfterLoad(old)).toBe(false);
+});
+
+test('A1 리뷰 12 · 책 화면 · 서재는 목록을 읽기 전에 떠날 때 저장을 기다린다(빼면 잡힌다)', () => {
+  const waitsBefore = (s: string, list: string) => /pendingLeave\.wait\(\)\.then\(\(\) => margins\.(?:ofBook|bookless)\(/.test(s) && s.includes(list);
+  expect(waitsBefore(srcOf(BOOK), 'margins.ofBook(id)')).toBe(true);
+  expect(waitsBefore(srcOf(LIBRARY), 'margins.bookless()')).toBe(true);
+  expect(waitsBefore('Promise.all([library.materials(id), margins.ofBook(id)])', 'margins.ofBook(id)')).toBe(false);
+});

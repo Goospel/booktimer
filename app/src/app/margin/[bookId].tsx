@@ -43,7 +43,7 @@ import {
   type SyncDoc,
 } from '../../lib/draftSync';
 import { bookSourceLine, buildNoteExport, shouldMarkExported } from '../../lib/exportText';
-import { canSaveMargin, hasQuoteField, noteEditBody, noteHead, noteMaxLength, noteRoute, savedNotice } from '../../lib/marginSave';
+import { canSaveMargin, hasQuoteField, leaveAction, noteEditBody, noteHead, noteMaxLength, noteRoute, pendingLeave, savedNotice } from '../../lib/marginSave';
 import { againArgs, bandHint, waitingText } from '../../lib/questions';
 import { quoteOnlyBand } from '../../lib/quoteOnlyBand';
 import { color, layout, line, space, type } from '../../theme/tokens';
@@ -141,7 +141,6 @@ export default function MarginNote() {
           return { ...toDoc(v), body: v.text === b.body.trim() ? b.body : v.text };
         },
       });
-      sync.current = s;
       if (route.noteId !== null) {
         const id = route.noteId;
         const v = await margins.get(id).catch(async (e) => {
@@ -156,6 +155,7 @@ export default function MarginNote() {
         focusRef.current = slot.focus;
         setMaxText(noteMaxLength(v.text));
         applyText({ quote: slot.title, text: slot.body });
+        sync.current = s; // 불러온 뒤에야 잡는다 — 불러오는 중 · 오류 뒤에 떠나면 정리가 일찍 빠진다(v1 순서 · A1 리뷰 1)
         if (v.bookId !== null) {
           // 재료 줄(「재료 N개 중 M개」)과 내보내기 책 줄 — 못 읽어도 쪽지는 쓴다
           void library.materials(v.bookId).then(
@@ -168,11 +168,13 @@ export default function MarginNote() {
         }
         if (slot.dirty) void save(); // 저장 안 된 기기 글이 서버보다 앞이다 — 바로 한 번 보낸다
       } else if (route.bookId !== null) {
+        sync.current = s; // 새 쪽지 — createFirst가 쓴다
         const m = await library.materials(route.bookId);
         fieldRef.current = true;
         setMaterials({ included: m.aiIncluded, excluded: m.aiExcluded });
         setHead({ bookTitle: m.book.title, bookLine: bookSourceLine(m.book), quoteSource: null, field: true });
       } else {
+        sync.current = s;
         fieldRef.current = false; // 책 없는 새 쪽지 — 옮긴 문장 칸이 없다(J84)
         setHead({ bookTitle: null, bookLine: null, quoteSource: null, field: false });
       }
@@ -203,17 +205,19 @@ export default function MarginNote() {
       if (timer.current) clearTimeout(timer.current);
       const s = sync.current;
       if (!s) return;
-      const empty = shouldDiscard({ title: quoteRef.current, body: textRef.current, rounds: roundsRef.current }) && !waitingRef.current;
+      const empty = shouldDiscard({ title: quoteRef.current, body: textRef.current, rounds: roundsRef.current });
       const id = noteId.current;
-      if (id === null) {
-        if (empty) void dropNewSlot();
-        else void createFirst(); // 실패하면 새 쪽지 칸이 남아 다음 실행에 보낸다(J100)
-      } else if (empty) {
-        void margins.delete(id).then(() => s.drop(id), () => undefined);
-      } else {
-        void s.flush(id);
-      }
-      if (!empty && edited.current) savedNotice.mark();
+      const del = (n: number) => margins.delete(n).then(() => s.drop(n), () => undefined);
+      const act = leaveAction({ loaded: route.noteId === null || serverRef.current !== null, empty, waiting: waitingRef.current, noteId: id, creating: creating.current !== null });
+      let leave: Promise<unknown> = Promise.resolve();
+      if (act === 'drop-slot') leave = dropNewSlot();
+      else if (act === 'create') leave = createFirst(); // 실패하면 새 쪽지 칸이 남아 다음 실행에 보낸다(J100)
+      else if (act === 'delete-after-create')
+        leave = Promise.all([dropNewSlot(), createFirst().then((r) => (r.kind === 'saved' && noteId.current !== null ? del(noteId.current) : undefined))]);
+      else if (act === 'delete' && id !== null) leave = del(id);
+      else if (act === 'flush' && id !== null) leave = s.flush(id);
+      pendingLeave.set(leave);
+      if (!(empty && !waitingRef.current) && edited.current) savedNotice.mark();
     };
   }, []);
 

@@ -1,7 +1,7 @@
 // 여백 쪽지 판정(책생글 「여백 + 블로그」 A1 — 설계 §5.1 · F1 사양 §4.3 · §4.4). 화면은 이 함수들을 그대로 그린다.
 import type { MarginSummary } from '../api/types';
 import * as marginSave from './marginSave';
-import { booklessSection, canSaveMargin, hasQuoteField, noteEditBody, noteHead, noteHref, noteMaxLength, noteRoute, noteRow, savedNotice, showsThought } from './marginSave';
+import { booklessSection, canSaveMargin, hasQuoteField, LEAVE_WAIT_MS, leaveAction, noteEditBody, noteHead, noteHref, noteMaxLength, noteRoute, noteRow, pendingLeave, savedNotice, showsThought } from './marginSave';
 
 test('REQ-210 · 입력칸 상한 = max(10,000, 불러온 글 길이)', () => {
   expect(noteMaxLength('')).toBe(10_000);
@@ -81,4 +81,59 @@ test('REQ-220 · 질문을 받은 쪽지만 AI 표시 · 문장부호뿐인 생�
 test('REQ-226 · 책 없는 여백 0개면 줄 없음 · 있으면 「N개」', () => {
   expect(booklessSection([])).toBeNull();
   expect(booklessSection([summary({ bookId: null }), summary({ id: 2, bookId: null })])).toEqual({ count: '2개' });
+});
+
+// 떠날 때 판정(F1 §4.4-7) — 화면 정리는 이 결과대로만 한다.
+describe('leaveAction · 쪽지 화면을 떠날 때', () => {
+  const at = (p: Partial<Parameters<typeof leaveAction>[0]>) => leaveAction({ loaded: true, empty: false, waiting: false, noteId: 9, creating: false, ...p });
+
+  test('A1 리뷰 1 · 기존 쪽지를 불러오기 전(불러오는 중 · 불러오기 오류)에 떠나면 아무것도 하지 않는다 — 지우지도 보내지도 않는다', () => {
+    expect(at({ loaded: false, empty: true })).toBe('none');
+    expect(at({ loaded: false, empty: false })).toBe('none');
+  });
+
+  test('불러온 기존 쪽지 — 비었으면 지우고 · 글이 있거나 질문을 보내는 중이면 남은 저장을 보낸다', () => {
+    expect(at({ empty: true })).toBe('delete');
+    expect(at({ empty: true, waiting: true })).toBe('flush');
+    expect(at({ empty: false })).toBe('flush');
+  });
+
+  test('새 쪽지 — 비었으면 칸만 버리고 · 글이 있으면 만든다', () => {
+    expect(at({ noteId: null, empty: true })).toBe('drop-slot');
+    expect(at({ noteId: null, empty: false })).toBe('create');
+    expect(at({ noteId: null, empty: false, creating: true })).toBe('create');
+  });
+
+  test('A1 리뷰 7 · 첫 POST가 나가는 중에 글을 다 지우고 떠나면 만든 뒤 지운다(지운 글로 쪽지가 남지 않게)', () => {
+    expect(at({ noteId: null, empty: true, creating: true })).toBe('delete-after-create');
+  });
+});
+
+describe('A1 리뷰 12 · pendingLeave — 돌아간 목록은 떠날 때 저장을 상한까지만 기다린다(떠나는 화면은 막지 않는다)', () => {
+  const tick = () => new Promise<void>((r) => setTimeout(r, 0));
+
+  test('저장이 끝나면 곧바로 풀린다', async () => {
+    let resolve!: () => void;
+    pendingLeave.set(new Promise<void>((r) => (resolve = r)));
+    let done = false;
+    void pendingLeave.wait(5_000).then(() => (done = true));
+    await tick();
+    expect(done).toBe(false);
+    resolve();
+    await tick();
+    expect(done).toBe(true);
+  });
+
+  test('저장이 끝나지 않으면 상한에서 풀린다 · 실패한 저장은 던지지 않는다', async () => {
+    pendingLeave.set(new Promise<void>(() => undefined));
+    const t0 = Date.now();
+    await pendingLeave.wait(30);
+    expect(Date.now() - t0).toBeGreaterThanOrEqual(25);
+    pendingLeave.set(Promise.reject(new Error('offline')));
+    await expect(pendingLeave.wait(1_000)).resolves.toBeUndefined();
+  });
+
+  test('기본 상한은 약 2초', () => {
+    expect(LEAVE_WAIT_MS).toBe(2_000);
+  });
 });

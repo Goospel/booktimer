@@ -10,7 +10,7 @@ import type { MarginSummary, MyBookSummary } from '../../api/types';
 import { Cover } from '../../components/Cover';
 import { NoteRow } from '../../components/NoteRow';
 import { Button, Notice, Screen, Txt, useStacked } from '../../components/ui';
-import { booklessSection, noteHref } from '../../lib/marginSave';
+import { booklessSection, noteHref, pendingLeave } from '../../lib/marginSave';
 import { bookMeta, shelfSections } from '../../lib/shelf';
 import { color, layout, line, space } from '../../theme/tokens';
 
@@ -21,8 +21,8 @@ export default function Library() {
   const stacked = useStacked();
 
   const load = useCallback(async () => {
-    // 책 없는 쪽지는 따로 읽는다 — 실패해도 서재가 막히지 않는다(못 읽으면 단을 숨긴다)
-    void margins.bookless().then(setBookless, () => setBookless([]));
+    // 책 없는 쪽지는 따로 읽는다 — 실패해도 서재가 막히지 않는다(못 읽으면 단을 숨긴다). 방금 떠난 쪽지의 저장은 상한까지 기다린다
+    void pendingLeave.wait().then(() => margins.bookless()).then(setBookless, () => setBookless([]));
     try {
       const r = await library.shelf();
       setBooks(r.books);
