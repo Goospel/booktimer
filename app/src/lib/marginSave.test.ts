@@ -1,7 +1,7 @@
 // 여백 쪽지 판정(책생글 「여백 + 블로그」 A1 — 설계 §5.1 · F1 사양 §4.3 · §4.4). 화면은 이 함수들을 그대로 그린다.
 import type { MarginSummary } from '../api/types';
 import * as marginSave from './marginSave';
-import { booklessSection, canSaveMargin, hasQuoteField, LEAVE_WAIT_MS, leaveAction, noteEditBody, noteHead, noteHref, noteMaxLength, noteRoute, noteRow, pendingLeave, savedNotice, showsThought } from './marginSave';
+import { booklessSection, canSaveMargin, hasQuoteField, javaStrip, keptBody, LEAVE_WAIT_MS, leaveAction, noteEditBody, noteHead, noteHref, noteMaxLength, noteRoute, noteRow, pendingLeave, savedNotice, showsThought } from './marginSave';
 
 test('REQ-210 · 입력칸 상한 = max(10,000, 불러온 글 길이)', () => {
   expect(noteMaxLength('')).toBe(10_000);
@@ -136,4 +136,21 @@ describe('A1 리뷰 12 · pendingLeave — 돌아간 목록은 떠날 때 저장
   test('기본 상한은 약 2초', () => {
     expect(LEAVE_WAIT_MS).toBe(2_000);
   });
+});
+
+// A1 리뷰 11 — 서버는 생각을 Java String.strip()으로 걷는다(Character.isWhitespace 집합). JS trim()과 집합이 달라 같은 글인데
+// 「서버와 달라요」가 나면 칸이 영구 dirty · 매번 PUT · 알림 반복이다. 서버 값은 검증자가 JDK 25로 잰 strip 결과.
+test('A1 리뷰 11 · 서버가 걷은 생각과 비교는 Java strip 집합으로 — 같으면 보낸 글을 그대로 둔다', () => {
+  // 고치기 전(JS trim 비교)엔 셋 다 MISMATCH였다
+  expect(keptBody('abc\u00A0 ', 'abc\u00A0')).toBe('abc\u00A0 '); // NBSP 뒤 공백 — Java는 NBSP를 남긴다
+  expect(keptBody(' \u00A0abc', '\u00A0abc')).toBe(' \u00A0abc');
+  expect(keptBody('abc\u001F', 'abc')).toBe('abc\u001F'); // U+001C~1F는 Java만 걷는다
+  // 대조군 — 공백 · 개행은 두 쪽이 같이 걷는다(전에도 일치)
+  expect(keptBody('abc \n', 'abc')).toBe('abc \n');
+  // 정말 다르면 서버 글
+  expect(keptBody('abc', 'abd')).toBe('abd');
+  // \uc9d1\ud569 \uacbd\uacc4 \u2014 \ud0ed \u00b7 \uc904 \uad6c\ubd84\uc790 \u00b7 \uc804\uac01 \uacf5\ubc31\uc740 \uac77\uace0, \uc904\ubc14\uafc8 \uc5c6\ub294 \uacf5\ubc31(U+00A0 \u00b7 U+2007 \u00b7 U+202F) \u00b7 BOM\uc740 \ub0a8\uae34\ub2e4
+  expect(javaStrip('\t\u2028abc\u3000')).toBe('abc');
+  expect(javaStrip('abc\u3000\u2007')).toBe('abc\u3000\u2007');
+  expect(javaStrip('\u202fabc\ufeff')).toBe('\u202fabc\ufeff');
 });

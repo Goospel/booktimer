@@ -5,6 +5,21 @@ import { dateLabel } from './format';
 
 const has = (s: string | null | undefined) => (s ?? '').trim() !== '';
 
+// Java Character.isWhitespace 집합 — 서버 Story.edit의 String.strip()이 걷는 글자. JS trim()과 다르다:
+// 줄바꿈 없는 공백(U+00A0 · U+2007 · U+202F)과 BOM(U+FEFF)은 남기고, U+001C~U+001F는 걷는다(A1 리뷰 11 — 검증자 JDK 25 실측).
+const JAVA_WS = '[\\t\\n\\u000B\\f\\r\\u001C-\\u001F \\u1680\\u2000-\\u2006\\u2008-\\u200A\\u2028\\u2029\\u205F\\u3000]';
+const JAVA_STRIP = new RegExp(`^${JAVA_WS}+|${JAVA_WS}+$`, 'g');
+
+/** 서버 String.strip()과 같은 결과. */
+export function javaStrip(s: string): string {
+  return s.replace(JAVA_STRIP, '');
+}
+
+/** 자동저장 응답의 생각 — 서버가 앞뒤 공백만 걷은 것이면 보낸 글을 그대로 둔다(「서버와 달라요」 · 영구 dirty를 띄우지 않는다). */
+export function keptBody(sent: string, server: string): string {
+  return server === javaStrip(sent) ? sent : server;
+}
+
 /** 두 칸 중 하나라도 글자가 있다 — [내보내기]가 켜진다(F1 §4.4-1). */
 export function canSaveMargin(i: { quote: string; thought: string }): boolean {
   return has(i.quote) || has(i.thought);

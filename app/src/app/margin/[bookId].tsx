@@ -43,7 +43,7 @@ import {
   type SyncDoc,
 } from '../../lib/draftSync';
 import { bookSourceLine, buildNoteExport, shouldMarkExported } from '../../lib/exportText';
-import { canSaveMargin, hasQuoteField, leaveAction, noteEditBody, noteHead, noteMaxLength, noteRoute, pendingLeave, savedNotice } from '../../lib/marginSave';
+import { canSaveMargin, hasQuoteField, keptBody, leaveAction, noteEditBody, noteHead, noteMaxLength, noteRoute, pendingLeave, savedNotice } from '../../lib/marginSave';
 import { againArgs, bandHint, pickPatch, waitingText } from '../../lib/questions';
 import { quoteOnlyBand } from '../../lib/quoteOnlyBand';
 import { color, layout, line, space, type } from '../../theme/tokens';
@@ -138,8 +138,8 @@ export default function MarginNote() {
           );
           serverRef.current = v;
           loadedQuote.current = v.quote;
-          // 서버는 생각 앞뒤 공백을 걷는다(Story.edit strip) — 그 차이만이면 보낸 글을 그대로 둬 「서버와 달라요」를 띄우지 않는다
-          return { ...toDoc(v), body: v.text === b.body.trim() ? b.body : v.text };
+          // 서버는 생각 앞뒤 공백을 Java strip으로 걷는다(Story.edit) — 그 차이만이면 보낸 글을 그대로 둬 「서버와 달라요」를 띄우지 않는다
+          return { ...toDoc(v), body: keptBody(b.body, v.text) };
         },
       });
       if (route.noteId !== null) {

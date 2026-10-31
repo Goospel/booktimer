@@ -402,3 +402,10 @@ test('A1 리뷰 13 · runAi는 한 번에 하나(aiOnce) 안에서 돈다(빼면
   expect(locked(srcOf(NOTE))).toBe(true);
   expect(locked('async function runAi(step: Step, f: string | null, consented = false) {\n    if (waiting) return;')).toBe(false);
 });
+
+// A1 리뷰 11 — 자동저장 응답 비교는 Java strip 집합(keptBody)으로. JS trim() 비교로 되돌리면 잡힌다.
+test('A1 리뷰 11 · 쪽지 화면 put 어댑터는 keptBody로 비교한다(trim 비교를 심으면 잡힌다)', () => {
+  const uses = (s: string) => s.includes('body: keptBody(b.body, v.text)') && !/v\.text === b\.body\.trim\(\)/.test(s);
+  expect(uses(srcOf(NOTE))).toBe(true);
+  expect(uses("return { ...toDoc(v), body: v.text === b.body.trim() ? b.body : v.text };")).toBe(false);
+});
