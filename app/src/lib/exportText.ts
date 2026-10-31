@@ -16,6 +16,11 @@ export function buildNoteExport(n: { quote: string | null; quoteSource: string |
   return buildExport({ title: head, body: n.text }).trimEnd();
 }
 
+/** 책 줄 — 서버 Story.sourceLine과 같은 꼴(바꾸면 함께). 저장이 아직 안 돼 서버 quoteSource가 없을 때 책 쪽지가 쓴다. */
+export function bookSourceLine(b: { title: string; author: string | null }): string {
+  return `『${b.title}』${b.author ? ` · ${b.author}` : ''}`;
+}
+
 /** 공유 시트가 「보냄」을 돌려줄 때만 내보낸 표시를 남긴다 — 시트를 연 것만으로는 아니다(비평 1-5). */
 export function shouldMarkExported(r: { action: string }): boolean {
   return r.action === Share.sharedAction;

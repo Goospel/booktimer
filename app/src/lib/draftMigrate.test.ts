@@ -7,7 +7,7 @@ jest.mock('expo-secure-store', () => ({
 
 import { ApiError, NetworkError } from '../api/client';
 import type { CreateMargin, DraftView, EditMargin, MarginView } from '../api/types';
-import { migrateDraftSlots } from './draftMigrate';
+import { migrateDraftSlots, syncSlotsOnStart } from './draftMigrate';
 import { type KV, type Slot, slotKey } from './draftSync';
 
 const MOVED = '이 글은 여백으로 옮겨졌어요 — 앱을 닫았다가 다시 열어 주세요';
@@ -208,4 +208,13 @@ test('REQ-222 · 제목 · 본문이 다 빈 dirty 칸은 보낼 것이 없어 �
   await s.run();
   expect(s.calls.getDraft).toEqual([]);
   expect(s.kv.map.has(slotKey(1, 7))).toBe(false);
+});
+
+test('J100 · 앱이 켜질 때 — 기기 칸 옮기기 다음에 남은 새 쪽지 칸을 보낸다 · 옮기기가 던져도 보내기는 돈다', async () => {
+  const order: string[] = [];
+  await syncSlotsOnStart({ migrate: async () => void order.push('migrate'), send: async () => void order.push('send') });
+  expect(order).toEqual(['migrate', 'send']);
+  order.length = 0;
+  await syncSlotsOnStart({ migrate: async () => { order.push('migrate'); throw new NetworkError(); }, send: async () => void order.push('send') });
+  expect(order).toEqual(['migrate', 'send']);
 });

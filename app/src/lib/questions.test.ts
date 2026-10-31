@@ -1,6 +1,6 @@
 // 띠 · 질문 시트의 보기 모양(PR-H 사양 REQ-137 · 139).
 import type { QuestionLog, Round, Step } from '../api/types';
-import { againArgs, bandHint, isPicked, roundTitle, sheetRounds } from './questions';
+import { againArgs, bandHint, isPicked, roundTitle, sheetRounds, waitingText } from './questions';
 
 const round = (step: Step, n: number, focus: string | null = null): Round => ({
   step, at: `2026-10-24T0${n}:00:00Z`, focus, bodyChars: n * 10,
@@ -27,7 +27,13 @@ test('REQ-139 · 펼치는 것은 마지막 라운드이고 지난 라운드는 
   expect(log.rounds.map((r) => r.bodyChars)).toEqual([10, 20, 30]); // 원본은 그대로(뒤집어 쓰지 않는다)
   expect(sheetRounds({ rounds: [] })).toEqual({ latest: null, past: [] });
   expect(roundTitle('ASK')).toBe('여백에서 받은 질문');
-  expect(roundTitle('FOLLOW')).toBe('내 글에서 받은 꼬리 질문');
+  expect(roundTitle('FOLLOW')).toBe('내 생각에서 받은 꼬리 질문'); // 「글」은 이제 블로그 글이다(F1 §4.5)
+});
+
+test('F1 §4.5 · 기다림 문구 — ASK는 쪽지를 · FOLLOW는 내 생각을 읽는다', () => {
+  expect(waitingText('ASK')).toBe('쪽지를 읽고 질문을 고르는 중이에요');
+  expect(waitingText('FOLLOW')).toBe('내 생각을 읽고 질문을 고르는 중이에요');
+  expect(waitingText(null)).toBeNull();
 });
 
 test('REQ-139 · 지금 답하는 질문(띠)과 글자가 같은 질문만 고른 표시를 받는다', () => {

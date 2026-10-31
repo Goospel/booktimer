@@ -48,7 +48,7 @@ function harness(o: { flush?: () => Promise<{ revision: number }>; post?: (r: nu
   };
 }
 
-const SAVE_FAIL = '글이 아직 저장되지 않아 질문을 보내지 못했어요 — 잠시 뒤 다시 눌러 주세요';
+const SAVE_FAIL = '쪽지가 아직 저장되지 않아 질문을 보내지 못했어요 — 잠시 뒤 다시 눌러 주세요'; // F1 §4.5 — 「글」 → 「쪽지」
 const NET = '인터넷에 연결되지 않았어요 — 쓴 글은 이 기기에 남아 있어요. 연결되면 다시 눌러 주세요';
 const NOT_YET = '질문을 아직 받지 못했어요';
 const GENERIC = '질문을 보내지 못했어요 — 잠시 뒤 다시 눌러 주세요';
@@ -174,6 +174,7 @@ describe('REQ-62 · 실패 문구', () => {
     expect(revisionOrThrow({ kind: 'mismatch', revision: 5 })).toEqual({ revision: 5 });
     expect(caught({ kind: 'offline' })).toBeInstanceOf(NetworkError);
     expect((caught({ kind: 'conflict' }) as ApiError).status).toBe(409);
+    expect((caught({ kind: 'conflict' }) as ApiError).message).toBe('다른 기기에서 이 쪽지가 바뀌었어요 — 그쪽을 불러와 주세요'); // F1 §4.5
     expect(caught({ kind: 'gone' })).toBeInstanceOf(Error);
     expect(caught(null)).toBeInstanceOf(Error);
   });

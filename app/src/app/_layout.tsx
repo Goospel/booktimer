@@ -1,3 +1,4 @@
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { SplashScreen, Stack } from 'expo-router';
 import { useEffect, useState } from 'react';
 import { LogBox, View } from 'react-native';
@@ -6,6 +7,8 @@ import { LogBox, View } from 'react-native';
 import '../../widgets/ReadingWidget';
 import '../../widgets/ReadingActivity';
 import { session } from '../api/client';
+import { migrateDrafts, syncSlotsOnStart } from '../lib/draftMigrate';
+import { sendNewNotes } from '../lib/draftSync';
 import { clearSurfaces } from '../lib/surfaces';
 import { useAppFonts } from '../theme/fonts';
 import { color } from '../theme/tokens';
@@ -43,6 +46,16 @@ export default function RootLayout() {
     });
   }, []);
 
+  // 로그인된 채 켜지면(또는 로그인하면) 한 번 — 옛 글 화면의 기기 칸을 쪽지로 옮기고, 앱이 꺼져 남은 새 쪽지 칸을 보낸다(J5 · J100).
+  // 화면을 막지 않는다 — 실패한 칸은 남아 다음 실행에 다시 간다.
+  useEffect(() => {
+    if (!signedIn) return;
+    void session.userId().then((userId) => {
+      if (userId === null) return;
+      return syncSlotsOnStart({ migrate: () => migrateDrafts(AsyncStorage, userId), send: () => sendNewNotes(AsyncStorage, userId) });
+    }, () => undefined);
+  }, [signedIn]);
+
   const ready = fontsOk && signedIn !== null;
   useEffect(() => {
     if (ready) SplashScreen.hideAsync();
@@ -57,9 +70,8 @@ export default function RootLayout() {
         {/* 쌓는 화면(PR-G · PR-H) — 탭을 덮는다. 뒤로 단추는 갈매기만(「(tabs)」 글자 방지 — U-60) */}
         <Stack.Screen name="add" options={stacked} />
         <Stack.Screen name="book/[id]" options={stacked} />
+        {/* 쪽지(책생글 A1) — 화면이 머리 가운데 책 제목(책 없는 쪽지는 「책 없는 여백」) · 오른쪽 「내보내기」를 단다 */}
         <Stack.Screen name="margin/[bookId]" options={stacked} />
-        {/* 글쓰기(PR-H) — 화면이 머리 가운데 책 제목 · 오른쪽 「내보내기」를 단다 */}
-        <Stack.Screen name="draft/[id]" options={stacked} />
         {/* 계정 삭제(PR-I — 결정 A ① 쌓는 화면) */}
         <Stack.Screen name="account-delete" options={stacked} />
       </Stack.Protected>

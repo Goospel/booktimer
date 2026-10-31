@@ -145,6 +145,23 @@ test('U-137 · 410(옮긴 글)이면 칸을 지우지 않고 서버 평문 그�
   expect(JSON.parse(kv.map.get(slotKey(1, 7))!)).toMatchObject({ body: '옮기기 전에 쓴 글', dirty: true });
 });
 
+test('F1 §4.5 · 서버 문구 없는 저장 실패는 「쪽지를 저장하지 못했어요」(쪽지 화면이 이 칸을 쓴다)', async () => {
+  const { sync } = setup(1, async () => { throw new ApiError(500, '요청에 실패했어요 (500)'); }, memoryKV());
+  await sync.open(server());
+  await sync.edit(7, { body: '고침' });
+  expect(await sync.flush(7)).toMatchObject({ kind: 'error', message: '쪽지를 저장하지 못했어요 — 잠시 뒤 다시 해 주세요' });
+});
+
+// 고정 테스트(지금 코드에서도 초록) — 단독으로 잡는 실패: 질문을 고를 때 생각 칸이 바뀌거나 저장이 나가는 회귀(AI 글자가 생각으로 들어가는 길).
+test('REQ-221 · 질문 고르기는 띠만 바꾼다 — 생각 · 옮긴 문장 칸 그대로 · 저장할 글이 아니다', async () => {
+  const { calls, kv, sync } = setup(1, echo, memoryKV());
+  await sync.open(server({ title: '옮긴 문장', body: '내 생각' }));
+  await sync.edit(7, { focus: '그 길에서 무엇이 처음 보였나요?' });
+  expect(JSON.parse(kv.map.get(slotKey(1, 7))!)).toEqual({ title: '옮긴 문장', body: '내 생각', focus: '그 길에서 무엇이 처음 보였나요?', base: 3, dirty: false });
+  await sync.flush(7);
+  expect(calls).toEqual([]);
+});
+
 describe('REQ-229 · 기기 칸 접두어 셋(J80)', () => {
   const dirty = JSON.stringify({ dirty: true });
   const clean = JSON.stringify({ dirty: false });

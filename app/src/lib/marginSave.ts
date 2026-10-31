@@ -1,9 +1,11 @@
-// 여백 저장 단계(v1 REQ-44 · REQ-96). 두 「생각」 판정은 일부러 다르다(PR-G 사양 §11-1):
-// 확인 판정 = trim() !== ''(서버 REQ-93 — 「.」 하나도 남아 남에게 보인다) · 목록 그리기 = showsThought(서버 NO_THOUGHT).
+// 여백 쪽지 판정(책생글 「여백 + 블로그」 A1 — 설계 §5.1 · F1 사양 §4.3 · §4.4). 화면은 이 함수들의 결과를 그대로 그린다.
+// 「공개 책이에요」 확인 단계는 없다 — 여백은 나만 본다(D1 · REQ-223). 저장은 자동이라 [남기기]도 없다(F1 §8-3).
+import type { EditMargin, MarginSummary } from '../api/types';
+import { dateLabel } from './format';
 
 const has = (s: string | null | undefined) => (s ?? '').trim() !== '';
 
-/** 두 칸 중 하나라도 글자가 있으면 남길 수 있다 — 옮긴 문장만 있어도 된다. */
+/** 두 칸 중 하나라도 글자가 있다 — [내보내기]가 켜진다(F1 §4.4-1). */
 export function canSaveMargin(i: { quote: string; thought: string }): boolean {
   return has(i.quote) || has(i.thought);
 }
@@ -18,12 +20,55 @@ export function noteMaxLength(loaded: string): number {
   return Math.max(10_000, loaded.length);
 }
 
-/** 공개 책 && 생각 있음 && 그 책에 남에게 보이는 여백(생각 있는 것)이 아직 없음 → 확인 시트. */
-export function marginSaveStep(p: { isPublic: boolean; thought: string; margins: { text: string | null }[] }): 'confirm' | 'save' {
-  return p.isPublic && has(p.thought) && !p.margins.some((m) => has(m.text)) ? 'confirm' : 'save';
+/** 옮긴 문장 칸 — 책이나 출처 스냅샷이 있는 쪽지만(서버 Story.edit가 옮긴 문장을 받는 조건과 같다 — J84). */
+export function hasQuoteField(n: { bookId: number | null; quoteSource: string | null }): boolean {
+  return n.bookId !== null || n.quoteSource !== null;
 }
 
-/** 남긴 뒤 돌아간 화면이 한 번 읽는 한 칸짜리 표시. */
+/**
+ * 자동저장 PUT 몸 — quote를 늘 싣는다. 칸이 있으면 칸 값, 없으면 불러온 값 그대로(F1 §4.4-3).
+ * 서버 Story.edit는 quote를 늘 덮어써서, 빼거나 null을 새로 만들어 보내면 옮긴 문장이 말없이 지워진다.
+ */
+export function noteEditBody(p: { field: boolean; quote: string; text: string; revision: number; loadedQuote: string | null; exported?: boolean }): EditMargin {
+  const body: EditMargin = { quote: p.field ? p.quote : p.loadedQuote, text: p.text, revision: p.revision };
+  return p.exported ? { ...body, exported: true } : body;
+}
+
+/** 쪽지 화면 머리 제목 · 생각 칸 자리글자(F1 §4.4-1 · §7-8 · §7-15). */
+export function noteHead(p: { bookTitle: string | null; field: boolean }): { title: string; placeholder: string } {
+  return {
+    title: p.bookTitle ?? '책 없는 여백',
+    placeholder: p.field ? '그 문장에 대해 든 생각을 남겨 보세요' : '떠오른 생각을 마음껏 적어 보세요',
+  };
+}
+
+/** 쪽지 화면 주소 — 책 없는 쪽지는 `none`, 기존 쪽지는 `?note=`(J75). */
+export function noteHref(bookId: number | null, noteId?: number): string {
+  return `/margin/${bookId ?? 'none'}${noteId === undefined ? '' : `?note=${noteId}`}`;
+}
+
+const positiveInt = (s: string | undefined) => (s !== undefined && /^\d+$/.test(s) ? Number(s) : null);
+
+/** 라우트 매개변수 → 책(없으면 null) · 쪽지 id(없거나 깨지면 null = 새 쪽지). */
+export function noteRoute(p: { bookId?: string; note?: string }): { bookId: number | null; noteId: number | null } {
+  return { bookId: positiveInt(p.bookId), noteId: positiveInt(p.note) };
+}
+
+/** 목록의 쪽지 한 줄(F1 §4.3-3) — 옮긴 문장 · 생각 미리보기(서버가 접은 앞 80자) · 날짜 · 받은 질문이 있으면 AI 표시. */
+export function noteRow(m: MarginSummary): { quote: string | null; thought: string | null; date: string; ai: boolean; label: string } {
+  const quote = has(m.quote) ? m.quote : null;
+  const thought = showsThought(m.preview) ? m.preview : null;
+  const date = dateLabel(new Date(m.createdAt));
+  const label = [quote && `옮긴 문장: ${quote}`, thought && `내 생각: ${thought}`, date, m.hasAi && 'AI 질문 받음'].filter(Boolean).join(', ');
+  return { quote, thought, date, ai: m.hasAi, label };
+}
+
+/** 서재 맨 아래 「책 없는 여백」 — 0개면 단째 숨김(REQ-226). */
+export function booklessSection(list: MarginSummary[]): { count: string } | null {
+  return list.length === 0 ? null : { count: `${list.length}개` };
+}
+
+/** 남긴 뒤 돌아간 화면이 한 번 읽는 한 칸짜리 표시(「여백을 남겼어요」 — REQ-135). */
 let saved = false;
 export const savedNotice = {
   mark() {

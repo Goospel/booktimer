@@ -1,7 +1,7 @@
 // 글쓰기 AI 한 번(v1 REQ-36 · 47 · 62 · PR-H 사양 §5.4 · REQ-138 · 140).
 // 순서: 입력 확정(blur) → 다음 틱 → 자동저장 비우기 → 그 revision으로 POST. 응답을 못 받으면 글을 다시 읽어 AI 필드만 줍는다.
 import { ApiError, NetworkError } from '../api/client';
-import type { AiView, DraftView, QuestionLog, Step } from '../api/types';
+import type { AiView, MarginView, QuestionLog, Step } from '../api/types';
 import { showsThought } from './marginSave';
 
 export type { Step };
@@ -21,7 +21,7 @@ export const FOLLOW_MIN_BODY = 30;
 
 const NET = '인터넷에 연결되지 않았어요 — 쓴 글은 이 기기에 남아 있어요. 연결되면 다시 눌러 주세요';
 const NOT_YET = '질문을 아직 받지 못했어요';
-const SAVE_FAIL = '글이 아직 저장되지 않아 질문을 보내지 못했어요 — 잠시 뒤 다시 눌러 주세요';
+const SAVE_FAIL = '쪽지가 아직 저장되지 않아 질문을 보내지 못했어요 — 잠시 뒤 다시 눌러 주세요';
 const GENERIC = '질문을 보내지 못했어요 — 잠시 뒤 다시 눌러 주세요';
 
 const nextTick = () => new Promise<void>((r) => setTimeout(r, 0));
@@ -45,7 +45,7 @@ export async function sendAiStep(p: {
   blur: () => void;
   flush: () => Promise<{ revision: number }>;
   post: (revision: number) => Promise<AiView>;
-  reload: () => Promise<DraftView>;
+  reload: () => Promise<Pick<MarginView, 'questions' | 'aiUpdatedAt' | 'aiRemainingToday'>>;
   /** 보내기 전 라운드 수 — 서버는 라운드를 덧붙이기만 한다. 시각 문자열 비교는 서버 정밀도(나노초 응답 vs datetime(6))에 깨진다 */
   roundsBefore: number;
   wait?: (ms: number) => Promise<void>;

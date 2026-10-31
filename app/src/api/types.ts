@@ -247,11 +247,15 @@ export interface DraftView {
 
 // ── 여백 쪽지(책생글 「여백 + 블로그」 M1) — 서버 AppMarginApiController record 그대로 ──────
 
-/** `AppMarginApiController.MarginSummary` — 목록 한 줄(생각 본문 없음). preview = 첫 비공백 줄 80자. */
+/**
+ * `AppMarginApiController.MarginSummary` — 목록 한 줄(생각 본문 없음). preview = 생각의 공백 · 줄바꿈 덩어리를 공백 하나로 접은 앞 80자
+ * (앱은 다시 접지 않는다 — F1 확인 질문 3). quoteSource = 옮긴 문장의 『제목』 · 저자 스냅샷(서재 「책 없는 여백」 출처 줄 — J84).
+ */
 export interface MarginSummary {
   id: number;
   bookId: number | null;
   quote: string | null;
+  quoteSource: string | null;
   preview: string;
   chars: number;
   hasAi: boolean;

@@ -11,14 +11,11 @@ import type {
   CreateMargin,
   Dashboard,
   DeleteRequest,
-  DraftSummary,
-  DraftView,
   EditMargin,
   MarginSummary,
   MarginView,
   MaterialsView,
   MyBookSummary,
-  SaveDraft,
   SearchResponse,
   ShelfResponse,
   ShelfStatus,
@@ -214,8 +211,6 @@ export const reading = {
   start: (bookId: number | null) => request<unknown>('/api/sessions/start', { body: { bookId } }),
   stop: () => request<unknown>('/api/sessions/stop', { method: 'POST' }),
   setGoal: (seconds: number) => request<void>('/api/app/goal', { body: { dailyIncrementSeconds: seconds } }),
-  /** 최근 고친 글 20편(본문 없음) — 홈 「이어 쓰기」 */
-  drafts: () => request<DraftSummary[]>('/api/app/drafts'),
 };
 
 // ── 서재 · 책 담기 · 책 재료(PR-G) — 독서 서재 책만. 공개 범위는 웹이 바꾼다(REQ-40 — 그 문을 부르지 않는다) ──
@@ -230,13 +225,9 @@ export const library = {
   materials: (id: number) => request<MaterialsView>(`/api/app/books/${id}/materials`),
 };
 
-// ── 여백 — 본문에 공유 · 배경색 필드를 싣지 않는다(REQ-40 · 사양 §8-18). 생각은 인용이 있을 때만 비울 수 있다(서버 REQ-93) ──
+// ── 여백 쪽지(책생글 M1 — /api/app/margins) — 본문에 공유 · 배경색 필드를 싣지 않는다(REQ-40). 응답은 늘 revision을 준다. 오류는 평문(404 남의·없는 쪽지 · 409 낡은 판) ──
+// 앱은 이제 /api/stories를 부르지 않는다(설계 §5.1 — 웹 · 미니앱 경로는 남는다).
 export const margins = {
-  create: (p: { bookId: number; quote: string; thought: string }) =>
-    request<unknown>('/api/stories', { body: { bookId: p.bookId, quote: p.quote.trim() || null, text: p.thought.trim() } }),
-  remove: (id: number) => request<void>(`/api/stories/${id}`, { method: 'DELETE' }),
-  // ↑ 옛 /api/stories 둘은 지금 화면이 쓴다 — 쪽지 화면(A1 화면 몫)이 아래로 옮기면 지운다.
-  // ↓ 쪽지(책생글 M1 — /api/app/margins). 응답은 늘 revision을 준다. 오류는 평문(404 남의·없는 쪽지 · 409 낡은 판).
   ofBook: (bookId: number) => request<MarginSummary[]>(`/api/app/books/${bookId}/margins`),
   /** 책 없는 쪽지(C9) */
   bookless: () => request<MarginSummary[]>('/api/app/margins?book=none'),
@@ -249,13 +240,8 @@ export const margins = {
   ai: (id: number, body: { step: Step; revision: number; focus: string | null }) => request<AiView>(`/api/app/margins/${id}/ai`, { body }),
 };
 
-// ── 글쓰기 · AI 질문 · 동의(PR-H) — /ai 응답에는 본문이 없다(REQ-47). 동의는 시행일 전이면 503(서버 문구가 날짜를 낸다) ──
+// ── AI 동의(PR-H) — 시행일 전이면 503(서버 문구가 날짜를 낸다). 옛 글 경로는 부르지 않는다(D9 · REQ-224 — 기기 칸 옮기기만 예외) ──
 export const writing = {
-  get: (id: number) => request<DraftView>(`/api/app/drafts/${id}`),
-  create: (bookId: number) => request<DraftView>('/api/app/drafts', { body: { bookId } }),
-  save: (id: number, body: SaveDraft) => request<DraftView>(`/api/app/drafts/${id}`, { method: 'PUT', body }),
-  remove: (id: number) => request<void>(`/api/app/drafts/${id}`, { method: 'DELETE' }),
-  ai: (id: number, body: { step: Step; revision: number; focus: string | null }) => request<AiView>(`/api/app/drafts/${id}/ai`, { body }),
   consent: (agree: boolean) => request<ConsentView>('/api/app/ai-consent', { method: 'PUT', body: { agree } }),
 };
 

@@ -175,9 +175,9 @@ test('REQ-125 · 검색어는 encodeURIComponent로 싣는다', async () => {
   expect(fetchMock.mock.calls[0][0]).toBe('https://booktimer.app/api/books/search?q=%EB%8D%B0%EB%AF%B8%EC%95%88%20%26%20%ED%97%A4%EC%84%B8');
 });
 
-test('REQ-40 · 여백 생성 본문은 bookId · quote · text뿐이다(shared · bgCode 없음)', async () => {
+test('REQ-40 · 쪽지 만들기 본문은 bookId · quote · text뿐이다(shared · bgCode 없음)', async () => {
   fetchMock.mockResolvedValueOnce(reply(200, '{}'));
-  await margins.create({ bookId: 7, quote: '  ', thought: ' 좋다 ' });
+  await margins.add({ bookId: 7, quote: null, text: '좋다' });
   expect(JSON.parse(fetchMock.mock.calls[0][1].body)).toEqual({ bookId: 7, quote: null, text: '좋다' });
 });
 

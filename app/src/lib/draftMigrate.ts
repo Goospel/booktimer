@@ -77,3 +77,9 @@ export const migrateDrafts = (kv: KV, userId: number) =>
     editNote: margins.edit,
     createNote: margins.add,
   });
+
+/** 앱이 켜질 때(J100 · §5.11) — 옛 `draft:` 칸 옮기기 다음에 남은 새 쪽지 칸 보내기. 옮기기가 던져도 보내기는 돈다(둘 다 실패면 칸이 남는다). */
+export async function syncSlotsOnStart(p: { migrate: () => Promise<void>; send: () => Promise<void> }): Promise<void> {
+  await p.migrate().catch(() => undefined); // 칸은 남아 다음 실행에 다시
+  await p.send();
+}

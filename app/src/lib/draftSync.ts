@@ -1,7 +1,7 @@
 // 기기 초안 · 자동저장(v1 REQ-38 · PR-H 사양 REQ-141 · 142). 저장 안 된 제목 · 본문과 띠의 질문은 userId · 글별 칸에 둔다.
 // 서버가 원본이고, 칸은 서버가 확인하기 전까지의 안전망이다. 저장 요청은 글마다 한 번에 하나(응답 뒤 그사이 바뀌었으면 칸이 dirty로 남는다).
 import { ApiError, failText, margins, NetworkError } from '../api/client';
-import type { CreateMargin, DraftView, SaveDraft } from '../api/types';
+import type { CreateMargin, SaveDraft } from '../api/types';
 
 export interface Slot {
   title: string;
@@ -30,6 +30,14 @@ export type SaveOutcome =
   | { kind: 'offline' } // 연결 없음 — 칸에 남는다
   | { kind: 'error'; message: string; cause?: unknown }; // cause = 원래 오류(AI 보내기가 다시 던져 문구를 고른다)
 
+/** 칸이 기대는 서버 글 — 옛 글(DraftView)은 그대로, 쪽지는 화면이 title = 옮긴 문장 · body = 생각으로 옮겨 넣는다. */
+export interface SyncDoc {
+  id: number;
+  title: string | null;
+  body: string;
+  revision: number;
+}
+
 export const AUTOSAVE_MS = 1_500;
 /** 기기 칸 접두어 셋(J80) — 옛 글 `draft:` · 여백 쪽지 `margin:` · 블로그 초안 `blog:`. 로그아웃 · 탈퇴는 셋을 다 센다 · 지운다. */
 export const SLOT_PREFIXES = ['draft', 'margin', 'blog'] as const;
@@ -37,7 +45,7 @@ export type SlotPrefix = (typeof SLOT_PREFIXES)[number];
 
 export const slotKey = (userId: number, id: number, prefix: SlotPrefix = 'draft') => `${prefix}:${userId}:${id}`;
 
-const fromServer = (d: DraftView, focus: string | null): Slot => ({ title: d.title ?? '', body: d.body, focus, base: d.revision, dirty: false });
+const fromServer = (d: SyncDoc, focus: string | null): Slot => ({ title: d.title ?? '', body: d.body, focus, base: d.revision, dirty: false });
 
 const userKeys = async (kv: KV, userId: number, prefixes: readonly SlotPrefix[]) =>
   (await kv.getAllKeys()).filter((k) => prefixes.some((x) => k.startsWith(`${x}:${userId}:`)));
@@ -107,7 +115,7 @@ export async function sendNewNotes(kv: KV, userId: number, create: (b: CreateMar
   }
 }
 
-export function draftSync(p: { kv: KV; userId: number; put: (id: number, b: SaveDraft) => Promise<DraftView>; prefix?: SlotPrefix }) {
+export function draftSync(p: { kv: KV; userId: number; put: (id: number, b: SaveDraft) => Promise<SyncDoc>; prefix?: SlotPrefix }) {
   const kind = p.prefix ?? 'draft';
   const key = (id: number) => slotKey(p.userId, id, kind);
   const read = async (id: number): Promise<Slot | null> => {
@@ -126,9 +134,9 @@ export function draftSync(p: { kv: KV; userId: number; put: (id: number, b: Save
 
   async function flushOnce(id: number, exported: boolean): Promise<SaveOutcome> {
     const sent = await serial(() => read(id));
-    if (sent === null) return { kind: 'error', message: '글을 저장하지 못했어요 — 잠시 뒤 다시 해 주세요' };
+    if (sent === null) return { kind: 'error', message: '쪽지를 저장하지 못했어요 — 잠시 뒤 다시 해 주세요' };
     if (!sent.dirty && !exported) return { kind: 'saved', revision: sent.base };
-    let res: DraftView;
+    let res: SyncDoc;
     try {
       res = await p.put(id, exported ? { title: sent.title, body: sent.body, revision: sent.base, exported } : { title: sent.title, body: sent.body, revision: sent.base });
     } catch (e) {
@@ -138,7 +146,7 @@ export function draftSync(p: { kv: KV; userId: number; put: (id: number, b: Save
         await serial(() => p.kv.removeItem(key(id)));
         return { kind: 'gone' };
       }
-      return { kind: 'error', message: failText(e, '글을 저장하지 못했어요 — 잠시 뒤 다시 해 주세요'), cause: e };
+      return { kind: 'error', message: failText(e, '쪽지를 저장하지 못했어요 — 잠시 뒤 다시 해 주세요'), cause: e };
     }
     const mismatch = res.body !== sent.body;
     await serial(async () => {
@@ -150,7 +158,7 @@ export function draftSync(p: { kv: KV; userId: number; put: (id: number, b: Save
 
   const api = {
     /** 칸이 dirty면 칸(서버보다 앞), 아니면 서버 글 + 칸의 띠 질문. */
-    open: (server: DraftView): Promise<Slot> =>
+    open: (server: SyncDoc): Promise<Slot> =>
       serial(async () => {
         const slot = await read(server.id);
         if (slot?.dirty) return slot;
@@ -173,7 +181,7 @@ export function draftSync(p: { kv: KV; userId: number; put: (id: number, b: Save
       return next;
     },
     /** 409 「이 기기 것 유지」 — 서버 판에 기대어 이 기기 글을 다시 보낸다. */
-    async keepMine(id: number, server: DraftView): Promise<SaveOutcome> {
+    async keepMine(id: number, server: SyncDoc): Promise<SaveOutcome> {
       await serial(async () => {
         const slot = (await read(id)) ?? fromServer(server, null);
         await write(id, { ...slot, base: server.revision, dirty: true });
@@ -181,7 +189,7 @@ export function draftSync(p: { kv: KV; userId: number; put: (id: number, b: Save
       return api.flush(id);
     },
     /** 409 「그쪽 불러오기」 — 칸을 서버 글로(띠 질문은 남긴다). */
-    takeTheirs: (id: number, server: DraftView): Promise<Slot> =>
+    takeTheirs: (id: number, server: SyncDoc): Promise<Slot> =>
       serial(async () => {
         const next = fromServer(server, (await read(id))?.focus ?? null);
         await write(id, next);
@@ -203,6 +211,6 @@ export function revisionOrThrow(o: SaveOutcome | null): { revision: number } {
   if (o?.kind === 'saved' || o?.kind === 'mismatch') return { revision: o.revision };
   if (o?.kind === 'offline') throw new NetworkError();
   if (o?.kind === 'error') throw o.cause ?? new Error(o.message); // 원래 오류 그대로 — 서버 문구가 없으면 저장 실패 문구가 된다
-  if (o?.kind === 'conflict') throw new ApiError(409, '다른 기기에서 이 글이 바뀌었어요 — 그쪽을 불러와 주세요');
+  if (o?.kind === 'conflict') throw new ApiError(409, '다른 기기에서 이 쪽지가 바뀌었어요 — 그쪽을 불러와 주세요');
   throw new Error('not saved');
 }

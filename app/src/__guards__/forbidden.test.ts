@@ -14,6 +14,8 @@ interface Row {
   planted: string;
   /** 주석을 걷은 소스에서 찾는다(낱말 금지 — 주석의 「왜」는 남겨도 된다) */
   strip?: boolean;
+  /** app/src 기준 상대 경로 접두 — 있으면 이 행은 여기만 본다(심은 픽스처도 첫 접두 안에 둔다) */
+  only?: string[];
 }
 
 const ROWS: Row[] = [
@@ -58,6 +60,17 @@ const ROWS: Row[] = [
   { id: 'REQ-177', pattern: /정하기/, skip: [], planted: "const goalCue = dash.todayGoalSeconds > 0 ? '바꾸기' : '정하기';", strip: true },
   // 글은 여백 쪽지로 합쳤다(D9) — 앱은 /api/app/drafts를 부르지 않는다. 옛 기기 칸을 옮기는 draftMigrate만 예외(J5 — 옛 JS가 사라지면 함께 지운다).
   { id: 'REQ-224', pattern: /\/api\/app\/drafts\b/, skip: [join('lib', 'draftMigrate.ts')], planted: "request<DraftView>(`/api/app/drafts/${id}`)", strip: true },
+  // 여백은 나만 본다(D1) — 「공개 책이에요」 확인 시트는 걷혔다.
+  { id: 'REQ-223', pattern: /공개 책이에요/, skip: [], planted: '<Txt v="H2">공개 책이에요</Txt>', strip: true },
+  // 「글」은 이제 블로그 글이다(D1 · D2 · D9) — 쪽지 화면 · 시트 · 그 문구를 내는 lib에 「이 글」 · 「내 글」이 없다(F1 §4.5 — 「쪽지」 · 「생각」).
+  {
+    id: 'REQ-221 낱말',
+    pattern: /이 글|내 글/,
+    skip: [],
+    only: [join('app', 'margin'), join('components', 'QuestionSheet.tsx'), join('components', 'QuestionBand.tsx'), join('lib', 'questions.ts'), join('lib', 'aiStep.ts'), join('lib', 'draftSync.ts')],
+    planted: "const LAST_ROUND = '이 글에서 받을 수 있는 질문을 모두 받았어요';",
+    strip: true,
+  },
 ];
 
 // 블록 주석 · 줄 주석을 걷는다. URL의 //(앞이 :)는 주석이 아니다.
@@ -77,9 +90,12 @@ const ALL = files(APP_SRC).map((p) => ({ rel: p.slice(APP_SRC.length + 1), text:
 
 function hits(row: Row, all = ALL): string[] {
   return all.filter((f) => !f.rel.startsWith(SELF) && !row.skip.some((s) => f.rel.startsWith(s)))
+    .filter((f) => !row.only || row.only.some((s) => f.rel.startsWith(s)))
     .filter((f) => row.pattern.test(row.strip ? stripComments(f.text) : f.text))
     .map((f) => f.rel);
 }
+
+const plantedRel = (row: Row) => (row.only ? join(row.only[0], 'planted.tsx') : join('app', 'planted.tsx'));
 
 test('금지 표 · 검사할 소스 파일을 실제로 읽는다(빈 집합이면 늘 초록)', () => {
   expect(ALL.filter((f) => !f.rel.startsWith(SELF)).length).toBeGreaterThanOrEqual(3);
@@ -87,7 +103,7 @@ test('금지 표 · 검사할 소스 파일을 실제로 읽는다(빈 집합이
 
 // 같은 스캐너에 심은 파일을 넣는다 — 스캐너가 망가져 늘 0을 내면 여기서 깨진다(범위 보충 §6.1).
 test.each(ROWS)('$id · 심은 픽스처는 같은 스캐너에서 잡힌다(양성 대조)', (row) => {
-  expect(hits(row, [{ rel: join('app', 'planted.tsx'), text: row.planted }])).toHaveLength(1);
+  expect(hits(row, [{ rel: plantedRel(row), text: row.planted }])).toHaveLength(1);
 });
 
 test('REQ-107 · 화면 코드에 밤 토큰 사용이 없다(위젯·테마 제외 — 심은 픽스처는 잡힌다)', () => {
@@ -170,16 +186,51 @@ test('REQ-178 · 달성 순간 알림 글은 lib만 만든다 — 화면이 스�
   expect(hits(row!, [{ rel: join('app', 'planted.tsx'), text: '// goalBody는 lib만 부른다' }])).toEqual([]);
 });
 
-// A1 화면 몫(피그마 F1 뒤)이 draft 화면 · 홈 reading.drafts()와 client.ts의 drafts 함수를 지우면 기대를 []로 바꾼다 — 그때까지는 새 호출이 늘지 않게 지금 집합에 묶는다.
+// A1 화면 몫이 draft 화면 · 홈 reading.drafts() · client.ts의 drafts 함수를 지웠다 — 옛 글 화면으로 가는 길도 0.
 test('REQ-224 · 앱이 /api/app/drafts를 부르지 않는다 — draftMigrate만 예외(심은 픽스처는 잡힌다)', () => {
   const row = ROWS.find((r) => r.id === 'REQ-224');
   expect(row).toBeDefined();
-  expect(hits(row!)).toEqual([join('api', 'client.ts')]);
+  expect(hits(row!)).toEqual([]);
+  // 옛 글 화면 라우트 파일 · 그리로 가는 주소 0(심은 주소는 같은 식에 잡힌다)
+  const toDraft = /['"`]\/draft\//;
+  expect(ALL.filter((f) => !f.rel.startsWith(SELF) && (f.rel.startsWith(join('app', 'draft')) || toDraft.test(stripComments(f.text)))).map((f) => f.rel)).toEqual([]);
+  expect(toDraft.test('router.push(`/draft/${d.id}`)')).toBe(true);
   const at = (rel: string, text: string) => hits(row!, [{ rel, text }]);
   expect(at(join('app', 'planted.tsx'), "request('/api/app/drafts')")).toHaveLength(1); // 목록 꼴도 잡힌다
   expect(at(join('lib', 'draftMigrate.ts'), row!.planted)).toEqual([]); // 예외 파일
   expect(at(join('lib', 'draftMigrateX.ts'), row!.planted)).toHaveLength(1); // 예외는 그 파일 하나뿐
   expect(at(join('app', 'planted.tsx'), '// 옛 /api/app/drafts는 410이다')).toEqual([]); // 주석의 「왜」는 남겨도 된다
+});
+
+test('REQ-223 · 앱 소스에 「공개 책이에요」 확인이 없다 — 여백은 나만 봐요(심은 픽스처는 잡힌다)', () => {
+  const row = ROWS.find((r) => r.id === 'REQ-223');
+  expect(row).toBeDefined();
+  expect(hits(row!)).toEqual([]);
+});
+
+test('REQ-221 · 쪽지 화면 문구에 「이 글」 · 「내 글」 0 — 쪽지 화면 · 시트 · questions · aiStep · draftSync만(심은 픽스처는 잡힌다)', () => {
+  const row = ROWS.find((r) => r.id === 'REQ-221 낱말');
+  expect(row).toBeDefined();
+  expect(hits(row!)).toEqual([]);
+  // 범위 안 파일이 실제로 읽힌다 — 이름이 바뀌어 판정 범위에서 조용히 빠지지 않게
+  for (const p of row!.only!) expect([p, ALL.some((f) => f.rel.startsWith(p))]).toEqual([p, true]);
+  const at = (rel: string, text: string) => hits(row!, [{ rel, text }]);
+  expect(at(join('components', 'QuestionSheet.tsx'), '<Txt v="H2">{`이 글에서 받은 질문 ${rounds}/${ROUNDS_MAX}`}</Txt>')).toHaveLength(1);
+  expect(at(join('lib', 'questions.ts'), "return '내 글에서 받은 꼬리 질문';")).toHaveLength(1);
+  expect(at(join('lib', 'consentCopy.ts'), "'지금 쓰는 글과 이 글에서 앞서 받은 질문'")).toEqual([]); // 동의 1판은 범위 밖(E2 전 그대로 — J35)
+  expect(at(join('lib', 'questions.ts'), '// 꼬리 질문은 내 글을 읽는다')).toEqual([]); // 주석은 걸리지 않는다
+});
+
+// 책 화면 단추는 「여백에 글쓰기」 하나다(D9 · 사용자 확인 질문 1) — 옛 [이 책으로 글쓰기] · 「이 책의 글」 단은 없다.
+const bookButtons = (src: string) => {
+  const s = stripComments(src);
+  return { buttons: s.match(/<Button\b/g)?.length ?? 0, write: /label="여백에 글쓰기"/.test(s), old: /이 책으로 글쓰기|이 책의 글/.test(s) };
+};
+test('REQ-220 · 책 화면 단추 하나 — 「여백에 글쓰기」 · 「이 책의 글」 없음(옛 화면 꼴을 심으면 잡힌다)', () => {
+  const src = ALL.find((f) => f.rel === join('app', 'book', '[id].tsx'));
+  expect(src).toBeDefined();
+  expect(bookButtons(src!.text)).toEqual({ buttons: 1, write: true, old: false });
+  expect(bookButtons('<Button kind="ink" label="여백 남기기" />\n<Button kind="outline" label="이 책으로 글쓰기" />')).toEqual({ buttons: 2, write: false, old: true });
 });
 
 test('REQ-177 · 목표 줄 단서는 「바꾸기」 하나다 — 앱 소스에 「정하기」가 없다(심은 픽스처는 잡힌다)', () => {
