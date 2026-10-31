@@ -389,6 +389,8 @@ test('REQ-194 · 달이 바뀐 자정 — 11/1 항목은 11월 한 장(앞 빈�
   expect(nov.rows).toHaveLength(5);
   expect(cells(nov).filter((c) => c.today).map((c) => c.day)).toEqual([1]);
   expect(Object.values(marksOf(nov)).filter((k) => k > 0)).toEqual([]);
+  // 안 읽은 11/1(덧붙인 0초 칸) — 11/2 항목에서 표식 없음(REQ-194 「0 없음」)
+  expect(marksOf(entry(widgetTimeline(oct30Idle, oct30), new Date(2026, 10, 2)).month!)[1]).toBe(0);
   const dec31 = new Date(2026, 11, 31, 21, 0);
   const jan = entry(widgetTimeline({ ...idle, graph: { ...idle.graph, weeks: serverWeeks(dec31, {}) } }, dec31), new Date(2027, 0, 1)).month!;
   expect(jan.title).toBe('1월');
