@@ -7,7 +7,7 @@ jest.mock('expo-secure-store', () => ({
 
 import { ApiError, NetworkError } from '../api/client';
 import type { AiView, DraftView, QuestionLog } from '../api/types';
-import { aiButton, messageFor, sendAiStep } from './aiStep';
+import { aiButton, messageFor, sendAiStep, singleFlight } from './aiStep';
 import { revisionOrThrow } from './draftSync';
 
 const log = (text: string): QuestionLog => ({
@@ -49,7 +49,7 @@ function harness(o: { flush?: () => Promise<{ revision: number }>; post?: (r: nu
 }
 
 const SAVE_FAIL = '쪽지가 아직 저장되지 않아 질문을 보내지 못했어요 — 잠시 뒤 다시 눌러 주세요'; // F1 §4.5 — 「글」 → 「쪽지」
-const NET = '인터넷에 연결되지 않았어요 — 쓴 글은 이 기기에 남아 있어요. 연결되면 다시 눌러 주세요';
+const NET = '인터넷에 연결되지 않았어요 — 쓴 쪽지는 이 기기에 남아 있어요. 연결되면 다시 눌러 주세요'; // F1 §4.5 — 「글」 → 「쪽지」(A1 리뷰 5)
 const NOT_YET = '질문을 아직 받지 못했어요';
 const GENERIC = '질문을 보내지 못했어요 — 잠시 뒤 다시 눌러 주세요';
 
@@ -215,5 +215,32 @@ describe('REQ-138 · 아래 막대 AI 단추', () => {
     expect(off({ thought: '.', boxes: 1 })).toBe(false); // 건 블로그 문장 박스만(B1)
     expect(off({ thought: '' })).toBe(true); // 빈 쪽지
     expect(off({ thought: '  …?! ', quote: '   ' })).toBe(true); // 문장부호 · 공백뿐
+  });
+});
+
+// A1 리뷰 13 — 새 쪽지 첫 POST를 기다리는 동안 [질문 받기]를 또 누르면 AI 요청이 두 번 나간다(쪽지 몫 · 하루 몫 · 원가). 돌고 있으면 무시한다.
+describe('singleFlight · AI 보내기는 한 번에 하나', () => {
+  test('돌고 있는 동안 또 부르면 아무것도 하지 않고 · 끝나면 다시 받는다', async () => {
+    const once = singleFlight();
+    let calls = 0;
+    let release!: () => void;
+    const first = once(async () => {
+      calls++;
+      await new Promise<void>((r) => (release = r));
+    });
+    await once(async () => void calls++);
+    expect(calls).toBe(1);
+    release();
+    await first;
+    await once(async () => void calls++);
+    expect(calls).toBe(2);
+  });
+
+  test('던져도 잠금이 풀린다', async () => {
+    const once = singleFlight();
+    await expect(once(async () => { throw new Error('x'); })).rejects.toThrow('x');
+    let ran = false;
+    await once(async () => void (ran = true));
+    expect(ran).toBe(true);
   });
 });

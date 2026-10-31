@@ -62,10 +62,10 @@ const ROWS: Row[] = [
   { id: 'REQ-224', pattern: /\/api\/app\/drafts\b/, skip: [join('lib', 'draftMigrate.ts')], planted: "request<DraftView>(`/api/app/drafts/${id}`)", strip: true },
   // 여백은 나만 본다(D1) — 「공개 책이에요」 확인 시트는 걷혔다.
   { id: 'REQ-223', pattern: /공개 책이에요/, skip: [], planted: '<Txt v="H2">공개 책이에요</Txt>', strip: true },
-  // 「글」은 이제 블로그 글이다(D1 · D2 · D9) — 쪽지 화면 · 시트 · 그 문구를 내는 lib에 「이 글」 · 「내 글」이 없다(F1 §4.5 — 「쪽지」 · 「생각」).
+  // 「글」은 이제 블로그 글이다(D1 · D2 · D9) — 쪽지 화면 · 시트 · 그 문구를 내는 lib에 「이 글」 · 「내 글」 · 「쓴 글」이 없다(F1 §4.5 — 「쪽지」 · 「생각」).
   {
     id: 'REQ-221 낱말',
-    pattern: /이 글|내 글/,
+    pattern: /이 글|내 글|쓴 글/,
     skip: [],
     only: [join('app', 'margin'), join('components', 'QuestionSheet.tsx'), join('components', 'QuestionBand.tsx'), join('lib', 'questions.ts'), join('lib', 'aiStep.ts'), join('lib', 'draftSync.ts')],
     planted: "const LAST_ROUND = '이 글에서 받을 수 있는 질문을 모두 받았어요';",
@@ -217,6 +217,7 @@ test('REQ-221 · 쪽지 화면 문구에 「이 글」 · 「내 글」 0 — �
   const at = (rel: string, text: string) => hits(row!, [{ rel, text }]);
   expect(at(join('components', 'QuestionSheet.tsx'), '<Txt v="H2">{`이 글에서 받은 질문 ${rounds}/${ROUNDS_MAX}`}</Txt>')).toHaveLength(1);
   expect(at(join('lib', 'questions.ts'), "return '내 글에서 받은 꼬리 질문';")).toHaveLength(1);
+  expect(at(join('lib', 'aiStep.ts'), "const NET = '인터넷에 연결되지 않았어요 — 쓴 글은 이 기기에 남아 있어요';")).toHaveLength(1); // 「쓴 글」 갈래 양성 대조(A1 리뷰 5)
   expect(at(join('lib', 'consentCopy.ts'), "'지금 쓰는 글과 이 글에서 앞서 받은 질문'")).toEqual([]); // 동의 1판은 범위 밖(E2 전 그대로 — J35)
   expect(at(join('lib', 'questions.ts'), '// 꼬리 질문은 내 글을 읽는다')).toEqual([]); // 주석은 걸리지 않는다
 });
@@ -378,4 +379,26 @@ test('A1 리뷰 4 · 서재 포커스가 savedNotice를 소비한다 · 알림�
   expect(lib).toContain('savedNotice.take()');
   expect(lib).not.toContain('여백을 남겼어요');
   expect(focus('useFocusEffect(useCallback(() => { void load(); }, [load]))')).not.toContain('savedNotice.take()');
+});
+
+// REQ-221 — 질문 고르기(pick)는 생각 칸을 건드리지 않는다: 칸 패치는 lib pickPatch(키 focus뿐 — questions.test)만, 본문엔 생각 칸을 바꾸는 호출 0(A1 리뷰 3).
+const PICK_WRITES = /applyText\(|setThoughtText\(|setInitial\(|textRef\.current\s*=(?!=)|body:/;
+test('REQ-221 · 쪽지 화면 pick 본문에 생각 칸을 바꾸는 호출이 없다 · 칸 패치는 pickPatch(질문 글자를 생각에 넣는 꼴을 심으면 잡힌다)', () => {
+  const s = srcOf(NOTE);
+  const pick = bodyOf(s, 'function pick(');
+  expect(pick).toContain('pickPatch(q)');
+  expect(PICK_WRITES.test(pick)).toBe(false);
+  // 양성 대조(G221d · G221c) — 실제 pick 본문에 심어 같은 검사를 돌린다
+  const planted = (line: string) => bodyOf(s.replace('function pick(q: Question) {', `function pick(q: Question) {\n    ${line}`), 'function pick(');
+  expect(PICK_WRITES.test(planted('applyText({ quote: quoteRef.current, text: textRef.current + q.text });'))).toBe(true);
+  expect(PICK_WRITES.test(planted('void sync.current?.edit(id, { ...pickPatch(q), body: textRef.current + q.text });'))).toBe(true);
+  expect(PICK_WRITES.test(planted('textRef.current = textRef.current + q.text;'))).toBe(true);
+  expect(planted('x();')).toContain('x();'); // 심기가 실제로 들어갔다
+});
+
+// A1 리뷰 13 — runAi는 singleFlight 잠금 안에서 돈다(새 쪽지 첫 POST 중 두 번 눌러도 AI 요청 하나).
+test('A1 리뷰 13 · runAi는 한 번에 하나(aiOnce) 안에서 돈다(빼면 잡힌다)', () => {
+  const locked = (s: string) => /function runAi\([^)]*\)\s*\{\s*return aiOnce\(async \(\) => \{/.test(s) && /const aiOnce = useRef\(singleFlight\(\)\)\.current;/.test(s);
+  expect(locked(srcOf(NOTE))).toBe(true);
+  expect(locked('async function runAi(step: Step, f: string | null, consented = false) {\n    if (waiting) return;')).toBe(false);
 });

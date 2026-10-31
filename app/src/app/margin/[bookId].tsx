@@ -29,7 +29,7 @@ import { QuestionBand } from '../../components/QuestionBand';
 import { QuestionSheet } from '../../components/QuestionSheet';
 import { QuoteOnlyBand } from '../../components/QuoteOnlyBand';
 import { Button, Notice, readColumn, Screen, Txt, useStacked } from '../../components/ui';
-import { aiButton, ROUNDS_MAX, sendAiStep } from '../../lib/aiStep';
+import { aiButton, ROUNDS_MAX, sendAiStep, singleFlight } from '../../lib/aiStep';
 import {
   adoptNewNote,
   AUTOSAVE_MS,
@@ -44,7 +44,7 @@ import {
 } from '../../lib/draftSync';
 import { bookSourceLine, buildNoteExport, shouldMarkExported } from '../../lib/exportText';
 import { canSaveMargin, hasQuoteField, leaveAction, noteEditBody, noteHead, noteMaxLength, noteRoute, pendingLeave, savedNotice } from '../../lib/marginSave';
-import { againArgs, bandHint, waitingText } from '../../lib/questions';
+import { againArgs, bandHint, pickPatch, waitingText } from '../../lib/questions';
 import { quoteOnlyBand } from '../../lib/quoteOnlyBand';
 import { color, layout, line, space, type } from '../../theme/tokens';
 
@@ -104,6 +104,7 @@ export default function MarginNote() {
   const localId = useRef<string | null>(null); // 새 쪽지 칸(첫 저장 전)
   const newSlotChain = useRef<Promise<unknown>>(Promise.resolve());
   const creating = useRef<Promise<SaveOutcome> | null>(null);
+  const aiOnce = useRef(singleFlight()).current; // AI 보내기는 한 번에 하나 — 새 쪽지 첫 POST 중 두 번 눌러도 요청 하나(A1 리뷰 13)
 
   function applyText(t: { quote: string; text: string }) {
     quoteRef.current = t.quote;
@@ -358,62 +359,64 @@ export default function MarginNote() {
     }
   }
 
-  async function runAi(step: Step, f: string | null, consented = false) {
-    if (waiting) return;
-    let v = serverRef.current;
-    if (!v) {
-      // 새 쪽지 — 먼저 만들어야 동의 · 남은 몫을 안다(저장 실패는 save가 알린다)
-      await save();
-      v = serverRef.current;
-      if (!v) return;
-    }
-    if (!v.aiConsent && !consented) {
-      pending.current = { step, focus: f };
-      Keyboard.dismiss();
-      setSheet('consent');
-      return;
-    }
-    const id = v.id;
-    setNotice(null);
-    setSheet(null);
-    setWaiting(step);
-    waitingRef.current = true;
-    let gone = false;
-    const r = await sendAiStep({
-      blur: () => {
-        quoteInput.current?.blur();
-        textInput.current?.blur();
-      },
-      flush: async () => {
-        const o = await save();
-        if (o?.kind === 'gone') gone = true;
-        return revisionOrThrow(o);
-      },
-      post: (revision) => margins.ai(id, { step, revision, focus: step === 'ASK' ? null : f }),
-      reload: () => margins.get(id),
-      roundsBefore: roundsRef.current,
-    });
-    setWaiting(null);
-    waitingRef.current = false;
-    if (gone) return; // save()가 띄운 「쪽지를 찾을 수 없어요 + 돌아가기」를 남긴다
-    if (r.kind === 'done') {
-      roundsRef.current = r.questions.rounds.length;
-      const cur = serverRef.current;
-      if (cur) {
-        const next = { ...cur, aiConsent: true, questions: r.questions, aiUpdatedAt: r.aiUpdatedAt, aiRemainingToday: r.aiRemainingToday };
-        serverRef.current = next;
-        setNote(next);
+  function runAi(step: Step, f: string | null, consented = false) {
+    return aiOnce(async () => {
+      if (waiting) return;
+      let v = serverRef.current;
+      if (!v) {
+        // 새 쪽지 — 먼저 만들어야 동의 · 남은 몫을 안다(저장 실패는 save가 알린다)
+        await save();
+        v = serverRef.current;
+        if (!v) return;
       }
-      setSheet('questions'); // 누른 뒤의 결과라 진입 직후 덮기가 아니다
-    } else if (r.kind === 'consent') {
-      setConsent(false);
-      pending.current = { step, focus: f };
-      setSheet('consent');
-    } else if (r.kind === 'retry') {
-      setNotice({ message: r.message, tone: 'error', action: { label: '다시 시도', onPress: () => void runAi(step, f, consented) } });
-    } else {
-      setNotice({ message: r.message, tone: 'error' });
-    }
+      if (!v.aiConsent && !consented) {
+        pending.current = { step, focus: f };
+        Keyboard.dismiss();
+        setSheet('consent');
+        return;
+      }
+      const id = v.id;
+      setNotice(null);
+      setSheet(null);
+      setWaiting(step);
+      waitingRef.current = true;
+      let gone = false;
+      const r = await sendAiStep({
+        blur: () => {
+          quoteInput.current?.blur();
+          textInput.current?.blur();
+        },
+        flush: async () => {
+          const o = await save();
+          if (o?.kind === 'gone') gone = true;
+          return revisionOrThrow(o);
+        },
+        post: (revision) => margins.ai(id, { step, revision, focus: step === 'ASK' ? null : f }),
+        reload: () => margins.get(id),
+        roundsBefore: roundsRef.current,
+      });
+      setWaiting(null);
+      waitingRef.current = false;
+      if (gone) return; // save()가 띄운 「쪽지를 찾을 수 없어요 + 돌아가기」를 남긴다
+      if (r.kind === 'done') {
+        roundsRef.current = r.questions.rounds.length;
+        const cur = serverRef.current;
+        if (cur) {
+          const next = { ...cur, aiConsent: true, questions: r.questions, aiUpdatedAt: r.aiUpdatedAt, aiRemainingToday: r.aiRemainingToday };
+          serverRef.current = next;
+          setNote(next);
+        }
+        setSheet('questions'); // 누른 뒤의 결과라 진입 직후 덮기가 아니다
+      } else if (r.kind === 'consent') {
+        setConsent(false);
+        pending.current = { step, focus: f };
+        setSheet('consent');
+      } else if (r.kind === 'retry') {
+        setNotice({ message: r.message, tone: 'error', action: { label: '다시 시도', onPress: () => void runAi(step, f, consented) } });
+      } else {
+        setNotice({ message: r.message, tone: 'error' });
+      }
+    });
   }
 
   function setConsent(aiConsent: boolean) {
@@ -445,7 +448,7 @@ export default function MarginNote() {
     setFocus(q.text);
     focusRef.current = q.text;
     const id = noteId.current;
-    if (id !== null) void sync.current?.edit(id, { focus: q.text }); // 띠의 질문은 기기 칸에만 — 생각 칸은 그대로(REQ-221)
+    if (id !== null) void sync.current?.edit(id, pickPatch(q)); // 띠의 질문은 기기 칸에만 — 생각 칸은 그대로(REQ-221 · 금지 표가 이 본문을 본다)
     setSheet(null);
     // 시트가 내려간 뒤 생각 칸 끝에 커서
     setTimeout(() => {

@@ -1,6 +1,6 @@
 // 띠 · 질문 시트의 보기 모양(PR-H 사양 REQ-137 · 139).
 import type { QuestionLog, Round, Step } from '../api/types';
-import { againArgs, bandHint, isPicked, roundTitle, sheetRounds, waitingText } from './questions';
+import { againArgs, bandHint, isPicked, pickPatch, roundTitle, sheetRounds, waitingText } from './questions';
 
 const round = (step: Step, n: number, focus: string | null = null): Round => ({
   step, at: `2026-10-24T0${n}:00:00Z`, focus, bodyChars: n * 10,
@@ -47,4 +47,11 @@ test('REQ-139 · 질문 다시 받기는 마지막 라운드의 단계와 그 �
   expect(againArgs({ rounds: [round('ASK', 1), round('FOLLOW', 2, '띠에 있던 질문인가요?')] })).toEqual({ step: 'FOLLOW', focus: '띠에 있던 질문인가요?' });
   expect(againArgs({ rounds: [round('ASK', 1)] })).toEqual({ step: 'ASK', focus: null });
   expect(againArgs({ rounds: [] })).toBeNull();
+});
+
+// A1 리뷰 3 — 질문을 고르면 칸에는 띠(focus)만 간다. 생각 · 옮긴 문장으로 가는 키가 하나라도 생기면 AI 글자가 생각 칸에 들어간다(REQ-221 · D16).
+test('REQ-221 · 질문 고르기 패치의 키는 focus 하나뿐이다', () => {
+  const q = { text: '한 정거장 앞에서 내렸을 때, 처음 눈에 들어온 것은 무엇이었나요?', anchor: '한 정거장 앞에서 내려 걸었다' };
+  expect(Object.keys(pickPatch(q))).toEqual(['focus']);
+  expect(pickPatch(q)).toEqual({ focus: q.text });
 });

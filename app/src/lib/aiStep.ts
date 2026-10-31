@@ -19,10 +19,24 @@ export const SAFETY_NET_MS = [5_000, 15_000, 30_000] as const;
 export const ROUNDS_MAX = 8;
 export const FOLLOW_MIN_BODY = 30;
 
-const NET = '인터넷에 연결되지 않았어요 — 쓴 글은 이 기기에 남아 있어요. 연결되면 다시 눌러 주세요';
+const NET = '인터넷에 연결되지 않았어요 — 쓴 쪽지는 이 기기에 남아 있어요. 연결되면 다시 눌러 주세요';
 const NOT_YET = '질문을 아직 받지 못했어요';
 const SAVE_FAIL = '쪽지가 아직 저장되지 않아 질문을 보내지 못했어요 — 잠시 뒤 다시 눌러 주세요';
 const GENERIC = '질문을 보내지 못했어요 — 잠시 뒤 다시 눌러 주세요';
+
+/** 한 번에 하나 — 돌고 있는 동안 또 부르면 아무것도 하지 않는다(새 쪽지 첫 POST 중 두 번 누르면 AI 요청이 두 번 나간다 — A1 리뷰 13). */
+export function singleFlight() {
+  let busy = false;
+  return async (f: () => Promise<void>): Promise<void> => {
+    if (busy) return;
+    busy = true;
+    try {
+      await f();
+    } finally {
+      busy = false;
+    }
+  };
+}
 
 const nextTick = () => new Promise<void>((r) => setTimeout(r, 0));
 const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));

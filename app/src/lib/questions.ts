@@ -25,6 +25,11 @@ export function waitingText(step: Step | null): string | null {
   return null;
 }
 
+/** 질문을 고르면 칸에 넘기는 패치 — 띠(focus)뿐이다. 생각 · 옮긴 문장 칸으로 가는 키는 없다(REQ-221 · D16 — AI는 질문만). */
+export function pickPatch(q: Question): { focus: string } {
+  return { focus: q.text };
+}
+
 /** 띠에 있는 질문(글자가 같으면) — 「지금 답하는 질문」 표시. */
 export function isPicked(q: Question, focus: string | null): boolean {
   return focus !== null && q.text === focus;

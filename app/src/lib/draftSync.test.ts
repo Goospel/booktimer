@@ -152,7 +152,8 @@ test('F1 §4.5 · 서버 문구 없는 저장 실패는 「쪽지를 저장하�
   expect(await sync.flush(7)).toMatchObject({ kind: 'error', message: '쪽지를 저장하지 못했어요 — 잠시 뒤 다시 해 주세요' });
 });
 
-// 고정 테스트(지금 코드에서도 초록) — 단독으로 잡는 실패: 질문을 고를 때 생각 칸이 바뀌거나 저장이 나가는 회귀(AI 글자가 생각으로 들어가는 길).
+// 고정 테스트(지금 코드에서도 초록) — lib 몫만 잡는다: draftSync.edit에 focus만 넘겼을 때 title · body · dirty가 바뀌는 회귀.
+// 화면 pick()이 무엇을 넘기는지는 questions.test(pickPatch 키 = focus뿐)와 금지 표(pick 본문에 생각 칸을 바꾸는 호출 0)가 본다(A1 리뷰 3).
 test('REQ-221 · 질문 고르기는 띠만 바꾼다 — 생각 · 옮긴 문장 칸 그대로 · 저장할 글이 아니다', async () => {
   const { calls, kv, sync } = setup(1, echo, memoryKV());
   await sync.open(server({ title: '옮긴 문장', body: '내 생각' }));
