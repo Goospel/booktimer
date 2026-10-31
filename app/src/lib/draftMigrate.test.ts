@@ -68,10 +68,11 @@ test('REQ-222 · movedTo + 같은 글(공백 정규화) → 칸만 지운다', a
   expect(s.kv.map.has(slotKey(1, 7))).toBe(false);
 });
 
-test('REQ-222 · revision 0 다른 글 → 그 판(0)으로 PUT · 칸은 받은 뒤 지운다', async () => {
-  const s = setup();
+// 쪽지의 quote를 칸 · 픽스처 기본값(null)과 다르게 둔다 — 「쪽지 quote를 실어」와 「null을 보냄」을 가른다(A1 리뷰 16)
+test('REQ-222 · revision 0 다른 글 → 그 판(0)으로 PUT · 쪽지의 quote를 실어 · 칸은 받은 뒤 지운다', async () => {
+  const s = setup({ getNote: async () => note({ quote: '옮긴 문장' }) });
   await s.run();
-  expect(s.calls.edit).toEqual([[70, { quote: null, text: '칸 제목\n\n칸 본문', revision: 0 }]]);
+  expect(s.calls.edit).toEqual([[70, { quote: '옮긴 문장', text: '칸 제목\n\n칸 본문', revision: 0 }]]);
   expect(s.calls.create).toEqual([]);
   expect(s.kv.map.has(slotKey(1, 7))).toBe(false);
 });

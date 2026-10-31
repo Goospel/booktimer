@@ -225,13 +225,26 @@ test('REQ-221 · 쪽지 화면 문구에 「이 글」 · 「내 글」 0 — �
 // 책 화면 단추는 「여백에 글쓰기」 하나다(D9 · 사용자 확인 질문 1) — 옛 [이 책으로 글쓰기] · 「이 책의 글」 단은 없다.
 const bookButtons = (src: string) => {
   const s = stripComments(src);
-  return { buttons: s.match(/<Button\b/g)?.length ?? 0, write: /label="여백에 글쓰기"/.test(s), old: /이 책으로 글쓰기|이 책의 글/.test(s) };
+  return {
+    buttons: s.match(/<Button\b/g)?.length ?? 0,
+    presses: s.match(/\bonPress=/g)?.length ?? 0, // Pressable · Row로 만든 둘째 동작도 센다(A1 리뷰 17)
+    write: /label="여백에 글쓰기"/.test(s),
+    old: /이 책으로\s*\S*쓰기|이 책의 글/.test(s),
+  };
 };
 test('REQ-220 · 책 화면 단추 하나 — 「여백에 글쓰기」 · 「이 책의 글」 없음(옛 화면 꼴을 심으면 잡힌다)', () => {
   const src = ALL.find((f) => f.rel === join('app', 'book', '[id].tsx'));
   expect(src).toBeDefined();
-  expect(bookButtons(src!.text)).toEqual({ buttons: 1, write: true, old: false });
-  expect(bookButtons('<Button kind="ink" label="여백 남기기" />\n<Button kind="outline" label="이 책으로 글쓰기" />')).toEqual({ buttons: 2, write: false, old: true });
+  expect(bookButtons(src!.text)).toEqual({ buttons: 1, presses: 3, write: true, old: false });
+  expect(bookButtons('<Button kind="ink" label="여백 남기기" />\n<Button kind="outline" label="이 책으로 글쓰기" />')).toMatchObject({ buttons: 2, write: false, old: true });
+  // A1 리뷰 17 — 누르는 것은 onPress= 수로 센다(상태 세 칸 map 1 · 단추 1 · 쪽지 줄 1 = 3). Button이 아닌 둘째 동작도 잡는다
+  const real = src!.text;
+  const at = '<Button kind="ink" label="여백에 글쓰기"';
+  expect(real.includes(at)).toBe(true);
+  const plant = (jsx: string) => bookButtons(real.replace(at, `${jsx}\n      ${at}`));
+  expect(plant('<Pressable onPress={() => go()}><Txt>이 책으로 쓰기</Txt></Pressable>')).toMatchObject({ presses: 4, old: true }); // G220d
+  expect(plant('<Row title="이 책으로 쓰기" onPress={() => go()} />')).toMatchObject({ presses: 4, old: true }); // 하우스 Row 변형
+  expect(plant('<Button kind="outline" label="쓰기" onPress={() => go()} />')).toMatchObject({ buttons: 2, presses: 4 }); // G220a 꼴
 });
 
 test('REQ-177 · 목표 줄 단서는 「바꾸기」 하나다 — 앱 소스에 「정하기」가 없다(심은 픽스처는 잡힌다)', () => {
@@ -408,4 +421,20 @@ test('A1 리뷰 11 · 쪽지 화면 put 어댑터는 keptBody로 비교한다(tr
   const uses = (s: string) => s.includes('body: keptBody(b.body, v.text)') && !/v\.text === b\.body\.trim\(\)/.test(s);
   expect(uses(srcOf(NOTE))).toBe(true);
   expect(uses("return { ...toDoc(v), body: v.text === b.body.trim() ? b.body : v.text };")).toBe(false);
+});
+
+// A1 리뷰 15 — 화면이 lib 판정을 쓰는가(돌연변이 M2b · M3d · M7b · M9b · M10b가 살던 자리). 각 줄에 리뷰 때 돌연변이를 실제 소스에 심어 양성 대조.
+const WIRES: { id: string; rel: string; needle: string; n: number; mutant: string }[] = [
+  { id: 'M2b 옮긴 문장 칸 = hasQuoteField', rel: NOTE, needle: 'hasQuoteField(v)', n: 1, mutant: 'v.bookId !== null' },
+  { id: 'M3d C2 띠 = quoteOnlyBand', rel: NOTE, needle: 'quoteOnlyBand(aiInput) ?', n: 1, mutant: 'true ?' },
+  { id: 'M7b 내보내기 책 줄 = bookSourceLine(재료 · 새 쪽지 둘)', rel: NOTE, needle: 'bookSourceLine(m.book)', n: 2, mutant: 'null' },
+  { id: 'M9b AI 배지 = noteRow().ai', rel: join('components', 'NoteRow.tsx'), needle: 'r.ai ?', n: 1, mutant: 'true ?' },
+  { id: 'M10b 책 없는 여백 = bookless 결과', rel: LIBRARY, needle: '.then(setBookless', n: 1, mutant: '.then(() => setBookless([])' },
+];
+test.each(WIRES)('A1 리뷰 15 · $id — 화면이 lib 판정을 쓴다(돌연변이를 심으면 잡힌다)', ({ rel, needle, n, mutant }) => {
+  const s = srcOf(rel);
+  expect(count(s, needle)).toBe(n);
+  const mutated = s.replace(needle, mutant); // 첫 자리 하나만 — 둘인 줄은 하나만 바뀌어도 잡혀야 한다
+  expect(mutated).not.toBe(s); // 심기가 실제로 들어갔다
+  expect(count(mutated, needle)).not.toBe(n);
 });
