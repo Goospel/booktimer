@@ -4,7 +4,7 @@
 // 옛 JS가 사라지면(M2 뒤 확인) 이 파일을 지운다 — 앱에서 /api/app/drafts를 부르는 곳은 여기뿐이다(금지 표 REQ-224).
 import { ApiError, margins, request } from '../api/client';
 import type { CreateMargin, DraftView, EditMargin, MarginView } from '../api/types';
-import { type KV, type Slot } from './draftSync';
+import { type KV, newNoteKey, sendNewNotes, type Slot } from './draftSync';
 
 export interface MigrateDeps {
   kv: KV;
@@ -78,8 +78,19 @@ export const migrateDrafts = (kv: KV, userId: number) =>
     createNote: margins.add,
   });
 
-/** 앱이 켜질 때(J100 · §5.11) — 옛 `draft:` 칸 옮기기 다음에 남은 새 쪽지 칸 보내기. 옮기기가 던져도 보내기는 돈다(둘 다 실패면 칸이 남는다). */
-export async function syncSlotsOnStart(p: { migrate: () => Promise<void>; send: () => Promise<void> }): Promise<void> {
-  await p.migrate().catch(() => undefined); // 칸은 남아 다음 실행에 다시
-  await p.send();
+/**
+ * 앱이 켜질 때(J5 · J100 · §5.11) — 옛 `draft:` 칸 옮기기 다음에 남은 새 쪽지 칸 보내기. 옮기기가 던져도 보내기는 돈다(둘 다 실패면 칸이 남는다).
+ * 보낼 새 쪽지 칸은 옮기기 전에 스냅숏으로 뜬다 — 옮기는 동안 화면이 쓰기 시작한 칸은 화면 몫이다(A1 리뷰 9). _layout은 이 한 호출만 한다.
+ */
+export async function startSlotSync(
+  kv: KV,
+  userId: number,
+  p: { migrate: (kv: KV, userId: number) => Promise<void>; send: (kv: KV, userId: number, keys: readonly string[]) => Promise<void> } = {
+    migrate: migrateDrafts,
+    send: (k, u, keys) => sendNewNotes(k, u, undefined, keys),
+  },
+): Promise<void> {
+  const keys = (await kv.getAllKeys()).filter((k) => k.startsWith(newNoteKey(userId, '')));
+  await p.migrate(kv, userId).catch(() => undefined); // 칸은 남아 다음 실행에 다시
+  await p.send(kv, userId, keys);
 }

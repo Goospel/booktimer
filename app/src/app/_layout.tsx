@@ -7,8 +7,7 @@ import { LogBox, View } from 'react-native';
 import '../../widgets/ReadingWidget';
 import '../../widgets/ReadingActivity';
 import { session } from '../api/client';
-import { migrateDrafts, syncSlotsOnStart } from '../lib/draftMigrate';
-import { sendNewNotes } from '../lib/draftSync';
+import { startSlotSync } from '../lib/draftMigrate';
 import { clearSurfaces } from '../lib/surfaces';
 import { useAppFonts } from '../theme/fonts';
 import { color } from '../theme/tokens';
@@ -50,10 +49,13 @@ export default function RootLayout() {
   // 화면을 막지 않는다 — 실패한 칸은 남아 다음 실행에 다시 간다.
   useEffect(() => {
     if (!signedIn) return;
-    void session.userId().then((userId) => {
-      if (userId === null) return;
-      return syncSlotsOnStart({ migrate: () => migrateDrafts(AsyncStorage, userId), send: () => sendNewNotes(AsyncStorage, userId) });
-    }, () => undefined);
+    void session.userId().then(
+      (userId) => {
+        if (userId === null) return;
+        return startSlotSync(AsyncStorage, userId);
+      },
+      () => undefined,
+    );
   }, [signedIn]);
 
   const ready = fontsOk && signedIn !== null;

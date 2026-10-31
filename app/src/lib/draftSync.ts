@@ -83,21 +83,34 @@ export async function startNewNote<T extends NewNoteSlot>(kv: KV, userId: number
   return localId;
 }
 
-/** 첫 POST가 돌아오면 새 쪽지 칸을 id 칸(`margin:${userId}:${storyId}`)으로 옮긴다. */
+/**
+ * 첫 POST가 돌아오면 새 쪽지 칸을 id 칸(`margin:${userId}:${storyId}`)으로 옮긴다 — Slot 꼴로(title = 옮긴 문장 · body = 생각 · 판 0 · dirty).
+ * 원형을 복사하면 takeTheirs 전에 앱이 죽었을 때 open이 title · body 없는 칸을 돌려줘 그 쪽지가 열 때마다 깨진다(A1 리뷰 10).
+ */
 export async function adoptNewNote(kv: KV, userId: number, localId: string, storyId: number): Promise<void> {
   const raw = await kv.getItem(newNoteKey(userId, localId));
-  if (raw !== null) await kv.setItem(slotKey(userId, storyId, 'margin'), raw);
+  if (raw !== null) {
+    const n = JSON.parse(raw) as NewNoteSlot & { focus?: string | null };
+    const slot: Slot = { title: n.quote ?? '', body: n.text, focus: n.focus ?? null, base: 0, dirty: true };
+    await kv.setItem(slotKey(userId, storyId, 'margin'), JSON.stringify(slot));
+  }
   await kv.removeItem(newNoteKey(userId, localId));
 }
 
 /**
  * 앱이 꺼져 남은 dirty 새 쪽지 칸을 보낸다(J100 — 앱이 켜질 때 draftMigrate 다음). 옮긴 문장 · 생각이 다 비었으면 지우기만,
  * 아니면 POST해 서버가 받은 뒤 칸을 지운다. 실패(연결 · 5xx · 401 · 429 · 404 — 칸의 책이 그사이 지워짐)는 칸을 남긴다.
+ * keys를 넘기면 그 키만 본다 — 앱 시작이 옮기기 전에 뜬 스냅숏이라 그 뒤 화면이 만든 칸은 보내지 않는다(A1 리뷰 9).
  * ponytail: 응답을 잃은 POST를 다시 보내면 쪽지가 둘이 된다(J6과 같은 한계 — 하나를 지우면 된다).
  */
-export async function sendNewNotes(kv: KV, userId: number, create: (b: CreateMargin) => Promise<unknown> = margins.add): Promise<void> {
+export async function sendNewNotes(
+  kv: KV,
+  userId: number,
+  create: (b: CreateMargin) => Promise<unknown> = margins.add,
+  keys?: readonly string[],
+): Promise<void> {
   const prefix = newNoteKey(userId, '');
-  for (const key of (await kv.getAllKeys()).filter((k) => k.startsWith(prefix))) {
+  for (const key of (keys ?? (await kv.getAllKeys())).filter((k) => k.startsWith(prefix))) {
     const raw = await kv.getItem(key);
     if (raw === null) continue;
     const s = JSON.parse(raw) as NewNoteSlot;

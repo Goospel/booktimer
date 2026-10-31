@@ -268,9 +268,11 @@ export default function MarginNote() {
         return { kind: 'error', message: failText(e, SAVE_FAIL), cause: e };
       }
       await newSlotChain.current;
-      if (localId.current !== null) await adoptNewNote(AsyncStorage, userIdRef.current, localId.current, v.id);
+      // adopt를 기다리기 전에 넘긴다 — 그사이 편집은 큐에서 일찍 빠지고(새 쪽지 칸을 되살리지 않는다) 아래 「더 쓴 것」 대조가 id 칸에 얹는다(A1 리뷰 6)
+      const lid = localId.current;
       localId.current = null;
       noteId.current = v.id;
+      if (lid !== null) await adoptNewNote(AsyncStorage, userIdRef.current, lid, v.id);
       const s = sync.current!;
       await s.takeTheirs(v.id, toDoc(v)); // 칸 = 서버 글(새 쪽지 칸의 띠 질문은 남는다)
       takeServer(v);

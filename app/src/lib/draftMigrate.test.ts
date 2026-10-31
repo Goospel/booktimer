@@ -7,8 +7,8 @@ jest.mock('expo-secure-store', () => ({
 
 import { ApiError, NetworkError } from '../api/client';
 import type { CreateMargin, DraftView, EditMargin, MarginView } from '../api/types';
-import { migrateDraftSlots, syncSlotsOnStart } from './draftMigrate';
-import { type KV, type Slot, slotKey } from './draftSync';
+import { migrateDraftSlots, startSlotSync } from './draftMigrate';
+import { type KV, sendNewNotes, type Slot, slotKey } from './draftSync';
 
 const MOVED = '이 글은 여백으로 옮겨졌어요 — 앱을 닫았다가 다시 열어 주세요';
 
@@ -211,10 +211,27 @@ test('REQ-222 · 제목 · 본문이 다 빈 dirty 칸은 보낼 것이 없어 �
 });
 
 test('J100 · 앱이 켜질 때 — 기기 칸 옮기기 다음에 남은 새 쪽지 칸을 보낸다 · 옮기기가 던져도 보내기는 돈다', async () => {
+  const kv = memoryKV();
   const order: string[] = [];
-  await syncSlotsOnStart({ migrate: async () => void order.push('migrate'), send: async () => void order.push('send') });
+  await startSlotSync(kv, 1, { migrate: async () => void order.push('migrate'), send: async () => void order.push('send') });
   expect(order).toEqual(['migrate', 'send']);
   order.length = 0;
-  await syncSlotsOnStart({ migrate: async () => { order.push('migrate'); throw new NetworkError(); }, send: async () => void order.push('send') });
+  await startSlotSync(kv, 1, { migrate: async () => { order.push('migrate'); throw new NetworkError(); }, send: async () => void order.push('send') });
   expect(order).toEqual(['migrate', 'send']);
+});
+
+// A1 리뷰 9 — 옮기기가 느린 동안 사용자가 새 쪽지를 쓰기 시작하면 그 칸은 화면 몫이다. 옮기기 전에 뜬 스냅숏의 칸만 보낸다.
+test('J100 · 앱이 켜질 때 — 옮기기 전에 뜬 새 쪽지 칸만 보낸다 · 그 뒤 생긴 칸(지금 화면이 쓰는 칸)은 보내지 않는다', async () => {
+  const kv = memoryKV();
+  kv.map.set('margin:1:new:left', JSON.stringify({ bookId: 3, quote: null, text: '지난 실행에 남은 쪽지', dirty: true }));
+  kv.map.set('margin:2:new:other', JSON.stringify({ bookId: 3, quote: null, text: '남의 칸', dirty: true }));
+  const sent: string[] = [];
+  await startSlotSync(kv, 1, {
+    migrate: async () => {
+      kv.map.set('margin:1:new:live', JSON.stringify({ bookId: 3, quote: null, text: '옮기는 동안 화면이 쓴 칸', dirty: true }));
+    },
+    send: (k, uid, keys) => sendNewNotes(k, uid, async (b) => void sent.push(b.text), keys),
+  });
+  expect(sent).toEqual(['지난 실행에 남은 쪽지']);
+  expect([...kv.map.keys()].sort()).toEqual(['margin:1:new:live', 'margin:2:new:other']);
 });

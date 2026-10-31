@@ -338,3 +338,24 @@ test('A1 리뷰 12 · 책 화면 · 서재는 목록을 읽기 전에 떠날 때
   expect(waitsBefore(srcOf(LIBRARY), 'margins.bookless()')).toBe(true);
   expect(waitsBefore('Promise.all([library.materials(id), margins.ofBook(id)])', 'margins.ofBook(id)')).toBe(false);
 });
+
+/** createFirst가 adopt를 기다리기 전에 localId를 비우고 noteId를 세운다(A1 리뷰 6 — 그사이 편집이 새 쪽지 칸을 되살려 고아로 남기지 않게). */
+const adoptAfterSwitch = (s: string) => {
+  const body = bodyOf(s, 'function createFirst(');
+  const adopt = body.indexOf('await adoptNewNote(');
+  return adopt > 0 && body.indexOf('localId.current = null') > 0 && body.indexOf('localId.current = null') < adopt && body.indexOf('noteId.current = v.id') > 0 && body.indexOf('noteId.current = v.id') < adopt;
+};
+test('A1 리뷰 6 · createFirst는 adopt 전에 localId를 비우고 noteId를 세운다(옛 순서를 심으면 잡힌다)', () => {
+  expect(adoptAfterSwitch(srcOf(NOTE))).toBe(true);
+  const old = 'function createFirst() { await newSlotChain.current;\n if (localId.current !== null) await adoptNewNote(AsyncStorage, u, localId.current, v.id);\n localId.current = null;\n noteId.current = v.id; }';
+  expect(adoptAfterSwitch(old)).toBe(false);
+});
+
+// J5 · J100 — 앱 시작 동기화는 로그인 게이트 안에서 startSlotSync 한 호출이다(호출을 빼거나 게이트를 늘 return으로 만들면 잡힌다 — A1 리뷰 14).
+const START = /useEffect\(\(\) => \{\s*if \(!signedIn\) return;\s*void session\.userId\(\)\.then\(\s*\(userId\) => \{\s*if \(userId === null\) return;\s*return startSlotSync\(AsyncStorage, userId\);\s*\},\s*\(\) => undefined,?\s*\);\s*\}, \[signedIn\]\);/;
+test('A1 리뷰 14 · _layout이 signedIn 게이트 안에서 startSlotSync를 부른다(빼면 잡힌다)', () => {
+  const s = srcOf(join('app', '_layout.tsx'));
+  expect(START.test(s)).toBe(true);
+  expect(START.test(s.replace('return startSlotSync(AsyncStorage, userId);', ''))).toBe(false);
+  expect(START.test(s.replace('if (!signedIn) return;', 'if (!signedIn || true) return;'))).toBe(false);
+});

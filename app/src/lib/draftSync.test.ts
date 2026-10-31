@@ -214,12 +214,30 @@ describe('REQ-229 · 기기 칸 접두어 셋(J80)', () => {
     expect(await pendingAll(kv, 1)).toBe(3);
   });
 
-  test('REQ-229 · 새 쪽지 칸이 첫 POST 뒤 id 칸으로 옮겨진다', async () => {
+  // A1 리뷰 10 — id 칸은 draftSync Slot 꼴이어야 한다. 원형을 복사하면 takeTheirs 전에 앱이 죽었을 때 그 쪽지가 열 때마다 깨진다.
+  test('REQ-229 · 새 쪽지 칸이 첫 POST 뒤 id 칸으로 옮겨진다 — Slot 꼴(title = 옮긴 문장 · body = 생각 · 띠 질문 · 판 0 · dirty)', async () => {
     const kv = memoryKV();
     const local = await startNewNote(kv, 1, { bookId: 3, quote: null, text: '오프라인에서 쓴 쪽지', dirty: true });
     await adoptNewNote(kv, 1, local, 70);
     expect(kv.map.has(newNoteKey(1, local))).toBe(false);
-    expect(JSON.parse(kv.map.get(slotKey(1, 70, 'margin'))!)).toEqual({ bookId: 3, quote: null, text: '오프라인에서 쓴 쪽지', dirty: true });
+    expect(JSON.parse(kv.map.get(slotKey(1, 70, 'margin'))!)).toEqual({ title: '', body: '오프라인에서 쓴 쪽지', focus: null, base: 0, dirty: true });
+    const quoted = await startNewNote(kv, 1, { bookId: 3, quote: '옮긴 문장', text: '생각', dirty: true, focus: '띠 질문인가요?' });
+    await adoptNewNote(kv, 1, quoted, 71);
+    expect(JSON.parse(kv.map.get(slotKey(1, 71, 'margin'))!)).toEqual({ title: '옮긴 문장', body: '생각', focus: '띠 질문인가요?', base: 0, dirty: true });
+    // 그 칸을 바로 열어도(takeTheirs 전에 앱이 죽은 경우) 글이 문자열로 나온다
+    const opened = await draftSync({ kv, userId: 1, put: echo, prefix: 'margin' }).open(server({ id: 71, title: '옮긴 문장', body: '생각', revision: 0 }));
+    expect(shouldDiscard({ title: opened.title, body: opened.body, rounds: 0 })).toBe(false);
+  });
+
+  // A1 리뷰 9 — 앱 시작 동기화가 지금 화면이 쓰는 새 쪽지 칸까지 보내면 쪽지가 둘이 된다. 넘겨받은 키(시작 때 스냅숏)만 보낸다.
+  test('REQ-229 · 보낼 키를 넘기면 그 키만 보낸다(그 뒤 생긴 칸은 화면 몫)', async () => {
+    const kv = memoryKV();
+    kv.map.set(newNoteKey(1, 'old'), JSON.stringify({ bookId: 3, quote: null, text: '지난 실행', dirty: true }));
+    kv.map.set(newNoteKey(1, 'live'), JSON.stringify({ bookId: 3, quote: null, text: '지금 쓰는 중', dirty: true }));
+    const sent: string[] = [];
+    await sendNewNotes(kv, 1, async (b) => void sent.push(b.text), [newNoteKey(1, 'old')]);
+    expect(sent).toEqual(['지난 실행']);
+    expect(kv.map.has(newNoteKey(1, 'live'))).toBe(true);
   });
 
   // J100 — 앱이 꺼져 남은 새 쪽지 칸은 목록에 안 보여 다시 열 길이 없다 → 앱이 켜질 때(draftMigrate 다음) 보낸다.
