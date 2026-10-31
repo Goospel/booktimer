@@ -175,10 +175,31 @@ test('REQ-125 · 검색어는 encodeURIComponent로 싣는다', async () => {
   expect(fetchMock.mock.calls[0][0]).toBe('https://booktimer.app/api/books/search?q=%EB%8D%B0%EB%AF%B8%EC%95%88%20%26%20%ED%97%A4%EC%84%B8');
 });
 
-test('REQ-40 · 여백 생성 본문은 bookId · quote · text뿐이다(shared · bgCode 없음)', async () => {
+test('REQ-40 · 쪽지 만들기 본문은 bookId · quote · text뿐이다(shared · bgCode 없음)', async () => {
   fetchMock.mockResolvedValueOnce(reply(200, '{}'));
-  await margins.create({ bookId: 7, quote: '  ', thought: ' 좋다 ' });
+  await margins.add({ bookId: 7, quote: null, text: '좋다' });
   expect(JSON.parse(fetchMock.mock.calls[0][1].body)).toEqual({ bookId: 7, quote: null, text: '좋다' });
+});
+
+test('M1 · 쪽지 API 경로 · 메서드는 서버 AppMarginApiController와 같다', async () => {
+  fetchMock.mockResolvedValue(reply(200, '{}'));
+  await margins.ofBook(3);
+  await margins.bookless();
+  await margins.get(70);
+  await margins.add({ bookId: null, quote: null, text: '책 없는 쪽지' });
+  await margins.edit(70, { quote: null, text: '고친 쪽지', revision: 0, exported: true });
+  await margins.delete(70);
+  await margins.ai(70, { step: 'ASK', revision: 1, focus: null });
+  const sent = fetchMock.mock.calls.map(([url, init]) => [url.replace('https://booktimer.app', ''), init.method, init.body && JSON.parse(init.body)]);
+  expect(sent).toEqual([
+    ['/api/app/books/3/margins', 'GET', undefined],
+    ['/api/app/margins?book=none', 'GET', undefined],
+    ['/api/app/margins/70', 'GET', undefined],
+    ['/api/app/margins', 'POST', { bookId: null, quote: null, text: '책 없는 쪽지' }],
+    ['/api/app/margins/70', 'PUT', { quote: null, text: '고친 쪽지', revision: 0, exported: true }],
+    ['/api/app/margins/70', 'DELETE', undefined],
+    ['/api/app/margins/70/ai', 'POST', { step: 'ASK', revision: 1, focus: null }],
+  ]);
 });
 
 test('실패 문구 · 서버 평문과 연결 문구는 그대로, 문구 없는 실패(HTML 오류 페이지)는 화면 문구로 바꾼다', () => {

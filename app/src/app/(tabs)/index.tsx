@@ -14,7 +14,6 @@ import { clockLabel, dateLabel, durationLabel } from '../../lib/format';
 import { goalChoices, goalProgress, goalStatus, isStaleDay, nextMidnightOf, SESSION_CAP_MS } from '../../lib/goalProgress';
 import { savedNotice } from '../../lib/marginSave';
 import { ALREADY_STOPPED, startMeasure, stopMeasure } from '../../lib/measureStart';
-import { type DraftRow, recentDrafts } from '../../lib/recentDrafts';
 import { goalMetNotice } from '../../lib/reminders';
 import { syncSurfaces } from '../../lib/surfaces';
 import { useMeasureShortcut } from '../../lib/useMeasureShortcut';
@@ -32,12 +31,9 @@ export default function Home() {
   const [pickedId, setPickedId] = useState<number | null>(null);
   const [now, setNow] = useState(Date.now());
   const [loadedMidnight, setLoadedMidnight] = useState(0);
-  const [drafts, setDrafts] = useState<DraftRow[] | null>(null);
   const stacked = useStacked();
 
   const load = useCallback(async () => {
-    // 글 목록은 따로 읽는다 — 실패해도 홈이 불러오기 오류로 막히지 않는다(못 읽으면 빈 상태 문구도 띄우지 않는다).
-    void reading.drafts().then((list) => setDrafts(recentDrafts(list)), () => undefined);
     try {
       const d = await reading.dashboard();
       setDash(d);
@@ -277,22 +273,6 @@ export default function Home() {
       <View style={{ gap: space[3] }}>
         <Button kind="ink" label="여백 남기기" onPress={() => router.push(`/margin/${book.id}`)} />
         <Button kind="outline" label="읽기 시작" busy={busy} onPress={() => void start(book.id)} />
-      </View>
-      <View style={{ gap: space[2], marginTop: space[4] }}>
-        <Txt v="H3" accessibilityRole="header">
-          이어 쓰기
-        </Txt>
-        {drafts && drafts.length > 0 ? (
-          <View>
-            {drafts.map((d) => (
-              <Row key={d.id} title={d.title} meta={d.meta} accessibilityHint="글쓰기 화면을 열어요" onPress={() => router.push(`/draft/${d.id}`)} />
-            ))}
-          </View>
-        ) : drafts ? (
-          <Txt v="L1" style={{ color: color.text }}>
-            아직 쓴 글이 없어요 — 여백이 있는 책에서 「이 책으로 글쓰기」를 눌러 보세요
-          </Txt>
-        ) : null}
       </View>
       {others.length > 0 ? (
         <View style={{ marginTop: space[4] }}>

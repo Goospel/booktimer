@@ -1,7 +1,8 @@
 // 글쓰기 AI 한 번(v1 REQ-36 · 47 · 62 · PR-H 사양 §5.4 · REQ-138 · 140).
 // 순서: 입력 확정(blur) → 다음 틱 → 자동저장 비우기 → 그 revision으로 POST. 응답을 못 받으면 글을 다시 읽어 AI 필드만 줍는다.
 import { ApiError, NetworkError } from '../api/client';
-import type { AiView, DraftView, QuestionLog, Step } from '../api/types';
+import type { AiView, MarginView, QuestionLog, Step } from '../api/types';
+import { showsThought } from './marginSave';
 
 export type { Step };
 
@@ -18,10 +19,24 @@ export const SAFETY_NET_MS = [5_000, 15_000, 30_000] as const;
 export const ROUNDS_MAX = 8;
 export const FOLLOW_MIN_BODY = 30;
 
-const NET = '인터넷에 연결되지 않았어요 — 쓴 글은 이 기기에 남아 있어요. 연결되면 다시 눌러 주세요';
+const NET = '인터넷에 연결되지 않았어요 — 쓴 쪽지는 이 기기에 남아 있어요. 연결되면 다시 눌러 주세요';
 const NOT_YET = '질문을 아직 받지 못했어요';
-const SAVE_FAIL = '글이 아직 저장되지 않아 질문을 보내지 못했어요 — 잠시 뒤 다시 눌러 주세요';
+const SAVE_FAIL = '쪽지가 아직 저장되지 않아 질문을 보내지 못했어요 — 잠시 뒤 다시 눌러 주세요';
 const GENERIC = '질문을 보내지 못했어요 — 잠시 뒤 다시 눌러 주세요';
+
+/** 한 번에 하나 — 돌고 있는 동안 또 부르면 아무것도 하지 않는다(새 쪽지 첫 POST 중 두 번 누르면 AI 요청이 두 번 나간다 — A1 리뷰 13). */
+export function singleFlight() {
+  let busy = false;
+  return async (f: () => Promise<void>): Promise<void> => {
+    if (busy) return;
+    busy = true;
+    try {
+      await f();
+    } finally {
+      busy = false;
+    }
+  };
+}
 
 const nextTick = () => new Promise<void>((r) => setTimeout(r, 0));
 const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
@@ -44,7 +59,7 @@ export async function sendAiStep(p: {
   blur: () => void;
   flush: () => Promise<{ revision: number }>;
   post: (revision: number) => Promise<AiView>;
-  reload: () => Promise<DraftView>;
+  reload: () => Promise<Pick<MarginView, 'questions' | 'aiUpdatedAt' | 'aiRemainingToday'>>;
   /** 보내기 전 라운드 수 — 서버는 라운드를 덧붙이기만 한다. 시각 문자열 비교는 서버 정밀도(나노초 응답 vs datetime(6))에 깨진다 */
   roundsBefore: number;
   wait?: (ms: number) => Promise<void>;
@@ -92,13 +107,24 @@ export async function sendAiStep(p: {
   return reached ? { kind: 'retry', message: NOT_YET } : { kind: 'error', message: NET };
 }
 
+/** 쪽지 AI 단추 입력 — 지금 쪽지만(J98). boxes = 재료로 가는 건 블로그 문장 박스 수(B1부터 · 가린 박스 제외 — A1은 0). */
+export interface NoteAiInput {
+  rounds: number;
+  quote: string | null;
+  thought: string;
+  boxes: number;
+}
+
+/** 지금 쪽지에 읽을 것이 있다(J98) — 옮긴 문장 ∨ 생각(showsThought — 서버 NO_THOUGHT) ∨ 건 문장 박스. 책 유무 · 다른 쪽지 수는 보지 않는다. */
+export const hasMaterial = (p: Omit<NoteAiInput, 'rounds'>) => (p.quote ?? '').trim() !== '' || showsThought(p.thought) || p.boxes > 0;
+
 /** 아래 막대 검정 알약 — busy는 화면이 얹는다. 꼬리 질문 30자는 서버 strip()처럼 앞뒤 공백을 뺀 길이. */
-export function aiButton(p: { rounds: number; body: string; aiIncluded: number; hasBook: boolean }): {
+export function aiButton(p: NoteAiInput): {
   step: Step;
   label: '질문 받기' | '꼬리 질문';
   disabled: boolean;
 } {
   const full = p.rounds >= ROUNDS_MAX;
-  if (p.rounds === 0) return { step: 'ASK', label: '질문 받기', disabled: full || !p.hasBook || p.aiIncluded === 0 };
-  return { step: 'FOLLOW', label: '꼬리 질문', disabled: full || p.body.trim().length < FOLLOW_MIN_BODY };
+  if (p.rounds === 0) return { step: 'ASK', label: '질문 받기', disabled: full || !hasMaterial(p) };
+  return { step: 'FOLLOW', label: '꼬리 질문', disabled: full || p.thought.trim().length < FOLLOW_MIN_BODY };
 }

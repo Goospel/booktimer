@@ -14,7 +14,7 @@ import { base, Button, Notice, Row, Screen, SwitchRow, Txt, useStacked } from '.
 import { kakaoLogout } from '../../lib/auth/kakao';
 import { buildInfoLine } from '../../lib/buildInfo';
 import { deleteVia } from '../../lib/deleteVia';
-import { draftSync } from '../../lib/draftSync';
+import { clearAll, pendingAll } from '../../lib/draftSync';
 import { dateLabel } from '../../lib/format';
 import { logout } from '../../lib/logout';
 import { askPermission, permission, type PermissionState, reminderStore, syncReminders } from '../../lib/notify';
@@ -152,9 +152,8 @@ export default function Settings() {
   async function onLogout() {
     setNotice(null);
     const [userId, a] = await Promise.all([session.userId(), session.account()]);
-    const drafts = userId === null ? null : draftSync({ kv: AsyncStorage, userId, put: writing.save });
     await logout({
-      pending: async () => (drafts ? drafts.pending() : 0),
+      pending: async () => (userId === null ? 0 : pendingAll(AsyncStorage, userId)),
       confirm: () =>
         new Promise<boolean>((ok) =>
           Alert.alert(
@@ -169,7 +168,7 @@ export default function Settings() {
         ),
       revoke: () => account.logout(),
       clearDrafts: async () => {
-        await drafts?.clear();
+        if (userId !== null) await clearAll(AsyncStorage, userId);
       },
       clearSession: () => session.clear(), // 루트 세션 구독이 로그인 화면 + 기기 표면 정리
       authProvider: a.authProvider, // KAKAO면 SDK 로그아웃(REQ-112 — 최선 노력)

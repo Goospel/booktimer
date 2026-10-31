@@ -1,10 +1,10 @@
 // 질문 띠 · 질문 시트의 보기 모양(PR-H 사양 REQ-137 · 139 · §8-9 · §8-11).
 import type { Question, QuestionLog, Round, Step } from '../api/types';
+import { hasMaterial, type NoteAiInput } from './aiStep';
 
-/** 빈 띠 문구 — 라운드 0에서만 책 · 여백 사정을 알린다(꼬리 질문은 내 글을 읽는다). */
-export function bandHint(p: { rounds: number; aiIncluded: number; hasBook: boolean }): string {
-  if (p.rounds === 0 && !p.hasBook) return '책이 지워진 글이라 첫 질문은 받을 수 없어요';
-  if (p.rounds === 0 && p.aiIncluded === 0) return '이 책에 여백을 하나 남기면 질문을 받을 수 있어요';
+/** 빈 띠 문구 — 라운드 0에 지금 쪽지에 읽을 것이 없을 때만 알린다(J98 · F1 §4.5 — 꼬리 질문은 내 생각을 읽는다). */
+export function bandHint(p: NoteAiInput): string {
+  if (p.rounds === 0 && !hasMaterial(p)) return '문장이나 생각을 적으면 질문을 받을 수 있어요';
   return '질문을 고르거나, 그냥 써도 돼요';
 }
 
@@ -14,8 +14,20 @@ export function sheetRounds(log: QuestionLog): { latest: Round | null; past: Rou
   return { latest: n > 0 ? log.rounds[n - 1] : null, past: log.rounds.slice(0, -1).reverse() };
 }
 
-export function roundTitle(step: Step): '여백에서 받은 질문' | '내 글에서 받은 꼬리 질문' {
-  return step === 'ASK' ? '여백에서 받은 질문' : '내 글에서 받은 꼬리 질문';
+export function roundTitle(step: Step): '여백에서 받은 질문' | '내 생각에서 받은 꼬리 질문' {
+  return step === 'ASK' ? '여백에서 받은 질문' : '내 생각에서 받은 꼬리 질문';
+}
+
+/** 질문 띠 기다림 문구(F1 §4.5) — ASK는 쪽지를, FOLLOW는 내 생각을 읽는다. */
+export function waitingText(step: Step | null): string | null {
+  if (step === 'ASK') return '쪽지를 읽고 질문을 고르는 중이에요';
+  if (step === 'FOLLOW') return '내 생각을 읽고 질문을 고르는 중이에요';
+  return null;
+}
+
+/** 질문을 고르면 칸에 넘기는 패치 — 띠(focus)뿐이다. 생각 · 옮긴 문장 칸으로 가는 키는 없다(REQ-221 · D16 — AI는 질문만). */
+export function pickPatch(q: Question): { focus: string } {
+  return { focus: q.text };
 }
 
 /** 띠에 있는 질문(글자가 같으면) — 「지금 답하는 질문」 표시. */
