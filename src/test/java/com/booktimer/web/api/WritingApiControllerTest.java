@@ -105,128 +105,122 @@ class WritingApiControllerTest {
         return call(request.contentType(MediaType.APPLICATION_JSON).content(body), token);
     }
 
-    private Long createDraft(String token, Long bookId) throws Exception {
-        String res = json(post("/api/app/drafts"), token, "{\"bookId\":" + bookId + "}")
-                .andExpect(status().isCreated()).andReturn().getResponse().getContentAsString();
-        return Long.parseLong(res.replaceAll("(?s)^\\{\"id\":(\\d+),.*", "$1"));
-    }
-
     private static String save(String title, String body, int revision, Boolean exported) {
         return "{\"title\":" + (title == null ? "null" : "\"" + title + "\"") + ",\"body\":\"" + body
                 + "\",\"revision\":" + revision + ",\"exported\":" + exported + "}";
     }
 
-    // ── REQ-10 글 원장 CRUD ────────────────────────────────────────────────────
+    // ── REQ-216 옛 JS 호환(책생글 M1 — 설계 §5.1 표) ─────────────────────────────
+
+    /** v1이 만든 글 한 편 — M1 뒤엔 앱이 drafts를 만들 수 없어 저장소로 직접 둔다. */
+    private WritingDraft draft(User user, Book book, String title, String body) {
+        WritingDraft d = WritingDraft.start(user, book);
+        d.edit(title, body, 0);
+        return draftRepository.saveAndFlush(d);
+    }
+
+    /** V105 복사가 남기는 짝 — writing_draft.story_id. */
+    private void movedTo(WritingDraft d, Story s) {
+        em.createNativeQuery("update writing_draft set story_id = ?1 where id = ?2")
+                .setParameter(1, s.getId()).setParameter(2, d.getId()).executeUpdate();
+        em.clear();
+    }
+
+    private static final String MOVED = "이 글은 여백으로 옮겨졌어요 — 앱을 닫았다가 다시 열어 주세요";
 
     @Test
-    @DisplayName("REQ-10 · 남의 글 id는 조회·저장·삭제 모두 404")
-    void othersDraftIs404() throws Exception {
-        User owner = register("wowner", Role.USER);
-        String ownerToken = apiTokenService.issue(owner);
-        String thiefToken = apiTokenService.issue(register("wthief", Role.USER));
-        Long id = createDraft(ownerToken, book(owner, "주인의 책").getId());
-        json(put("/api/app/drafts/" + id), ownerToken, save(null, "주인의 글", 0, null)).andExpect(status().isOk());
+    @DisplayName("REQ-216 · 옮긴 글 · 안 옮긴 글 PUT 둘 다 410 · 본문 평문(JSON 아님) · 글은 그대로")
+    void putIs410ForAnyRow() throws Exception {
+        User me = register("wput410", Role.USER);
+        String token = apiTokenService.issue(me);
+        Book book = book(me, "책");
+        WritingDraft moved = draft(me, book, "제목", "옮긴 글");
+        movedTo(moved, margin(me, book, null, "제목\n\n옮긴 글"));
+        WritingDraft unmoved = draft(me, book, null, "안 옮긴 글");
 
-        call(get("/api/app/drafts/" + id), thiefToken).andExpect(status().isNotFound());
-        json(put("/api/app/drafts/" + id), thiefToken, save(null, "덮어쓰기", 1, null)).andExpect(status().isNotFound());
-        call(delete("/api/app/drafts/" + id), thiefToken).andExpect(status().isNotFound());
-
-        WritingDraft after = draftRepository.findById(id).orElseThrow();
-        assertThat(after.getBody()).isEqualTo("주인의 글");
-        assertThat(after.getRevision()).isEqualTo(1);
-        // 양성 대조 — 주인은 지울 수 있다(위 404가 「삭제 문이 아예 없는」 구현으로 통과하지 않게).
-        call(delete("/api/app/drafts/" + id), ownerToken).andExpect(status().isNoContent());
-        assertThat(draftRepository.findById(id)).isEmpty();
+        for (WritingDraft d : java.util.List.of(moved, unmoved)) {
+            json(put("/api/app/drafts/" + d.getId()), token, save(null, "옛 JS가 보낸 글", 1, null))
+                    .andExpect(status().isGone())
+                    .andExpect(content().contentTypeCompatibleWith(MediaType.TEXT_PLAIN))
+                    .andExpect(content().string(MOVED));
+        }
+        assertThat(draftRepository.findById(unmoved.getId()).orElseThrow().getBody()).isEqualTo("안 옮긴 글");
     }
 
     @Test
-    @DisplayName("REQ-10 · 낡은 revision 저장은 409이고 본문이 그대로다")
-    void staleRevisionIs409() throws Exception {
-        User me = register("wstale", Role.USER);
+    @DisplayName("REQ-216 · GET movedTo = story id · 안 옮긴 행 null · 목록 GET은 200(읽기 전용)")
+    void getCarriesMovedTo() throws Exception {
+        User me = register("wmoved", Role.USER);
         String token = apiTokenService.issue(me);
-        Long id = createDraft(token, book(me, "책").getId());
+        Book book = book(me, "책");
+        WritingDraft moved = draft(me, book, null, "옮긴 글");
+        Story note = margin(me, book, null, "옮긴 글");
+        movedTo(moved, note);
+        WritingDraft unmoved = draft(me, book, null, "안 옮긴 글");
 
-        json(put("/api/app/drafts/" + id), token, save("제목", "긴 글", 0, null))
-                .andExpect(status().isOk()).andExpect(jsonPath("$.revision").value(1));
-        json(put("/api/app/drafts/" + id), token, save("제목", "짧은 글", 0, null))
-                .andExpect(status().isConflict());
-
-        call(get("/api/app/drafts/" + id), token)
-                .andExpect(jsonPath("$.body").value("긴 글"))
-                .andExpect(jsonPath("$.revision").value(1));
+        call(get("/api/app/drafts/" + moved.getId()), token).andExpect(status().isOk())
+                .andExpect(jsonPath("$.movedTo").value(note.getId()));
+        call(get("/api/app/drafts/" + unmoved.getId()), token).andExpect(status().isOk())
+                .andExpect(jsonPath("$.movedTo").value(org.hamcrest.Matchers.nullValue()))
+                .andExpect(jsonPath("$.body").value("안 옮긴 글"));
+        call(get("/api/app/drafts"), token).andExpect(status().isOk()).andExpect(jsonPath("$.length()").value(2));
+        // 남의 글 id는 여전히 404(존재 비노출)
+        call(get("/api/app/drafts/" + moved.getId()), apiTokenService.issue(register("wmovedthief", Role.USER)))
+                .andExpect(status().isNotFound());
     }
 
     @Test
-    @DisplayName("REQ-10 · 10,001자 본문은 400")
-    void tooLongBodyIs400() throws Exception {
-        User me = register("wlong", Role.USER);
+    @DisplayName("REQ-216 · POST · ai · DELETE 410 — 표를 얼린다(글 수 그대로)")
+    void writesAre410() throws Exception {
+        User me = register("wfrozen", Role.USER);
         String token = apiTokenService.issue(me);
-        Long id = createDraft(token, book(me, "책").getId());
+        Book book = book(me, "책");
+        WritingDraft d = draft(me, book, null, "얼린 글");
 
-        json(put("/api/app/drafts/" + id), token, save(null, "가".repeat(10_001), 0, null))
-                .andExpect(status().isBadRequest());
-        assertThat(draftRepository.findById(id).orElseThrow().getBody()).isEmpty();
-        // 양성 대조 — 상한 그대로는 저장된다.
-        json(put("/api/app/drafts/" + id), token, save(null, "가".repeat(10_000), 0, null))
-                .andExpect(status().isOk()).andExpect(jsonPath("$.revision").value(1));
+        json(post("/api/app/drafts"), token, "{\"bookId\":" + book.getId() + "}")
+                .andExpect(status().isGone()).andExpect(content().string(MOVED));
+        json(post("/api/app/drafts/" + d.getId() + "/ai"), token, "{\"step\":\"ASK\",\"revision\":1}")
+                .andExpect(status().isGone()).andExpect(content().string(MOVED));
+        call(delete("/api/app/drafts/" + d.getId()), token)
+                .andExpect(status().isGone()).andExpect(content().string(MOVED));
+        assertThat(draftRepository.findTop20ByUserOrderByUpdatedAtDesc(me)).hasSize(1);
     }
 
     @Test
-    @DisplayName("REQ-10 · 목록에 책 연결이 풀린 글도 나온다")
-    void listIncludesUnlinkedDraft() throws Exception {
-        User me = register("wlist", Role.USER);
+    @DisplayName("U-154 ⑤ · 옮긴 쪽지를 지우면 writing_draft 원본도 0행 · GET drafts/{id} 404 · 목록에서 빠짐(처리방침 5절 파기)")
+    void deletingMovedNoteDeletesSourceDraft() throws Exception {
+        User me = register("wdelsrc", Role.USER);
         String token = apiTokenService.issue(me);
-        Book doomed = book(me, "지울 책");
-        Long unlinked = createDraft(token, doomed.getId());
-        Long linked = createDraft(token, book(me, "남길 책").getId());
-        json(put("/api/app/drafts/" + unlinked), token, save(null, "\\n  책 없는 글\\n둘째 줄", 0, null)).andExpect(status().isOk());
-        bookService.delete(me, doomed.getId());
+        Book book = book(me, "책");
+        WritingDraft moved = draft(me, book, "제목", "옮긴 글");
+        Story note = margin(me, book, null, "제목\n\n옮긴 글");
+        movedTo(moved, note);
+        WritingDraft other = draft(me, book, null, "남은 글");
 
-        call(get("/api/app/drafts"), token)
+        call(delete("/api/app/margins/" + note.getId()), token).andExpect(status().isNoContent());
+
+        assertThat(draftRepository.findById(moved.getId())).isEmpty();
+        call(get("/api/app/drafts/" + moved.getId()), token).andExpect(status().isNotFound());
+        call(get("/api/app/drafts"), token).andExpect(status().isOk()).andExpect(jsonPath("$.length()").value(1));
+        assertThat(draftRepository.findById(other.getId())).isPresent();
+    }
+
+    @Test
+    @DisplayName("REQ-216 · materials drafts = [] — 그 책에 옛 글이 있어도(옛 책 화면이 drafts.length를 읽는다)")
+    void materialsDraftsEmpty() throws Exception {
+        User me = register("wmatdrafts", Role.USER);
+        Book book = book(me, "책");
+        draft(me, book, null, "옛 글");
+
+        call(get("/api/app/books/" + book.getId() + "/materials"), apiTokenService.issue(me))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.length()").value(2))
-                .andExpect(jsonPath("$[0].id").value(unlinked))
-                .andExpect(jsonPath("$[0].bookId").doesNotExist())
-                .andExpect(jsonPath("$[0].preview").value("책 없는 글"))
-                .andExpect(jsonPath("$[1].id").value(linked))
-                .andExpect(jsonPath("$[1].bookTitle").value("남길 책"));
+                .andExpect(jsonPath("$.drafts").isArray())
+                .andExpect(jsonPath("$.drafts.length()").value(0));
     }
-
-    @Test
-    @DisplayName("REQ-10 · 목록에 남의 글이 없다")
-    void listExcludesOthersDrafts() throws Exception {
-        User owner = register("wlistowner", Role.USER);
-        User me = register("wlistme", Role.USER);
-        String myToken = apiTokenService.issue(me);
-        createDraft(apiTokenService.issue(owner), book(owner, "주인의 책").getId());
-        Long mine = createDraft(myToken, book(me, "내 책").getId());
-
-        call(get("/api/app/drafts"), myToken)
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.length()").value(1))
-                .andExpect(jsonPath("$[0].id").value(mine));
-    }
-
-    @Test
-    @DisplayName("REQ-10 · 남의 책 id로 글을 만들면 404")
-    void createOnOthersBookIs404() throws Exception {
-        User owner = register("wcreateowner", Role.USER);
-        User thief = register("wcreatethief", Role.USER);
-        Book book = book(owner, "주인의 비공개 책");
-
-        json(post("/api/app/drafts"), apiTokenService.issue(thief), "{\"bookId\":" + book.getId() + "}")
-                .andExpect(status().isNotFound())
-                .andExpect(content().string(org.hamcrest.Matchers.not(org.hamcrest.Matchers.containsString("주인의 비공개 책"))));
-        assertThat(draftRepository.findTop20ByUserOrderByUpdatedAtDesc(thief)).isEmpty();
-        // 양성 대조 — 주인은 같은 요청으로 만든다(위 404가 「생성이 아예 안 되는」 구현으로 통과하지 않게).
-        json(post("/api/app/drafts"), apiTokenService.issue(owner), "{\"bookId\":" + book.getId() + "}")
-                .andExpect(status().isCreated());
-    }
-
     // ── REQ-11 재료는 소셜 경로를 타지 않는다 ─────────────────────────────────────
 
     @Test
-    @DisplayName("REQ-12 · materials는 그 책의 여백·글만 최근순으로 싣는다")
+    @DisplayName("REQ-12 · materials는 그 책의 여백만 최근순으로 싣는다(글은 M1부터 drafts = [] — REQ-216)")
     void materialsAreThisBookRecentFirst() throws Exception {
         User me = register("wmatorder", Role.USER);
         String token = apiTokenService.issue(me);
@@ -235,8 +229,6 @@ class WritingApiControllerTest {
         margin(me, a, null, "먼저 쓴 여백");
         margin(me, a, null, "나중 쓴 여백"); // createdAt이 같아도 id 내림차순으로 순서가 정해진다
         margin(me, b, null, "다른 책 여백");
-        Long draftA = createDraft(token, a.getId());
-        createDraft(token, b.getId());
 
         call(get("/api/app/books/" + a.getId() + "/materials"), token)
                 .andExpect(status().isOk())
@@ -245,8 +237,7 @@ class WritingApiControllerTest {
                 .andExpect(jsonPath("$.margins[1].text").value("먼저 쓴 여백"))
                 .andExpect(content().string(org.hamcrest.Matchers.not(org.hamcrest.Matchers.containsString("다른 책 여백"))))
                 .andExpect(jsonPath("$.aiIncluded").value(2))
-                .andExpect(jsonPath("$.drafts.length()").value(1))
-                .andExpect(jsonPath("$.drafts[0].id").value(draftA));
+                .andExpect(jsonPath("$.drafts.length()").value(0));
     }
 
     @Test
@@ -295,14 +286,12 @@ class WritingApiControllerTest {
     // ── REQ-13 · 14 책 삭제 · 탈퇴 ───────────────────────────────────────────────
 
     @Test
-    @DisplayName("REQ-13 · 책을 지우면 그 책의 글은 남고 book이 null이 된다(실 H2)")
+    @DisplayName("REQ-13 · 책을 지우면 그 책의 글·여백은 남고 book이 null이 된다(실 H2 — 여백까지 넓힘, C9)")
     void deletingBookKeepsDraft() throws Exception {
         User me = register("wdelbook", Role.USER);
-        String token = apiTokenService.issue(me);
         Book book = book(me, "지울 책");
-        Long marginId = margin(me, book, null, "책과 함께 사라질 여백").getId();
-        Long id = createDraft(token, book.getId());
-        json(put("/api/app/drafts/" + id), token, save(null, "남아야 할 글", 0, null)).andExpect(status().isOk());
+        Long marginId = margin(me, book, null, "책이 사라져도 남을 여백").getId();
+        Long id = draft(me, book, null, "남아야 할 글").getId();
 
         bookService.delete(me, book.getId());
         em.flush();
@@ -312,7 +301,7 @@ class WritingApiControllerTest {
         assertThat(draft.getBook()).isNull();
         assertThat(draft.getBody()).isEqualTo("남아야 할 글");
         assertThat(bookRepository.findById(book.getId())).isEmpty();
-        assertThat(storyRepository.findById(marginId)).as("여백은 기존대로 책과 함께 지워진다").isEmpty();
+        assertThat(storyRepository.findById(marginId).orElseThrow().getBook()).as("여백도 남고 연결만 풀린다(C9)").isNull();
     }
 
     @Test
@@ -320,8 +309,7 @@ class WritingApiControllerTest {
     void purgeDeletesDrafts() throws Exception {
         String sub = "000777.writing.0014";
         User me = appleUsers.register(sub);
-        String token = apiTokenService.issue(me);
-        Long id = createDraft(token, book(me, "앱 책").getId());
+        Long id = draft(me, book(me, "앱 책"), null, "").getId();
         em.flush();
 
         accountService.deleteAppleVerifiedAccount(me, sub);
@@ -368,7 +356,7 @@ class WritingApiControllerTest {
         clock.set(EFFECTIVE.plusSeconds(86_400 * 3));
         User me = register("wstalecons", Role.USER);
         String token = apiTokenService.issue(me);
-        Long id = createDraft(token, book(me, "책").getId());
+        Long id = draft(me, book(me, "책"), null, "").getId();
 
         me.consentToAi(EFFECTIVE.minusSeconds(1));
         userRepository.saveAndFlush(me);
@@ -405,32 +393,29 @@ class WritingApiControllerTest {
         mvc.perform(get("/api/app/ai-consent")).andExpect(status().isUnauthorized());
     }
 
-    // ── REQ-16 내보내기 계측 ─────────────────────────────────────────────────
+    // ── REQ-16 내보내기 계측 → 쪽지로 옮겼다(REQ-227 · AppMarginApiControllerTest) ─────────
 
     @Test
-    @DisplayName("REQ-16 · exported는 처음 한 번만 시각을 박는다")
+    @DisplayName("REQ-16 · 쪽지 exported는 처음 한 번만 시각을 박는다(REQ-227 — v1 지표는 쪽지 기준으로 산다)")
     void exportedStampsOnce() throws Exception {
         Instant first = Instant.parse("2026-11-24T01:00:00Z");
         clock.set(first.minusSeconds(60));
         User me = register("wexport", Role.USER);
         String token = apiTokenService.issue(me);
-        Long id = createDraft(token, book(me, "책").getId());
+        Long id = margin(me, book(me, "책"), null, "글").getId();
 
-        json(put("/api/app/drafts/" + id), token, save(null, "글", 0, null)).andExpect(status().isOk());
-        assertThat(draftRepository.findById(id).orElseThrow().getExportedAt()).as("exported 없이는 안 박힌다").isNull();
         clock.set(first);
-        json(put("/api/app/drafts/" + id), token, save(null, "글", 1, true)).andExpect(status().isOk());
+        json(put("/api/app/margins/" + id), token, "{\"text\":\"글\",\"revision\":0,\"exported\":true}").andExpect(status().isOk());
         clock.set(first.plusSeconds(3_600));
-        json(put("/api/app/drafts/" + id), token, save(null, "글 고침", 2, true)).andExpect(status().isOk());
+        json(put("/api/app/margins/" + id), token, "{\"text\":\"글 고침\",\"revision\":1,\"exported\":true}").andExpect(status().isOk());
 
-        assertThat(draftRepository.findById(id).orElseThrow().getExportedAt()).isEqualTo(first);
-        call(get("/api/app/drafts"), token).andExpect(jsonPath("$[0].exported").value(true));
+        assertThat(storyRepository.findById(id).orElseThrow().getExportedAt()).isEqualTo(first);
     }
 
     // ── REQ-48 독서 서재에만 ──────────────────────────────────────────────────
 
     @Test
-    @DisplayName("REQ-48 · 공부 서재 책 id로 글을 만들면 404이고 같은 사용자의 독서 서재 책 id는 201")
+    @DisplayName("REQ-48 · 공부 서재 책 id로 쪽지를 만들면 404이고 같은 사용자의 독서 서재 책 id는 201")
     void studyBookIdIs404() throws Exception {
         User me = register("wstudy", Role.USER);
         String token = apiTokenService.issue(me);
@@ -441,12 +426,13 @@ class WritingApiControllerTest {
             reading = book(me, "데미안");
         }
 
-        json(post("/api/app/drafts"), token, "{\"bookId\":" + study.getId() + "}").andExpect(status().isNotFound());
-        assertThat(draftRepository.findTop20ByUserOrderByUpdatedAtDesc(me)).isEmpty();
-        json(post("/api/app/drafts"), token, "{\"bookId\":" + reading.getId() + "}")
+        long before = storyRepository.count();
+        json(post("/api/app/margins"), token, "{\"bookId\":" + study.getId() + ",\"text\":\"생각\"}").andExpect(status().isNotFound());
+        assertThat(storyRepository.count()).isEqualTo(before);
+        json(post("/api/app/margins"), token, "{\"bookId\":" + reading.getId() + ",\"text\":\"생각\"}")
                 .andExpect(status().isCreated())
                 .andExpect(jsonPath("$.bookTitle").value("데미안"))
-                .andExpect(jsonPath("$.body").value(""))
+                .andExpect(jsonPath("$.text").value("생각"))
                 .andExpect(jsonPath("$.revision").value(0))
                 .andExpect(jsonPath("$.questions.rounds.length()").value(0));
     }

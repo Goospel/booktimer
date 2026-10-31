@@ -9,8 +9,6 @@ import com.booktimer.follow.FollowRepository;
 import com.booktimer.security.CurrentUserService;
 import com.booktimer.session.ReadingSession;
 import com.booktimer.session.ReadingSessionRepository;
-import com.booktimer.story.Story;
-import com.booktimer.story.StoryRepository;
 import com.booktimer.user.User;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -21,11 +19,9 @@ import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
-import java.util.Collections;
 import java.util.Comparator;
 import java.util.HashMap;
 import java.util.HashSet;
-import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -46,6 +42,9 @@ import java.util.Set;
  * {@code newsEnabled}</b>(킬스위치 {@code booktimer.news.enabled}, 기본 켜짐): 끄면 false + 빈 목록이라
  * 미니앱이 탭 자체를 안 그린다(죽은 탭 금지) — 구글 RSS 형식이 바뀌어도 미니앱 재배포 없이 끌 수 있다.
  * SecurityConfig default-deny로 자동 인증.
+ *
+ * <p>여백(남의 「○○님이 여백에 글을 남겼어요」 소식 · 「여백」 탭)은 없다 — 2026-10-30 책생글 M1부터 여백은 본인만의 공간이다(C3).
+ * {@code discover}는 응답 모양(동결 미니앱 호환)을 위해 빈 목록으로 남는다.
  */
 @RestController
 public class HomeFeedApiController {
@@ -59,27 +58,12 @@ public class HomeFeedApiController {
     /** 뉴스 응답 상한. 소식과 같은 이유(미리보기 + 「더 보기」로 이 안에서 펼친다). */
     private static final int MAX_NEWS = 30;
 
-    /** 여백 글 미리보기 길이 — 말줄임(…)을 포함해 이 길이를 넘지 않는다. */
-    private static final int EXCERPT_MAX_LENGTH = 80;
-
     /** 「함께 읽는 사람」 상한. 소식·뉴스와 같은 값 — 미리보기 + 「더 보기」로 이 안에서 펼친다. */
     private static final int MAX_READERS = 30;
-
-    /**
-     * 「여백」 탭이 섞을 모집단 — 최신 이만큼을 받아 인메모리로 섞고 {@value #MAX_EVENTS}장만 남긴다.
-     * 상한의 3배 남짓이라 매 진입마다 목록이 눈에 띄게 달라진다.
-     *
-     * <p>⚠️ <b>고정되는 것은 반환 건수뿐이고 정렬 비용은 아니다</b> — {@code story}의 인덱스는
-     * {@code (user_id, created_at)}뿐이라 {@code order by created_at desc}가 전역 filesort로 떨어진다.
-     * 즉 비용은 공개 여백 <b>전체 수</b>에 비례한다. 공개 여백이 수만 건이 되면 인덱스
-     * {@code (shared, created_at)}를 마이그레이션으로 추가한다.
-     */
-    private static final int DISCOVER_POOL = 100;
 
     private final CurrentUserService currentUserService;
     private final BookRepository bookRepository;
     private final BookNewsRepository bookNewsRepository;
-    private final StoryRepository storyRepository;
     private final FollowRepository followRepository;
     private final ReadingSessionRepository sessionRepository;
     private final GoogleNewsRssClient newsClient;
@@ -88,7 +72,6 @@ public class HomeFeedApiController {
     public HomeFeedApiController(CurrentUserService currentUserService,
                                  BookRepository bookRepository,
                                  BookNewsRepository bookNewsRepository,
-                                 StoryRepository storyRepository,
                                  FollowRepository followRepository,
                                  ReadingSessionRepository sessionRepository,
                                  GoogleNewsRssClient newsClient,
@@ -96,7 +79,6 @@ public class HomeFeedApiController {
         this.currentUserService = currentUserService;
         this.bookRepository = bookRepository;
         this.bookNewsRepository = bookNewsRepository;
-        this.storyRepository = storyRepository;
         this.followRepository = followRepository;
         this.sessionRepository = sessionRepository;
         this.newsClient = newsClient;
@@ -116,36 +98,11 @@ public class HomeFeedApiController {
         for (Book book : bookRepository.feedStarted(viewer, cutoff)) {
             events.add(event(book, "STARTED", book.getStartedReadingAt()));
         }
-        events.addAll(marginEvents(viewer, cutoff));
         events.sort(Comparator.comparing(SocialEvent::occurredAt).reversed());
 
         return new HomeFeedResponse(
                 events.size() > MAX_EVENTS ? List.copyOf(events.subList(0, MAX_EVENTS)) : events,
-                newsClient.isEnabled(), newsFor(viewer), readersFor(viewer), discoverFor(viewer));
-    }
-
-    /**
-     * 「여백」 탭 — <b>팔로우와 무관하게</b> 「모두의 여백」에 올라온 글, 무작위 {@value #MAX_EVENTS}장.
-     *
-     * <p>소식과 두 자리가 다르다. ① <b>묶지 않는다</b>: 소식이 사람+책으로 묶는 이유는 한 사람의 연속
-     * 작성이 완독·시작 소식을 밀어내지 않게 하는 것인데, 이 탭엔 밀려날 다른 종류가 없다. 글 1장이
-     * 1행이라 {@code count}는 언제나 1이다. ② <b>순서가 최신순이 아니다</b>: 발견용이라 매 진입마다
-     * 다른 글이 서야 한다.
-     *
-     * <p>섞는 자리가 인메모리인 이유: {@code order by rand()}는 H2(테스트)·MySQL(운영)로 방언이 갈려
-     * 이식성이 없다. 최신 {@value #DISCOVER_POOL}건만 받아 섞는다 — 다만 <b>고정되는 것은 반환 건수뿐,
-     * 정렬 비용은 공개 여백 수에 비례한다</b>({@link #DISCOVER_POOL} 주석 참고).
-     */
-    private List<SocialEvent> discoverFor(User viewer) {
-        List<Story> pool = new ArrayList<>(
-                storyRepository.sharedRecent(viewer.getId(), PageRequest.of(0, DISCOVER_POOL)));
-        Collections.shuffle(pool);
-        return pool.stream()
-                .limit(MAX_EVENTS)
-                .map(s -> new SocialEvent(s.getUser().getLoginId(), s.getUser().getNickname(),
-                        s.getBook().getTitle(), "STORY", s.getCreatedAt(),
-                        s.getBook().getId(), excerptOf(s.getText()), 1, s.getBook().getCoverUrl()))
-                .toList();
+                newsClient.isEnabled(), newsFor(viewer), readersFor(viewer), List.of());
     }
 
     /**
@@ -246,51 +203,6 @@ public class HomeFeedApiController {
                 .toList();
     }
 
-    /**
-     * 「○○님이 『책』의 여백에 글을 남겼어요」 이벤트 — <b>사람+책 단위로 묶어</b> 한 줄로 만든다.
-     *
-     * <p>묶는 자리가 서버인 이유: ① 상한 30건을 서버가 자르는데 묶기 <i>전</i> 개수로 자르면 한 사람의
-     * 연속 작성이 완독·시작 소식을 부당하게 밀어낸다(묶는 이유 자체가 그 밀림 방지다) ② SQL로 묶으려면
-     * 「그룹별 최신 text」를 뽑을 윈도 함수가 필요한데 JPQL엔 없어 억지 서브쿼리가 된다.
-     *
-     * <p>스캔이 최신순이라 각 그룹에서 <b>먼저 만난 글이 그 그룹의 최신</b>이다 — 시각·발췌는 거기서 온다.
-     */
-    private List<SocialEvent> marginEvents(User viewer, Instant cutoff) {
-        Map<MarginKey, List<Story>> byBook = new LinkedHashMap<>();
-        for (Story story : storyRepository.feedRecent(viewer, cutoff)) {
-            byBook.computeIfAbsent(
-                    new MarginKey(story.getUser().getId(), story.getBook().getId()),
-                    key -> new ArrayList<>()).add(story);
-        }
-        List<SocialEvent> events = new ArrayList<>();
-        for (List<Story> group : byBook.values()) {
-            Story newest = group.get(0); // 스캔이 최신순
-            events.add(new SocialEvent(newest.getUser().getLoginId(), newest.getUser().getNickname(),
-                    newest.getBook().getTitle(), "STORY", newest.getCreatedAt(),
-                    newest.getBook().getId(), excerptOf(newest.getText()), group.size(),
-                    newest.getBook().getCoverUrl()));
-        }
-        return events;
-    }
-
-    /** 묶기 단위 — 같은 사람이라도 책이 다르면 별개 행이다(책이 곧 여백이므로). */
-    private record MarginKey(Long userId, Long bookId) {
-    }
-
-    /**
-     * 여백 글의 미리보기 1줄 — {@value #EXCERPT_MAX_LENGTH}자를 넘으면 잘라 말줄임을 붙인다.
-     *
-     * <p>서버에 두는 이유는 <b>페이로드 절단</b>이다: 글은 최대 500자인데 소식이 30건이면 15KB가
-     * 미리보기 한 줄 때문에 오간다. 폭에 맞춘 시각적 말줄임은 CSS clamp가 따로 맡는다 —
-     * 화면 폭은 서버가 알 수 없다.
-     */
-    static String excerptOf(String text) {
-        if (text == null || text.length() <= EXCERPT_MAX_LENGTH) {
-            return text;
-        }
-        return text.substring(0, EXCERPT_MAX_LENGTH - 1) + "…"; // 말줄임 포함해 상한을 넘지 않게
-    }
-
     private static SocialEvent event(Book book, String type, Instant occurredAt) {
         return new SocialEvent(book.getUser().getLoginId(), book.getUser().getNickname(),
                 book.getTitle(), type, occurredAt, null, null, 0, // 여백 전용 필드는 STORY 행만 채운다
@@ -298,8 +210,7 @@ public class HomeFeedApiController {
     }
 
     /**
-     * @param discover 팔로우 무관 공개 여백 — 「소식」과 같은 {@link SocialEvent} 모양이되 전부 STORY
-     *                 행이고, <b>묶이지 않아</b> {@code count}가 언제나 1이며 순서가 무작위다
+     * @param discover 옛 「여백」 탭 — 책생글 M1부터 늘 빈 목록이다(여백은 본인만 — C3). 동결 미니앱이 읽어 모양만 남긴다
      */
     public record HomeFeedResponse(List<SocialEvent> social, boolean newsEnabled, List<NewsItem> news,
                                    List<ReaderStatus> readers, List<SocialEvent> discover) {

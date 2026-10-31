@@ -236,8 +236,8 @@ class FlywayMigrationTest {
     }
 
     @Test
-    void v71_retires_story_view_and_requires_book() {
-        // V71: 열람 기록 은퇴(테이블 드롭) + 여백의 책 귀속(book_id NOT NULL). 둘 다 스키마에서 파생 단언.
+    void v71_retires_story_view_and_v104_frees_book() {
+        // V71: 열람 기록 은퇴(테이블 드롭). V71이 못 박은 book_id NOT NULL은 V104(책생글 M1 — C9)가 다시 풀었다. 둘 다 스키마에서 파생 단언.
         assertThat(jdbcTemplate.queryForObject("""
                 SELECT COUNT(*) FROM INFORMATION_SCHEMA.TABLES WHERE UPPER(TABLE_NAME) = 'STORY_VIEW'
                 """, Integer.class))
@@ -248,8 +248,8 @@ class FlywayMigrationTest {
                 SELECT IS_NULLABLE FROM INFORMATION_SCHEMA.COLUMNS
                 WHERE UPPER(TABLE_NAME) = 'STORY' AND UPPER(COLUMN_NAME) = 'BOOK_ID'
                 """, String.class))
-                .as("여백은 책에 귀속된다 — book_id NOT NULL이 앱 코드 대신 DB가 지키는 제약")
-                .isEqualTo("NO");
+                .as("책 없는 쪽지(C9) — 책을 지우면 연결만 푼다(BookService.delete → unlinkBook)")
+                .isEqualTo("YES");
     }
 
     @Test
@@ -723,7 +723,10 @@ class FlywayMigrationTest {
         List<String> violations = new ArrayList<>();
         // classpath*: — classpath:는 db/migration이 든 첫 루트 하나만 훑어, 테스트 루트에 그 폴더가 생기면 main이 빠진다
         Resource[] scanned = new PathMatchingResourcePatternResolver().getResources("classpath*:db/migration/V*.sql");
-        assertThat(scanned).as("스캔이 비거나 모자라면 가드가 공허하다").hasSize(flyway.info().all().length);
+        // 자바 마이그레이션(V105 — SQL로 줄바꿈을 두 DB에 같게 못 쓴다)은 SQL 파일이 아니라 스캔에 없다 — SQL 수끼리 맞댄다
+        long sqlMigrations = java.util.Arrays.stream(flyway.info().all()).filter(i -> i.getScript().endsWith(".sql")).count();
+        assertThat(scanned).as("스캔이 비거나 모자라면 가드가 공허하다").hasSize((int) sqlMigrations)
+                .hasSizeLessThan(flyway.info().all().length); // 양성 대조 — 자바 마이그레이션이 실제로 있어 위 필터가 뭔가를 거른다
         for (Resource r : scanned) {
             String file = r.getFilename();
             if (file.startsWith("V1__")) {

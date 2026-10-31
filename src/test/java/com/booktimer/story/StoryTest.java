@@ -58,21 +58,37 @@ class StoryTest {
     }
 
     @Test
-    @DisplayName("of: 책 없는 글은 거부한다 — 여백은 책에 귀속된다(2026-08-16 재설계)")
-    void of_rejectsNullBook() {
+    @DisplayName("REQ-210 · of: 책 없는 쪽지는 된다 · 책 없는 옮긴 문장은 거부한다(출처 없는 책 문장 0 — J84)")
+    void of_booklessNoteAllowedButNotBooklessQuote() {
         User me = author();
 
-        assertThatThrownBy(() -> Story.of(me, "책 없는 문장", null, null))
+        assertThat(Story.of(me, "책 없는 생각", null, null).getBook()).isNull();
+        assertThatThrownBy(() -> Story.of(me, "생각", null, null, "출처 없는 문장"))
                 .isInstanceOf(IllegalArgumentException.class);
     }
 
     @Test
-    @DisplayName("of: 501자는 거부한다")
-    void of_rejects501Chars() {
+    @DisplayName("REQ-210 · of: 생각 10,200자는 되고 10,201자는 거부한다(J3)")
+    void of_textLengthBoundary() {
         User me = author();
 
-        assertThatThrownBy(() -> Story.of(me, "가".repeat(501), publicBookOf(me), null))
+        assertThat(Story.of(me, "가".repeat(10_200), publicBookOf(me), null).getText()).hasSize(10_200);
+        assertThatThrownBy(() -> Story.of(me, "가".repeat(10_201), publicBookOf(me), null))
                 .isInstanceOf(IllegalArgumentException.class);
+    }
+
+    @Test
+    @DisplayName("REQ-211 · edit: 낡은 판이면 StaleMarginException이고 아무것도 바꾸지 않는다 · 맞는 판이면 +1")
+    void edit_checksRevision() {
+        User me = author();
+        Story s = Story.of(me, "처음", publicBookOf(me), null);
+
+        assertThatThrownBy(() -> s.edit(null, "낡은 판의 덮어쓰기", 1)).isInstanceOf(Story.StaleMarginException.class);
+        assertThat(s.getText()).isEqualTo("처음");
+        assertThat(s.getRevision()).isZero();
+        s.edit(null, "고침", 0);
+        assertThat(s.getText()).isEqualTo("고침");
+        assertThat(s.getRevision()).isEqualTo(1);
     }
 
     @Test

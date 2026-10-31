@@ -5,6 +5,7 @@ import com.booktimer.book.BookRepository;
 import com.booktimer.book.BookStatus;
 import com.booktimer.story.Story;
 import com.booktimer.story.StoryRepository;
+import com.booktimer.story.StoryService;
 import com.booktimer.study.StudyAiDailyTotal;
 import com.booktimer.study.StudyAiDailyTotalRepository;
 import com.booktimer.study.StudyAiUsage.Kind;
@@ -67,7 +68,7 @@ class WritingAiServiceTest {
     @Autowired UserRepository userRepository;
     @Autowired BookRepository bookRepository;
     @Autowired StoryRepository storyRepository;
-    @Autowired WritingDraftRepository draftRepository;
+    @Autowired StoryService storyService;
     @Autowired StudyAiUsageService usageService;
     @Autowired StudyAiDailyTotalRepository dailyTotalRepository;
     @Autowired AiSpendMonthRepository spendRepository;
@@ -94,16 +95,26 @@ class WritingAiServiceTest {
         return u;
     }
 
-    private WritingDraft draft(User u, boolean withMargin, String body) {
+    /**
+     * 쪽지 한 장 — {@code withMaterial}이면 같은 책에 다른 쪽지(옮긴 문장 + 생각)가 하나 더 있다(배경 재료).
+     * {@code text}가 null이면 옮긴 문장만 남긴 쪽지다. 재료가 없는 쪽지({@code withMaterial} = false · {@code text} = null)는
+     * 옮긴 글에서만 생긴다 — AI 기록만 남고 생각 · 옮긴 문장이 빈 쪽지(J4).
+     */
+    private Story note(User u, boolean withMaterial, String text) {
         Book book = bookRepository.saveAndFlush(Book.register(u, "데미안", "헤르만 헤세", null, null, null, null, BookStatus.READING));
-        if (withMargin) {
+        if (withMaterial) {
             storyRepository.saveAndFlush(Story.of(u, "나도 껍질을 깨고 싶었다", book, "paper", "새는 알에서 나오려고 투쟁한다"));
         }
-        WritingDraft d = writingService.create(u, book.getId());
-        if (body != null) {
-            writingService.save(u, d.getId(), "제목", body, 0, null);
+        if (text != null) {
+            return storyRepository.saveAndFlush(Story.of(u, text, book, null));
         }
-        return draftRepository.findById(d.getId()).orElseThrow();
+        if (withMaterial) {
+            return storyRepository.saveAndFlush(Story.of(u, "", book, null, "알은 세계다"));
+        }
+        Story moved = Story.of(u, "옮겨 온 글", book, null);
+        moved.recordRound("{\"rounds\":[]}", 0, CONSENT_AT);
+        moved.edit(null, "", 0);
+        return storyRepository.saveAndFlush(moved);
     }
 
     private static WritingAiResult<Questions> answer(String... texts) {
@@ -140,14 +151,14 @@ class WritingAiServiceTest {
     }
 
     /** 이 글에 라운드 n개를 미리 쌓는다(질문 텍스트 = "r{i}-q"). */
-    private void rounds(WritingDraft d, int n) {
-        QuestionLog log = QuestionLog.parse(d.getQuestionsJson());
+    private void rounds(Story d, int n) {
+        QuestionLog log = QuestionLog.parse(d.getAiLog());
         for (int i = 1; i <= n; i++) {
             log = log.append(new QuestionLog.Round(Step.ASK, CONSENT_AT, null, 0,
                     List.of(new Question("r" + i + "-a?", null), new Question("r" + i + "-b?", null))));
         }
         d.recordRound(log.toJson(), 0, CONSENT_AT);
-        draftRepository.saveAndFlush(d);
+        storyRepository.saveAndFlush(d);
     }
 
     // ── REQ-18 동의 게이트 ────────────────────────────────────────────────────
@@ -156,21 +167,21 @@ class WritingAiServiceTest {
     @DisplayName("REQ-18 · 동의 없는 AI 단계는 403이고 몫·호출·비용이 0")
     void noConsentIs403() {
         User u = user(false);
-        WritingDraft d = draft(u, true, null);
+        Story d = note(u, true, null);
         int globalBefore = globalUsed();
 
         assertThat(statusOf(() -> aiService.run(u, d.getId(), Step.ASK, d.getRevision(), null))).isEqualTo(HttpStatus.FORBIDDEN);
         assertThat(remaining(u)).isEqualTo(Kind.WRITE.max());
         assertThat(globalUsed()).isEqualTo(globalBefore);
         verifyNoInteractions(assistant);
-        assertThat(draftRepository.findById(d.getId()).orElseThrow().getAiCostMicroUsd()).isZero();
+        assertThat(storyRepository.findById(d.getId()).orElseThrow().getAiCostMicroUsd()).isZero();
     }
 
     @Test
     @DisplayName("REQ-18 · 동의 뒤 같은 요청은 200이고 어댑터 호출이 1")
     void consentedCallsOnce() {
         User u = user(true);
-        WritingDraft d = draft(u, true, null);
+        Story d = note(u, true, null);
         given(assistant.ask(anyString())).willReturn(answer("어떤 투쟁이었나요?"));
 
         AiView view = aiService.run(u, d.getId(), Step.ASK, d.getRevision(), null);
@@ -186,7 +197,7 @@ class WritingAiServiceTest {
     @DisplayName("REQ-19 · 키가 없으면 몫을 깎기 전에 503")
     void noKeyIs503BeforeQuota() {
         User u = user(true);
-        WritingDraft d = draft(u, true, null);
+        Story d = note(u, true, null);
         given(assistant.isEnabled()).willReturn(false);
 
         assertThat(statusOf(() -> aiService.run(u, d.getId(), Step.ASK, d.getRevision(), null)))
@@ -200,7 +211,7 @@ class WritingAiServiceTest {
     @DisplayName("REQ-19 · revision이 다르면 409이고 몫·호출·비용이 0")
     void staleRevisionIs409BeforeQuota() {
         User u = user(true);
-        WritingDraft d = draft(u, true, null);
+        Story d = note(u, true, null);
         int globalBefore = globalUsed();
         given(assistant.ask(anyString())).willReturn(answer("어떤 투쟁이었나요?"));
 
@@ -209,7 +220,7 @@ class WritingAiServiceTest {
         assertThat(remaining(u)).isEqualTo(Kind.WRITE.max());
         assertThat(globalUsed()).isEqualTo(globalBefore);
         verify(assistant, never()).ask(anyString());
-        assertThat(draftRepository.findById(d.getId()).orElseThrow().getAiCostMicroUsd()).isZero();
+        assertThat(storyRepository.findById(d.getId()).orElseThrow().getAiCostMicroUsd()).isZero();
         // 양성 대조 — 맞는 revision이면 라운드가 생긴다
         assertThat(aiService.run(u, d.getId(), Step.ASK, d.getRevision(), null).questions().rounds()).hasSize(1);
     }
@@ -218,7 +229,7 @@ class WritingAiServiceTest {
     @DisplayName("REQ-19 · 어댑터 실패는 두 몫을 환불한다")
     void failureRefundsBoth() {
         User u = user(true);
-        WritingDraft d = draft(u, true, null);
+        Story d = note(u, true, null);
         int globalBefore = globalUsed();
         given(assistant.ask(anyString())).willReturn(fail(Failure.UNAVAILABLE, null));
 
@@ -246,19 +257,18 @@ class WritingAiServiceTest {
         boolean hadDaily = dailyTotalRepository.existsByUsageDate(day);
         boolean hadMonth = spendRepository.findBySpendMonth(month).isPresent();
         try {
-            WritingDraft d = draft(me, true, "처음 쓴 본문입니다");
+            Story d = note(me, true, "처음 쓴 본문입니다");
             given(assistant.ask(anyString())).willAnswer(inv -> {
-                writingService.save(me, d.getId(), "새 제목", "AI를 기다리는 동안 이어 쓴 본문", 1, null); // 다른 요청의 PUT
+                storyService.editNote(me, d.getId(), null, "AI를 기다리는 동안 이어 쓴 본문", 0, null); // 다른 요청의 PUT
                 return answer("어떤 투쟁이었나요?");
             });
 
-            aiService.run(me, d.getId(), Step.ASK, 1, null);
+            aiService.run(me, d.getId(), Step.ASK, 0, null);
 
-            WritingDraft after = draftRepository.findById(d.getId()).orElseThrow();
-            assertThat(after.getBody()).isEqualTo("AI를 기다리는 동안 이어 쓴 본문");
-            assertThat(after.getTitle()).isEqualTo("새 제목");
-            assertThat(after.getRevision()).isEqualTo(2);
-            assertThat(QuestionLog.parse(after.getQuestionsJson()).rounds()).hasSize(1); // 양성 대조 — AI 열은 저장됐다
+            Story after = storyRepository.findById(d.getId()).orElseThrow();
+            assertThat(after.getText()).isEqualTo("AI를 기다리는 동안 이어 쓴 본문");
+            assertThat(after.getRevision()).isEqualTo(1);
+            assertThat(QuestionLog.parse(after.getAiLog()).rounds()).hasSize(1); // 양성 대조 — AI 열은 저장됐다
         } finally {
             accountService.deleteAppleVerifiedAccount(userRepository.findById(me.getId()).orElseThrow(), sub);
             if (!hadDaily) {
@@ -276,7 +286,7 @@ class WritingAiServiceTest {
     @DisplayName("REQ-19 · 성공하면 질문 기록에 라운드가 하나 늘어난다")
     void successAppendsRound() {
         User u = user(true);
-        WritingDraft d = draft(u, true, null);
+        Story d = note(u, true, null);
         rounds(d, 2);
         given(assistant.ask(anyString())).willReturn(answer("새 질문인가요?"));
 
@@ -284,7 +294,7 @@ class WritingAiServiceTest {
 
         assertThat(view.questions().rounds()).hasSize(3);
         assertThat(view.questions().rounds().get(2).questions()).extracting(Question::text).containsExactly("새 질문인가요?");
-        assertThat(QuestionLog.parse(draftRepository.findById(d.getId()).orElseThrow().getQuestionsJson()).rounds()).hasSize(3);
+        assertThat(QuestionLog.parse(storyRepository.findById(d.getId()).orElseThrow().getAiLog()).rounds()).hasSize(3);
         assertThat(view.aiUpdatedAt()).isNotNull();
     }
 
@@ -294,7 +304,7 @@ class WritingAiServiceTest {
     @DisplayName("REQ-20 · 재료 0개 ASK는 400이고 몫이 그대로")
     void askWithoutMaterialIs400() {
         User u = user(true);
-        WritingDraft d = draft(u, false, null);
+        Story d = note(u, false, null);
 
         assertThat(statusOf(() -> aiService.run(u, d.getId(), Step.ASK, d.getRevision(), null))).isEqualTo(HttpStatus.BAD_REQUEST);
         assertThat(remaining(u)).isEqualTo(Kind.WRITE.max());
@@ -305,8 +315,8 @@ class WritingAiServiceTest {
     @DisplayName("REQ-20 · 공백 뺀 29자 본문 FOLLOW는 400이고 30자는 통과")
     void followNeedsThirtyChars() {
         User u = user(true);
-        WritingDraft short29 = draft(u, true, "  " + "가".repeat(29) + "\n ");
-        WritingDraft ok30 = draft(u, true, " " + "나".repeat(30) + " ");
+        Story short29 = note(u, true, "  " + "가".repeat(29) + "\n ");
+        Story ok30 = note(u, true, " " + "나".repeat(30) + " ");
         given(assistant.follow(anyString(), anyList(), any(), anyString())).willReturn(answer("왜 그랬나요?"));
 
         assertThat(statusOf(() -> aiService.run(u, short29.getId(), Step.FOLLOW, short29.getRevision(), null)))
@@ -319,9 +329,9 @@ class WritingAiServiceTest {
     @DisplayName("REQ-20 · 라운드 8개인 글의 AI 요청은 400이고 몫이 그대로(7개면 통과)")
     void roundCap() {
         User u = user(true);
-        WritingDraft eight = draft(u, true, null);
+        Story eight = note(u, true, null);
         rounds(eight, 8);
-        WritingDraft seven = draft(u, true, null);
+        Story seven = note(u, true, null);
         rounds(seven, 7);
         given(assistant.ask(anyString())).willReturn(answer("여덟 번째인가요?"));
 
@@ -335,7 +345,7 @@ class WritingAiServiceTest {
     @DisplayName("REQ-20 · focus 201자는 400")
     void focusTooLong() {
         User u = user(true);
-        WritingDraft d = draft(u, true, "가".repeat(40));
+        Story d = note(u, true, "가".repeat(40));
         given(assistant.follow(anyString(), anyList(), any(), anyString())).willReturn(answer("왜 그랬나요?"));
 
         assertThat(statusOf(() -> aiService.run(u, d.getId(), Step.FOLLOW, d.getRevision(), "가".repeat(201))))
@@ -350,7 +360,7 @@ class WritingAiServiceTest {
     @DisplayName("REQ-21 · WRITE 21번째 호출은 429이고 「오전 9시」 안내")
     void twentyFirstIs429() {
         User u = user(true);
-        WritingDraft d = draft(u, true, null);
+        Story d = note(u, true, null);
         for (int i = 0; i < Kind.WRITE.max(); i++) {
             assertThat(usageService.tryConsumeBoth(u, clock.instant(), Kind.WRITE)).isEqualTo(StudyAiUsageService.Grant.OK);
         }
@@ -366,7 +376,7 @@ class WritingAiServiceTest {
     @DisplayName("REQ-21 · 전역 하루 상한 소진이면 503이고 내 몫은 환불")
     void globalCapIs503() {
         User u = user(true);
-        WritingDraft d = draft(u, true, null);
+        Story d = note(u, true, null);
         while (usageService.tryConsumeGlobal(clock.instant())) {
             // 전역 몫을 다 쓴다(이 테스트 트랜잭션 안 — 끝나면 롤백)
         }
@@ -384,7 +394,7 @@ class WritingAiServiceTest {
     @DisplayName("REQ-22 · 월 누적이 상한 이상이면 호출 전에 503(어댑터 호출 0)")
     void monthlyBudgetBlocks() {
         User u = user(true);
-        WritingDraft d = draft(u, true, null);
+        Story d = note(u, true, null);
         budgetService.add(clock.instant(), 20_000_000L); // 기본 상한 $20
 
         assertThat(statusOf(() -> aiService.run(u, d.getId(), Step.ASK, d.getRevision(), null)))
@@ -398,7 +408,7 @@ class WritingAiServiceTest {
     @DisplayName("REQ-22 · 가드가 결과를 비워도 비용은 월 누적과 글에 더해진다")
     void guardEmptiedStillCosts() {
         User u = user(true);
-        WritingDraft d = draft(u, true, null);
+        Story d = note(u, true, null);
         long before = monthSpend();
         int globalBefore = globalUsed();
         given(assistant.ask(anyString())).willReturn(answer("이렇게 써 보세요.")); // 물음표 없음 → 가드가 비운다
@@ -408,18 +418,18 @@ class WritingAiServiceTest {
         long cost = AiPrice.microUsd(MODEL, new Usage(1_000, 0, 0, 500));
         assertThat(cost).isPositive();
         assertThat(monthSpend() - before).isEqualTo(cost);
-        WritingDraft after = draftRepository.findById(d.getId()).orElseThrow();
+        Story after = storyRepository.findById(d.getId()).orElseThrow();
         assertThat(after.getAiCostMicroUsd()).isEqualTo(cost);
-        assertThat(QuestionLog.parse(after.getQuestionsJson()).rounds()).isEmpty();
+        assertThat(QuestionLog.parse(after.getAiLog()).rounds()).isEmpty();
         assertThat(remaining(u)).isEqualTo(Kind.WRITE.max());
         assertThat(globalUsed()).as("전역 하루 몫도 돌려준다").isEqualTo(globalBefore);
     }
 
     @Test
     @DisplayName("REQ-22 · 성공한 호출의 usage 원가가 월 누적과 글에 더해진다")
-    void successCostsMonthAndDraft() {
+    void successCostsMonthAndNote() {
         User u = user(true);
-        WritingDraft d = draft(u, true, null);
+        Story d = note(u, true, null);
         long before = monthSpend();
         given(assistant.ask(anyString())).willReturn(answer("새 질문인가요?"));
 
@@ -428,14 +438,14 @@ class WritingAiServiceTest {
         long cost = AiPrice.microUsd(MODEL, new Usage(1_000, 0, 0, 500));
         assertThat(cost).isPositive();
         assertThat(monthSpend() - before).isEqualTo(cost);
-        assertThat(draftRepository.findById(d.getId()).orElseThrow().getAiCostMicroUsd()).isEqualTo(cost);
+        assertThat(storyRepository.findById(d.getId()).orElseThrow().getAiCostMicroUsd()).isEqualTo(cost);
     }
 
     @Test
     @DisplayName("REQ-22 · 응답 없이 시간 초과된 호출은 보수 추정치를 월 누적과 글에 더한다")
     void noResponseAddsEstimate() {
         User u = user(true);
-        WritingDraft d = draft(u, true, "가".repeat(40));
+        Story d = note(u, true, "가".repeat(40));
         long before = monthSpend();
         ArgumentCaptor<String> material = ArgumentCaptor.forClass(String.class);
         given(assistant.follow(material.capture(), anyList(), any(), anyString())).willReturn(fail(Failure.NO_RESPONSE, null));
@@ -447,7 +457,7 @@ class WritingAiServiceTest {
         long estimate = AiPrice.estimateMicroUsd(MODEL, chars, ClaudeWritingAssistant.FOLLOW_MAX_TOKENS);
         assertThat(estimate).isPositive();
         assertThat(monthSpend() - before).isEqualTo(estimate);
-        assertThat(draftRepository.findById(d.getId()).orElseThrow().getAiCostMicroUsd()).isEqualTo(estimate);
+        assertThat(storyRepository.findById(d.getId()).orElseThrow().getAiCostMicroUsd()).isEqualTo(estimate);
         assertThat(remaining(u)).isEqualTo(Kind.WRITE.max());
     }
 
@@ -455,14 +465,14 @@ class WritingAiServiceTest {
     @DisplayName("REQ-22 · HTTP 오류 응답은 비용 0")
     void httpErrorCostsNothing() {
         User u = user(true);
-        WritingDraft d = draft(u, true, null);
+        Story d = note(u, true, null);
         long before = monthSpend();
         given(assistant.ask(anyString())).willReturn(fail(Failure.UNAVAILABLE, null));
 
         assertThat(statusOf(() -> aiService.run(u, d.getId(), Step.ASK, d.getRevision(), null)))
                 .isEqualTo(HttpStatus.SERVICE_UNAVAILABLE);
         assertThat(monthSpend()).isEqualTo(before);
-        assertThat(draftRepository.findById(d.getId()).orElseThrow().getAiCostMicroUsd()).isZero();
+        assertThat(storyRepository.findById(d.getId()).orElseThrow().getAiCostMicroUsd()).isZero();
     }
 
     // ── REQ-27 거절 ───────────────────────────────────────────────────────────
@@ -471,7 +481,7 @@ class WritingAiServiceTest {
     @DisplayName("REQ-27 · refusal은 REFUSED로 422 안내이고 몫을 환불한다")
     void refusalIs422() {
         User u = user(true);
-        WritingDraft d = draft(u, true, null);
+        Story d = note(u, true, null);
         long before = monthSpend();
         given(assistant.ask(anyString())).willReturn(fail(Failure.REFUSED, new Usage(1_000, 0, 0, 20)));
 
@@ -487,7 +497,7 @@ class WritingAiServiceTest {
     @DisplayName("REQ-46 · FOLLOW 어댑터 입력의 앞서 받은 질문은 기록의 모든 라운드 질문을 먼저 받은 것부터 담는다")
     void priorQuestionsInOrder() {
         User u = user(true);
-        WritingDraft d = draft(u, true, "가".repeat(40));
+        Story d = note(u, true, "가".repeat(40));
         rounds(d, 2);
         @SuppressWarnings("unchecked")
         ArgumentCaptor<List<String>> prior = ArgumentCaptor.forClass(List.class);
@@ -503,7 +513,7 @@ class WritingAiServiceTest {
     void roundRecordsFields() {
         User u = user(true);
         String body = "회사를 그만두던 날 나는 처음으로 내 껍질을 보았다. 그날의 공기가 기억난다.";
-        WritingDraft d = draft(u, true, body);
+        Story d = note(u, true, body);
         ArgumentCaptor<String> sentBody = ArgumentCaptor.forClass(String.class);
         given(assistant.follow(anyString(), anyList(), any(), sentBody.capture())).willReturn(answer("그날 공기는 어땠나요?"));
 
@@ -520,22 +530,62 @@ class WritingAiServiceTest {
     // ── REQ-47 사용자 글은 읽기 전용 ──────────────────────────────────────────
 
     @Test
-    @DisplayName("REQ-47 · AI 단계 뒤 본문·제목·revision이 그대로이고 질문 기록만 바뀐다")
+    @DisplayName("REQ-47 · AI 단계 뒤 생각·revision이 그대로이고 질문 기록만 바뀐다")
     void bodyTitleRevisionUntouched() {
         User u = user(true);
-        WritingDraft d = draft(u, true, "내가 쓴 본문 그대로 남아야 하는 글입니다. 서른 자를 넘깁니다.");
-        String beforeJson = d.getQuestionsJson();
+        Story d = note(u, true, "내가 쓴 본문 그대로 남아야 하는 글입니다. 서른 자를 넘깁니다.");
+        String beforeJson = d.getAiLog();
         given(assistant.follow(anyString(), anyList(), any(), anyString()))
                 .willReturn(answer("「대신 써 준 문장」을 넣어 볼까요?", "AI가 지어낸 제목은 무엇인가요?"));
 
         aiService.run(u, d.getId(), Step.FOLLOW, d.getRevision(), null);
 
-        WritingDraft after = draftRepository.findById(d.getId()).orElseThrow();
-        assertThat(after.getBody()).isEqualTo("내가 쓴 본문 그대로 남아야 하는 글입니다. 서른 자를 넘깁니다.")
+        Story after = storyRepository.findById(d.getId()).orElseThrow();
+        assertThat(after.getText()).isEqualTo("내가 쓴 본문 그대로 남아야 하는 글입니다. 서른 자를 넘깁니다.")
                 .doesNotContain("AI가 지어낸 제목");
-        assertThat(after.getTitle()).isEqualTo("제목");
-        assertThat(after.getRevision()).isEqualTo(1);
-        assertThat(after.getQuestionsJson()).as("양성 대조 — 질문 기록은 바뀌었다").isNotEqualTo(beforeJson)
+        assertThat(after.getRevision()).isZero();
+        assertThat(after.getAiLog()).as("양성 대조 — 질문 기록은 바뀌었다").isNotEqualTo(beforeJson)
                 .contains("AI가 지어낸 제목은 무엇인가요?");
+    }
+
+    // ── REQ-228 · J34 여백 AI 재료(책생글 M1) ────────────────────────────────────
+
+    @Test
+    @DisplayName("REQ-228 · 책 없는 쪽지 ASK 재료에 다른 쪽지 본문 0 · 책 칸 빔")
+    void booklessNoteMaterialIsThatNoteOnly() {
+        User u = user(true);
+        Book book = bookRepository.saveAndFlush(Book.register(u, "데미안", "헤르만 헤세", null, null, null, null, BookStatus.READING));
+        storyRepository.saveAndFlush(Story.of(u, "책 쪽지의 생각", book, null, "새는 알에서 나오려고 투쟁한다"));
+        storyRepository.saveAndFlush(Story.of(u, "다른 책 없는 쪽지", null, null));
+        Story d = storyRepository.saveAndFlush(Story.of(u, "책 없이 끄적인 생각", null, null));
+        ArgumentCaptor<String> material = ArgumentCaptor.forClass(String.class);
+        given(assistant.ask(material.capture())).willReturn(answer("무엇이 남았나요?"));
+
+        aiService.run(u, d.getId(), Step.ASK, d.getRevision(), null);
+
+        assertThat(material.getValue())
+                .contains("책 없이 끄적인 생각")
+                .startsWith("[책] 없음")
+                .doesNotContain("다른 책 없는 쪽지", "책 쪽지의 생각", "새는 알에서", "데미안", "헤르만 헤세");
+    }
+
+    @Test
+    @DisplayName("M1 · 책 쪽지 ASK 재료 = 지금 쪽지 먼저 · 같은 책 다른 쪽지는 뒤 · 다른 책 쪽지는 0(J34)")
+    void bookNoteMaterialPutsCurrentFirst() {
+        User u = user(true);
+        Book book = bookRepository.saveAndFlush(Book.register(u, "데미안", "헤르만 헤세", null, null, null, null, BookStatus.READING));
+        Book other = bookRepository.saveAndFlush(Book.register(u, "싯다르타", "헤르만 헤세", null, null, null, null, BookStatus.READING));
+        Story d = storyRepository.saveAndFlush(Story.of(u, "먼저 쓴 지금 쪽지", book, null));
+        storyRepository.saveAndFlush(Story.of(u, "나중에 쓴 같은 책 쪽지", book, null));
+        storyRepository.saveAndFlush(Story.of(u, "다른 책 쪽지", other, null));
+        ArgumentCaptor<String> material = ArgumentCaptor.forClass(String.class);
+        given(assistant.ask(material.capture())).willReturn(answer("무엇이 남았나요?"));
+
+        aiService.run(u, d.getId(), Step.ASK, d.getRevision(), null);
+
+        String sent = material.getValue();
+        assertThat(sent).contains("[책] 데미안").doesNotContain("다른 책 쪽지");
+        assertThat(sent.indexOf("먼저 쓴 지금 쪽지")).isNotNegative()
+                .isLessThan(sent.indexOf("나중에 쓴 같은 책 쪽지"));
     }
 }

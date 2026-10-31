@@ -1,7 +1,7 @@
 package com.booktimer.book;
 
 import com.booktimer.session.ReadingSessionRepository;
-import com.booktimer.story.StoryLikeRepository;
+import com.booktimer.story.Story;
 import com.booktimer.story.StoryRepository;
 import com.booktimer.user.User;
 import com.booktimer.writing.WritingDraftRepository;
@@ -26,7 +26,6 @@ public class BookService {
     private final BookSearchClient searchClient;
     private final ReadingSessionRepository sessionRepository;
     private final StoryRepository storyRepository;
-    private final StoryLikeRepository storyLikeRepository;
     private final CoupangLinkBuilder coupangLinkBuilder;
     private final CoupangDeeplinkClient coupangDeeplinkClient;
     private final Yes24LinkBuilder yes24LinkBuilder;
@@ -38,7 +37,6 @@ public class BookService {
     public BookService(BookRepository bookRepository, BookSearchClient searchClient,
                        ReadingSessionRepository sessionRepository,
                        StoryRepository storyRepository,
-                       StoryLikeRepository storyLikeRepository,
                        CoupangLinkBuilder coupangLinkBuilder,
                        CoupangDeeplinkClient coupangDeeplinkClient,
                        Yes24LinkBuilder yes24LinkBuilder,
@@ -50,7 +48,6 @@ public class BookService {
         this.searchClient = searchClient;
         this.sessionRepository = sessionRepository;
         this.storyRepository = storyRepository;
-        this.storyLikeRepository = storyLikeRepository;
         this.coupangLinkBuilder = coupangLinkBuilder;
         this.coupangDeeplinkClient = coupangDeeplinkClient;
         this.yes24LinkBuilder = yes24LinkBuilder;
@@ -248,16 +245,15 @@ public class BookService {
      * 독서 기록(잔디·누적 시간)을 보존한다 — {@code reading_session.book_id} FK 때문에 이 정리 없이는
      * 삭제가 제약 위반으로 실패한다(AccountService가 탈퇴 시 FK 순서로 정리하는 것과 같은 이유).
      *
-     * <p>여백의 글은 세션과 달리 <b>함께 지운다</b> — 여백은 책에 딸린 자리라(2026-08-16 재설계,
-     * {@code story.book_id} NOT NULL) 풀어 둘 자리가 없고, 의미상으로도 책이 사라지면 자리도 사라진다.
-     * 삭제 확인 문구 "이 책에 쌓인 기록도 함께 사라져요"가 이미 이 의미를 커버한다.
+     * <p>여백의 쪽지도 <b>연결만 푼다</b>(REQ-13을 여백까지 — 2026-10-30 책생글 M1 · C9). 쪽지는 사용자 것이라 책 없는 쪽지로
+     * 남고, 옮긴 문장이 있으면 그 책의 『제목』 · 저자를 출처 스냅샷으로 남긴다(J84). 동결 미니앱의 「이 책에 쌓인 기록도 함께
+     * 사라져요」는 실제보다 더 잃는다고 말하는 쪽이라 그대로 둔다(설계 §5.1).
      */
     public void delete(User user, Long bookId) {
         Book book = ownedBook(user, bookId);
         sessionRepository.unlinkBook(book);
         writingDraftRepository.unlinkBook(book); // 앱에서 쓴 글은 남고 연결만 풀린다 (writing_draft.book_id FK — REQ-13)
-        storyLikeRepository.deleteByStoryBook(book); // 글에 달린 좋아요가 먼저 (story_like.story_id FK)
-        storyRepository.deleteByBook(book); // 여백의 글은 책과 함께 사라진다 (story.book_id FK)
+        storyRepository.unlinkBook(book, Story.sourceLine(book)); // 쪽지도 남고 연결만 풀린다 (story.book_id FK — C9)
         bookRepository.delete(book);
     }
 

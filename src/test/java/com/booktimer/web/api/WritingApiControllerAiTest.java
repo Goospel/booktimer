@@ -18,8 +18,6 @@ import com.booktimer.writing.ClaudeWritingAssistant.Questions;
 import com.booktimer.writing.ClaudeWritingAssistant.Usage;
 import com.booktimer.writing.ClaudeWritingAssistant.WritingAiResult;
 import com.booktimer.writing.Question;
-import com.booktimer.writing.WritingDraft;
-import com.booktimer.writing.WritingService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -47,7 +45,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 /**
- * {@code POST /api/app/drafts/{id}/ai}(v1 §5.1.4 · REQ-47) — 실 H2 + Bearer 토큰 + 가짜 어댑터.
+ * {@code POST /api/app/margins/{id}/ai}(v1 §5.1.4 · REQ-47 — 책생글 M1에서 글(draft) 대신 쪽지(story)가 대상이 됐다) — 실 H2 + Bearer 토큰 + 가짜 어댑터.
  *
  * <p>통과하면 확정: 응답에 본문·제목·revision 키가 없고(앱이 AI 응답으로 편집기를 채울 재료가 없다), 상태 코드 표의 각 갈래가 평문 안내로
  * 나간다. 순서·환불·비용 규칙 자체는 {@code WritingAiServiceTest}가 잰다 — 여기는 문(門)의 계약만.
@@ -66,13 +64,12 @@ class WritingApiControllerAiTest {
     @Autowired ApiTokenService apiTokenService;
     @Autowired BookRepository bookRepository;
     @Autowired StoryRepository storyRepository;
-    @Autowired WritingService writingService;
     @Autowired StudyAiUsageService usageService;
     @Autowired Clock clock;
 
     private User user;
     private String token;
-    private WritingDraft draft;
+    private Story draft;
 
     @BeforeEach
     void setUp() {
@@ -83,12 +80,11 @@ class WritingApiControllerAiTest {
         user = userRepository.saveAndFlush(user);
         token = apiTokenService.issue(user);
         Book book = bookRepository.saveAndFlush(Book.register(user, "데미안", "헤르만 헤세", null, null, null, null, BookStatus.READING));
-        storyRepository.saveAndFlush(Story.of(user, "나도 껍질을 깨고 싶었다", book, "paper", "새는 알에서 나오려고 투쟁한다"));
-        draft = writingService.create(user, book.getId());
+        draft = storyRepository.saveAndFlush(Story.of(user, "", book, "paper", "새는 알에서 나오려고 투쟁한다"));
     }
 
     private ResultActions ai(Long id, String json) throws Exception {
-        return mvc.perform(post("/api/app/drafts/" + id + "/ai").header("Authorization", "Bearer " + token)
+        return mvc.perform(post("/api/app/margins/" + id + "/ai").header("Authorization", "Bearer " + token)
                 .contentType(MediaType.APPLICATION_JSON).content(json));
     }
 
@@ -102,7 +98,7 @@ class WritingApiControllerAiTest {
     }
 
     @Test
-    @DisplayName("REQ-47 · /ai 응답 JSON에 body·title·revision 키가 없다")
+    @DisplayName("REQ-47 · REQ-221 · /ai 응답 JSON에 본문(text·body)·title·revision 키가 없다")
     void aiViewHasNoBody() throws Exception {
         given(assistant.ask(anyString())).willReturn(ok());
 
@@ -111,21 +107,21 @@ class WritingApiControllerAiTest {
         JsonNode json = JsonMapper.builder().build().readTree(res);
         List<String> keys = new ArrayList<>(json.propertyNames());
         assertThat(keys).containsExactlyInAnyOrder("questions", "aiUpdatedAt", "aiRemainingToday")
-                .doesNotContain("body", "title", "revision");
+                .doesNotContain("body", "text", "quote", "title", "revision");
         assertThat(json.path("questions").path("rounds").get(0).path("questions").get(0).path("text").asString())
                 .isEqualTo("어떤 투쟁이었나요?");
         assertThat(json.path("aiRemainingToday").asInt()).isEqualTo(Kind.WRITE.max() - 1);
     }
 
     @Test
-    @DisplayName("PR-C · 글 응답(DraftView)에 오늘 남은 글쓰기 AI 몫 aiRemainingToday가 있다")
+    @DisplayName("PR-C · 쪽지 응답(MarginView)에 오늘 남은 글쓰기 AI 몫 aiRemainingToday가 있다")
     void draftViewHasRemaining() throws Exception {
         usageService.tryConsumeBoth(user, clock.instant(), Kind.WRITE);
 
-        mvc.perform(get("/api/app/drafts/" + draft.getId()).header("Authorization", "Bearer " + token))
+        mvc.perform(get("/api/app/margins/" + draft.getId()).header("Authorization", "Bearer " + token))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.aiRemainingToday").value(Kind.WRITE.max() - 1))
-                .andExpect(jsonPath("$.body").exists());
+                .andExpect(jsonPath("$.text").exists());
     }
 
     // ── 상태 코드 표 ──────────────────────────────────────────────────────────
@@ -154,7 +150,7 @@ class WritingApiControllerAiTest {
         userRepository.saveAndFlush(other);
         String otherToken = apiTokenService.issue(other);
 
-        mvc.perform(post("/api/app/drafts/" + draft.getId() + "/ai").header("Authorization", "Bearer " + otherToken)
+        mvc.perform(post("/api/app/margins/" + draft.getId() + "/ai").header("Authorization", "Bearer " + otherToken)
                         .contentType(MediaType.APPLICATION_JSON).content("{\"step\":\"ASK\",\"revision\":0}"))
                 .andExpect(status().isNotFound());
         ai(Long.MAX_VALUE, "{\"step\":\"ASK\",\"revision\":0}").andExpect(status().isNotFound());

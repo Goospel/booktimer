@@ -2705,8 +2705,7 @@ img.dash-book-chip-cover { object-fit: cover; background: var(--line-1); }
 .dash-recall-card .study-day-label { display: none; }
 
 /* 긴 것에 상한을 둔다 — 잔디를 걷어낸 이유가 「늘어짐」이라 여기서 다시 늘어나면 헛일이다.
-   책 제목은 한 줄, 미리보기 본문은 4줄까지. 책방 여백 패널(.margin-card)엔 안 닿는다 —
-   거기선 글 전문을 읽는 것이 목적이다. */
+   책 제목은 한 줄, 미리보기 본문은 4줄까지. 책방 여백 패널(.margin-card)은 더 넉넉한 12줄(아래 .margin-card-text). */
 .dash-card-sub { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 46ch; }
 .dash-margin-cards .margin-card-text {
     display: -webkit-box; -webkit-line-clamp: 4; -webkit-box-orient: vertical; overflow: hidden;
@@ -3395,6 +3394,8 @@ body.has-rails { padding-bottom: calc(100px + env(safe-area-inset-bottom, 0px));
 .margin-card-text {
     margin: 0; font-family: var(--font-serif); font-size: 16px; line-height: 1.75;
     white-space: pre-wrap; word-break: break-word;
+    /* 앱에서 쓴 긴 생각(최대 1만 200자 — 옛 API는 500자로 잘라 준다)이 패널을 늘이지 않게 줄여 보인다(책생글 M1 · J64) */
+    display: -webkit-box; -webkit-line-clamp: 12; -webkit-box-orient: vertical; overflow: hidden;
 }
 /* 책에서 옮긴 문장 — 主인 주석보다 작고 옅게. 본문이 이미 명조라 서체로는 못 가르고,
    currentColor 세로선이라 팔레트 6색을 그대로 탄다(색을 박으면 어두운 배경에서 사라진다). */

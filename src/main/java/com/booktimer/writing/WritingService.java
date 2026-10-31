@@ -74,58 +74,35 @@ public class WritingService {
         return draftRepository.findTop20ByUserOrderByUpdatedAtDesc(user);
     }
 
-    public WritingDraft create(User user, Long bookId) {
-        return draftRepository.save(WritingDraft.start(user, ownedBook(user, bookId)));
-    }
-
     @Transactional(readOnly = true)
     public WritingDraft get(User user, Long id) {
         return owned(user, id);
     }
 
     /**
-     * 사용자 저장 — 본문을 바꾸는 유일한 길(REQ-47). 소유 판정(404)이 검증(400)보다 먼저다(남의 글 존재를 캐지 못하게).
-     *
-     * @param exported {@code true}면 처음 한 번만 내보낸 시각을 박는다(REQ-16)
-     * @throws ResponseStatusException  404 남의·없는 글 / 409 낡은 판(덮어쓰지 않는다)
-     * @throws IllegalArgumentException 길이 위반(→ 400)
-     */
-    public WritingDraft save(User user, Long id, String title, String body, int revision, Boolean exported) {
-        WritingDraft draft = owned(user, id);
-        try {
-            draft.edit(title, body, revision);
-        } catch (WritingDraft.StaleDraftException e) {
-            throw new ResponseStatusException(HttpStatus.CONFLICT, "다른 기기에서 이 글이 바뀌었어요 — 그쪽을 불러와 주세요");
-        }
-        if (Boolean.TRUE.equals(exported)) {
-            draft.markExported(clock.instant());
-        }
-        return draft;
-    }
-
-    public void delete(User user, Long id) {
-        draftRepository.delete(owned(user, id));
-    }
-
-    /**
-     * AI 한 라운드 저장(PR-C) — 글을 다시 읽어 질문 기록에 덧붙이고 AI 열만 바꾼다(제목·본문·revision은 그대로 — REQ-47).
+     * 쪽지 AI 한 라운드 저장 — 쪽지를 다시 읽어 질문 기록에 덧붙이고 AI 열만 바꾼다(생각·옮긴 문장·판은 그대로 — REQ-47).
      *
      * <p><b>읽기와 쓰기가 한 트랜잭션이어야 한다.</b> 트랜잭션 밖에서 다시 읽은 사본을 따로 {@code save}하면, 그 사본이 낡은 경우
-     * (같은 스레드의 EntityManager가 먼저 읽어 둔 것을 돌려줌) 병합이 AI 호출 동안 저장된 본문을 옛 값으로 덮는다 — 2026-10-23
-     * {@code WritingAiServiceTest} REQ-19 실측. 한 트랜잭션 안에서는 낡은 사본이라도 스냅샷과 같아 {@code @DynamicUpdate}가 AI 열만 쓴다.
+     * 병합이 AI 호출 동안 저장된 생각을 옛 값으로 덮는다(2026-10-23 {@code WritingAiServiceTest} REQ-19 실측 — 옛 글 원장 시절).
+     * 한 트랜잭션 안에서는 {@code @DynamicUpdate}가 AI 열만 쓴다.
      *
      * @return 덧붙인 뒤의 질문 기록
      */
-    public QuestionLog recordAiRound(User user, Long id, QuestionLog.Round round, long microUsd) {
-        WritingDraft draft = owned(user, id);
-        QuestionLog next = QuestionLog.parse(draft.getQuestionsJson()).append(round);
-        draft.recordRound(next.toJson(), microUsd, round.at());
+    public QuestionLog recordAiRound(User user, Long storyId, QuestionLog.Round round, long microUsd) {
+        Story note = ownedNote(user, storyId);
+        QuestionLog next = QuestionLog.parse(note.getAiLog()).append(round);
+        note.recordRound(next.toJson(), microUsd, round.at());
         return next;
     }
 
-    /** 결과 없는 AI 실패의 원가를 글에 더한다(그사이 지워진 글이면 아무것도 하지 않는다). {@link #recordAiRound}와 같은 이유로 한 트랜잭션. */
-    public void addAiCost(User user, Long id, long microUsd) {
-        draftRepository.findByIdAndUser(id, user).ifPresent(d -> d.addCost(microUsd));
+    /** 결과 없는 AI 실패의 원가를 쪽지에 더한다(그사이 지워진 쪽지면 아무것도 하지 않는다). {@link #recordAiRound}와 같은 이유로 한 트랜잭션. */
+    public void addAiCost(User user, Long storyId, long microUsd) {
+        storyRepository.findWithBook(storyId, user).ifPresent(s -> s.addAiCost(microUsd));
+    }
+
+    private Story ownedNote(User user, Long storyId) {
+        return storyRepository.findWithBook(storyId, user)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "쪽지를 찾을 수 없어요"));
     }
 
     // ── 책 재료 ─────────────────────────────────────────────────────────────
@@ -162,11 +139,6 @@ public class WritingService {
         long seconds = ended.stream().mapToLong(ReadingSession::getDurationSeconds).sum();
         return new BookLine(book.getId(), book.getTitle(), book.getAuthor(), book.getCoverUrl(), book.getStatus(),
                 seconds, ended.size(), book.isPublic());
-    }
-
-    @Transactional(readOnly = true)
-    public List<WritingDraft> draftsOf(User user, Book book) {
-        return draftRepository.findByUserAndBookOrderByUpdatedAtDesc(user, book);
     }
 
     // ── AI 전송 동의 ────────────────────────────────────────────────────────

@@ -45,17 +45,17 @@ public record WritingMaterial(List<MaterialItem> included, int excludedCount, in
     /**
      * 모델이 받는 [책]·[재료] 블록(v1 §10.2 user 블록 1 — 독서 기록 줄 없음).
      *
-     * @param book {@code null}이면 책이 풀린 글이다 — 재료 없이 글만 본다는 한 줄
+     * @param book {@code null}이면 책 없는 쪽지다 — 책 칸은 「없음」이고 재료는 그 쪽지만(J76). 재료도 없으면 글만 본다는 한 줄
      */
     public String text(BookLine book) {
-        if (book == null) {
+        if (book == null && included.isEmpty()) {
             return "[책] 없음 — 재료 없이 글만 봅니다\n";
         }
-        StringBuilder text = new StringBuilder("[책] ").append(book.title());
-        if (book.author() != null && !book.author().isBlank()) {
+        StringBuilder text = new StringBuilder("[책] ").append(book == null ? "없음" : book.title());
+        if (book != null && book.author() != null && !book.author().isBlank()) {
             text.append(" / ").append(book.author());
         }
-        text.append("\n[재료 — 사용자가 이 책을 읽으며 남긴 것. ").append(included.size())
+        text.append(book == null ? "\n[재료 — 사용자가 남긴 것. " : "\n[재료 — 사용자가 이 책을 읽으며 남긴 것. ").append(included.size())
                 .append("개(전체 ").append(included.size() + excludedCount).append("개 중 최근 것부터)]\n");
         included.forEach(item -> text.append(block(item)));
         return text.toString();

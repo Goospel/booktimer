@@ -258,7 +258,7 @@ class StoryApiControllerTest {
      * 「팔로워 → 목록」 테스트는 이제 같은 시나리오라 여기 합쳤다(팔로우 관계가 결과를 안 바꾼다).
      */
     @Test
-    @DisplayName("GET /api/stories/of 비팔로워 → 공개 책이면 글 목록이 그대로 온다 (팔로우 무관)")
+    @DisplayName("REQ-212 · GET /api/stories/of 비팔로워 → 공개 책이어도 글 0건(머리 모양은 그대로)")
     void marginOf_nonFollower_returnsEntries() throws Exception {
         register("nf-viewer@booktimer.com", "nfviewer", "열람자");
         User target = register("nf-target@booktimer.com", "nftarget", "대상");
@@ -272,8 +272,7 @@ class StoryApiControllerTest {
                 .andExpect(jsonPath("$.book.title").value("공개 책"))
                 .andExpect(jsonPath("$.ownerNickname").value("대상"))
                 .andExpect(jsonPath("$.self").value(false))
-                .andExpect(jsonPath("$.entries[0].text").value("낯선 사람에게도 보일 문장"))
-                .andExpect(jsonPath("$.entries[0].bgCode").value("sea"));
+                .andExpect(jsonPath("$.entries.length()").value(0)); // REQ-212 — 머리만, 글 0건
     }
 
     // ── 비공개 책 여백 (2026-08-16 결정 2) — 주인만 열린다 ─────────────────────
@@ -354,42 +353,6 @@ class StoryApiControllerTest {
                 .andExpect(status().isNotFound());
     }
 
-    /**
-     * §5-1 ⓓ — 가시성 <b>전환</b>. 글에 자체 공개 필드가 없어 동기화 코드가 0줄이므로, 「전환하면
-     * 자동으로 사라진다」는 것 자체가 검증 대상이다. 여백 게이트와 소식 피드 두 경로를 한 흐름에서 본다.
-     */
-    @Test
-    // 팔로우 관계를 세팅해 두는 이유: 여백은 팔로우를 안 보지만 <b>소식 피드는 여전히 본다</b>
-    // (feedRecent). 한 흐름에서 두 경로를 같이 보므로 관계가 있어야 소식 쪽이 의미를 갖는다.
-    @DisplayName("PUBLIC→PRIVATE 전환: 보이던 여백은 404, 소식에서도 사라진다 (동기화 코드 0줄)")
-    void publicToPrivate_hidesMarginAndFeed() throws Exception {
-        User viewer = register("tr-viewer@booktimer.com", "trviewer", "팔로워");
-        User owner = register("tr-owner@booktimer.com", "trowner", "주인");
-        followRepository.save(Follow.of(viewer, owner));
-        Book book = publicBookOf(owner, "나중에 비공개가 될 책");
-        storyRepository.save(Story.of(owner, "공개일 때 남긴 글", book, null));
-
-        mockMvc.perform(get("/api/stories/of/trowner")
-                        .param("bookId", String.valueOf(book.getId()))
-                        .with(user("tr-viewer@booktimer.com")))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.entries[0].text").value("공개일 때 남긴 글"));
-        mockMvc.perform(get("/api/home-feed").with(user("tr-viewer@booktimer.com")))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.social[0].type").value("STORY"));
-
-        book.makePrivate();
-        bookRepository.save(book);
-
-        mockMvc.perform(get("/api/stories/of/trowner")
-                        .param("bookId", String.valueOf(book.getId()))
-                        .with(user("tr-viewer@booktimer.com")))
-                .andExpect(status().isNotFound());
-        mockMvc.perform(get("/api/home-feed").with(user("tr-viewer@booktimer.com")))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.social").isEmpty());
-    }
-
     @Test
     @DisplayName("DELETE /api/stories/{id} 타인 글 → 404 (IDOR)")
     void delete_othersStory_returns404() throws Exception {
@@ -442,27 +405,27 @@ class StoryApiControllerTest {
         follow(fan, author);
 
         mockMvc.perform(post("/api/stories/" + story.getId() + "/like")
-                        .with(user("like-fan@booktimer.com")).with(csrf()))
+                        .with(user("like-author@booktimer.com")).with(csrf()))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.likeCount").value(1))
                 .andExpect(jsonPath("$.liked").value(true));
 
         // 목록에도 실린다 — 카드가 하트를 채우는 근거
         mockMvc.perform(get("/api/stories/of/likeauthor").param("bookId", String.valueOf(book.getId()))
-                        .with(user("like-fan@booktimer.com")))
+                        .with(user("like-author@booktimer.com")))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.entries[0].likeCount").value(1))
                 .andExpect(jsonPath("$.entries[0].liked").value(true));
 
         mockMvc.perform(delete("/api/stories/" + story.getId() + "/like")
-                        .with(user("like-fan@booktimer.com")).with(csrf()))
+                        .with(user("like-author@booktimer.com")).with(csrf()))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.likeCount").value(0))
                 .andExpect(jsonPath("$.liked").value(false));
     }
 
     @Test
-    @DisplayName("POST .../like 비팔로워 → 공개 책 글이면 200 (팔로우 축 제거 — 배선 확인)")
+    @DisplayName("REQ-212 · POST .../like 비팔로워 → 공개 책 글이어도 404")
     void like_nonFollower_returnsOk() throws Exception {
         User author = register("like-closed@booktimer.com", "likeclosed", "글쓴이");
         register("like-stranger@booktimer.com", "likestranger", "남");
@@ -470,8 +433,7 @@ class StoryApiControllerTest {
 
         mockMvc.perform(post("/api/stories/" + story.getId() + "/like")
                         .with(user("like-stranger@booktimer.com")).with(csrf()))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.liked").value(true));
+                .andExpect(status().isNotFound()); // REQ-212
     }
 
     /**
@@ -539,7 +501,7 @@ class StoryApiControllerTest {
     }
 
     @Test
-    @DisplayName("GET .../likes 팔로워 → 누른 사람의 핸들·닉네임이 실린다")
+    @DisplayName("GET .../likes 본인 → 내 쪽지에 누른 사람의 핸들·닉네임이 실린다(남은 404 — REQ-212)")
     void likers_follower_returnsNames() throws Exception {
         User author = register("likers-author@booktimer.com", "likersauthor", "글쓴이");
         register("likers-fan@booktimer.com", "likersfan", "누른이");
@@ -548,18 +510,18 @@ class StoryApiControllerTest {
         follow(userRepository.findByEmail("likers-fan@booktimer.com").orElseThrow(), author);
 
         mockMvc.perform(post("/api/stories/" + story.getId() + "/like")
-                        .with(user("likers-fan@booktimer.com")).with(csrf()))
+                        .with(user("likers-author@booktimer.com")).with(csrf()))
                 .andExpect(status().isOk());
 
         mockMvc.perform(get("/api/stories/" + story.getId() + "/likes")
-                        .with(user("likers-fan@booktimer.com")))
+                        .with(user("likers-author@booktimer.com")))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$[0].loginId").value("likersfan"))
-                .andExpect(jsonPath("$[0].nickname").value("누른이"));
+                .andExpect(jsonPath("$[0].loginId").value("likersauthor"))
+                .andExpect(jsonPath("$[0].nickname").value("글쓴이"));
     }
 
     @Test
-    @DisplayName("GET .../likes 비팔로워 → 공개 책 글이면 200 (목록과 같은 판정 — 팔로우 축 제거)")
+    @DisplayName("REQ-212 · GET .../likes 비팔로워 → 공개 책 글이어도 404")
     void likers_nonFollower_returnsOk() throws Exception {
         User author = register("likers-closed@booktimer.com", "likersclosed", "글쓴이");
         register("likers-stranger@booktimer.com", "likersstranger", "남");
@@ -567,7 +529,7 @@ class StoryApiControllerTest {
 
         mockMvc.perform(get("/api/stories/" + story.getId() + "/likes")
                         .with(user("likers-stranger@booktimer.com")))
-                .andExpect(status().isOk());
+                .andExpect(status().isNotFound()); // REQ-212 — 남의 여백 명단은 없다
     }
 
     @Test
@@ -634,7 +596,7 @@ class StoryApiControllerTest {
     }
 
     @Test
-    @DisplayName("POST /api/stories shared:true → 켜진 채 저장된다 (작성 화면의 「함께 걸기」)")
+    @DisplayName("REQ-213 · POST /api/stories shared:true → 200 · 꺼진 채 저장된다(글을 잃지 않는다)")
     void create_withSharedTrue_savesShared() throws Exception {
         User me = register("share-new@booktimer.com", "sharenew", "작성자");
         Book book = publicBookWithIsbn(me, "함께 걸 책", SHARE_ISBN);
@@ -645,7 +607,7 @@ class StoryApiControllerTest {
                         .content("{\"text\":\"함께 걸어 둔 글\",\"bookId\":" + book.getId()
                                 + ",\"shared\":true}"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.shared").value(true));
+                .andExpect(jsonPath("$.shared").value(false)); // REQ-213 — 동결 미니앱의 체크 값은 무시하고 저장한다
     }
 
     @Test
@@ -671,15 +633,14 @@ class StoryApiControllerTest {
     }
 
     @Test
-    @DisplayName("POST → DELETE /api/stories/{id}/share 왕복 — 상태가 JSON으로 오간다")
+    @DisplayName("REQ-213 · POST /api/stories/{id}/share 400 · DELETE는 200 shared:false 그대로")
     void share_roundTrip_returnsState() throws Exception {
         User me = register("share-toggle@booktimer.com", "sharetoggle", "작성자");
         Story story = storyOf(me, publicBookWithIsbn(me, "책", SHARE_ISBN), "내 글");
 
         mockMvc.perform(post("/api/stories/" + story.getId() + "/share")
                         .with(user("share-toggle@booktimer.com")).with(csrf()))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.shared").value(true));
+                .andExpect(status().isBadRequest()); // REQ-213 — 여백은 나만 본다
 
         mockMvc.perform(delete("/api/stories/" + story.getId() + "/share")
                         .with(user("share-toggle@booktimer.com")).with(csrf()))
@@ -688,7 +649,7 @@ class StoryApiControllerTest {
     }
 
     @Test
-    @DisplayName("POST /api/stories/{id}/share 남의 글 → 404 (IDOR — 존재 비노출)")
+    @DisplayName("REQ-213 · POST /api/stories/{id}/share 남의 글도 400 — 존재를 묻기 전에 막는다")
     void share_othersStory_returns404() throws Exception {
         User owner = register("share-owner@booktimer.com", "shareowner", "주인");
         register("share-intruder@booktimer.com", "shareintruder", "침입자");
@@ -696,7 +657,7 @@ class StoryApiControllerTest {
 
         mockMvc.perform(post("/api/stories/" + story.getId() + "/share")
                         .with(user("share-intruder@booktimer.com")).with(csrf()))
-                .andExpect(status().isNotFound());
+                .andExpect(status().isBadRequest()); // REQ-213 — 켜기는 누구의 글이든 400(존재를 묻지 않는다)
     }
 
     @Test
@@ -705,29 +666,6 @@ class StoryApiControllerTest {
         mockMvc.perform(get("/api/stories/book/" + SHARE_ISBN))
                 .andExpect(status().is3xxRedirection())
                 .andExpect(redirectedUrl("/login"));
-    }
-
-    @Test
-    @DisplayName("GET /api/stories/book/{isbn} 낯선 사람에게도 함께 걸린 글이 실린다 — 작성자 줄과 함께")
-    void bookMargin_strangerSeesSharedStories() throws Exception {
-        User author = register("bookaxis-author@booktimer.com", "bookaxisauthor", "글쓴이");
-        register("bookaxis-stranger@booktimer.com", "bookaxisstranger", "낯선이");
-        Book book = publicBookWithIsbn(author, "함께 읽는 책", SHARE_ISBN);
-        Story shared = storyOf(author, book, "함께 건 글");
-        shared.markShared(true);
-        storyOf(author, book, "안 건 글");
-
-        mockMvc.perform(get("/api/stories/book/" + SHARE_ISBN)
-                        .with(user("bookaxis-stranger@booktimer.com")))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.book.isbn13").value(SHARE_ISBN))
-                .andExpect(jsonPath("$.book.title").value("함께 읽는 책"))
-                .andExpect(jsonPath("$.myBookId").doesNotExist())
-                .andExpect(jsonPath("$.totalCount").value(1))
-                .andExpect(jsonPath("$.entries.length()").value(1))
-                .andExpect(jsonPath("$.entries[0].text").value("함께 건 글"))
-                .andExpect(jsonPath("$.entries[0].authorLoginId").value("bookaxisauthor"))
-                .andExpect(jsonPath("$.entries[0].authorNickname").value("글쓴이"));
     }
 
     @Test
@@ -741,26 +679,6 @@ class StoryApiControllerTest {
     }
 
     // --- GET /api/stories/of/{loginId}/all (사람축 전체 여백 — 책방 「여백」 탭) ---
-
-    @Test
-    @DisplayName("GET /api/stories/of/{loginId}/all 낯선 이 → 공개 책 글만, 책 라벨이 그 책과 일치")
-    void allMarginsOf_stranger_returnsOnlyPublicBookStories() throws Exception {
-        register("all-viewer@booktimer.com", "allviewer", "열람자");
-        User target = register("all-target@booktimer.com", "alltarget", "대상");
-        Book open = publicBookOf(target, "공개 책");
-        Book secret = bookRepository.save(
-                Book.register(target, "비공개 책", null, null, null, null, null, BookStatus.READING));
-        storyOf(target, open, "낯선 사람에게도 보일 문장");
-        storyOf(target, secret, "새면 안 되는 메모");
-
-        mockMvc.perform(get("/api/stories/of/alltarget/all")
-                        .with(user("all-viewer@booktimer.com")))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.length()").value(1))
-                .andExpect(jsonPath("$[0].text").value("낯선 사람에게도 보일 문장"))
-                .andExpect(jsonPath("$[0].bookId").value(open.getId()))
-                .andExpect(jsonPath("$[0].bookTitle").value("공개 책"));
-    }
 
     @Test
     @DisplayName("GET /api/stories/of/{loginId}/all 본인 → 비공개 책 글까지 최신순으로 실린다")
@@ -786,10 +704,10 @@ class StoryApiControllerTest {
         User author = register("all-like-author@booktimer.com", "alllikeauthor", "글쓴이");
         User fan = register("all-like-fan@booktimer.com", "alllikefan", "독자");
         Story story = storyOf(author, publicBookOf(author, "좋아요가 달릴 책"), "누를 만한 문장");
-        storyLikeRepository.save(StoryLike.of(fan, story));
+        storyLikeRepository.save(StoryLike.of(author, story)); // 여백은 본인만 — 내 쪽지에 내가 누른 하트(REQ-212)
 
         mockMvc.perform(get("/api/stories/of/alllikeauthor/all")
-                        .with(user("all-like-fan@booktimer.com")))
+                        .with(user("all-like-author@booktimer.com")))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$[0].likeCount").value(1))
                 .andExpect(jsonPath("$[0].liked").value(true));

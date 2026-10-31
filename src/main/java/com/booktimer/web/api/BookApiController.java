@@ -113,23 +113,8 @@ public class BookApiController {
                 .map(r -> SearchRow.from(r, myIsbns)).toList();
         List<String> resultIsbns = result.results().stream().map(BookSearchResult::isbn13).toList();
         Map<String, FollowScopePopularity> pop = popularityService.countByIsbn(user, resultIsbns);
-        return new SearchResponse(rows, toPopularityMap(pop), marginCounts(resultIsbns));
-    }
-
-    /**
-     * 검색 행의 「여백 N」 배지 — 함께 걸린 글 수. <b>페이지당 1쿼리</b>(N+1 금지, {@code storyCounts} 관례).
-     *
-     * <p>글이 없는 isbn은 <b>키 자체가 없다</b>(group by가 행을 안 준다) — 화면이 0 배지를 그리지
-     * 않는 근거가 서버 응답에 그대로 있다. isbn null인 결과와 빈 목록은 선제 가드({@code in ()} 회피).
-     */
-    private Map<String, Long> marginCounts(List<String> isbns) {
-        List<String> keys = isbns.stream().filter(Objects::nonNull).distinct().toList();
-        if (keys.isEmpty()) {
-            return Map.of();
-        }
-        return storyRepository.sharedCountsByIsbn(keys).stream()
-                .collect(Collectors.toMap(StoryRepository.IsbnStoryCount::getIsbn13,
-                        StoryRepository.IsbnStoryCount::getCount));
+        // 「여백 N」 배지는 없다 — 책생글 M1부터 여백은 본인만(C3). 키 없는 맵 = 배지 미표시(웹 · 동결 미니앱이 읽는 모양은 그대로)
+        return new SearchResponse(rows, toPopularityMap(pop), Map.of());
     }
 
     /**
@@ -272,8 +257,7 @@ public class BookApiController {
                                 List<MyBookSummary> books, Map<String, Popularity> popularity) {}
 
     /**
-     * @param marginCounts isbn13 → 함께 걸린 글 수. <b>0인 책은 키가 없다</b>(배지 미표시의 근거).
-     *                     {@code popularity}와 동형 — isbn 키 맵을 검색 응답에 얹는 선례를 그대로 따른다
+     * @param marginCounts 옛 「여백 N」 배지 — 책생글 M1부터 늘 빈 맵이다(여백은 본인만 — C3). 웹 · 동결 미니앱이 읽어 모양만 남긴다
      */
     public record SearchResponse(List<SearchRow> results, Map<String, Popularity> popularity,
                                  Map<String, Long> marginCounts) {}

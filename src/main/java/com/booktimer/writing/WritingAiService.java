@@ -1,6 +1,8 @@
 package com.booktimer.writing;
 
 import com.booktimer.book.Book;
+import com.booktimer.story.Story;
+import com.booktimer.story.StoryRepository;
 import com.booktimer.study.StudyAiUsage.Kind;
 import com.booktimer.study.StudyAiUsageService;
 import com.booktimer.user.User;
@@ -17,11 +19,15 @@ import org.springframework.web.server.ResponseStatusException;
 
 import java.time.Clock;
 import java.time.Instant;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 
 /**
  * 앱 글쓰기 AI 단계 — 질문(ASK) · 꼬리 질문(FOLLOW)(v1 §5.1.4 · REQ-18~22 · 27 · 46 · 47).
+ *
+ * <p><b>대상은 여백 쪽지다</b>(2026-10-30 책생글 M1 — D9 · J2): v1의 글(draft)은 쪽지로 합쳤고, 「사용자 글」은 쪽지의 생각이다.
+ * 재료는 지금 쪽지 먼저, 같은 책 다른 쪽지는 배경(J34) · 책 없는 쪽지는 그 쪽지만(J76). 프롬프트 글자는 그대로다(C1 줄은 B3 — J79).
  *
  * <p>{@link #run}의 <b>순서가 이 클래스의 설계</b>다(REQ-19, {@code StudyRecallService.analyze} 선례): ① 동의 → ② 글 → ③ revision
  * → ④ 전제조건(라운드 상한 포함) → ⑤ 키 → ⑥ 월 예산 → ⑦ 하루 몫 → ⑧ 호출 → (실패 환불) → ⑨ 가드 → (빈 결과 환불) → ⑩ AI 열만
@@ -46,17 +52,17 @@ public class WritingAiService {
 
     static final String FAILED = "이번엔 질문을 만들지 못했어요 — 잠시 뒤 다시 눌러 주세요(이번 몫은 돌려 드렸어요)";
 
-    private final WritingDraftRepository draftRepository;
+    private final StoryRepository storyRepository;
     private final WritingService writingService;
     private final ClaudeWritingAssistant assistant;
     private final AiBudgetService budget;
     private final StudyAiUsageService usageService;
     private final Clock clock;
 
-    public WritingAiService(WritingDraftRepository draftRepository, WritingService writingService,
+    public WritingAiService(StoryRepository storyRepository, WritingService writingService,
                             ClaudeWritingAssistant assistant, AiBudgetService budget,
                             StudyAiUsageService usageService, Clock clock) {
-        this.draftRepository = draftRepository;
+        this.storyRepository = storyRepository;
         this.writingService = writingService;
         this.assistant = assistant;
         this.budget = budget;
@@ -69,13 +75,13 @@ public class WritingAiService {
      * @param focus    FOLLOW가 답하는 질문(띠의 질문) — 없으면 {@code null}
      * @throws ResponseStatusException 400 전제조건 · 403 동의 없음 · 404 · 409 revision · 422 거절 · 429 내 몫 · 503 키·예산·전역 몫·실패
      */
-    public AiView run(User user, Long draftId, Step step, int revision, String focus) {
+    public AiView run(User user, Long storyId, Step step, int revision, String focus) {
         if (!writingService.aiConsent(user)) { // ① 게이트가 가장 앞 — 몫·호출·비용이 모두 0이다(REQ-18)
             throw new ResponseStatusException(HttpStatus.FORBIDDEN, "AI 질문을 받으려면 안내를 읽고 동의해 주세요");
         }
-        WritingDraft draft = draftRepository.findWithBook(draftId, user)
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "글을 찾을 수 없어요"));
-        if (draft.getRevision() != revision) {
+        Story note = storyRepository.findWithBook(storyId, user)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "쪽지를 찾을 수 없어요"));
+        if (note.getRevision() != revision) {
             throw new ResponseStatusException(HttpStatus.CONFLICT, "글이 아직 저장되지 않았어요 — 저장 뒤 다시 눌러 주세요");
         }
 
@@ -84,21 +90,20 @@ public class WritingAiService {
         if (cleanFocus != null && cleanFocus.length() > FOCUS_MAX) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "지금 답하는 질문이 너무 길어요(200자까지)");
         }
-        QuestionLog history = QuestionLog.parse(draft.getQuestionsJson());
+        QuestionLog history = QuestionLog.parse(note.getAiLog());
         if (history.rounds().size() >= ROUNDS_MAX) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "이 글에서 받을 수 있는 질문을 모두 받았어요 — 이제 내 글로 이어 가 보세요");
         }
-        String body = draft.getBody();
-        Book book = draft.getBook();
-        WritingMaterial material = book == null ? null : writingService.material(user, writingService.margins(user, book));
-        if (step == Step.ASK && (material == null || material.included().isEmpty())) {
+        String body = note.getText();
+        Book book = note.getBook();
+        WritingMaterial material = writingService.material(user, materialNotes(user, note, book));
+        if (step == Step.ASK && material.included().isEmpty()) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "여백에 문장이나 메모를 하나 이상 남긴 뒤에 질문을 받을 수 있어요");
         }
         if (step == Step.FOLLOW && body.strip().length() < FOLLOW_MIN_BODY) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "내 생각을 한두 문장 쓴 뒤에 꼬리 질문을 받을 수 있어요");
         }
-        String materialBlock = material == null ? new WritingMaterial(List.of(), 0, 0).text(null)
-                : material.text(writingService.bookLine(user, book));
+        String materialBlock = material.text(book == null ? null : writingService.bookLine(user, book));
 
         if (!assistant.isEnabled()) { // ⑤
             throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE, "지금은 AI 질문이 꺼져 있어요 — 글은 그대로 쓸 수 있어요");
@@ -127,7 +132,7 @@ public class WritingAiService {
 
         if (result.failure() != null || result.value() == null) {
             usageService.refundBoth(user, now, Kind.WRITE);
-            recordCostOnly(user, draftId, now, cost);
+            recordCostOnly(user, storyId, now, cost);
             throw failure(result.failure() == null ? Failure.UNAVAILABLE : result.failure());
         }
         String materialText = WritingGuards.materialText(materialBlock); // ⑨
@@ -137,15 +142,27 @@ public class WritingAiService {
         if (guarded.isEmpty()) {
             log.warn("글쓰기 AI 결과가 가드 뒤 비었다 — user={} step={}", user.getId(), step);
             usageService.refundBoth(user, now, Kind.WRITE);
-            recordCostOnly(user, draftId, now, cost);
+            recordCostOnly(user, storyId, now, cost);
             throw failure(Failure.UNAVAILABLE);
         }
 
         // ⑩ 다시 읽어 AI 열만 — 그사이 저장된 본문을 보존한다(REQ-19 · 47). 읽기·쓰기가 한 트랜잭션인 것이 요점(그쪽 javadoc).
         budget.add(now, cost);
-        QuestionLog next = writingService.recordAiRound(user, draftId,
+        QuestionLog next = writingService.recordAiRound(user, storyId,
                 new QuestionLog.Round(step, now, cleanFocus, body.length(), guarded.get().questions()), cost);
         return new AiView(next, now, usageService.remaining(user, now, Kind.WRITE));
+    }
+
+    /**
+     * 재료가 될 쪽지 — <b>지금 쪽지 먼저</b>, 그다음 같은 책 다른 쪽지 최근순(배경 재료 — J34). 책 없는 쪽지는 그 쪽지만(J76 — 다른
+     * 쪽지 본문 0 · REQ-228). 생각 · 옮긴 문장이 다 빈 쪽지(질문 기록만 남은 옮긴 쪽지)는 재료가 아니다.
+     */
+    private List<Story> materialNotes(User user, Story note, Book book) {
+        List<Story> notes = new ArrayList<>(List.of(note));
+        if (book != null) {
+            writingService.margins(user, book).stream().filter(s -> !s.getId().equals(note.getId())).forEach(notes::add);
+        }
+        return notes.stream().filter(s -> s.getQuote() != null || !s.getText().isBlank()).toList();
     }
 
     /** 오늘 남은 글쓰기 AI 몫 — 화면이 버튼 옆에 그린다(UTC 날짜 키 — 소진·환불과 같은 규칙). */
@@ -167,13 +184,13 @@ public class WritingAiService {
         return 0;
     }
 
-    /** 결과 없는 실패의 원가 — 월 누적과 글에(글은 원가 열만). */
-    private void recordCostOnly(User user, Long draftId, Instant now, long cost) {
+    /** 결과 없는 실패의 원가 — 월 누적과 쪽지에(쪽지는 원가 열만). */
+    private void recordCostOnly(User user, Long storyId, Instant now, long cost) {
         if (cost <= 0) {
             return;
         }
         budget.add(now, cost);
-        writingService.addAiCost(user, draftId, cost);
+        writingService.addAiCost(user, storyId, cost);
     }
 
     private static ResponseStatusException failure(Failure failure) {
@@ -189,7 +206,7 @@ public class WritingAiService {
     }
 
     /**
-     * {@code POST /api/app/drafts/{id}/ai} 응답 — 본문·제목·revision 필드가 <b>없다</b>(REQ-47: 앱이 AI 응답으로 편집기를 채울 재료
+     * {@code POST /api/app/margins/{id}/ai} 응답 — 본문·제목·revision 필드가 <b>없다</b>(REQ-47: 앱이 AI 응답으로 편집기를 채울 재료
      * 자체가 없다). 필드 이름이 앱 types.ts의 단일 출처다.
      */
     public record AiView(QuestionLog questions, Instant aiUpdatedAt, int aiRemainingToday) {

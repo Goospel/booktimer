@@ -38,4 +38,12 @@ public interface WritingDraftRepository extends JpaRepository<WritingDraft, Long
      * 앞이어야 한다({@code AccountService.purge} 순서 · {@code AccountServiceTest} inOrder가 잠근다).
      */
     void deleteByUser(User user);
+
+    /**
+     * 옮긴 쪽지를 지울 때 원본 글도 함께 파기한다(U-154 ⑤ · 처리방침 5절 「그 글을 지우면 함께 파기」) — 지운 글이 M2 전까지
+     * 옛 JS 목록에 남지 않게. {@code story_id}는 FK가 없어 순서 제약은 없다. M2가 이 표와 함께 지운다.
+     */
+    @Modifying(flushAutomatically = true)
+    @Query("delete from WritingDraft d where d.storyId = :storyId")
+    int deleteByStoryId(@Param("storyId") Long storyId);
 }

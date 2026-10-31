@@ -1,6 +1,5 @@
 package com.booktimer.story;
 
-import com.booktimer.book.Book;
 import com.booktimer.user.User;
 import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.JpaRepository;
@@ -65,9 +64,6 @@ public interface StoryLikeRepository extends JpaRepository<StoryLike, Long> {
 
     /** 글 개별 삭제({@code StoryService.delete}) — story_like.story_id FK보다 앞서야 한다. */
     void deleteByStory(Story story);
-
-    /** 책 삭제({@code BookService.delete}) — 그 책 여백의 글들에 달린 좋아요를 통째로. */
-    void deleteByStoryBook(Book book);
 
     /** 탈퇴 — <b>내가 남에게 누른</b> 좋아요(story_like.user_id FK). */
     void deleteByUser(User user);
