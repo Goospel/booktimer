@@ -128,15 +128,18 @@ export async function sendNewNotes(
   }
 }
 
+/** 404 = 「이미 없다」는 서버의 확답 — 지운 것으로 친다(설계 §5.11 R1). 목록 지우기 · 떠날 때 지우기 · 저장이 같은 정의를 쓴다. */
+export const isGone = (e: unknown): boolean => e instanceof ApiError && e.status === 404;
+
 /**
  * 목록에서 쪽지 지우기 — 서버가 지운 뒤 그 쪽지 칸도 지운다(남으면 로그아웃 · 탈퇴 확인이 거짓 미전송을 센다 — A1 리뷰 8).
- * 404는 「이미 없다」는 서버의 확답이라 지운 것으로 친다(설계 §5.11 R1 · flushOnce와 같다 — 재리뷰 E). 그 밖의 실패는 던진다.
+ * 404면 지운 것으로 친다(isGone — 재리뷰 E). 그 밖의 실패는 던진다.
  */
 export async function deleteNote(kv: KV, userId: number | null, id: number, del: (id: number) => Promise<unknown> = margins.delete): Promise<void> {
   try {
     await del(id);
   } catch (e) {
-    if (!(e instanceof ApiError && e.status === 404)) throw e;
+    if (!isGone(e)) throw e;
   }
   if (userId !== null) await kv.removeItem(slotKey(userId, id, 'margin'));
 }
@@ -168,7 +171,7 @@ export function draftSync(p: { kv: KV; userId: number; put: (id: number, b: Save
     } catch (e) {
       if (e instanceof NetworkError) return { kind: 'offline' };
       if (e instanceof ApiError && e.status === 409) return { kind: 'conflict' };
-      if (e instanceof ApiError && e.status === 404) {
+      if (isGone(e)) {
         await serial(() => p.kv.removeItem(key(id)));
         return { kind: 'gone' };
       }

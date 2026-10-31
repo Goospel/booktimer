@@ -1,6 +1,7 @@
 // 여백 쪽지 판정(책생글 「여백 + 블로그」 A1 — 설계 §5.1 · F1 사양 §4.3 · §4.4). 화면은 이 함수들의 결과를 그대로 그린다.
 // 「공개 책이에요」 확인 단계는 없다 — 여백은 나만 본다(D1 · REQ-223). 저장은 자동이라 [남기기]도 없다(F1 §8-3).
 import type { EditMargin, MarginSummary } from '../api/types';
+import { isGone } from './draftSync';
 import { dateLabel } from './format';
 
 const has = (s: string | null | undefined) => (s ?? '').trim() !== '';
@@ -105,15 +106,16 @@ export type LeaveAction = 'none' | 'drop-slot' | 'create' | 'delete-after-create
  */
 export function leaveAction(p: { loaded: boolean; empty: boolean; waiting: boolean; noteId: number | null; creating: boolean }): LeaveAction {
   const discard = p.empty && !p.waiting;
-  if (p.noteId === null) return discard ? (p.creating ? 'delete-after-create' : 'drop-slot') : 'create';
+  // 만드는 중이면 noteId가 섰어도(adopt 창) 새 쪽지 갈래 — 아직 없는 id 칸을 flush하지 않고 같은 약속을 기다린다(3차 5)
+  if (p.noteId === null || p.creating) return discard ? (p.creating ? 'delete-after-create' : 'drop-slot') : 'create';
   if (!p.loaded) return 'none';
   return discard ? 'delete' : 'flush';
 }
 
 /**
- * 떠날 때 할 일을 실제로 부른다(재리뷰 A). 돌려준 약속 = 그 효과의 끝 — 화면은 이것을 pendingLeave에 넣는다.
+ * 떠날 때 할 일을 실제로 부른다(재리뷰 A). 돌려준 약속 = 그 갈래의 마지막 효과의 끝 — 화면은 이것을 pendingLeave에 넣는다.
  * create는 만든 뒤 만드는 동안 더 쓴 것을 곧바로 보낸다(언마운트 뒤 1.5초 타이머에 맡기면 돌아간 목록이 옛 미리보기다 — 재리뷰 H).
- * delete는 서버가 지운 뒤에만 칸을 지우고 실패는 삼킨다(칸이 남아 다음에 다시 열 수 있다).
+ * delete는 서버가 지웠거나 404(이미 없음 — isGone)면 칸을 지운다. 그 밖의 실패는 삼키고 칸을 남긴다(다음에 다시 열 수 있다 — 3차 4).
  */
 export function runLeave(
   act: LeaveAction,
@@ -126,7 +128,7 @@ export function runLeave(
     noteId: () => number | null;
   },
 ): Promise<unknown> {
-  const remove = (id: number) => d.del(id).then(() => d.drop(id), () => undefined);
+  const remove = (id: number) => d.del(id).then(() => d.drop(id), (e) => (isGone(e) ? d.drop(id) : undefined));
   const afterCreate = (f: (id: number) => Promise<unknown>) =>
     d.createFirst().then((r) => {
       const id = d.noteId();

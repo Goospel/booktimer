@@ -343,6 +343,21 @@ test('A1 리뷰 1 · 12 · 쪽지 화면 정리는 leaveAction대로 · 떠날 �
   const LEAVE = /pendingLeave\.set\(\s*runLeave\(\s*leaveAction\(/;
   expect(LEAVE.test(cleanup)).toBe(true);
   expect(LEAVE.test('const act = leaveAction(p);\n if (act === "flush") void s.flush(id);\n pendingLeave.set(Promise.resolve());')).toBe(false);
+  // 3차 3 — runLeave에 넘기는 효과 묶음(이른 noteId 읽기 · no-op del · flush→drop을 심으면 잡힌다)
+  const DEPS = '{ dropNewSlot, createFirst, del: margins.delete, drop: s.drop, flush: (n) => s.flush(n), noteId: () => noteId.current }';
+  expect(count(cleanup, DEPS)).toBe(1);
+  // 3차 5 — 판정에 「만드는 중」을 넘긴다(adopt 창에 떠나도 새 쪽지 갈래). 빼면 잡힌다
+  expect(count(cleanup, 'creating: creating.current !== null')).toBe(1);
+  expect(count(cleanup.replace('creating: creating.current !== null', 'creating: false'), 'creating: creating.current !== null')).toBe(0);
+  for (const [from, to] of [
+    ['noteId: () => noteId.current', 'noteId: () => route.noteId'],
+    ['del: margins.delete', 'del: async () => undefined'],
+    ['flush: (n) => s.flush(n)', 'flush: s.drop'],
+    ['drop: s.drop', 'drop: async () => undefined'],
+  ]) {
+    const mutated = cleanup.replace(from, to);
+    expect([from, mutated !== cleanup, count(mutated, DEPS)]).toEqual([from, true, 0]);
+  }
   expect(syncAfterLoad(s)).toBe(true);
   // 양성 대조 — 리뷰 때 꼴(GET 전에 대입)은 잡힌다
   const old = 'const load = async () => { sync.current = s;\n if (route.noteId !== null) { const v = await margins.get(id); applyText({ quote: slot.title, text: slot.body }); } }';
@@ -399,7 +414,7 @@ test('A1 리뷰 4 · 서재 포커스가 savedNotice를 소비한다 · 알림�
 
 // REQ-221 — 질문 고르기(pick)는 생각 칸을 건드리지 않는다: 칸 패치는 lib pickPatch(키 focus뿐 — questions.test)만, 본문엔 생각 칸을 바꾸는 호출 0(A1 리뷰 3).
 // 화면 edit(…) 호출은 잡고, 칸 패치(sync.current?.edit(id, pickPatch(q)))는 앞의 「.」로 뺀다(재리뷰 D)
-const PICK_WRITES = /applyText\(|setThoughtText\(|setQuoteText\(|setInitial\(|(?:textRef|quoteRef)\.current\s*(?:\+=|=(?!=))|(?<![.\w])edit\(|\b(?:body|title)\s*:|setNativeProps\(/;
+const PICK_WRITES = /applyText\(|setThoughtText\(|setQuoteText\(|setInitial\(|(?:textRef|quoteRef)\.current\s*(?:\+=|=(?!=))|(?<![.\w])edit\(|\b(?:body|title)\s*:|[{,]\s*(?:body|title)\s*[,}]|setNativeProps\(/;
 test('REQ-221 · 쪽지 화면 pick 본문에 생각 칸을 바꾸는 호출이 없다 · 칸 패치는 pickPatch(질문 글자를 생각에 넣는 꼴을 심으면 잡힌다)', () => {
   const s = srcOf(NOTE);
   const pick = bodyOf(s, 'function pick(');
@@ -418,6 +433,8 @@ test('REQ-221 · 쪽지 화면 pick 본문에 생각 칸을 바꾸는 호출이 
     'void sync.current?.edit(id, { ...pickPatch(q), title: q.text });',
     'setQuoteText(q.text);',
     'textInput.current?.setNativeProps({ text: q.text });',
+    'void sync.current?.edit(id, { ...pickPatch(q), body });', // 3차 6 — 단축 속성
+    'void sync.current?.edit(id, { title, ...pickPatch(q) });',
   ]) expect([line, PICK_WRITES.test(planted(line))]).toEqual([line, true]);
   expect(planted('x();')).toContain('x();'); // 심기가 실제로 들어갔다
 });
@@ -439,9 +456,15 @@ test('A1 리뷰 11 · 쪽지 화면 put 어댑터는 keptBody로 비교한다(tr
 // 재리뷰 B — createFirst가 noteId를 세운 뒤 adopt를 기다리는 사이에 save()가 불리면 id 칸이 아직 없어 거짓 「저장하지 못했어요」가 난다.
 // 만드는 중이면 그 약속(createFirst는 진행 중이면 같은 약속)을 기다린다.
 test('재리뷰 B · save는 만드는 중이면 flush 대신 createFirst를 기다린다(옛 꼴을 심으면 잡힌다)', () => {
-  const waits = (s: string) => /const r = id === null \|\| creating\.current \? await createFirst\(\) : await s\.flush\(id, opts\);/.test(bodyOf(s, 'async function save('));
+  // 3차 1 — 만든 뒤 「만드는 동안 더 쓴 것」을 flush까지 해야 AI가 그 PUT 뒤의 판으로 나간다(v1 REQ-36 「비우기 → 그 revision으로 /ai」).
+  // POST 중(id === null) · adopt 창(creating) 둘 다 같은 갈래다. not-dirty면 flush는 PUT 없이 칸의 판(= takeTheirs가 넣은 서버 판)을 돌려준다.
+  const waits = (s: string) =>
+    /const r =\s*id === null \|\| creating\.current\s*\?\s*await createFirst\(\)\.then\(\(c\) => \(c\.kind === 'saved' && noteId\.current !== null \? s\.flush\(noteId\.current, opts\) : c\)\)\s*:\s*await s\.flush\(id, opts\);/.test(
+      bodyOf(s, 'async function save('),
+    );
   expect(waits(srcOf(NOTE))).toBe(true);
-  expect(waits('async function save(opts) {\n    const r = id === null ? await createFirst() : await s.flush(id, opts);\n  }')).toBe(false);
+  expect(waits('async function save(opts) {\n    const r = id === null ? await createFirst() : await s.flush(id, opts);\n  }')).toBe(false); // B 전
+  expect(waits('async function save(opts) {\n    const r = id === null || creating.current ? await createFirst() : await s.flush(id, opts);\n  }')).toBe(false); // 67026ad6(만든 뒤 flush 없음)
 });
 
 // 재리뷰 G2 — 공용 지우기가 기기 칸을 지우려면 userId를 넘겨야 한다(null이면 칸이 남는다).

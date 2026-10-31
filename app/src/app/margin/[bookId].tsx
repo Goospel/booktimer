@@ -306,8 +306,12 @@ export default function MarginNote() {
     // 빈 쪽지는 보내지 않는다(서버 400) — 떠날 때 지운다. 받은 질문이 있으면 원가가 든 쪽지라 빈 채로도 남는다
     if (shouldDiscard({ title: quoteRef.current, body: textRef.current, rounds: roundsRef.current })) return null;
     const id = noteId.current;
-    // 만드는 중이면(noteId는 섰지만 id 칸을 옮기는 중) flush가 아니라 그 약속을 기다린다 — 거짓 「저장하지 못했어요」 방지(재리뷰 B)
-    const r = id === null || creating.current ? await createFirst() : await s.flush(id, opts);
+    // 새 쪽지 · 만드는 중(noteId는 섰지만 id 칸을 옮기는 중)이면 그 약속을 기다린 뒤 「만드는 동안 더 쓴 것」을 flush한다 —
+    // 없는 id 칸 flush의 거짓 「저장하지 못했어요」(재리뷰 B)와 AI가 그 PUT보다 먼저 옛 판으로 나가는 것(3차 1 · v1 REQ-36)을 함께 막는다
+    const r =
+      id === null || creating.current
+        ? await createFirst().then((c) => (c.kind === 'saved' && noteId.current !== null ? s.flush(noteId.current, opts) : c))
+        : await s.flush(id, opts);
     onOutcome(r);
     return r;
   }

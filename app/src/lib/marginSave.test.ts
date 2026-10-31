@@ -1,7 +1,8 @@
 // 여백 쪽지 판정(책생글 「여백 + 블로그」 A1 — 설계 §5.1 · F1 사양 §4.3 · §4.4). 화면은 이 함수들을 그대로 그린다.
+import { ApiError, NetworkError } from '../api/client';
 import type { MarginSummary } from '../api/types';
 import * as marginSave from './marginSave';
-import { booklessSection, canSaveMargin, hasQuoteField, javaStrip, keptBody, LEAVE_WAIT_MS, leaveAction, noteEditBody, runLeave, noteHead, noteHref, noteMaxLength, noteRoute, noteRow, pendingLeave, savedNotice, showsThought } from './marginSave';
+import { booklessSection, canSaveMargin, hasQuoteField, javaStrip, keptBody, LEAVE_WAIT_MS, type LeaveAction, leaveAction, noteEditBody, runLeave, noteHead, noteHref, noteMaxLength, noteRoute, noteRow, pendingLeave, savedNotice, showsThought } from './marginSave';
 
 test('REQ-210 · 입력칸 상한 = max(10,000, 불러온 글 길이)', () => {
   expect(noteMaxLength('')).toBe(10_000);
@@ -155,7 +156,8 @@ test('A1 리뷰 11 · 서버가 걷은 생각과 비교는 Java strip 집합으�
   expect(javaStrip('\u202fabc\ufeff')).toBe('\u202fabc\ufeff');
 });
 
-// 재리뷰 A · H — 떠날 때 판정 → 효과(디스패치). 갈래마다 무엇을 부르는지 · 돌려준 약속이 그 효과의 끝인지 본다.
+// 재리뷰 A · H — 떠날 때 판정 → 효과(디스패치). 여기선 갈래마다 무엇을 어떤 순서로 부르는지 본다.
+// 「돌려준 약속 = 마지막 효과의 끝」은 아래 한 건(flush)과 「3차 2」 갈래 표(create · delete · delete-after-create · drop-slot)가 본다.
 describe('runLeave · 떠날 때 할 일을 실제로 부른다', () => {
   function fakes(p: { created?: 'saved' | 'offline'; delFails?: boolean; id?: number | null } = {}) {
     const calls: string[] = [];
@@ -217,7 +219,7 @@ describe('runLeave · 떠날 때 할 일을 실제로 부른다', () => {
     expect(bad.calls).toEqual(['del 9']);
   });
 
-  test('돌려준 약속은 효과가 끝난 뒤에 풀린다(pendingLeave가 기다릴 그것)', async () => {
+  test('flush 갈래 — 돌려준 약속은 flush가 끝난 뒤에 풀린다(pendingLeave가 기다릴 그것)', async () => {
     let release!: () => void;
     const calls: string[] = [];
     const p = runLeave('flush', {
@@ -236,4 +238,78 @@ describe('runLeave · 떠날 때 할 일을 실제로 부른다', () => {
     await p;
     expect([done, calls]).toEqual([true, ['flushed']]);
   });
+});
+
+// 3차 확인 5 — 만드는 중 adopt 창(noteId는 섰고 creating 중)에 떠나도 새 쪽지 갈래다(아직 없는 id 칸을 flush하지 않는다).
+test('3차 5 · 만드는 중이면 noteId가 섰어도 새 쪽지 갈래 — 비었으면 만든 뒤 지움 · 아니면 만든 뒤 보냄', () => {
+  const at = (p: Partial<Parameters<typeof leaveAction>[0]>) => leaveAction({ loaded: true, empty: false, waiting: false, noteId: 80, creating: true, ...p });
+  expect(at({ empty: true })).toBe('delete-after-create');
+  expect(at({ empty: false })).toBe('create');
+});
+
+// 3차 확인 2 — 「돌려준 약속 = 효과의 끝」을 갈래마다. 게이트를 연 뒤에야 runLeave 약속이 풀려야 한다.
+describe('3차 2 · runLeave 약속은 그 갈래의 마지막 효과까지 기다린다', () => {
+  const gate = () => {
+    let open!: () => void;
+    const p = new Promise<void>((r) => (open = r));
+    return { p, open };
+  };
+  const ticks = async () => {
+    await new Promise((r) => setTimeout(r, 0));
+    await new Promise((r) => setTimeout(r, 0));
+  };
+  type Dep = 'dropNewSlot' | 'del' | 'drop' | 'flush';
+  const cases: { act: LeaveAction; id: number | null; on: Dep }[] = [
+    { act: 'create', id: null, on: 'flush' },
+    { act: 'delete', id: 9, on: 'del' },
+    { act: 'delete', id: 9, on: 'drop' },
+    { act: 'delete-after-create', id: null, on: 'dropNewSlot' },
+    { act: 'delete-after-create', id: null, on: 'del' },
+    { act: 'delete-after-create', id: null, on: 'drop' },
+    { act: 'drop-slot', id: null, on: 'dropNewSlot' },
+    { act: 'flush', id: 9, on: 'flush' },
+  ];
+  test.each(cases)('$act · $on을 붙잡으면 그동안 안 풀리고 · 열면 풀린다', async ({ act, id: start, on }) => {
+    const g = gate();
+    let id = start;
+    const dep = (name: Dep) => async () => (name === on ? g.p : undefined);
+    const p = runLeave(act, {
+      dropNewSlot: dep('dropNewSlot'),
+      createFirst: async () => ((id = id ?? 70), { kind: 'saved' }),
+      del: dep('del'),
+      drop: dep('drop'),
+      flush: dep('flush'),
+      noteId: () => id,
+    });
+    let done = false;
+    void p.then(() => (done = true));
+    await ticks();
+    expect(done).toBe(false);
+    g.open();
+    await ticks();
+    expect(done).toBe(true);
+  });
+});
+
+// 3차 확인 4 — 떠날 때 지우기도 「404 = 이미 지워짐」(deleteNote · flushOnce와 같은 정의): 칸을 지우고 던지지 않는다.
+test('3차 4 · runLeave delete — 404면 칸을 지우고 · 그 밖의 실패는 칸을 남긴다 · 둘 다 던지지 않는다', async () => {
+  const run = async (err: unknown) => {
+    const calls: string[] = [];
+    await expect(
+      runLeave('delete', {
+        dropNewSlot: async () => undefined,
+        createFirst: async () => ({ kind: 'saved' }),
+        del: async () => {
+          throw err;
+        },
+        drop: async (n) => void calls.push(`drop ${n}`),
+        flush: async () => undefined,
+        noteId: () => 9,
+      }),
+    ).resolves.toBeUndefined();
+    return calls;
+  };
+  expect(await run(new ApiError(404, '글을 찾을 수 없습니다'))).toEqual(['drop 9']);
+  expect(await run(new ApiError(500, '요청에 실패했어요 (500)'))).toEqual([]);
+  expect(await run(new NetworkError())).toEqual([]);
 });
