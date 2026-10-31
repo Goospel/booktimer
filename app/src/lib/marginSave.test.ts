@@ -1,7 +1,7 @@
 // 여백 쪽지 판정(책생글 「여백 + 블로그」 A1 — 설계 §5.1 · F1 사양 §4.3 · §4.4). 화면은 이 함수들을 그대로 그린다.
 import type { MarginSummary } from '../api/types';
 import * as marginSave from './marginSave';
-import { booklessSection, canSaveMargin, hasQuoteField, javaStrip, keptBody, LEAVE_WAIT_MS, leaveAction, noteEditBody, noteHead, noteHref, noteMaxLength, noteRoute, noteRow, pendingLeave, savedNotice, showsThought } from './marginSave';
+import { booklessSection, canSaveMargin, hasQuoteField, javaStrip, keptBody, LEAVE_WAIT_MS, leaveAction, noteEditBody, runLeave, noteHead, noteHref, noteMaxLength, noteRoute, noteRow, pendingLeave, savedNotice, showsThought } from './marginSave';
 
 test('REQ-210 · 입력칸 상한 = max(10,000, 불러온 글 길이)', () => {
   expect(noteMaxLength('')).toBe(10_000);
@@ -153,4 +153,87 @@ test('A1 리뷰 11 · 서버가 걷은 생각과 비교는 Java strip 집합으�
   expect(javaStrip('\t\u2028abc\u3000')).toBe('abc');
   expect(javaStrip('abc\u3000\u2007')).toBe('abc\u3000\u2007');
   expect(javaStrip('\u202fabc\ufeff')).toBe('\u202fabc\ufeff');
+});
+
+// 재리뷰 A · H — 떠날 때 판정 → 효과(디스패치). 갈래마다 무엇을 부르는지 · 돌려준 약속이 그 효과의 끝인지 본다.
+describe('runLeave · 떠날 때 할 일을 실제로 부른다', () => {
+  function fakes(p: { created?: 'saved' | 'offline'; delFails?: boolean; id?: number | null } = {}) {
+    const calls: string[] = [];
+    let id: number | null = p.id === undefined ? 9 : p.id;
+    const d = {
+      dropNewSlot: async () => void calls.push('dropNewSlot'),
+      createFirst: async () => {
+        calls.push('createFirst');
+        if (p.created === 'saved') id = 70;
+        return { kind: p.created ?? 'saved' };
+      },
+      del: async (n: number) => {
+        calls.push(`del ${n}`);
+        if (p.delFails) throw new Error('offline');
+      },
+      drop: async (n: number) => void calls.push(`drop ${n}`),
+      flush: async (n: number) => void calls.push(`flush ${n}`),
+      noteId: () => id,
+    };
+    return { calls, d };
+  }
+
+  test('none · drop-slot · flush', async () => {
+    const none = fakes();
+    await runLeave('none', none.d);
+    expect(none.calls).toEqual([]);
+    const drop = fakes({ id: null });
+    await runLeave('drop-slot', drop.d);
+    expect(drop.calls).toEqual(['dropNewSlot']);
+    const flush = fakes();
+    await runLeave('flush', flush.d);
+    expect(flush.calls).toEqual(['flush 9']);
+  });
+
+  test('재리뷰 H · create — 만든 뒤 만드는 동안 더 쓴 것을 곧바로 보낸다(언마운트 뒤 1.5초 타이머에 맡기지 않는다) · 못 만들면 보내지 않는다', async () => {
+    const ok = fakes({ id: null, created: 'saved' });
+    await runLeave('create', ok.d);
+    expect(ok.calls).toEqual(['createFirst', 'flush 70']);
+    const off = fakes({ id: null, created: 'offline' });
+    await runLeave('create', off.d);
+    expect(off.calls).toEqual(['createFirst']);
+  });
+
+  test('delete-after-create — 칸을 버리고 · 만든 뒤 새 id를 지우고 칸도 지운다 · 못 만들면 지울 것이 없다', async () => {
+    const ok = fakes({ id: null, created: 'saved' });
+    await runLeave('delete-after-create', ok.d);
+    expect(ok.calls).toEqual(['dropNewSlot', 'createFirst', 'del 70', 'drop 70']);
+    const off = fakes({ id: null, created: 'offline' });
+    await runLeave('delete-after-create', off.d);
+    expect(off.calls).toEqual(['dropNewSlot', 'createFirst']);
+  });
+
+  test('delete — 서버가 지운 뒤에만 칸을 지운다 · 실패는 삼킨다(칸은 남는다)', async () => {
+    const ok = fakes();
+    await runLeave('delete', ok.d);
+    expect(ok.calls).toEqual(['del 9', 'drop 9']);
+    const bad = fakes({ delFails: true });
+    await expect(runLeave('delete', bad.d)).resolves.toBeUndefined();
+    expect(bad.calls).toEqual(['del 9']);
+  });
+
+  test('돌려준 약속은 효과가 끝난 뒤에 풀린다(pendingLeave가 기다릴 그것)', async () => {
+    let release!: () => void;
+    const calls: string[] = [];
+    const p = runLeave('flush', {
+      dropNewSlot: async () => undefined,
+      createFirst: async () => ({ kind: 'saved' }),
+      del: async () => undefined,
+      drop: async () => undefined,
+      flush: () => new Promise<void>((r) => (release = () => (calls.push('flushed'), r()))),
+      noteId: () => 9,
+    });
+    let done = false;
+    void p.then(() => (done = true));
+    await new Promise((r) => setTimeout(r, 0));
+    expect(done).toBe(false);
+    release();
+    await p;
+    expect([done, calls]).toEqual([true, ['flushed']]);
+  });
 });

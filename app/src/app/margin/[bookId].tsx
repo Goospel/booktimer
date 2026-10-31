@@ -43,7 +43,7 @@ import {
   type SyncDoc,
 } from '../../lib/draftSync';
 import { bookSourceLine, buildNoteExport, shouldMarkExported } from '../../lib/exportText';
-import { canSaveMargin, hasQuoteField, keptBody, leaveAction, noteEditBody, noteHead, noteMaxLength, noteRoute, pendingLeave, savedNotice } from '../../lib/marginSave';
+import { canSaveMargin, hasQuoteField, keptBody, leaveAction, noteEditBody, noteHead, noteMaxLength, noteRoute, pendingLeave, runLeave, savedNotice } from '../../lib/marginSave';
 import { againArgs, bandHint, pickPatch, waitingText } from '../../lib/questions';
 import { quoteOnlyBand } from '../../lib/quoteOnlyBand';
 import { color, layout, line, space, type } from '../../theme/tokens';
@@ -207,17 +207,13 @@ export default function MarginNote() {
       const s = sync.current;
       if (!s) return;
       const empty = shouldDiscard({ title: quoteRef.current, body: textRef.current, rounds: roundsRef.current });
-      const id = noteId.current;
-      const del = (n: number) => margins.delete(n).then(() => s.drop(n), () => undefined);
-      const act = leaveAction({ loaded: route.noteId === null || serverRef.current !== null, empty, waiting: waitingRef.current, noteId: id, creating: creating.current !== null });
-      let leave: Promise<unknown> = Promise.resolve();
-      if (act === 'drop-slot') leave = dropNewSlot();
-      else if (act === 'create') leave = createFirst(); // 실패하면 새 쪽지 칸이 남아 다음 실행에 보낸다(J100)
-      else if (act === 'delete-after-create')
-        leave = Promise.all([dropNewSlot(), createFirst().then((r) => (r.kind === 'saved' && noteId.current !== null ? del(noteId.current) : undefined))]);
-      else if (act === 'delete' && id !== null) leave = del(id);
-      else if (act === 'flush' && id !== null) leave = s.flush(id);
-      pendingLeave.set(leave);
+      // 판정 → 효과 → 돌아간 목록이 기다릴 약속(create가 실패하면 새 쪽지 칸이 남아 다음 실행에 보낸다 — J100)
+      pendingLeave.set(
+        runLeave(
+          leaveAction({ loaded: route.noteId === null || serverRef.current !== null, empty, waiting: waitingRef.current, noteId: noteId.current, creating: creating.current !== null }),
+          { dropNewSlot, createFirst, del: margins.delete, drop: s.drop, flush: (n) => s.flush(n), noteId: () => noteId.current },
+        ),
+      );
       if (!(empty && !waitingRef.current) && edited.current) savedNotice.mark();
     };
   }, []);
@@ -310,7 +306,8 @@ export default function MarginNote() {
     // 빈 쪽지는 보내지 않는다(서버 400) — 떠날 때 지운다. 받은 질문이 있으면 원가가 든 쪽지라 빈 채로도 남는다
     if (shouldDiscard({ title: quoteRef.current, body: textRef.current, rounds: roundsRef.current })) return null;
     const id = noteId.current;
-    const r = id === null ? await createFirst() : await s.flush(id, opts);
+    // 만드는 중이면(noteId는 섰지만 id 칸을 옮기는 중) flush가 아니라 그 약속을 기다린다 — 거짓 「저장하지 못했어요」 방지(재리뷰 B)
+    const r = id === null || creating.current ? await createFirst() : await s.flush(id, opts);
     onOutcome(r);
     return r;
   }

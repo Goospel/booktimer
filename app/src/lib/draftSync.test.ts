@@ -284,6 +284,17 @@ test('목록에서 쪽지 지우기 — 서버가 지운 뒤 그 쪽지 칸도 �
   expect(kv.map.has(slotKey(1, 71, 'margin'))).toBe(true);
 });
 
+// 재리뷰 E — 설계 §5.11 R1: 404는 서버의 확답(이미 없다) · 지운 뜻이 이긴다. flushOnce의 404와 같이 칸을 지우고 줄을 뺀다.
+test('목록에서 쪽지 지우기 — 404면 칸을 지우고 던지지 않는다 · 그 밖의 오류는 그대로 던지고 칸을 남긴다', async () => {
+  const kv = memoryKV();
+  kv.map.set(slotKey(1, 70, 'margin'), JSON.stringify({ title: '', body: '다른 기기에서 지운 쪽지', focus: null, base: 2, dirty: true }));
+  kv.map.set(slotKey(1, 71, 'margin'), JSON.stringify({ title: '', body: '서버 오류', focus: null, base: 1, dirty: true }));
+  await expect(deleteNote(kv, 1, 70, async () => { throw new ApiError(404, '글을 찾을 수 없습니다'); })).resolves.toBeUndefined();
+  expect(kv.map.has(slotKey(1, 70, 'margin'))).toBe(false);
+  await expect(deleteNote(kv, 1, 71, async () => { throw new ApiError(500, '요청에 실패했어요 (500)'); })).rejects.toMatchObject({ status: 500 });
+  expect(kv.map.has(slotKey(1, 71, 'margin'))).toBe(true);
+});
+
 test('REQ-142 · 제목·본문이 공백뿐이고 받은 질문이 0인 글만 나갈 때 지운다', () => {
   expect(shouldDiscard({ title: '', body: '  \n', rounds: 0 })).toBe(true);
   expect(shouldDiscard({ title: '', body: 'a', rounds: 0 })).toBe(false);

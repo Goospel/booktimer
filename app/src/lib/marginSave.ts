@@ -110,6 +110,37 @@ export function leaveAction(p: { loaded: boolean; empty: boolean; waiting: boole
   return discard ? 'delete' : 'flush';
 }
 
+/**
+ * 떠날 때 할 일을 실제로 부른다(재리뷰 A). 돌려준 약속 = 그 효과의 끝 — 화면은 이것을 pendingLeave에 넣는다.
+ * create는 만든 뒤 만드는 동안 더 쓴 것을 곧바로 보낸다(언마운트 뒤 1.5초 타이머에 맡기면 돌아간 목록이 옛 미리보기다 — 재리뷰 H).
+ * delete는 서버가 지운 뒤에만 칸을 지우고 실패는 삼킨다(칸이 남아 다음에 다시 열 수 있다).
+ */
+export function runLeave(
+  act: LeaveAction,
+  d: {
+    dropNewSlot: () => Promise<unknown>;
+    createFirst: () => Promise<{ kind: string }>;
+    del: (id: number) => Promise<unknown>;
+    drop: (id: number) => Promise<unknown>;
+    flush: (id: number) => Promise<unknown>;
+    noteId: () => number | null;
+  },
+): Promise<unknown> {
+  const remove = (id: number) => d.del(id).then(() => d.drop(id), () => undefined);
+  const afterCreate = (f: (id: number) => Promise<unknown>) =>
+    d.createFirst().then((r) => {
+      const id = d.noteId();
+      return r.kind === 'saved' && id !== null ? f(id) : undefined;
+    });
+  const id = d.noteId();
+  if (act === 'drop-slot') return d.dropNewSlot();
+  if (act === 'create') return afterCreate(d.flush);
+  if (act === 'delete-after-create') return Promise.all([d.dropNewSlot(), afterCreate(remove)]);
+  if (act === 'delete' && id !== null) return remove(id);
+  if (act === 'flush' && id !== null) return d.flush(id);
+  return Promise.resolve();
+}
+
 export const LEAVE_WAIT_MS = 2_000;
 let leaving: Promise<unknown> = Promise.resolve();
 /** 떠날 때 보낸 저장 한 칸 — 돌아간 책 화면 · 서재가 목록을 읽기 전에 상한까지만 기다린다(떠나는 화면은 기다리지 않는다 — A1 리뷰 12). */

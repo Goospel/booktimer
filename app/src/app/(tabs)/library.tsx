@@ -128,6 +128,7 @@ export default function Library() {
 /** 「책 없는 여백」 단 — 쪽지 줄은 책 화면과 같은 모양(길게 누르거나 VoiceOver 「지우기」로 지운다) · 옮긴 문장이 있으면 그 아래 출처 줄(J84). */
 function Bookless({ list, onRemoved }: { list: MarginSummary[]; onRemoved: (id: number) => void }) {
   const [error, setError] = useState<string | null>(null);
+  useFocusEffect(useCallback(() => setError(null), [])); // 지우기 실패 알림은 탭을 다시 열면 걷는다
   const section = booklessSection(list);
   if (!section) return null;
   return (

@@ -59,7 +59,8 @@ const ROWS: Row[] = [
   // 목표 줄 단서는 「바꾸기」 하나다 — 「목표 없음」을 고른 사람에게 목표를 권하지 않는다(REQ-177). 미니앱(동결)의 「정하기」는 앱 소스 밖이다.
   { id: 'REQ-177', pattern: /정하기/, skip: [], planted: "const goalCue = dash.todayGoalSeconds > 0 ? '바꾸기' : '정하기';", strip: true },
   // 글은 여백 쪽지로 합쳤다(D9) — 앱은 /api/app/drafts를 부르지 않는다. 옛 기기 칸을 옮기는 draftMigrate만 예외(J5 — 옛 JS가 사라지면 함께 지운다).
-  { id: 'REQ-224', pattern: /\/api\/app\/drafts\b/, skip: [join('lib', 'draftMigrate.ts')], planted: "request<DraftView>(`/api/app/drafts/${id}`)", strip: true },
+  // 짝 테스트(draftMigrate.test)는 기본 deps가 그 경로를 부르는지 단언하려고 경로를 적는다 — 앱 호출이 아니다(재리뷰 C).
+  { id: 'REQ-224', pattern: /\/api\/app\/drafts\b/, skip: [join('lib', 'draftMigrate.ts'), join('lib', 'draftMigrate.test.ts')], planted: "request<DraftView>(`/api/app/drafts/${id}`)", strip: true },
   // 여백은 나만 본다(D1) — 「공개 책이에요」 확인 시트는 걷혔다.
   { id: 'REQ-223', pattern: /공개 책이에요/, skip: [], planted: '<Txt v="H2">공개 책이에요</Txt>', strip: true },
   // 「글」은 이제 블로그 글이다(D1 · D2 · D9) — 쪽지 화면 · 시트 · 그 문구를 내는 lib에 「이 글」 · 「내 글」 · 「쓴 글」이 없다(F1 §4.5 — 「쪽지」 · 「생각」).
@@ -306,7 +307,7 @@ test('R-03 · 로그인 SDK import는 Apple · expo-auth-session · 카카오 �
   expect(loginSdkImports(planted)).toEqual(['@react-native-google-signin/google-signin', 'expo-auth-session/providers/google', 'react-native-google-one-tap']);
 });
 
-// ── 화면 배선 — lib 판정을 화면이 실제로 쓰는가(A1 리뷰). 렌더러가 없어(들이면 package.json 지문이 바뀐다) 소스로 본다 ─────────
+// ── 화면 배선 — lib 판정을 화면이 실제로 쓰는가(A1 리뷰). 렌더러는 jest-expo가 끌어오는 선언 안 된 전이 의존이라 기대지 않고 소스로 본다 ─────────
 const srcOf = (rel: string) => {
   const f = ALL.find((x) => x.rel === rel);
   if (!f) throw new Error(`없는 파일: ${rel}`);
@@ -338,8 +339,10 @@ const syncAfterLoad = (s: string) => {
 test('A1 리뷰 1 · 12 · 쪽지 화면 정리는 leaveAction대로 · 떠날 때 저장을 pendingLeave에 · 기존 쪽지는 불러온 뒤에 sync를 잡는다(옛 꼴을 심으면 잡힌다)', () => {
   const s = srcOf(NOTE);
   const cleanup = bodyOf(s.slice(s.indexOf("AppState.addEventListener('change'")), 'return () =>'); // 떠날 때 정리(AppState effect)
-  expect(cleanup).toContain('leaveAction(');
-  expect(cleanup).toContain('pendingLeave.set(');
+  // 판정(leaveAction) → 효과(runLeave) → pendingLeave가 한 식이다(재리뷰 A — 갈래별 효과는 marginSave.test의 runLeave가 본다)
+  const LEAVE = /pendingLeave\.set\(\s*runLeave\(\s*leaveAction\(/;
+  expect(LEAVE.test(cleanup)).toBe(true);
+  expect(LEAVE.test('const act = leaveAction(p);\n if (act === "flush") void s.flush(id);\n pendingLeave.set(Promise.resolve());')).toBe(false);
   expect(syncAfterLoad(s)).toBe(true);
   // 양성 대조 — 리뷰 때 꼴(GET 전에 대입)은 잡힌다
   const old = 'const load = async () => { sync.current = s;\n if (route.noteId !== null) { const v = await margins.get(id); applyText({ quote: slot.title, text: slot.body }); } }';
@@ -395,7 +398,8 @@ test('A1 리뷰 4 · 서재 포커스가 savedNotice를 소비한다 · 알림�
 });
 
 // REQ-221 — 질문 고르기(pick)는 생각 칸을 건드리지 않는다: 칸 패치는 lib pickPatch(키 focus뿐 — questions.test)만, 본문엔 생각 칸을 바꾸는 호출 0(A1 리뷰 3).
-const PICK_WRITES = /applyText\(|setThoughtText\(|setInitial\(|textRef\.current\s*=(?!=)|body:/;
+// 화면 edit(…) 호출은 잡고, 칸 패치(sync.current?.edit(id, pickPatch(q)))는 앞의 「.」로 뺀다(재리뷰 D)
+const PICK_WRITES = /applyText\(|setThoughtText\(|setQuoteText\(|setInitial\(|(?:textRef|quoteRef)\.current\s*(?:\+=|=(?!=))|(?<![.\w])edit\(|\b(?:body|title)\s*:|setNativeProps\(/;
 test('REQ-221 · 쪽지 화면 pick 본문에 생각 칸을 바꾸는 호출이 없다 · 칸 패치는 pickPatch(질문 글자를 생각에 넣는 꼴을 심으면 잡힌다)', () => {
   const s = srcOf(NOTE);
   const pick = bodyOf(s, 'function pick(');
@@ -406,6 +410,15 @@ test('REQ-221 · 쪽지 화면 pick 본문에 생각 칸을 바꾸는 호출이 
   expect(PICK_WRITES.test(planted('applyText({ quote: quoteRef.current, text: textRef.current + q.text });'))).toBe(true);
   expect(PICK_WRITES.test(planted('void sync.current?.edit(id, { ...pickPatch(q), body: textRef.current + q.text });'))).toBe(true);
   expect(PICK_WRITES.test(planted('textRef.current = textRef.current + q.text;'))).toBe(true);
+  // 재리뷰 D — 넓힌 꼴들
+  for (const line of [
+    'textRef.current += q.text;',
+    'quoteRef.current = q.text;',
+    'edit({ text: textRef.current + q.text });',
+    'void sync.current?.edit(id, { ...pickPatch(q), title: q.text });',
+    'setQuoteText(q.text);',
+    'textInput.current?.setNativeProps({ text: q.text });',
+  ]) expect([line, PICK_WRITES.test(planted(line))]).toEqual([line, true]);
   expect(planted('x();')).toContain('x();'); // 심기가 실제로 들어갔다
 });
 
@@ -421,6 +434,24 @@ test('A1 리뷰 11 · 쪽지 화면 put 어댑터는 keptBody로 비교한다(tr
   const uses = (s: string) => s.includes('body: keptBody(b.body, v.text)') && !/v\.text === b\.body\.trim\(\)/.test(s);
   expect(uses(srcOf(NOTE))).toBe(true);
   expect(uses("return { ...toDoc(v), body: v.text === b.body.trim() ? b.body : v.text };")).toBe(false);
+});
+
+// 재리뷰 B — createFirst가 noteId를 세운 뒤 adopt를 기다리는 사이에 save()가 불리면 id 칸이 아직 없어 거짓 「저장하지 못했어요」가 난다.
+// 만드는 중이면 그 약속(createFirst는 진행 중이면 같은 약속)을 기다린다.
+test('재리뷰 B · save는 만드는 중이면 flush 대신 createFirst를 기다린다(옛 꼴을 심으면 잡힌다)', () => {
+  const waits = (s: string) => /const r = id === null \|\| creating\.current \? await createFirst\(\) : await s\.flush\(id, opts\);/.test(bodyOf(s, 'async function save('));
+  expect(waits(srcOf(NOTE))).toBe(true);
+  expect(waits('async function save(opts) {\n    const r = id === null ? await createFirst() : await s.flush(id, opts);\n  }')).toBe(false);
+});
+
+// 재리뷰 G2 — 공용 지우기가 기기 칸을 지우려면 userId를 넘겨야 한다(null이면 칸이 남는다).
+test('재리뷰 G2 · confirmRemoveNote는 deleteNote에 userId를 넘긴다(null을 심으면 잡힌다)', () => {
+  const passes = (s: string) => count(bodyOf(s, 'export function confirmRemoveNote('), 'deleteNote(AsyncStorage, userId, id)') === 1;
+  const s = srcOf(join('components', 'NoteRow.tsx'));
+  expect(passes(s)).toBe(true);
+  const mutated = s.replace('deleteNote(AsyncStorage, userId, id)', 'deleteNote(AsyncStorage, null, id)');
+  expect(mutated).not.toBe(s);
+  expect(passes(mutated)).toBe(false);
 });
 
 // A1 리뷰 15 — 화면이 lib 판정을 쓰는가(돌연변이 M2b · M3d · M7b · M9b · M10b가 살던 자리). 각 줄에 리뷰 때 돌연변이를 실제 소스에 심어 양성 대조.

@@ -6,6 +6,7 @@ jest.mock('expo-secure-store', () => ({
 }));
 
 import { ApiError, NetworkError } from '../api/client';
+import * as client from '../api/client';
 import type { CreateMargin, DraftView, EditMargin, MarginView } from '../api/types';
 import { migrateDraftSlots, startSlotSync } from './draftMigrate';
 import { type KV, sendNewNotes, type Slot, slotKey } from './draftSync';
@@ -235,4 +236,34 @@ test('J100 · 앱이 켜질 때 — 옮기기 전에 뜬 새 쪽지 칸만 보�
   });
   expect(sent).toEqual(['지난 실행에 남은 쪽지']);
   expect([...kv.map.keys()].sort()).toEqual(['margin:1:new:live', 'margin:2:new:other']);
+});
+
+// 재리뷰 C — _layout이 실제로 타는 기본 deps 경로. 기본 send가 keys를 버리거나(리뷰 9 복귀) migrate · send를 무력화하면 잡힌다.
+test('J100 · startSlotSync 기본 deps — 옛 칸 옮기기(drafts GET)를 부르고 · 그 뒤 생긴 새 쪽지 칸은 보내지 않는다', async () => {
+  const kv = memoryKV();
+  kv.map.set(slotKey(1, 7), JSON.stringify(slot()));
+  kv.map.set('margin:1:new:old', JSON.stringify({ bookId: 3, quote: null, text: '지난 실행에 남은 쪽지', dirty: true }));
+  const paths: string[] = [];
+  const request = jest.spyOn(client, 'request').mockImplementation(async (path: string) => {
+    paths.push(path);
+    if (path === '/api/app/drafts/7') {
+      kv.map.set('margin:1:new:live', JSON.stringify({ bookId: 3, quote: null, text: '옮기는 동안 화면이 쓴 칸', dirty: true }));
+      throw new NetworkError();
+    }
+    throw new Error(`예상 밖 요청 ${path}`);
+  });
+  const sent: string[] = [];
+  const add = jest.spyOn(client.margins, 'add').mockImplementation(async (b: CreateMargin) => {
+    sent.push(b.text);
+    return note({ id: 99, text: b.text });
+  });
+  try {
+    await startSlotSync(kv, 1);
+    expect(paths).toEqual(['/api/app/drafts/7']);
+    expect(sent).toEqual(['지난 실행에 남은 쪽지']);
+    expect([...kv.map.keys()].sort()).toEqual([slotKey(1, 7), 'margin:1:new:live'].sort()); // 옮기기 실패한 칸 · 화면 칸은 남는다
+  } finally {
+    request.mockRestore();
+    add.mockRestore();
+  }
 });
