@@ -137,10 +137,10 @@ test('REQ-180 · 단추 — 측정 전 「읽기 시작」+start · 독서 측�
   expect(widgetPayload({ ...idle, study: studying }, now).action).toEqual({ label: '측정 종료', url: 'booktimer://widget/stop-study' });
 });
 
-// REQ-185 — 위젯은 스스로 값을 못 구한다. 측정 중 목표에 닿는 순간은 타임라인 둘째 항목이 앱을 안 열어도 바꾼다. 자정 항목은 없다(v1 §4.10).
+// REQ-185 — 위젯은 스스로 값을 못 구한다. 측정 중 목표에 닿는 순간은 타임라인 둘째 항목이 앱을 안 열어도 바꾼다. 자정 항목(REQ-193)은 아래 절 — 여기 단언은 그날 항목만 본다.
 test('REQ-185 · 독서 측정 중 · 목표 전이면 목표에 닿는 시각에 둘째 항목(21:00 · 20:50 시작 · 끝난 10분 · 목표 30분 → 21:10에 머리 「목표 30분 · 6일째」)', () => {
   const t = widgetTimeline(reading(at(20, 50), { todayReadSeconds: 10 * MIN }), now);
-  expect(t).toHaveLength(2);
+  expect(sameDay(t, now)).toHaveLength(2);
   expect(t[0].date).toEqual(now);
   expect(t[0].props.runNote).toBe('목표 30분 · 5일째');
   expect(t[1].date).toEqual(new Date(2026, 9, 23, 21, 10));
@@ -149,7 +149,7 @@ test('REQ-185 · 독서 측정 중 · 목표 전이면 목표에 닿는 시각�
   expect(t[1].props.dateLabel).toBe('10월 23일');
 });
 
-test('REQ-185 · 공부 측정 · 이미 채움 · 목표 없음 · 자정 너머(23:50 시작 · 남은 30분) · 상한 너머 · 측정 전이면 한 항목', () => {
+test('REQ-185 · 공부 측정 · 이미 채움 · 목표 없음 · 자정 너머(23:50 시작 · 남은 30분) · 상한 너머 · 측정 전이면 그날 항목은 하나', () => {
   const late = new Date(2026, 9, 23, 23, 55);
   const sources: [WidgetSource, Date][] = [
     [{ ...idle, todayReadSeconds: 0, study: studying }, now], // 공부
@@ -161,7 +161,7 @@ test('REQ-185 · 공부 측정 · 이미 채움 · 목표 없음 · 자정 너�
   ];
   for (const [d, n] of sources) {
     const t = widgetTimeline(d, n);
-    expect(t).toHaveLength(1);
+    expect(sameDay(t, n)).toHaveLength(1);
     expect(t[0]).toEqual({ date: n, props: widgetPayload(d, n) });
   }
 });
@@ -281,7 +281,7 @@ test('REQ-189 · 달이 바뀐 날 — 11월 1일(일요일)엔 11월 한 장 ·
 test('REQ-185 · 목표에 닿는 시각 항목에서는 오늘 칸이 2다 · 머리 연속 「6일째」', () => {
   const d = { ...octIdle, todayReadSeconds: 10 * MIN, hasActiveSession: true, activeStartedAt: new Date(2026, 9, 28, 20, 50).toISOString(), activeBookTitle: '데미안' };
   const t = widgetTimeline(d, oct28);
-  expect(t).toHaveLength(2);
+  expect(sameDay(t, oct28)).toHaveLength(2);
   expect(marksOf(t[0].props.month!)[28]).toBe(1);
   expect(t[0].props.month!.streak).toBe('5일째');
   expect(marksOf(t[1].props.month!)[28]).toBe(2);
@@ -324,4 +324,153 @@ test('REQ-190 · 안 읽은 날 · 목표 없음이면 머리 연속 없음(REQ-
 test('REQ-186 · 로그아웃 값에는 달력이 없다', () => {
   expect(signedOutWidget(oct28)).not.toHaveProperty('month');
   expect(widgetPayload(octIdle, oct28)).toHaveProperty('month'); // 양성 대조
+});
+
+// ── 자정 항목(REQ-193~195 · 2026-10-31) — 앱을 안 열어도 자정에 새 날로. 새 날 값 = 「그 자정에 앱을 열었다면」의 대시보드 ──
+// 두 출처를 다르게 둔다: 서버 잔디의 전날 칸 단계 ≠ 앱이 센 전날 마지막 상태 · goalStreak(유예 연속) ≠ 새 날 연속 · currentStreak 9는 섞어 둔다.
+// 잔디가 있는 픽스처는 now와 같은 날까지 짓는다(서버의 오늘 = 기기의 오늘 — 가드 T11).
+type Timeline = ReturnType<typeof widgetTimeline>;
+const sameDay = (t: Timeline, n: Date) => t.filter((e) => e.date.getTime() < nextMidnightOf(n.getTime()));
+const entry = (t: Timeline, when: Date) => {
+  const e = t.find((x) => x.date.getTime() === when.getTime());
+  expect(e).toBeDefined(); // Red: 자정 항목이 없다
+  return e!.props;
+};
+const oct30 = new Date(2026, 9, 30, 21, 0);
+// 사용자 사례(10/31 10:14 TF#2) — 서버 잔디 30일 칸은 0단계로 둔다(앱이 센 34분과 갈리게)
+const oct30Idle = { ...idle, todayReadSeconds: 34 * MIN, todayGoalSeconds: 60 * MIN, graph: { goalStreak: 1, currentStreak: 9, weeks: serverWeeks(oct30, { '2026-10-29': 4 }) } };
+const late = new Date(2026, 9, 23, 23, 55);
+const oct24 = (h = 0, m = 0, s = 0) => new Date(2026, 9, 24, h, m, s);
+const stopReading = { label: '측정 종료', url: WIDGET_URL.stopReading };
+
+test('REQ-193 · 측정 전이면 지금 항목 뒤에 다음 자정부터 7번의 자정 항목 — 10/30 21:00 → 10/31 00:00 … 11/6 00:00', () => {
+  const t = widgetTimeline(oct30Idle, oct30);
+  expect(t.map((e) => e.date)).toEqual([oct30, ...Array.from({ length: 7 }, (_, i) => new Date(2026, 9, 31 + i))]);
+});
+
+test('REQ-193 · 지금이 자정 정각이면 첫 자정 항목은 다음 날 · 자정 1ms 전이면 1ms 뒤 — 같은 시각 항목이 두 번 없다', () => {
+  const nov1 = new Date(2026, 10, 1);
+  expect(widgetTimeline(idle, nov1).map((e) => e.date)).toEqual(Array.from({ length: 8 }, (_, i) => new Date(2026, 10, 1 + i)));
+  const t = widgetTimeline(idle, new Date(2026, 9, 31, 23, 59, 59, 999));
+  expect(entry(t, nov1).dateLabel).toBe('11월 1일');
+  expect(t[0].props.dateLabel).toBe('10월 31일');
+});
+
+test('REQ-194 · 새 날 작은 위젯 — 「10월 31일」 · 큰 글 「하루 목표 1시간」 · 작은 글 없음 · [읽기 시작] · 옛 배치 분 0(끝난 34분은 전날 몫)', () => {
+  const t = widgetTimeline(oct30Idle, oct30);
+  // 양성 대조 — 픽스처가 사용자 그림(「10월 30일 · 오늘 34분 · 목표 1시간 · 1일째」)을 낸다
+  expect(t[0].props).toMatchObject({ dateLabel: '10월 30일', idleTitle: '34분', idleNote: '목표 1시간 · 1일째' });
+  const p = entry(t, new Date(2026, 9, 31));
+  expect(p).toMatchObject({ dateLabel: '10월 31일', todayMinutes: 0, mode: 'reading', idleTitle: '하루 목표 1시간', action: start });
+  expect(p).not.toHaveProperty('idleNote');
+  expect(p).not.toHaveProperty('activeStartedAt');
+});
+
+test('REQ-194 · 새 날 큰 위젯 — 전날 칸은 앱이 센 마지막 상태(34분/1시간 → 빈 원 · 서버 칸 0단계여도 · 30초여도 빈 원) · 그 앞 날은 서버 잔디 · 오늘 칸 = 새 날 · 머리 연속 없음 · 둘째 줄 「10월 31일 · 하루 목표 1시간」', () => {
+  const t = widgetTimeline(oct30Idle, oct30);
+  // 양성 대조 — 읽은 날의 오늘 칸은 30일 · 머리 「1일째」
+  expect(cells(t[0].props.month!).filter((c) => c.today).map((c) => c.day)).toEqual([30]);
+  expect(t[0].props.month!.streak).toBe('1일째');
+  const m = entry(t, new Date(2026, 9, 31)).month!;
+  expect(marksOf(m)).toMatchObject({ 29: 2, 30: 1, 31: 0 });
+  expect(cells(m).filter((c) => c.today).map((c) => c.day)).toEqual([31]);
+  expect(m).not.toHaveProperty('streak');
+  expect(m.line).toBe('10월 31일 · 하루 목표 1시간');
+  // 1분 미만 전날(30초) — 서버 1단계와 같은 규칙(> 0)으로 빈 원 · 새 날 글은 안 읽은 날
+  const p = entry(widgetTimeline({ ...oct30Idle, todayReadSeconds: 30 }, oct30), new Date(2026, 9, 31));
+  expect(marksOf(p.month!)[30]).toBe(1);
+  expect(p.idleTitle).toBe('하루 목표 1시간');
+});
+
+test('REQ-194 · 달이 바뀐 자정 — 11/1 항목은 11월 한 장(앞 빈칸 0 · 5줄 · 1일만 굵게 · 표식 0) · 12/31에 읽으면 1/1 항목은 1월 6줄', () => {
+  const nov = entry(widgetTimeline(oct30Idle, oct30), new Date(2026, 10, 1)).month!;
+  expect(nov.title).toBe('11월');
+  expect(blanksBefore(nov)).toBe(0);
+  expect(nov.rows).toHaveLength(5);
+  expect(cells(nov).filter((c) => c.today).map((c) => c.day)).toEqual([1]);
+  expect(Object.values(marksOf(nov)).filter((k) => k > 0)).toEqual([]);
+  const dec31 = new Date(2026, 11, 31, 21, 0);
+  const jan = entry(widgetTimeline({ ...idle, graph: { ...idle.graph, weeks: serverWeeks(dec31, {}) } }, dec31), new Date(2027, 0, 1)).month!;
+  expect(jan.title).toBe('1월');
+  expect(jan.rows).toHaveLength(6);
+});
+
+test('REQ-194 · 목표 없음이면 새 날 「하루 목표 없음」 · 전날 12분은 꽉 찬 점(목표 0 = 읽은 날이 채운 날) · 잔디 · 연속 칸 없는 옛 값에도 자정 항목(달력 없이)', () => {
+  // 서버 30일 칸은 0단계(oct30Idle) — 꽉 찬 점은 앱이 센 전날 마지막 상태에서만 나온다
+  const none = { ...oct30Idle, todayReadSeconds: 12 * MIN, todayGoalSeconds: 0, graph: { ...oct30Idle.graph, goalStreak: 4 } };
+  const p = entry(widgetTimeline(none, oct30), new Date(2026, 9, 31));
+  expect(p.idleTitle).toBe('하루 목표 없음');
+  expect(marksOf(p.month!)[30]).toBe(2);
+  expect(p.month).not.toHaveProperty('streak');
+  const old = { hasActiveSession: false, activeStartedAt: null, activeBookTitle: null, todayReadSeconds: 34 * MIN, todayGoalSeconds: 60 * MIN };
+  const t = widgetTimeline(old, oct30);
+  expect(t).toHaveLength(8);
+  const q = entry(t, new Date(2026, 9, 31));
+  expect(q.idleTitle).toBe('하루 목표 1시간');
+  expect(q).not.toHaveProperty('month');
+});
+
+// 손 유도(서버 규칙 → 기대값). 서버 연속은 「오늘을 채웠으면 오늘부터, 아니면 어제부터」 거꾸로 센다(ContributionGraphBuilder currentGoalStreak 유예).
+// 채움 = levelFor 4(정확히 100%도 4). 날별 초 = 끝난 몫 + 진행 중 세션의 오늘보다 이른 날 몫(withActiveBeforeToday). 새 날 0시의 「오늘」은 0초라 커서는 늘 전날이다.
+test('REQ-194 · 새 날 연속 — 전날을 끝난 몫으로 채웠으면 그대로(40분 · goalStreak 6 → 「6일째」) · 진행 중 몫으로 처음 채웠으면 +1(18:30 시작 · goalStreak 2 → 「3일째」) · 못 채웠으면 0(23:50 시작 10분 · 유예 goalStreak 5 → 연속 없음) — 자정을 넘겨 재는 새 날 머리(00:00:01)로 본다', () => {
+  const head = (d: WidgetSource) => entry(widgetTimeline(d, late), oct24(0, 0, 1)).runNote;
+  // ① 10/23 서버 커서 = 10/23(40분 ≥ 30분)이라 6에 10/23이 들어 있다. 10/24 0시 커서 10/23 = 40 + 10(23:50~24:00) = 50분 → 채움 → 6
+  expect(head(reading(at(23, 50), { todayReadSeconds: 40 * MIN, graph: { ...idle.graph, goalStreak: 6 } }))).toBe('목표 30분 · 6일째');
+  // ② 10/23 서버 = 0 → 유예로 10/22부터 2. 10/24 0시 커서 10/23 = 0 + 5시간 30분(18:30~24:00 · 상한 00:30 전이라 진행 중) → 채움 → 3
+  expect(head(reading(at(18, 30), { todayReadSeconds: 0, graph: { ...idle.graph, goalStreak: 2 } }))).toBe('목표 30분 · 3일째');
+  // ③ 10/24 0시 커서 10/23 = 0 + 10분 < 30분 → 못 채움 → 0 → 머리 「목표 30분」(연속 글 없음)
+  expect(head(reading(at(23, 50), { todayReadSeconds: 0, graph: { ...idle.graph, goalStreak: 5 } }))).toBe('목표 30분');
+});
+
+test('REQ-195 · 자정을 넘기는 독서 — 새 날 항목은 00:00:01(정각 항목 없음) · 측정 중(같은 시작 · [측정 종료]) · 오늘 칸 빈 원(목표 없음이면 꽉 찬 점) · 새 날 목표에 닿는 시각 항목(23:50 시작 → 00:30 「목표 30분 · 1일째」) · 전날 닿는 시각이 자정이면 전날 항목 없음(23:40 시작 · 끝난 10분 · goalStreak 3 → 00:00:01 「4일째」 · 00:30 「5일째」) · 그다음 자정부터 측정 전', () => {
+  const d = reading(at(23, 50), { todayReadSeconds: 0, graph: { ...idle.graph, weeks: serverWeeks(late, {}) } });
+  const t = widgetTimeline(d, late);
+  expect(t.find((e) => e.date.getTime() === oct24().getTime())).toBeUndefined();
+  const p = entry(t, oct24(0, 0, 1));
+  expect(p).toMatchObject({ activeStartedAt: Date.parse(at(23, 50)), action: stopReading });
+  expect(marksOf(p.month!)[24]).toBe(1);
+  expect(marksOf(entry(widgetTimeline({ ...d, todayGoalSeconds: 0 }, late), oct24(0, 0, 1)).month!)[24]).toBe(2);
+  // ④ 10/24 = 진행 중 30분(00:00~) → 오늘 채움 · 10/23은 못 채움이라 거기서 끊긴다 → 1
+  expect(entry(t, oct24(0, 30)).runNote).toBe('목표 30분 · 1일째');
+  expect(sameDay(t, late)).toHaveLength(1); // 닿는 시각 00:20 — 다음 자정 너머
+  expect(entry(t, new Date(2026, 9, 25))).toMatchObject({ dateLabel: '10월 25일', idleTitle: '하루 목표 30분', action: start });
+  // ⑤ 10/23 서버 = 10분 → 유예로 10/22부터 3. 10/24 0시 커서 10/23 = 10 + 20(23:40~24:00) = 30분 = 100% → 4단계 → 4 · 00:30에 10/24 = 30분 → +1 → 5
+  const e = widgetTimeline(reading(at(23, 40), { todayReadSeconds: 10 * MIN, graph: { ...idle.graph, goalStreak: 3 } }), late);
+  expect(sameDay(e, late)).toHaveLength(1); // 닿는 시각 = 자정 — 그날 항목 없음
+  expect(entry(e, oct24(0, 0, 1)).runNote).toBe('목표 30분 · 4일째');
+  expect(entry(e, oct24(0, 30)).runNote).toBe('목표 30분 · 5일째');
+});
+
+test('REQ-195 · 상한 — 자정 뒤 상한(18:30 시작)은 새 날 00:30에 닿아 새 날 칸 꽉 찬 점 · 10/25부터 측정 전 · 상한 = 자정(18:00 시작)이면 새 날 00:00은 측정 전(서버가 자정에 닫는다) · 같은 날 상한(15:00 시작 · 목표 8시간)이면 새 날은 측정 전이고 전날 칸 = 6시간(빈 원 · 서버 칸 0단계여도)', () => {
+  const n = new Date(2026, 9, 23, 23, 0);
+  const t = widgetTimeline(reading(at(18, 30), { todayReadSeconds: 0, graph: { ...idle.graph, goalStreak: 2, weeks: serverWeeks(n, { '2026-10-22': 4, '2026-10-23': 1 }) } }), n);
+  expect(marksOf(entry(t, oct24(0, 0, 1)).month!)).toMatchObject({ 22: 2, 23: 2, 24: 1 });
+  expect(marksOf(entry(t, oct24(0, 30)).month!)[24]).toBe(2);
+  const oct25 = entry(t, new Date(2026, 9, 25));
+  expect(oct25).not.toHaveProperty('activeStartedAt');
+  expect(marksOf(oct25.month!)).toMatchObject({ 23: 2, 24: 2 });
+  // 상한 = 자정 — 새 날 몫 0(서버가 자정에 닫는다) · 전날 = 6시간(꽉 찬 점 · 서버 칸 1단계여도)
+  const edge = entry(widgetTimeline(reading(at(18, 0), { todayReadSeconds: 0, graph: { ...idle.graph, goalStreak: 2, weeks: serverWeeks(n, { '2026-10-23': 1 }) } }), n), oct24());
+  expect(edge).toMatchObject({ idleTitle: '하루 목표 30분', action: start });
+  expect(edge).not.toHaveProperty('activeStartedAt');
+  expect(marksOf(edge.month!)[23]).toBe(2);
+  // 같은 날 상한 — 15:00 + 6시간 = 21:00
+  const n2 = new Date(2026, 9, 23, 20, 0);
+  const same = entry(widgetTimeline(reading(at(15, 0), { todayGoalSeconds: 8 * 60 * MIN, todayReadSeconds: 0, graph: { ...idle.graph, weeks: serverWeeks(n2, {}) } }), n2), oct24());
+  expect(same.idleTitle).toBe('하루 목표 8시간');
+  expect(marksOf(same.month!)[23]).toBe(1);
+});
+
+test('REQ-195 · 공부가 자정을 넘기면(23:30 시작) 새 날 00:00도 「공부 중」(1초 뒤로 옮기지 않는다 — 독서 달력과 무관) · [측정 종료] 공부 · 그다음 자정부터 독서 측정 전', () => {
+  const t = widgetTimeline({ ...idle, todayReadSeconds: 0, study: { ...studying, activeStartedAt: at(23, 30) } }, late);
+  expect(entry(t, oct24())).toMatchObject({ mode: 'study', activeStartedAt: Date.parse(at(23, 30)), action: { label: '측정 종료', url: WIDGET_URL.stopStudy } });
+  expect(entry(t, new Date(2026, 9, 25))).toMatchObject({ mode: 'reading', idleTitle: '하루 목표 30분', action: start });
+});
+
+test('REQ-193 · 서버의 오늘(잔디에서 날짜가 있는 가장 늦은 칸)이 기기의 오늘과 다르면 자정 항목 없이 그날 항목만 — 서버가 하루 앞(10/31) · 하루 뒤(10/29)', () => {
+  expect(widgetTimeline(oct30Idle, oct30)).toHaveLength(8); // 양성 대조 — 같은 날이면 자정 항목이 있다
+  for (const serverDay of [new Date(2026, 9, 31), new Date(2026, 9, 29)]) {
+    const d = { ...oct30Idle, graph: { ...oct30Idle.graph, weeks: serverWeeks(serverDay, { '2026-10-29': 4 }) } };
+    expect(widgetTimeline(d, oct30).map((e) => e.date)).toEqual([oct30]);
+  }
 });

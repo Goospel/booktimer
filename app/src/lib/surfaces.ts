@@ -19,7 +19,7 @@ export async function syncSurfaces(d: Dashboard, now = new Date()): Promise<void
   // 로그아웃 직전에 나간 대시보드 GET이 clearSurfaces보다 늦게 와도 로그아웃한 폰에 책 제목 · 시간을 다시 그리지 않는다
   if ((await session.token()) === null) return;
   // 「무엇을 재는 중인가」(독서 · 공부)는 widgetPayload 한 곳이 정하고 위젯과 Live Activity가 같은 값을 쓴다(범위 보충 REQ-106).
-  // 위젯은 타임라인으로 — 독서 측정이 목표에 닿는 시각 항목이 앱을 안 열어도 연속을 올린다(위젯 확장 REQ-185). LA 판정은 지금 값으로.
+  // 위젯은 타임라인으로 — 독서 측정이 목표에 닿는 시각 항목이 앱을 안 열어도 연속을 올린다(위젯 확장 REQ-185) · 앞으로 7번의 자정 항목이 앱을 안 열어도 새 날로 넘긴다(REQ-193). LA 판정은 지금 값으로.
   const entries = widgetTimeline(d, now);
   const p = entries[0].props;
   try {
