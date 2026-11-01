@@ -59,7 +59,7 @@ test('로그인 토큰이 없으면 측정 중 대시보드가 와도 위젯 · 
 });
 
 // 위젯 확장 REQ-185 — 목표에 닿는 순간은 타임라인 둘째 항목이 앱을 안 열어도 그린다. 항목은 한 번에 쓴다(따로 쓰면 뒤가 앞을 덮는다).
-test('REQ-185 · 대시보드를 읽으면 updateTimeline에 항목을 한 번에 쓴다(독서 측정 중 · 목표 전이면 둘)', async () => {
+test('REQ-185 · REQ-193 · 대시보드를 읽으면 updateTimeline에 항목을 한 번에 쓴다(지금 · 목표에 닿는 시각 · 앞으로 7번의 자정 — 새 날 목표 시각 포함)', async () => {
   token.mockResolvedValue('x');
   const now = new Date(2026, 9, 23, 21, 0);
   const d = {
@@ -73,7 +73,14 @@ test('REQ-185 · 대시보드를 읽으면 updateTimeline에 항목을 한 번�
   await syncSurfaces(d, now);
   expect(ReadingWidget.updateTimeline).toHaveBeenCalledTimes(1);
   const entries = (ReadingWidget.updateTimeline as jest.Mock).mock.calls[0][0];
-  expect(entries.map((e: { date: Date }) => e.date)).toEqual([now, new Date(2026, 9, 23, 21, 10)]);
+  // 셋째는 독서 측정이 이어지는 새 날(상한 02:50)이라 00:00:01 · 넷째는 새 날 목표 시각 · 10/25부터 측정 전
+  expect(entries.map((e: { date: Date }) => e.date)).toEqual([
+    now,
+    new Date(2026, 9, 23, 21, 10),
+    new Date(2026, 9, 24, 0, 0, 1),
+    new Date(2026, 9, 24, 0, 30),
+    ...Array.from({ length: 6 }, (_, i) => new Date(2026, 9, 25 + i)),
+  ]);
   expect(entries[1].props.runNote).toBe('목표 30분 · 6일째');
   expect(mockStart).toHaveBeenCalledTimes(1); // LA는 지금 값으로 — 항목 수와 무관하게 한 번
 });
