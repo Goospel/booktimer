@@ -140,6 +140,24 @@ class MeasureFinishApiControllerTest {
             assertThat(r.getBook()).isSameAs(book);
         });
         assertThat(book.getStatus()).isEqualTo(BookStatus.READING);
+        assertThat(book.getStartedReadingAt()).isEqualTo(s.truncatedTo(ChronoUnit.MILLIS)); // 지금이 아니라 측정 시작
+    }
+
+    @Test
+    @DisplayName("REQ-353 · 구간 전체가 이미 있는 실측에 덮여 적을 조각이 없으면 읽고싶음 책을 읽는중으로 바꾸지 않는다")
+    void finish_fullyCovered_leavesWantToReadBook() throws Exception {
+        User u = user("f-covered");
+        Book book = bookRepository.save(Book.register(u, "아직 안 읽은 책", null, null, null, null, null,
+                BookStatus.WANT_TO_READ));
+        ended(u, yesterday("09:00"), yesterday("12:00"), null);
+
+        finish(READING, u, body(yesterday("10:00"), yesterday("11:00"), book.getId()))
+                .andExpect(status().isOk());
+
+        assertThat(realEnded(u)).singleElement() // 덮은 실측 하나뿐 — 새 행 0
+                .satisfies(r -> assertThat(r.getBook()).isNull());
+        assertThat(book.getStatus()).isEqualTo(BookStatus.WANT_TO_READ);
+        assertThat(book.getStartedReadingAt()).isNull();
     }
 
     @Test
@@ -275,6 +293,21 @@ class MeasureFinishApiControllerTest {
         assertThat(realEnded(u)).extracting(ReadingSession::getStartedAt, ReadingSession::getEndedAt)
                 .containsExactly(tuple(yesterday("14:00"), yesterday("15:00")));
         assertThat(open.getEndedAt()).isNull();
+    }
+
+    @Test
+    @DisplayName("REQ-354 · 독서 마감은 켜져 있는 공부와 겹친 시간도 빼고 그 공부는 열린 채 둔다")
+    void finish_subtractsOpenStudy() throws Exception {
+        User u = user("f-open-study");
+        // PC 웹 공부가 어제 10:30부터 켜져 있다 — 폰 앱 독서 마감 [10:00, 11:00]
+        StudySession openStudy = studyRepository.save(StudySession.start(u, yesterday("10:30")));
+
+        finish(READING, u, body(yesterday("10:00"), yesterday("11:00"), null))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.trimmedSeconds").value(1800));
+
+        assertThat(realEnded(u)).extracting(ReadingSession::getStartedAt, ReadingSession::getEndedAt)
+                .containsExactly(tuple(yesterday("10:00"), yesterday("10:30")));
+        assertThat(openStudy.getEndedAt()).isNull();
     }
 
     @Test

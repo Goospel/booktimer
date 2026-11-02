@@ -1130,7 +1130,7 @@ class ReadingSessionServiceTest {
     }
 
     @Test
-    @DisplayName("REQ-354 · busySegment — 켜진 행은 [시작, min(지금, 시작 + 6시간)] · 지금 뒤에 시작한 켜진 행은 버린다(null) · 끝난 행은 그대로")
+    @DisplayName("REQ-354 · busySegment — 켜진 행은 [시작, min(지금, 시작 + 6시간)] · 0초 끝난 행은 버린다(null) · 역순 구간을 만들지 않는다 · 끝난 행은 그대로")
     void busySegment_cases() {
         Instant now = W0.plusSeconds(10 * 3600);
         assertThat(ReadingSessionService.busySegment(now.minusSeconds(3600), null, now))
@@ -1138,7 +1138,9 @@ class ReadingSessionServiceTest {
         Instant longAgo = now.minusSeconds(7 * 3600);
         assertThat(ReadingSessionService.busySegment(longAgo, null, now))
                 .isEqualTo(new ReadingSessionService.Segment(longAgo, longAgo.plusSeconds(6 * 3600)));
-        // 컨트롤러가 지금을 잡은 뒤 잠금을 기다리는 사이에 시작된 켜진 측정 — 역순 구간을 만들지 않는다
+        // 0초 끝난 행 — 버리지 않으면 빈 조각이 그 순간에서 둘로 쪼개진다(이 분기가 실제로 일하는 곳)
+        assertThat(ReadingSessionService.busySegment(W0, W0, now)).isNull();
+        // 지금 뒤에 시작한 켜진 행 — 조회 조건(startedAt < to ≤ now)이 먼저 거르지만 역순 구간을 만들지 않는다
         assertThat(ReadingSessionService.busySegment(now.plusMillis(1), null, now)).isNull();
         assertThat(ReadingSessionService.busySegment(now, null, now)).isNull();
         assertThat(ReadingSessionService.busySegment(W0, W0.plusSeconds(60), now))
