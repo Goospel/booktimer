@@ -11,7 +11,7 @@ import { Cover } from '../../components/Cover';
 import { Sheet } from '../../components/Sheet';
 import { Button, Notice, Row, Screen, Txt, useStacked } from '../../components/ui';
 import { clockLabel, dateLabel, durationLabel } from '../../lib/format';
-import { goalChoices, goalProgress, goalStatus, isStaleDay, nextMidnightOf, SESSION_CAP_MS } from '../../lib/goalProgress';
+import { goalChoices, goalProgress, goalStatus, isStaleDay, midnightRereadDelay, nextMidnightOf, SESSION_CAP_MS, todayDashboard } from '../../lib/goalProgress';
 import { savedNotice } from '../../lib/marginSave';
 import { ALREADY_STOPPED, startMeasure, stopMeasure } from '../../lib/measureStart';
 import { goalMetNotice } from '../../lib/reminders';
@@ -35,12 +35,13 @@ export default function Home() {
 
   const load = useCallback(async () => {
     try {
-      const d = await reading.dashboard();
+      // 판정한 순간(at)을 그 값의 시각으로(REQ-349)
+      const { d, at } = await todayDashboard(reading.dashboard);
       setDash(d);
       setLoadError(null);
-      setNow(Date.now());
-      setLoadedMidnight(nextMidnightOf(Date.now()));
-      void syncSurfaces(d);
+      setNow(at);
+      setLoadedMidnight(nextMidnightOf(at));
+      void syncSurfaces(d, new Date(at));
     } catch (e) {
       setLoadError(e instanceof Error ? e.message : String(e));
     }
@@ -72,11 +73,12 @@ export default function Home() {
   useEffect(() => {
     if (staleDay) void load();
   }, [staleDay, load]);
+  // 측정 전 자정 예약은 읽은 날의 자정 기준(REQ-349 — effect가 자정 뒤에 돌아도 다음 날로 밀리지 않게)
   useEffect(() => {
     if (measuring || !dash) return;
-    const id = setTimeout(() => void load(), nextMidnightOf(Date.now()) - Date.now() + 1000);
+    const id = setTimeout(() => void load(), midnightRereadDelay(loadedMidnight, Date.now()));
     return () => clearTimeout(id);
-  }, [measuring, dash, load]);
+  }, [measuring, dash, loadedMidnight, load]);
 
   const startedAt = measuring && dash?.activeStartedAt ? Date.parse(dash.activeStartedAt) : null;
   const progress = dash

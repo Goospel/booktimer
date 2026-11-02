@@ -32,6 +32,9 @@ const ROWS: Row[] = [
   },
   // 공개 범위 · 공유는 웹이 맡는다 — 앱은 그 문을 부르지 않는다(v1 REQ-40). 웹 /books 주소는 걸리지 않는다.
   { id: 'REQ-40', pattern: /\/(?:visibility|share)\b/, skip: [], planted: "request(`/api/stories/${id}/share`)" },
+  // 대시보드는 todayDashboard로만 읽는다 — 서버가 아직 전날로 센 응답(자정을 걸친 늦은 응답 · 시계 앞섬)을 쓰면 「새 날짜 + 전날 값」이다(REQ-348).
+  // 함수를 넘기는 todayDashboard(reading.dashboard)는 괄호가 없어 걸리지 않고, 여러 줄 사슬(reading 다음 줄의 .dashboard())은 걸린다.
+  { id: 'REQ-348', pattern: /\.dashboard\(\)/, skip: [], planted: 'const d = await reading.dashboard();', strip: true },
   // 키보드 위 막대는 KeyboardAvoidingView 안 보통 View다 — InputAccessoryView는 다시 마운트한 입력칸에 안 붙었다(U-05a 실측).
   // 낱말이 아니라 JSX 사용을 본다 — 「왜 안 쓰는가」를 적은 주석은 남겨도 된다(PR-H 사양 §8-27).
   { id: 'REQ-136', pattern: /<InputAccessoryView\b/, skip: [], planted: '<InputAccessoryView nativeID="bar">' },
@@ -132,6 +135,16 @@ test('REQ-40 · 앱 소스에 /visibility·/share 호출이 없다(심은 픽스
   expect(hits(ROWS[3], [{ rel: join('app', 'planted.tsx'), text: "request(`/api/books/${id}/visibility`, { body })" }])).toHaveLength(1);
   // 웹 공개 설정 화면(/books)을 여는 주소는 공개 문 호출이 아니다
   expect(hits(ROWS[3], [{ rel: join('app', 'planted.tsx'), text: "Linking.openURL('https://booktimer.app/books')" }])).toEqual([]);
+});
+
+test('REQ-348 · 대시보드는 todayDashboard로만 읽는다 — 앱 소스에 .dashboard() 직접 호출이 없다(여러 줄 사슬은 잡히고 함수 넘기기는 안 잡힌다)', () => {
+  const row = ROWS.find((r) => r.id === 'REQ-348');
+  expect(row).toBeDefined();
+  expect(hits(row!)).toEqual([]);
+  const at = (text: string) => hits(row!, [{ rel: join('app', 'planted.tsx'), text }]);
+  expect(at('void reading\n  .dashboard()\n  .catch(() => null)')).toHaveLength(1); // 여러 줄 사슬
+  expect(at('const d = await todayDashboard(reading.dashboard);')).toEqual([]); // 함수 넘기기
+  expect(at('// 옛 코드는 reading.dashboard()를 바로 불렀다')).toEqual([]); // 주석의 「왜」는 남겨도 된다
 });
 
 test('REQ-98 · 앱 소스에 회당 시간·회독 호출이 없다(심은 픽스처는 잡힌다)', () => {
