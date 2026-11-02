@@ -1,20 +1,20 @@
 // 공부 탭(PR-S1 사양 §5.1~§5.5 — 피그마 R7 S-STUDY · S-STUDY-BOOK · S-STUDY-RUN · S-STUDY-409 · S-STUDY-EMPTY).
 // 위 = 공부 막대(지금 책 · 오늘 공부 · [공부 시작]), 아래 = 공부 서재. 측정 중엔 홈 측정 중과 같은 한 화면이고 공부 서재를 숨긴다(결정 B ①).
 // 하루 목표 · 연속 · 회당 시간 · 회독은 없다(사용자 결정). 공부 책에는 글쓰기 · 여백 진입을 두지 않는다(v1 §4.1). 진입 직후 덮는 것 0.
-import { router, useFocusEffect } from 'expo-router';
-import { useCallback, useEffect, useState } from 'react';
-import { ActivityIndicator, Alert, AppState, Pressable, View } from 'react-native';
+import { router } from 'expo-router';
+import { useState } from 'react';
+import { ActivityIndicator, Alert, Pressable, View } from 'react-native';
 
-import { reading, study } from '../../api/client';
-import type { Dashboard, StudyBook } from '../../api/types';
+import { study } from '../../api/client';
+import type { StudyBook } from '../../api/types';
 import { Cover } from '../../components/Cover';
 import { Badge, Button, Notice, Screen, Txt, useStacked } from '../../components/ui';
 import { clockLabel, durationLabel, objectParticle } from '../../lib/format';
-import { isStaleDay, midnightRereadDelay, nextMidnightOf, SESSION_CAP_MS, todayDashboard } from '../../lib/goalProgress';
+import { nextMidnightOf, SESSION_CAP_MS } from '../../lib/goalProgress';
 import { ALREADY_STOPPED, startMeasure, stopMeasure } from '../../lib/measureStart';
 import { defaultStudyBook, removeStudyBook, studyMeta } from '../../lib/studyShelf';
 import { studyToday } from '../../lib/studyTimer';
-import { syncSurfaces } from '../../lib/surfaces';
+import { useMeasureDashboard } from '../../lib/useMeasureDashboard';
 import { useMeasureShortcut } from '../../lib/useMeasureShortcut';
 import { useWidgetIntent } from '../../lib/useWidgetIntent';
 import { color, layout, line, space } from '../../theme/tokens';
@@ -23,61 +23,15 @@ import { color, layout, line, space } from '../../theme/tokens';
 type NoticeState = { message: string; tone?: 'info' | 'error'; at: 'bar' | 'shelf' } | null;
 
 export default function Study() {
-  const [dash, setDash] = useState<Dashboard | null>(null);
-  const [loadError, setLoadError] = useState<string | null>(null);
+  // 대시보드 한 번으로 그린다(study 필드). 읽기 · 앞으로 올 때 · 포커스 · 1초 틱 · 자정은 홈과 같은 훅(타이머 오프라인 T0), 위젯 · LA는 루트가 같은 값으로 맞춘다(사양 §8-12)
+  const { dash, now, loadError, load, fresh } = useMeasureDashboard({ mode: 'study' });
   const [notice, setNotice] = useState<NoticeState>(null);
   const [busy, setBusy] = useState(false);
   const [pickedId, setPickedId] = useState<number | null>(null);
-  const [now, setNow] = useState(Date.now());
-  const [loadedMidnight, setLoadedMidnight] = useState(0);
   const stacked = useStacked();
-
-  // 대시보드 한 번으로 그린다(study 필드) — 위젯 · Live Activity도 같은 값으로 맞춘다(사양 §8-12)
-  const load = useCallback(async () => {
-    try {
-      // 판정한 순간(at)을 그 값의 시각으로(REQ-349)
-      const { d, at } = await todayDashboard(reading.dashboard);
-      setDash(d);
-      setLoadError(null);
-      setNow(at);
-      setLoadedMidnight(nextMidnightOf(at));
-      void syncSurfaces(d, new Date(at));
-    } catch (e) {
-      setLoadError(e instanceof Error ? e.message : String(e));
-    }
-  }, []);
-
-  useEffect(() => {
-    const sub = AppState.addEventListener('change', (s) => s === 'active' && void load());
-    return () => sub.remove();
-  }, [load]);
-
-  // 포커스마다 다시 읽는다 — 공부 책 담기 · 홈 탭에서 돌아오면 옛 값이다(첫 마운트도 여기서 읽는다)
-  useFocusEffect(
-    useCallback(() => {
-      void load();
-    }, [load]),
-  );
 
   const s = dash?.study;
   const measuring = !!s?.hasActiveSession && !!s.activeStartedAt;
-  useEffect(() => {
-    if (!measuring) return;
-    const id = setInterval(() => setNow(Date.now()), 1000);
-    return () => clearInterval(id);
-  }, [measuring]);
-
-  // 자정을 넘기면 다시 읽는다 — 끝난 몫이 전날 값이다. 측정 중엔 1초 틱이, 측정 전엔 자정 예약이 깨운다(홈과 같다).
-  const staleDay = dash !== null && isStaleDay(loadedMidnight, now);
-  useEffect(() => {
-    if (staleDay) void load();
-  }, [staleDay, load]);
-  // 측정 전 자정 예약은 읽은 날의 자정 기준(REQ-349)
-  useEffect(() => {
-    if (measuring || !dash) return;
-    const id = setTimeout(() => void load(), midnightRereadDelay(loadedMidnight, Date.now()));
-    return () => clearTimeout(id);
-  }, [measuring, dash, loadedMidnight, load]);
 
   // Option+P가 그대로 부르는 처리기 둘(사양 §5.1 — 아래 useMeasureShortcut)
   async function start(bookId: number | null) {
@@ -122,7 +76,7 @@ export default function Study() {
   // Option+P = 지금 보이는 측정 버튼(REQ-105): 측정 중 「측정 종료」 · 측정 전 「공부 시작」 · 빈 서재 「책 없이 시간만 재기」
   useMeasureShortcut({ button: !dash || !s ? null : measuring ? stop : book ? () => start(book.id) : () => start(null), busy, covered: false });
   // 위젯 「공부 중」 [측정 종료](위젯 확장 REQ-183) — 시작 처리기는 넘기지 않는다(위젯엔 공부 시작 주소가 없다)
-  useWidgetIntent({ mode: 'study', fresh: dash, measuring, button: measuring ? stop : null, onAlreadyStopped: () => setNotice({ message: ALREADY_STOPPED, at: 'bar' }) });
+  useWidgetIntent({ mode: 'study', fresh, measuring, button: measuring ? stop : null, onAlreadyStopped: () => setNotice({ message: ALREADY_STOPPED, at: 'bar' }) });
 
   if (!dash || !s) {
     return (
