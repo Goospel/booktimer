@@ -101,7 +101,7 @@ test('REQ-177 · 목표 없음이면 「하루 목표 없음」 · 「오늘 N�
 });
 
 // ── 자정을 걸친 늦은 대시보드 응답(REQ-346~349 · 2026-11-02) — 서버가 아직 전날로 센 응답은 쓰지 않고 1초 뒤 한 번 다시 읽는다 · 판정한 순간으로 쓴다 ──
-// 응답 픽스처의 서버 날짜는 가장 늦은 칸에만 둔다 — 앞 칸(10-18) · 앞날 칸(null) · 옛 주(10-11)와 갈리게(첫 칸을 읽으면 틀린다).
+// 응답 픽스처의 서버 날짜는 가장 늦은 칸에만 둔다 — 앞 칸(10-18) · 앞날 칸(null) · 옛 주(10-11)와 갈리게(첫 칸을 읽으면 아래 「이미 새 날이면 다시 읽지 않는다」가 깨진다).
 const when = (day: number, h = 0, m = 0, s = 0, ms = 0) => new Date(2026, 9, day, h, m, s, ms).getTime();
 const cell = (date: string | null): ContributionDay => ({ date, totalSeconds: 0, level: 0, manual: false });
 const reply = (server: string) => ({ graph: { goalStreak: 1, weeks: [[cell('2026-10-18'), cell(server), cell(null)], [cell('2026-10-11')]] } }) as unknown as Dashboard;
@@ -157,18 +157,39 @@ test('REQ-347 · todayDashboard — 서버가 계속 전날이면(해외 동쪽 
   jest.useFakeTimers();
   try {
     jest.setSystemTime(when(24, 0, 0, 1));
-    const stale = reply('2026-10-23');
+    const stale1 = reply('2026-10-23');
+    const stale2 = { ...reply('2026-10-23'), hasActiveSession: true } as Dashboard; // 둘 다 전날 — 다른 객체라 어느 응답을 썼는지 가른다
+    const queue = [stale1, stale2];
     const get = jest.fn(async () => {
       jest.setSystemTime(Date.now() + 300);
-      return stale;
+      return queue.shift()!;
     });
     const done = jest.fn();
     void todayDashboard(get).then(done);
     await jest.advanceTimersByTimeAsync(REREAD_MS);
     // 손 유도: 1.0초 보냄 → 1.3초 받음(창 안 · 전날 → 다시 읽기) → 1초 뒤 2.3초 보냄 → 2.6초 받음 → 판정 없이 쓴다
-    expect(done).toHaveBeenCalledWith({ d: stale, at: when(24, 0, 0, 2, 600) }); // 다시 읽은 응답은 판정 없이 쓴다 — 지금 동작
+    expect(done).toHaveBeenCalledWith({ d: stale2, at: when(24, 0, 0, 2, 600) }); // 다시 읽은 응답(버린 첫 응답이 아니라)을 판정 없이 쓴다 — 지금 동작
     expect(get).toHaveBeenCalledTimes(2);
     expect(jest.getTimerCount()).toBe(0); // 더 기다리는 타이머가 없다 — 끝남이 구조다
+  } finally {
+    jest.useRealTimers();
+  }
+});
+
+test('REQ-347 · todayDashboard — 자정을 걸쳐 온 응답(23:59:59.700 보냄 · 00:00:00.200 받음)이 이미 새 날(10-24)이면 다시 읽지 않는다', async () => {
+  jest.useFakeTimers();
+  try {
+    jest.setSystemTime(when(23, 23, 59, 59, 700));
+    const fresh = reply('2026-10-24');
+    const get = jest.fn(async () => {
+      jest.setSystemTime(Date.now() + 500);
+      return fresh;
+    });
+    const done = jest.fn();
+    void todayDashboard(get).then(done);
+    await jest.advanceTimersByTimeAsync(0); // 마이크로태스크만 — 1초 기다림이 끼면 done이 아직 없다
+    expect(done).toHaveBeenCalledWith({ d: fresh, at: when(24, 0, 0, 0, 200) });
+    expect(get).toHaveBeenCalledTimes(1);
   } finally {
     jest.useRealTimers();
   }
