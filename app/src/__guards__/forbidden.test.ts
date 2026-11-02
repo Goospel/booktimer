@@ -413,6 +413,22 @@ test('A1 리뷰 14 · _layout이 signedIn 게이트 안에서 startSlotSync를 �
   expect(START.test(s.replace('await measureStore.open(AsyncStorage, userId);', ''))).toBe(false);
 });
 
+// 타이머 오프라인 T0 리뷰 — 로그아웃 · 탈퇴는 측정 가게를 닫고(줄에 선 쓰기를 기다리고) 나서 칸을 지운다 · 로그인 화면이 되면 표면 맞추기를 끄고 가게를 닫는다(REQ-364).
+// 빠지면 늦게 온 대시보드 응답이 지운 timer 칸을 되살려 로그아웃한 기기에 책 제목 · 오늘 시간이 남는다.
+const CLOSE_THEN_CLEAR = /clearDrafts: async \(\) => \{\s*await measureStore\.close\(\);[^}]*clearAll\(/;
+const SIGNED_OUT = /if \(!v\) \{\s*stopSurfaceSync\(\);\s*void measureStore\.close\(\);/;
+test('REQ-364 · 로그아웃 · 탈퇴는 가게를 닫은 뒤 칸을 지우고, 루트는 로그인 화면이 되면 표면 맞추기를 끄고 가게를 닫는다(빼면 잡힌다)', () => {
+  for (const rel of [join('app', '(tabs)', 'settings.tsx'), join('app', 'account-delete.tsx')]) {
+    const s = srcOf(rel);
+    expect(CLOSE_THEN_CLEAR.test(s)).toBe(true);
+    expect(CLOSE_THEN_CLEAR.test(s.replace('await measureStore.close();', ''))).toBe(false);
+  }
+  const root = srcOf(join('app', '_layout.tsx'));
+  expect(SIGNED_OUT.test(root)).toBe(true);
+  expect(SIGNED_OUT.test(root.replace('void measureStore.close();', ''))).toBe(false);
+  expect(SIGNED_OUT.test(root.replace('stopSurfaceSync();', ''))).toBe(false);
+});
+
 // A1 리뷰 2 · 8 — 쪽지 지우기(확인 창 · 서버 지우기 · 기기 칸 지우기)는 한 곳(NoteRow.confirmRemoveNote)을 책 화면 · 서재가 같이 쓴다.
 test('A1 리뷰 2 · 서재 「책 없는 여백」 줄도 지운다 — 확인 창은 한 곳 · 책 화면과 서재가 같이 부른다(복붙 · 빠짐을 심으면 잡힌다)', () => {
   const dialogs = (all: { rel: string; text: string }[]) => all.filter((f) => !f.rel.startsWith(SELF) && stripComments(f.text).includes("'이 여백을 지울까요?'")).map((f) => f.rel);

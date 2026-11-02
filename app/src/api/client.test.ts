@@ -304,6 +304,15 @@ describe('REQ-356 · 요청 상한', () => {
     await cutAt(() => request('/api/x', { timeoutMs: 10_000 }), 10_000);
   });
 
+  test('REQ-356 · 머리는 왔는데 본문이 매달려도 상한에 끊는다(본문까지 상한 안 — 설계 §7.2)', async () => {
+    fetchMock.mockImplementation(async (_url: string, init: RequestInit) => ({
+      status: 200,
+      ok: true,
+      text: () => new Promise((_ok, fail) => init.signal?.addEventListener('abort', () => fail(new Error('aborted')))),
+    }));
+    await cutAt(() => request('/api/x', { timeoutMs: 10_000 }), 10_000);
+  });
+
   test('REQ-356 · 성공하면 타이머가 남지 않는다', async () => {
     fetchMock.mockResolvedValueOnce(reply(200, '{}'));
     await request('/api/x', { timeoutMs: 10_000 });

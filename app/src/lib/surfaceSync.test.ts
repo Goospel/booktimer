@@ -4,9 +4,17 @@ const mockInstances: { end: () => Promise<void> }[] = [];
 const mockStart = jest.fn(() => void mockInstances.push({ end: async () => void mockInstances.splice(0) }));
 jest.mock('../../widgets/ReadingActivity', () => ({ __esModule: true, default: { getInstances: () => [...mockInstances], start: () => mockStart() } }));
 jest.mock('../../widgets/ReadingWidget', () => ({ __esModule: true, default: { updateSnapshot: jest.fn(), updateTimeline: jest.fn() } }));
-jest.mock('@react-native-async-storage/async-storage', () => ({ getItem: async () => null, setItem: jest.fn(async () => {}), removeItem: jest.fn(async () => {}) }));
+// 기억하는 가짜 — 띄운 LA 값(KEY)을 돌려줘야 뒤 판이 「같은 활동」으로 보고 그대로 둔다(늘 null이면 restart 길을 타 거짓 Red가 난다)
+const mockKv = new Map<string, string>();
+jest.mock('@react-native-async-storage/async-storage', () => ({
+  getItem: async (k: string) => mockKv.get(k) ?? null,
+  setItem: async (k: string, v: string) => void mockKv.set(k, v),
+  removeItem: async (k: string) => void mockKv.delete(k),
+}));
 jest.mock('./notify', () => ({ syncReminders: jest.fn(async () => {}), cancelReminders: jest.fn(async () => {}) }));
 jest.mock('../api/client', () => ({ session: { token: jest.fn() } }));
+
+import { Platform } from 'react-native';
 
 import ReadingWidget from '../../widgets/ReadingWidget';
 import { session } from '../api/client';
@@ -49,6 +57,7 @@ beforeEach(async () => {
   reminders.mockReset().mockResolvedValue(undefined);
   mockStart.mockClear();
   mockInstances.splice(0);
+  mockKv.clear();
   await measureStore.open(kv, 1);
 });
 afterEach(async () => {
@@ -80,8 +89,19 @@ test('REQ-363 · 겹쳐 불려도 Live Activity를 둘 띄우지 않는다', asy
 
   mockStart.mockClear();
   mockInstances.splice(0);
+  mockKv.clear();
+  token.mockClear();
   await setBase(baseOf(d));
-  await Promise.all([syncSurfacesNow(), syncSurfacesNow(), syncSurfacesNow()]);
+  // 첫 판을 「없음」을 본 뒤 · 띄우기 직전(두 번째 토큰 확인)에 붙잡는다 — 그사이 부른 두 번째 판은 줄을 서야 한다
+  const hold = deferred<string>();
+  token.mockResolvedValueOnce('x').mockReturnValueOnce(hold.promise);
+  const first = syncSurfacesNow();
+  await tick();
+  expect(token).toHaveBeenCalledTimes(2); // 첫 판이 시작됐고(합류 불가) 띄우기 직전에 매달렸다
+  const second = syncSurfacesNow();
+  await tick();
+  hold.resolve('x');
+  await Promise.all([first, second]);
   expect(mockStart).toHaveBeenCalledTimes(1);
   expect(mockInstances).toHaveLength(1);
 });
@@ -98,6 +118,15 @@ test('REQ-363 · 맞추는 값은 맞추는 순간의 시각으로 굴린다(어
   expect(reminders).toHaveBeenCalledTimes(1);
   expect(reminders.mock.calls[0][0].todayReadSeconds).toBe(0);
   expect(reminders.mock.calls[0][1].getTime()).toBe(today);
+});
+
+test('REQ-363 리뷰 · iOS가 아닌 기기도 기준 값으로 알림을 맞춘다(위젯 · LA는 iOS만 — syncSurfaces가 알림 전에 돌아온다)', async () => {
+  jest.replaceProperty(Platform, 'OS', 'android');
+  await setBase(baseOf(dash(12 * 60)));
+  await syncSurfacesNow();
+  expect(timeline).toHaveBeenCalledTimes(0);
+  expect(reminders).toHaveBeenCalledTimes(1);
+  expect(reminders.mock.calls[0][0].todayReadSeconds).toBe(12 * 60);
 });
 
 test('REQ-363 · 기준 값이 없으면 알림을 null로 맞춘다 · syncSurfacesNow는 그 판이 끝나야 돌아온다', async () => {

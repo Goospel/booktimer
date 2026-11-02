@@ -71,10 +71,19 @@ test('REQ-362 · 이 실행에서 더 늦게 보낸 요청의 응답만 받는�
   second.resolve(dash(1200)); // 늦게 보낸 쪽이 먼저 온다
   await b;
   expect(measureStore.get()!.base!.d).toEqual(dash(1200));
+  const won = measureStore.get();
+  const notified = jest.fn();
+  const unsub = measureStore.subscribe(notified);
+  const setItem = jest.spyOn(kv, 'setItem');
   first.resolve(dash(600)); // 먼저 보낸 쪽이 늦게 와도 덮지 않는다
   await a;
+  unsub();
   expect(measureStore.get()!.base!.d).toEqual(dash(1200));
   expect(JSON.parse(kv.map.get('timer:1:state')!).base.d).toEqual(dash(1200));
+  // 진 응답은 아무것도 바꾸지 않는다 — 칸에 다시 쓰지도 알리지도 않는다(§6.5 「바뀐 때만」 · 리뷰 반영)
+  expect(measureStore.get()).toBe(won);
+  expect(setItem).not.toHaveBeenCalled();
+  expect(notified).not.toHaveBeenCalled();
 });
 
 test('REQ-362 · 디스크 칸을 못 읽거나 깨져 있어도 빈 기준 값으로 연다(열리지 않으면 홈이 「불러오는 중」에 멈춘다)', async () => {

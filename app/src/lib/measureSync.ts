@@ -80,8 +80,8 @@ export async function loadDashboard(): Promise<void> {
   const mine = ++seq;
   const got = await todayDashboard(reading.dashboard); // REQ-348 — 다른 길로 읽지 않는다(상한 30초)
   try {
-    // 이 실행에서 더 늦게 보낸 요청만 남긴다. 디스크 값(순번 0)은 어떤 새 응답에도 진다
-    await measureStore.update((s) => ({ ...s, base: s.base && s.base.seq > mine ? s.base : { d: got.d, at: got.at, sentAt, seq: mine } }), uid);
+    // 이 실행에서 더 늦게 보낸 요청만 남긴다. 디스크 값(순번 0)은 어떤 새 응답에도 진다. 진 응답은 s 그대로 — 칸에 쓰지도 알리지도 않는다
+    await measureStore.update((s) => (s.base && s.base.seq > mine ? s : { ...s, base: { d: got.d, at: got.at, sentAt, seq: mine } }), uid);
   } catch (e) {
     if (!(e instanceof MeasureStoreClosed)) throw e; // 로그아웃 · 계정 바꾸기 사이에 늦게 온 응답 — 버린다
   }

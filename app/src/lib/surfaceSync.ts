@@ -1,5 +1,7 @@
 // 위젯 · Live Activity · 알림을 루트 한 곳에서, 한 번에 하나씩 맞춘다(타이머 오프라인 설계 2026-11-02 §6.8 · REQ-363).
 // 두 탭이 각자 맞추면 겹친 두 판이 둘 다 「활동 없음」을 보고 Live Activity를 둘 띄운다(surfaces.ts getInstances → start).
+import { Platform } from 'react-native';
+
 import { measureStore } from './measureSync';
 import { syncReminders } from './notify';
 import { syncSurfaces } from './surfaces';
@@ -20,7 +22,9 @@ export function syncSurfacesNow(): Promise<void> {
       const t = Date.now();
       if (!s) return; // 닫힌 가게(로그아웃 중) — 표면 정리는 루트의 세션 구독(clearSurfaces)이 한다
       if (!s.base) return syncReminders(null); // 기준 값이 아예 없으면 지금처럼(못 읽으면 null — 다음 읽기가 고친다)
-      await syncSurfaces(rollToDay(s.base, t).d, new Date(t));
+      const d = rollToDay(s.base, t).d;
+      if (Platform.OS !== 'ios') return syncReminders(d, new Date(t)); // syncSurfaces는 iOS 밖에서 알림 전에 돌아온다 — 알림은 어느 기기든 맞춘다
+      await syncSurfaces(d, new Date(t));
     })
     .catch((e) => console.warn('surfaces', e));
   return tail;
