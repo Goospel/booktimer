@@ -141,7 +141,7 @@ function dayEntries(d: WidgetSource, now: Date): { date: Date; props: ReadingWid
  * (서버 currentGoalStreak 유예 — 새 날 0시엔 전날부터 센다). 달력 전날 칸 = 전날 마지막 상태(잔디 칸은 끝난 몫만이라 진행 중 몫으로 채운 전날을 모른다).
  * ponytail: 앱을 안 연 날 다른 곳에서 읽은 시간은 모른다(0으로 본다) — 서버에서 직접 받는 C안(plan.md ⏸)이 다음 단계.
  */
-function nextDaySource(d: WidgetSource, midnight: number): WidgetSource {
+export function nextDaySource(d: WidgetSource, midnight: number): WidgetSource {
   const readingNow = d.hasActiveSession && !!d.activeStartedAt;
   // now = nextMidnight = 그 자정 → 전날 0시부터 min(자정, 상한)까지의 진행 중 몫을 얹은 전날 마지막 상태
   const last = goalProgress({

@@ -42,12 +42,14 @@ export const AUTOSAVE_MS = 1_500;
 /** 기기 칸 접두어 셋(J80) — 옛 글 `draft:` · 여백 쪽지 `margin:` · 블로그 초안 `blog:`. 로그아웃 · 탈퇴는 셋을 다 센다 · 지운다. */
 export const SLOT_PREFIXES = ['draft', 'margin', 'blog'] as const;
 export type SlotPrefix = (typeof SLOT_PREFIXES)[number];
+/** 지우기만 넓힌다 — 측정 칸 `timer:{uid}:state`(마지막 대시보드 · T2 원장 — 타이머 오프라인 REQ-364). 글 수 세기(pendingAll)는 글 칸만 */
+const CLEAR_PREFIXES = [...SLOT_PREFIXES, 'timer'] as const;
 
 export const slotKey = (userId: number, id: number, prefix: SlotPrefix = 'draft') => `${prefix}:${userId}:${id}`;
 
 const fromServer = (d: SyncDoc, focus: string | null): Slot => ({ title: d.title ?? '', body: d.body, focus, base: d.revision, dirty: false });
 
-const userKeys = async (kv: KV, userId: number, prefixes: readonly SlotPrefix[]) =>
+const userKeys = async (kv: KV, userId: number, prefixes: readonly string[]) =>
   (await kv.getAllKeys()).filter((k) => prefixes.some((x) => k.startsWith(`${x}:${userId}:`)));
 
 async function countDirty(kv: KV, keys: readonly string[]): Promise<number> {
@@ -60,9 +62,9 @@ export async function pendingAll(kv: KV, userId: number): Promise<number> {
   return countDirty(kv, await userKeys(kv, userId, SLOT_PREFIXES));
 }
 
-/** 이 userId의 칸 전부 — 세 접두어(로그아웃 · 탈퇴 — J80). */
+/** 이 userId의 칸 전부 — 세 접두어 + 측정 칸(로그아웃 · 탈퇴 — J80 · REQ-364). */
 export async function clearAll(kv: KV, userId: number): Promise<void> {
-  await Promise.all((await userKeys(kv, userId, SLOT_PREFIXES)).map((k) => kv.removeItem(k)));
+  await Promise.all((await userKeys(kv, userId, CLEAR_PREFIXES)).map((k) => kv.removeItem(k)));
 }
 
 /** 첫 저장 전 새 쪽지 칸(J80) — 로컬 무작위 id라 같은 책 새 쪽지 둘을 오프라인에서 써도 칸이 겹치지 않는다. */

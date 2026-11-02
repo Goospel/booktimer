@@ -111,32 +111,44 @@ export interface RequestOptions {
   body?: unknown;
   /** 토큰을 싣지 않고 401도 세션을 지우지 않는다(로그인 요청). */
   anonymous?: boolean;
+  /** 이 안에 응답(본문까지)이 없으면 끊고 NetworkError(REQ-356) — 신호는 있는데 응답이 없는 연결(지하철). 없으면 상한 없음 */
+  timeoutMs?: number;
 }
 
+/** 요청 상한(REQ-356 — 조절 상수). 정지는 실패해도 늘 다시 읽으므로 늦게 닿은 정지가 화면을 속이지 않는다. 서버 시작은 비멱등이라 걸지 않는다 */
+export const MEASURE_TIMEOUT_MS = 10_000;
+export const DASHBOARD_TIMEOUT_MS = 30_000;
+
 export async function request<T>(path: string, options: RequestOptions = {}): Promise<T> {
-  const { body, anonymous } = options;
+  const { body, anonymous, timeoutMs } = options;
   const headers: Record<string, string> = {};
   if (body !== undefined) headers['Content-Type'] = 'application/json';
   const saved = anonymous ? null : await session.token();
   if (saved !== null) headers.Authorization = `Bearer ${saved}`;
 
+  const abort = timeoutMs === undefined ? null : new AbortController();
+  const timer = abort && setTimeout(() => abort.abort(), timeoutMs);
   let response: Response;
+  let text: string;
   try {
     response = await fetch(`${BASE_URL}${path}`, {
       method: options.method ?? (body === undefined ? 'GET' : 'POST'),
       headers,
       body: body === undefined ? undefined : JSON.stringify(body),
+      signal: abort?.signal,
     });
+    // 오류 본문은 평문 문구다. 성공 본문은 비어 있을 수 있다. 본문도 상한 안에 받는다(RN fetch는 본문까지 받은 뒤 resolve)
+    text = await response.text();
   } catch {
     throw new NetworkError();
+  } finally {
+    if (timer) clearTimeout(timer);
   }
 
   if (response.status === 401 && !anonymous) {
     await session.clear();
     throw new UnauthorizedError();
   }
-  // 오류 본문은 평문 문구다. 성공 본문은 비어 있을 수 있다.
-  const text = await response.text();
   if (!response.ok) throw new ApiError(response.status, errorMessage(response.status, text));
   return (text === '' ? undefined : JSON.parse(text)) as T;
 }
@@ -207,9 +219,9 @@ export async function idTokenSignIn(p: {
 
 // ── 독서 측정 · 하루 목표(PR-F) — 앱은 /api/app/goal 별칭만 부른다(REQ-109) ──────────
 export const reading = {
-  dashboard: () => request<Dashboard>('/api/dashboard'),
+  dashboard: () => request<Dashboard>('/api/dashboard', { timeoutMs: DASHBOARD_TIMEOUT_MS }),
   start: (bookId: number | null) => request<unknown>('/api/sessions/start', { body: { bookId } }),
-  stop: () => request<unknown>('/api/sessions/stop', { method: 'POST' }),
+  stop: () => request<unknown>('/api/sessions/stop', { method: 'POST', timeoutMs: MEASURE_TIMEOUT_MS }),
   setGoal: (seconds: number) => request<void>('/api/app/goal', { body: { dailyIncrementSeconds: seconds } }),
 };
 
@@ -255,7 +267,7 @@ export const account = {
 // ── 공부 타이머 · 공부 서재(PR-S1) — 회당 시간 · 회독 문은 부르지 않는다(v1 REQ-98 — 금지 표). 공부 탭은 대시보드 study로 그린다 ──
 export const study = {
   start: (bookId: number | null) => request<unknown>('/api/study/start', { body: { bookId } }),
-  stop: () => request<unknown>('/api/study/stop', { body: {} }),
+  stop: () => request<unknown>('/api/study/stop', { body: {}, timeoutMs: MEASURE_TIMEOUT_MS }),
   /** 담기 화면의 「담음」 판정용(공부 서재 isbn) */
   shelf: () => request<StudyShelfResponse>('/api/study/books'),
   add: (body: StudyAddRequest) => request<StudyBook>('/api/study/books', { body }),

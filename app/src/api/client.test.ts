@@ -6,7 +6,7 @@ jest.mock('expo-secure-store', () => ({
   deleteItemAsync: jest.fn(async (k: string) => void mockStore.delete(k)),
 }));
 
-import { account, ApiError, appleSignIn, failText, idTokenSignIn, library, margins, NetworkError, request, session, study, UnauthorizedError, writing } from './client';
+import { account, ApiError, appleSignIn, failText, idTokenSignIn, library, margins, NetworkError, reading, request, session, study, UnauthorizedError, writing } from './client';
 
 const fetchMock = jest.fn();
 global.fetch = fetchMock as unknown as typeof fetch;
@@ -275,4 +275,57 @@ test('REQ-157 · 탈퇴는 provider APPLE과 방금 받은 identityToken·author
   expect(fetchMock.mock.calls[0][0]).toBe('https://booktimer.app/api/app/account/delete');
   expect(fetchMock.mock.calls[0][1].method).toBe('POST');
   expect(JSON.parse(fetchMock.mock.calls[0][1].body)).toEqual({ provider: 'APPLE', identityToken: 'jwt', authorizationCode: 'code' });
+});
+
+// 타이머 오프라인 T0 — 매달린 연결(신호는 있는데 응답이 없다)에서 단추가 끝없이 돌지 않게(REQ-356 · 설계 §7.2).
+describe('REQ-356 · 요청 상한', () => {
+  // signal이 abort될 때만 끝나는 fetch — 응답이 영영 오지 않는 연결
+  const hang = () =>
+    fetchMock.mockImplementation(
+      (_url: string, init: RequestInit) => new Promise((_ok, fail) => init.signal?.addEventListener('abort', () => fail(new Error('aborted')))),
+    );
+  /** ms − 1엔 아직 미결, ms에 NetworkError */
+  async function cutAt(call: () => Promise<unknown>, ms: number) {
+    let out: unknown = 'pending';
+    void call().then(
+      () => (out = 'ok'),
+      (e) => (out = e),
+    );
+    await jest.advanceTimersByTimeAsync(ms - 1);
+    expect(out).toBe('pending');
+    await jest.advanceTimersByTimeAsync(1);
+    expect(out).toBeInstanceOf(NetworkError);
+  }
+  beforeEach(() => jest.useFakeTimers());
+  afterEach(() => jest.useRealTimers());
+
+  test('REQ-356 · timeoutMs가 지나도록 응답이 없으면 NetworkError', async () => {
+    hang();
+    await cutAt(() => request('/api/x', { timeoutMs: 10_000 }), 10_000);
+  });
+
+  test('REQ-356 · 성공하면 타이머가 남지 않는다', async () => {
+    fetchMock.mockResolvedValueOnce(reply(200, '{}'));
+    await request('/api/x', { timeoutMs: 10_000 });
+    expect(jest.getTimerCount()).toBe(0);
+  });
+
+  test('REQ-356 · timeoutMs가 없는 요청은 상한이 없다', async () => {
+    fetchMock.mockResolvedValueOnce(reply(200, ''));
+    await request('/api/x');
+    expect(fetchMock.mock.calls[0][1].signal).toBeUndefined();
+  });
+
+  test('REQ-356 · 정지는 10초 · 대시보드는 30초 상한을 싣고 서버 시작에는 싣지 않는다', async () => {
+    hang();
+    await cutAt(() => reading.stop(), 10_000);
+    await cutAt(() => study.stop(), 10_000);
+    await cutAt(reading.dashboard, 30_000); // 함수로 넘긴다 — 직접 호출은 금지 표 REQ-348이 막는다
+    // 시작은 비멱등 — 늦게라도 닿은 시작을 실패로 보이면 서버에 유령 측정이 남는다
+    fetchMock.mockReset();
+    fetchMock.mockResolvedValue(reply(200, ''));
+    await reading.start(1);
+    await study.start(1);
+    expect(fetchMock.mock.calls.map((c) => c[1].signal)).toEqual([undefined, undefined]);
+  });
 });

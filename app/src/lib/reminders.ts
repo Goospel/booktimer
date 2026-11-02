@@ -18,6 +18,15 @@ export function goalMetNotice(wasFilled: boolean | null, progress: GoalProgress,
   return wasFilled === false && progress.filled && goal > 0 ? goalBody(progress.streak) : null;
 }
 
+/**
+ * 홈 목표 달성 띠의 관측 한 번(REQ-371 — 화면 코드를 훅으로 옮겨도 지금 그대로). 굴린 값(지난날 기준 값)과 디스크 값(이 실행에서 아직 새로 읽지 않음)은
+ * 판정하지 않고 다음 값을 다시 「처음 읽은 값」으로 본다 — 앱이 닫힌 동안 다른 기기에서 채운 날, 캐시(미달) → 새 값(채움)으로 띠가 뜨지 않게(캐시 없던 지금과 같다).
+ */
+export function goalNoticeStep(prev: boolean | null, p: { rolled: boolean; cached: boolean; progress: GoalProgress; goal: number }): { prev: boolean | null; message: string | null } {
+  if (p.rolled || p.cached) return { prev: null, message: null };
+  return { prev: p.progress.filled, message: goalMetNotice(prev, p.progress, p.goal) };
+}
+
 export interface ReminderSetting {
   on: boolean;
   hour: number;
