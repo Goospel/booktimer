@@ -1,6 +1,7 @@
 // 오늘 목표 진행(범위 보충 §3.4 · REQ-90). 끝난 몫은 서버(계정 타임존), 진행 중 몫은 기기 자정부터 센다.
 // 서버 goalStreak은 끝난 몫만 본다 — 오늘을 진행 중 몫으로 처음 채우면 앱이 하나를 얹어 보인다.
 import { durationLabel } from './format';
+import type { ContributionDay, Dashboard } from '../api/types';
 
 export const SESSION_CAP_MS = 6 * 60 * 60 * 1000; // 서버 6시간 상한과 같다
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -98,4 +99,46 @@ export function isStaleDay(loadedMidnight: number, now: number): boolean {
 export function nextMidnightOf(now: number): number {
   const d = new Date(now);
   return new Date(d.getFullYear(), d.getMonth(), d.getDate() + 1).getTime();
+}
+
+/** 측정 전 자정 다시 읽기까지(ms) — 읽은 날의 자정 +1초(REQ-349). 그 자정이 이미 지났으면 1초 뒤 — 자정 직전에 받은 값의 effect가 자정 뒤에 돌아도 다음 자정으로 밀리지 않게. */
+export function midnightRereadDelay(loadedMidnight: number, now: number): number {
+  return Math.max(0, loadedMidnight - now) + 1000;
+}
+
+/** 날짜 열쇠 YYYY-MM-DD(달은 0부터 — Date와 같다). 서버 잔디 날짜와 같은 꼴이라 글자 순서가 날짜 순서다(widgetPayload에서 옮김). */
+export const dayKey = (y: number, m: number, d: number) => `${y}-${String(m + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+
+/** 서버의 오늘(계정 시간대) — 잔디에서 날짜가 있는 가장 늦은 칸(오늘 뒤 칸은 날짜 null). 잔디가 없으면(옛 서버) undefined. 잔디를 만든 순간의 날이다 — 끝난 몫의 날은 보증하지 않는다(서버가 시계를 따로 읽는다). */
+export function serverToday(weeks: ContributionDay[][] | undefined): string | undefined {
+  return weeks?.flat().reduce((m, c) => (c.date && c.date > m ? c.date : m), '') || undefined;
+}
+
+/** 다시 읽기 간격 · 창(REQ-346 · 347 — 조절 상수). 창은 「자정 뒤 몇 초 안에 보낸 요청을 일시 어긋남으로 의심하나」다 — 그 뒤의 어긋남은 해외 · 크게 틀린 시계라 다시 읽어도 안 바뀐다. */
+export const REREAD_MS = 1000;
+const REREAD_WINDOW_MS = 10 * 1000;
+
+/**
+ * 이 대시보드 응답을 버리고 다시 읽어야 하나(REQ-346 · 347). 받은 순간 서버의 오늘이 기기의 오늘보다 이르고,
+ * 요청을 그날 0시 전에 보냈거나(자정을 걸친 늦은 응답) 0시 뒤 10초 안에 보냈을 때(기기 시계가 서버보다 앞섬)만.
+ */
+export function shouldReread(server: string | undefined, sentAt: number, gotAt: number): boolean {
+  const g = new Date(gotAt);
+  const dayStart = new Date(g.getFullYear(), g.getMonth(), g.getDate()).getTime();
+  return server !== undefined && server < dayKey(g.getFullYear(), g.getMonth(), g.getDate()) && sentAt < dayStart + REREAD_WINDOW_MS;
+}
+
+/**
+ * 오늘의 대시보드와 그것을 판정한 순간(REQ-346 · 349 — 앱의 대시보드 읽기는 늘 이것으로 · REQ-348). 서버가 아직 전날로 센 응답은 쓰지 않고
+ * 1초 뒤 한 번 다시 읽는다 — 쓰면 홈 · 위젯 · 알림이 「새 날짜 + 전날 값」이 되고 자정 전에 써 둔 위젯 자정 항목(REQ-193)까지 한 항목으로 덮인다.
+ * 다시 읽은 응답은 판정 없이 쓴다(REQ-347 — 요청 많아야 2번). 쓰는 곳은 at을 그 값의 시각으로 쓴다(now · loadedMidnight · syncSurfaces · syncReminders).
+ */
+export async function todayDashboard(get: () => Promise<Dashboard>): Promise<{ d: Dashboard; at: number }> {
+  const sentAt = Date.now();
+  const first = await get();
+  const at = Date.now();
+  if (!shouldReread(serverToday(first.graph?.weeks), sentAt, at)) return { d: first, at };
+  await new Promise((r) => setTimeout(r, REREAD_MS));
+  const d = await get();
+  return { d, at: Date.now() };
 }

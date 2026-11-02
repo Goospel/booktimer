@@ -1,4 +1,5 @@
-import { goalChoices, goalProgress, type GoalProgress, goalStatus, isStaleDay, nextMidnightOf } from './goalProgress';
+import { goalChoices, goalProgress, type GoalProgress, goalStatus, isStaleDay, midnightRereadDelay, nextMidnightOf, REREAD_MS, shouldReread, todayDashboard } from './goalProgress';
+import type { ContributionDay, Dashboard } from '../api/types';
 
 // 범위 보충 §3.4 · REQ-90 — 오늘 초 = 끝난 몫 + 진행 중 몫(기기 자정부터 · 6시간 상한).
 // 시각은 기기 시간대의 날짜로 만든다(테스트가 어느 시간대에서 돌아도 같은 뜻).
@@ -97,4 +98,159 @@ test('REQ-177 · 목표 없음이면 「하루 목표 없음」 · 「오늘 N�
   expect(goalStatus({ progress: P({ streak: 3 }), goal: 0, measuring: false })).toBe(`하루 ${none}`);
   expect(goalStatus({ progress: P({ todaySeconds: 12 * MIN, filled: true, streak: 4 }), goal: 0, measuring: false })).toBe('오늘 12분 · 목표 없음');
   expect(goalStatus({ progress: P({ todaySeconds: 5 * MIN, filled: true, streak: 4 }), goal: 0, measuring: true })).toBe('오늘 5분 · 목표 없음');
+});
+
+// ── 자정을 걸친 늦은 대시보드 응답(REQ-346~349 · 2026-11-02) — 서버가 아직 전날로 센 응답은 쓰지 않고 1초 뒤 한 번 다시 읽는다 · 판정한 순간으로 쓴다 ──
+// 응답 픽스처의 서버 날짜는 가장 늦은 칸에만 둔다 — 앞 칸(10-18) · 앞날 칸(null) · 옛 주(10-11)와 갈리게(첫 칸을 읽으면 아래 「이미 새 날이면 다시 읽지 않는다」가 깨진다).
+const when = (day: number, h = 0, m = 0, s = 0, ms = 0) => new Date(2026, 9, day, h, m, s, ms).getTime();
+const cell = (date: string | null): ContributionDay => ({ date, totalSeconds: 0, level: 0, manual: false });
+const reply = (server: string) => ({ graph: { goalStreak: 1, weeks: [[cell('2026-10-18'), cell(server), cell(null)], [cell('2026-10-11')]] } }) as unknown as Dashboard;
+
+test('REQ-346 · 자정 전에 보낸 요청의 응답이 자정 뒤에 왔는데 서버가 아직 전날(10-23)이면 다시 읽는다 — 서버가 새 날(10-24)이면 그대로 쓴다', () => {
+  expect(shouldReread('2026-10-23', when(23, 23, 59, 59, 700), when(24, 0, 0, 0, 200))).toBe(true);
+  expect(shouldReread('2026-10-24', when(23, 23, 59, 59, 700), when(24, 0, 0, 0, 200))).toBe(false);
+});
+
+test('REQ-346 · 자정 뒤 10초 안에 보낸 요청에 서버가 전날이면 다시 읽는다(기기 시계가 서버보다 앞섬) — 9.999초까지 · 10초부터는 그대로 쓴다(창 끝)', () => {
+  expect(shouldReread('2026-10-23', when(24, 0, 0, 1), when(24, 0, 0, 1, 300))).toBe(true);
+  expect(shouldReread('2026-10-23', when(24, 0, 0, 9, 999), when(24, 0, 0, 10, 300))).toBe(true);
+  expect(shouldReread('2026-10-23', when(24, 0, 0, 10), when(24, 0, 0, 10, 300))).toBe(false);
+});
+
+test('REQ-347 · 다시 읽지 않는다 — 같은 날 · 서버가 하루 앞(해외 서쪽 · 자정 직후여도) · 잔디 없음(옛 서버 · 자정을 걸쳐도) · 낮 시간의 전날(해외 동쪽)', () => {
+  expect(shouldReread('2026-10-24', when(24, 12), when(24, 12, 0, 0, 300))).toBe(false);
+  expect(shouldReread('2026-10-25', when(24, 0, 0, 1), when(24, 0, 0, 1, 300))).toBe(false);
+  expect(shouldReread(undefined, when(23, 23, 59, 59, 700), when(24, 0, 0, 0, 200))).toBe(false);
+  expect(shouldReread('2026-10-23', when(24, 3), when(24, 3, 0, 0, 300))).toBe(false);
+});
+
+test('REQ-346 · 몇 시간 늦게 온 응답(23:59:30 보냄 → 08:00 옴 — 앱이 잠든 사이)도 다시 읽는다 · 그 다시 읽기(08:00:01 보냄)는 서버가 아직 전날이어도 그대로 쓴다(창 밖)', () => {
+  expect(shouldReread('2026-10-23', when(23, 23, 59, 30), when(24, 8))).toBe(true);
+  expect(shouldReread('2026-10-23', when(24, 8, 0, 1), when(24, 8, 0, 1, 300))).toBe(false);
+});
+
+test('REQ-346 · todayDashboard — 자정 전(23:59:59.700)에 보내 0.5초 걸린 응답이 서버 전날(10-23)이면 버리고 1초 뒤 다시 읽어 새 날(10-24) 응답과 그 받은 시각을 돌려준다', async () => {
+  jest.useFakeTimers();
+  try {
+    jest.setSystemTime(when(23, 23, 59, 59, 700));
+    const stale = reply('2026-10-23');
+    const fresh = reply('2026-10-24');
+    const queue = [stale, fresh];
+    const get = jest.fn(async () => {
+      jest.setSystemTime(Date.now() + 500); // 응답이 오는 데 걸린 시간
+      return queue.length > 1 ? queue.shift()! : queue[0];
+    });
+    const done = jest.fn();
+    void todayDashboard(get).then(done);
+    await jest.advanceTimersByTimeAsync(REREAD_MS - 1);
+    expect(get).toHaveBeenCalledTimes(1); // 1초를 기다린다
+    expect(done).not.toHaveBeenCalled(); // 버린 응답은 돌려주지 않는다
+    await jest.advanceTimersByTimeAsync(1);
+    expect(done).toHaveBeenCalledWith({ d: fresh, at: when(24, 0, 0, 1, 700) }); // 받아들인 응답을 받은 시각(REQ-349)
+    expect(get).toHaveBeenCalledTimes(2);
+  } finally {
+    jest.useRealTimers();
+  }
+});
+
+test('REQ-347 · todayDashboard — 서버가 계속 전날이면(해외 동쪽 · 기기 시계가 크게 앞섬) 한 번만 다시 읽고 그 응답을 쓴다 — 00:00:01에 보내 0.3초씩 걸리면 2번 읽고 남은 타이머가 없다', async () => {
+  jest.useFakeTimers();
+  try {
+    jest.setSystemTime(when(24, 0, 0, 1));
+    const stale1 = reply('2026-10-23');
+    const stale2 = { ...reply('2026-10-23'), hasActiveSession: true } as Dashboard; // 둘 다 전날 — 다른 객체라 어느 응답을 썼는지 가른다
+    const queue = [stale1, stale2];
+    const get = jest.fn(async () => {
+      jest.setSystemTime(Date.now() + 300);
+      return queue.shift()!;
+    });
+    const done = jest.fn();
+    void todayDashboard(get).then(done);
+    await jest.advanceTimersByTimeAsync(REREAD_MS);
+    // 손 유도: 1.0초 보냄 → 1.3초 받음(창 안 · 전날 → 다시 읽기) → 1초 뒤 2.3초 보냄 → 2.6초 받음 → 판정 없이 쓴다
+    expect(done).toHaveBeenCalledWith({ d: stale2, at: when(24, 0, 0, 2, 600) }); // 다시 읽은 응답(버린 첫 응답이 아니라)을 판정 없이 쓴다 — 지금 동작
+    expect(get).toHaveBeenCalledTimes(2);
+    expect(jest.getTimerCount()).toBe(0); // 더 기다리는 타이머가 없다 — 끝남이 구조다
+  } finally {
+    jest.useRealTimers();
+  }
+});
+
+test('REQ-347 · todayDashboard — 자정을 걸쳐 온 응답(23:59:59.700 보냄 · 00:00:00.200 받음)이 이미 새 날(10-24)이면 다시 읽지 않는다', async () => {
+  jest.useFakeTimers();
+  try {
+    jest.setSystemTime(when(23, 23, 59, 59, 700));
+    const fresh = reply('2026-10-24');
+    const get = jest.fn(async () => {
+      jest.setSystemTime(Date.now() + 500);
+      return fresh;
+    });
+    const done = jest.fn();
+    void todayDashboard(get).then(done);
+    await jest.advanceTimersByTimeAsync(0); // 마이크로태스크만 — 1초 기다림이 끼면 done이 아직 없다
+    expect(done).toHaveBeenCalledWith({ d: fresh, at: when(24, 0, 0, 0, 200) });
+    expect(get).toHaveBeenCalledTimes(1);
+  } finally {
+    jest.useRealTimers();
+  }
+});
+
+test('REQ-347 · todayDashboard — 같은 날 응답(서버 10-24 · 낮 12시)은 한 번 읽고 기다리지 않는다', async () => {
+  jest.useFakeTimers();
+  try {
+    jest.setSystemTime(when(24, 12));
+    const fresh = reply('2026-10-24');
+    const get = jest.fn(async () => fresh);
+    const done = jest.fn();
+    void todayDashboard(get).then(done);
+    await jest.advanceTimersByTimeAsync(0); // 마이크로태스크만 — 타이머는 나아가지 않는다
+    expect(done.mock.calls[0][0].d).toBe(fresh);
+    expect(get).toHaveBeenCalledTimes(1);
+  } finally {
+    jest.useRealTimers();
+  }
+});
+
+test('REQ-347 · todayDashboard — 다시 읽다 실패하면 그 오류를 낸다(버린 응답을 돌려주지 않는다 — 날짜에 묶인 값은 자정 전 값이 낫다)', async () => {
+  jest.useFakeTimers();
+  try {
+    jest.setSystemTime(when(23, 23, 59, 59, 700));
+    const get = jest
+      .fn()
+      .mockImplementationOnce(async () => {
+        jest.setSystemTime(Date.now() + 500);
+        return reply('2026-10-23');
+      })
+      .mockImplementationOnce(async () => {
+        throw new Error('끊김');
+      });
+    const r = todayDashboard(get).catch((e: unknown) => e);
+    await jest.advanceTimersByTimeAsync(REREAD_MS);
+    expect(await r).toEqual(new Error('끊김'));
+    expect(get).toHaveBeenCalledTimes(2);
+  } finally {
+    jest.useRealTimers();
+  }
+});
+
+test('REQ-349 · todayDashboard는 받아들인 응답을 받은 시각을 함께 돌려준다 — 자정 직전(23:59:59.700 보냄 · 23:59:59.950 받음)의 같은 날 응답은 23:59:59.950이다(보낸 시각이 아니다)', async () => {
+  jest.useFakeTimers();
+  try {
+    jest.setSystemTime(when(23, 23, 59, 59, 700));
+    const same = reply('2026-10-23');
+    const get = jest.fn(async () => {
+      jest.setSystemTime(Date.now() + 250);
+      return same;
+    });
+    await expect(todayDashboard(get)).resolves.toEqual({ d: same, at: when(23, 23, 59, 59, 950) }); // 쓰는 곳이 자정 뒤에 돌아도 이 값의 날은 10/23이다
+    expect(get).toHaveBeenCalledTimes(1);
+  } finally {
+    jest.useRealTimers();
+  }
+});
+
+test('REQ-349 · 측정 전 자정 다시 읽기는 읽은 날의 자정 +1초다 — 자정 직전(23:59:59.990)에 받은 값의 예약을 자정 뒤(00:00:00.010)에 걸어도 다음 날로 밀리지 않고 1초 뒤 · 평소(21:00)엔 3시간 +1초', () => {
+  expect(midnightRereadDelay(nextMidnightOf(when(23, 23, 59, 59, 990)), when(24, 0, 0, 0, 10))).toBe(1000);
+  expect(midnightRereadDelay(nextMidnightOf(when(23, 21)), when(23, 21))).toBe(3 * 60 * 60 * 1000 + 1000);
+  expect(midnightRereadDelay(when(24), when(24))).toBe(1000);
 });

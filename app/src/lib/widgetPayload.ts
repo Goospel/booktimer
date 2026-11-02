@@ -7,7 +7,7 @@
 import type { ReadingWidgetProps, WidgetMonth } from '../../widgets/ReadingWidget';
 import type { ContributionDay } from '../api/types';
 import { dateLabel } from './format';
-import { goalParts, goalProgress, nextMidnightOf, SESSION_CAP_MS } from './goalProgress';
+import { dayKey, goalParts, goalProgress, nextMidnightOf, serverToday, SESSION_CAP_MS } from './goalProgress';
 import { WIDGET_URL } from './widgetIntent';
 
 export interface WidgetSource {
@@ -67,8 +67,6 @@ export function widgetPayload(d: WidgetSource, now: Date): ReadingWidgetProps {
   return p;
 }
 
-const dayKey = (y: number, m: number, d: number) => `${y}-${String(m + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
-
 /**
  * 큰 위젯 달력(REQ-189) — now가 든 달 한 장. 일요일 시작 7칸 줄 · 1일 앞 빈칸.
  * 표식: 지난날 = 서버 잔디 단계(4 → 꽉 찬 점 · 1~3 → 빈 원) · 오늘 = 진행 중 몫을 얹은 판정 · 앞날 = 없음.
@@ -107,8 +105,8 @@ export function widgetTimeline(d: WidgetSource, now: Date): { date: Date; props:
   const entries = dayEntries(d, now);
   // 서버의 오늘(계정 시간대 — 날짜가 있는 가장 늦은 칸)이 기기의 오늘과 다르면(여행 · 자정 직후 시계 어긋남) 새 날을 미리 그리지 않는다 —
   // 덧붙인 전날 칸이 서버의 참값 칸을 덮고 새 날 연속이 틀린 채 며칠 남는다. 잔디가 없는 옛 서버는 덮을 칸이 없어 가드 없이.
-  const serverToday = d.graph?.weeks?.flat().reduce((m, c) => (c.date && c.date > m ? c.date : m), '');
-  if (serverToday && serverToday !== dayKey(now.getFullYear(), now.getMonth(), now.getDate())) return entries;
+  const server = serverToday(d.graph?.weeks);
+  if (server && server !== dayKey(now.getFullYear(), now.getMonth(), now.getDate())) return entries;
   let src = d;
   let at = now.getTime();
   for (let i = 0; i < WIDGET_DAYS_AHEAD; i++) {

@@ -16,6 +16,7 @@ import { buildInfoLine } from '../../lib/buildInfo';
 import { deleteVia } from '../../lib/deleteVia';
 import { clearAll, pendingAll } from '../../lib/draftSync';
 import { dateLabel } from '../../lib/format';
+import { todayDashboard } from '../../lib/goalProgress';
 import { logout } from '../../lib/logout';
 import { askPermission, permission, type PermissionState, reminderStore, syncReminders } from '../../lib/notify';
 import { clampTime, DEFAULT_REMINDER, type ReminderSetting } from '../../lib/reminders';
@@ -40,6 +41,12 @@ const todayAt = (h: number, m: number) => {
   const d = new Date();
   return new Date(d.getFullYear(), d.getMonth(), d.getDate(), h, m);
 };
+
+/** 알림을 오늘 대시보드로 다시 맞춘다(REQ-348 · 349). 계획은 판정한 순간으로 — 알림 줄은 늦게 돌아(notify.ts:68) 자정 직전에 받은 전날 값을 자정 뒤 「오늘」로 셀 수 있다. 못 읽으면 null — 오늘 것도 건다(다음 읽기가 고친다). */
+async function resyncReminders() {
+  const r = await todayDashboard(reading.dashboard).catch(() => null);
+  await syncReminders(r && r.d, r ? new Date(r.at) : undefined);
+}
 
 export default function Settings() {
   const stacked = useStacked();
@@ -99,7 +106,7 @@ export default function Settings() {
     const s = { ...setting, on: true };
     await reminderStore.set(s);
     setSetting(s);
-    await syncReminders(await reading.dashboard().catch(() => null));
+    await resyncReminders();
   }
 
   function pick(d: Date) {
@@ -109,12 +116,7 @@ export default function Settings() {
     void reminderStore.set(s);
     // 휠이 돌 때마다 30개를 다시 걸지 않는다 — 1초 뒤 한 번
     if (timer.current) clearTimeout(timer.current);
-    timer.current = setTimeout(() => {
-      void reading
-        .dashboard()
-        .catch(() => null)
-        .then((dash) => syncReminders(dash));
-    }, 1000);
+    timer.current = setTimeout(() => void resyncReminders(), 1000);
   }
 
   function withdraw() {

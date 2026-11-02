@@ -10,7 +10,7 @@ import type { Dashboard, StudyBook } from '../../api/types';
 import { Cover } from '../../components/Cover';
 import { Badge, Button, Notice, Screen, Txt, useStacked } from '../../components/ui';
 import { clockLabel, durationLabel, objectParticle } from '../../lib/format';
-import { isStaleDay, nextMidnightOf, SESSION_CAP_MS } from '../../lib/goalProgress';
+import { isStaleDay, midnightRereadDelay, nextMidnightOf, SESSION_CAP_MS, todayDashboard } from '../../lib/goalProgress';
 import { ALREADY_STOPPED, startMeasure, stopMeasure } from '../../lib/measureStart';
 import { defaultStudyBook, removeStudyBook, studyMeta } from '../../lib/studyShelf';
 import { studyToday } from '../../lib/studyTimer';
@@ -35,12 +35,13 @@ export default function Study() {
   // 대시보드 한 번으로 그린다(study 필드) — 위젯 · Live Activity도 같은 값으로 맞춘다(사양 §8-12)
   const load = useCallback(async () => {
     try {
-      const d = await reading.dashboard();
+      // 판정한 순간(at)을 그 값의 시각으로(REQ-349)
+      const { d, at } = await todayDashboard(reading.dashboard);
       setDash(d);
       setLoadError(null);
-      setNow(Date.now());
-      setLoadedMidnight(nextMidnightOf(Date.now()));
-      void syncSurfaces(d);
+      setNow(at);
+      setLoadedMidnight(nextMidnightOf(at));
+      void syncSurfaces(d, new Date(at));
     } catch (e) {
       setLoadError(e instanceof Error ? e.message : String(e));
     }
@@ -71,11 +72,12 @@ export default function Study() {
   useEffect(() => {
     if (staleDay) void load();
   }, [staleDay, load]);
+  // 측정 전 자정 예약은 읽은 날의 자정 기준(REQ-349)
   useEffect(() => {
     if (measuring || !dash) return;
-    const id = setTimeout(() => void load(), nextMidnightOf(Date.now()) - Date.now() + 1000);
+    const id = setTimeout(() => void load(), midnightRereadDelay(loadedMidnight, Date.now()));
     return () => clearTimeout(id);
-  }, [measuring, dash, load]);
+  }, [measuring, dash, loadedMidnight, load]);
 
   // Option+P가 그대로 부르는 처리기 둘(사양 §5.1 — 아래 useMeasureShortcut)
   async function start(bookId: number | null) {
