@@ -238,6 +238,63 @@ export interface DraftView {
   aiUpdatedAt: string | null;
   aiRemainingToday: number;
   aiConsent: boolean;
+  /**
+   * 옮긴 쪽지 id(책생글 M1 · J5) · 안 옮긴 빈 글은 null. 필드가 <b>없으면</b> M1 전 서버다 — 기기 칸 옮기기가 그 칸을 건드리지 않는다(J96).
+   * 그래서 선택 필드다(`'movedTo' in d`로 가른다).
+   */
+  movedTo?: number | null;
+}
+
+// ── 여백 쪽지(책생글 「여백 + 블로그」 M1) — 서버 AppMarginApiController record 그대로 ──────
+
+/**
+ * `AppMarginApiController.MarginSummary` — 목록 한 줄(생각 본문 없음). preview = 생각의 공백 · 줄바꿈 덩어리를 공백 하나로 접은 앞 80자
+ * (앱은 다시 접지 않는다 — F1 확인 질문 3). quoteSource = 옮긴 문장의 『제목』 · 저자 스냅샷(서재 「책 없는 여백」 출처 줄 — J84).
+ */
+export interface MarginSummary {
+  id: number;
+  bookId: number | null;
+  quote: string | null;
+  quoteSource: string | null;
+  preview: string;
+  chars: number;
+  hasAi: boolean;
+  exported: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+/** `AppMarginApiController.MarginView` — 쪽지 한 장. 책 없는 쪽지면 bookId · bookTitle이 null. quoteSource = 옮긴 문장의 『제목』 · 저자 스냅샷(J84). */
+export interface MarginView {
+  id: number;
+  bookId: number | null;
+  bookTitle: string | null;
+  quote: string | null;
+  quoteSource: string | null;
+  text: string;
+  revision: number;
+  questions: QuestionLog;
+  aiUpdatedAt: string | null;
+  aiRemainingToday: number;
+  aiConsent: boolean;
+  exported: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+/** `AppMarginApiController.CreateMargin` — bookId 없으면 책 없는 쪽지(C9 · 옮긴 문장은 400). */
+export interface CreateMargin {
+  bookId: number | null;
+  quote: string | null;
+  text: string;
+}
+
+/** `AppMarginApiController.EditMargin` — revision이 서버와 다르면 409. exported는 공유 시트 sharedAction일 때만 true(C8). */
+export interface EditMargin {
+  quote: string | null;
+  text: string;
+  revision: number;
+  exported?: boolean;
 }
 
 /** `WritingAiService.AiView` — 본문 · 제목 · revision이 없다(REQ-47). */

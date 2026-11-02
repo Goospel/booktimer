@@ -11,7 +11,7 @@ import { color, layout, line, space } from '../theme/tokens';
 import { Sheet } from './Sheet';
 import { AiBadge, Badge, Button, Txt } from './ui';
 
-const LAST_ROUND = '이 글에서 받을 수 있는 질문을 모두 받았어요 — 이제 내 글로 이어 가 보세요';
+const LAST_ROUND = '이 쪽지에서 받을 수 있는 질문을 모두 받았어요 — 이제 내 생각으로 이어 가 보세요';
 
 export function QuestionSheet(p: {
   open: boolean;
@@ -44,7 +44,7 @@ export function QuestionSheet(p: {
     <Sheet open={p.open} onClose={p.onClose} snap={['half', 'full']}>
       <View style={{ gap: space[6] }}>
         <View style={{ gap: space[1] }}>
-          <Txt v="H2">{`이 글에서 받은 질문 ${rounds}/${ROUNDS_MAX}`}</Txt>
+          <Txt v="H2">{`이 쪽지에서 받은 질문 ${rounds}/${ROUNDS_MAX}`}</Txt>
           <Txt v="T2" style={{ color: color.muted }}>
             {`오늘 남은 질문 ${p.remainingToday}번`}
           </Txt>

@@ -5,13 +5,13 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useEffect, useState } from 'react';
 import { ActivityIndicator, Alert, Linking, View } from 'react-native';
 
-import { account, session, writing } from '../api/client';
+import { account, session } from '../api/client';
 import { Button, Notice, Screen, Txt } from '../components/ui';
 import { appleCredential } from '../lib/auth/apple';
 import { googleSignIn, revokeGoogle } from '../lib/auth/google';
 import { kakaoIdToken, kakaoUnlink } from '../lib/auth/kakao';
 import { APPLE_AGAIN_LINE, confirmFor, deleteAccount, deleteCopy, deleteVia, type Via, WEB_DELETE_URL } from '../lib/deleteVia';
-import { draftSync } from '../lib/draftSync';
+import { clearAll, pendingAll } from '../lib/draftSync';
 import { signedOutNotice } from '../lib/logout';
 import { color, space } from '../theme/tokens';
 
@@ -27,7 +27,7 @@ export default function AccountDelete() {
   useEffect(() => {
     (async () => {
       const [acc, userId] = await Promise.all([session.account(), session.userId()]);
-      const pending = userId === null ? 0 : await draftSync({ kv: AsyncStorage, userId, put: writing.save }).pending();
+      const pending = userId === null ? 0 : await pendingAll(AsyncStorage, userId);
       setInfo({ via: deleteVia(acc), authProvider: acc.authProvider, appleLinked: acc.appleLinked, pending, userId });
     })().catch(() => setInfo({ via: 'WEB', authProvider: null, appleLinked: false, pending: 0, userId: null })); // 못 읽으면 아무것도 지우지 않는 웹 갈래
   }, []);
@@ -47,7 +47,7 @@ export default function AccountDelete() {
           unlinkKakao: kakaoUnlink,
           revokeGoogle,
           clearDrafts: async () => {
-            if (i.userId !== null) await draftSync({ kv: AsyncStorage, userId: i.userId, put: writing.save }).clear();
+            if (i.userId !== null) await clearAll(AsyncStorage, i.userId);
           },
           // 표지는 세션을 지우기 전에 — 지우는 순간 루트 틀이 로그인 화면을 그린다
           clearSession: async (message) => {

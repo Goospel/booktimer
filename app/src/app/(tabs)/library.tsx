@@ -1,22 +1,28 @@
 // 서재(PR-G 사양 §5.1 · §5.2 — 피그마 R7 S-LIB · S-LIB-EMPTY). 독서 서재 책만 세 단(읽는 중 → 다 읽음 → 읽고 싶어요).
 // 책이 있는 서재의 주 동작은 「책 열기」라 검정 알약이 없다 — 빈 서재에서만 「제목으로 찾기」가 검정(§8-4).
+// 맨 아래 「책 없는 여백」(책생글 A1 — J75 · C9 · F1 §4.2-4) — 0개면 단째 숨김. 빈 서재에도 단다(새 계정이 책 없이 쓴 쪽지 — U-148).
 import { router, useFocusEffect } from 'expo-router';
 import { useCallback, useState } from 'react';
 import { ActivityIndicator, Pressable, View } from 'react-native';
 
-import { library } from '../../api/client';
-import type { MyBookSummary } from '../../api/types';
+import { library, margins } from '../../api/client';
+import type { MarginSummary, MyBookSummary } from '../../api/types';
 import { Cover } from '../../components/Cover';
+import { confirmRemoveNote, NoteRow } from '../../components/NoteRow';
 import { Button, Notice, Screen, Txt, useStacked } from '../../components/ui';
+import { booklessSection, noteHref, pendingLeave, savedNotice } from '../../lib/marginSave';
 import { bookMeta, shelfSections } from '../../lib/shelf';
 import { color, layout, line, space } from '../../theme/tokens';
 
 export default function Library() {
   const [books, setBooks] = useState<MyBookSummary[] | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
+  const [bookless, setBookless] = useState<MarginSummary[]>([]);
   const stacked = useStacked();
 
   const load = useCallback(async () => {
+    // 책 없는 쪽지는 따로 읽는다 — 실패해도 서재가 막히지 않는다(못 읽으면 단을 숨긴다). 방금 떠난 쪽지의 저장은 상한까지 기다린다
+    void pendingLeave.wait().then(() => margins.bookless()).then(setBookless, () => setBookless([]));
     try {
       const r = await library.shelf();
       setBooks(r.books);
@@ -29,10 +35,12 @@ export default function Library() {
   // 책 화면에서 상태를 바꾸고 돌아오면 단이 바뀌어야 한다
   useFocusEffect(
     useCallback(() => {
+      savedNotice.take(); // 서재에서 연 쪽지의 「여백을 남겼어요」 — 소비만 한다(알림은 홈 · 책 — F1 §4.4-7). 안 하면 나중에 엉뚱한 화면에 뜬다
       void load();
     }, [load]),
   );
 
+  const removeBookless = (id: number) => setBookless((l) => l.filter((x) => x.id !== id));
   const toAdd = () => router.push('/add');
   const toScan = () => router.push('/add?scan=1');
 
@@ -68,6 +76,7 @@ export default function Library() {
             <Button kind="outline" label="바코드로 담기" onPress={toScan} />
           </View>
         </View>
+        <Bookless list={bookless} onRemoved={removeBookless} />
       </Screen>
     );
   }
@@ -111,7 +120,49 @@ export default function Library() {
           </View>
         ))}
       </View>
+      <Bookless list={bookless} onRemoved={removeBookless} />
     </Screen>
+  );
+}
+
+/** 「책 없는 여백」 단 — 쪽지 줄은 책 화면과 같은 모양(길게 누르거나 VoiceOver 「지우기」로 지운다) · 옮긴 문장이 있으면 그 아래 출처 줄(J84). */
+function Bookless({ list, onRemoved }: { list: MarginSummary[]; onRemoved: (id: number) => void }) {
+  const [error, setError] = useState<string | null>(null);
+  useFocusEffect(useCallback(() => setError(null), [])); // 지우기 실패 알림은 탭을 다시 열면 걷는다
+  const section = booklessSection(list);
+  if (!section) return null;
+  return (
+    <View style={{ marginTop: layout.sectionGap - space[4], gap: space[3] }}>{/* 화면 틀 사이 16 + 16 = 단 사이 32 */}
+      <View
+        accessible
+        accessibilityRole="header"
+        accessibilityLabel={`책 없는 여백, ${section.count}`}
+        style={{ flexDirection: 'row', alignItems: 'flex-end', justifyContent: 'space-between', gap: space[2] }}
+      >
+        <Txt v="H1">책 없는 여백</Txt>
+        <Txt v="L1" style={{ color: color.muted }}>
+          {section.count}
+        </Txt>
+      </View>
+      {error ? <Notice tone="error" message={error} /> : null}
+      <View>
+        {list.map((m) => (
+          <NoteRow
+            key={m.id}
+            m={m}
+            source
+            onPress={() => router.push(noteHref(null, m.id))}
+            onDelete={() => confirmRemoveNote(m.id, {
+                  removed: () => {
+                    setError(null);
+                    onRemoved(m.id);
+                  },
+                  failed: setError,
+                })}
+          />
+        ))}
+      </View>
+    </View>
   );
 }
 

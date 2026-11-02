@@ -7,7 +7,7 @@ jest.mock('expo-secure-store', () => ({
 
 import { ApiError, NetworkError } from '../api/client';
 import type { AiView, DraftView, QuestionLog } from '../api/types';
-import { aiButton, messageFor, sendAiStep } from './aiStep';
+import { aiButton, messageFor, sendAiStep, singleFlight } from './aiStep';
 import { revisionOrThrow } from './draftSync';
 
 const log = (text: string): QuestionLog => ({
@@ -48,8 +48,8 @@ function harness(o: { flush?: () => Promise<{ revision: number }>; post?: (r: nu
   };
 }
 
-const SAVE_FAIL = '글이 아직 저장되지 않아 질문을 보내지 못했어요 — 잠시 뒤 다시 눌러 주세요';
-const NET = '인터넷에 연결되지 않았어요 — 쓴 글은 이 기기에 남아 있어요. 연결되면 다시 눌러 주세요';
+const SAVE_FAIL = '쪽지가 아직 저장되지 않아 질문을 보내지 못했어요 — 잠시 뒤 다시 눌러 주세요'; // F1 §4.5 — 「글」 → 「쪽지」
+const NET = '인터넷에 연결되지 않았어요 — 쓴 쪽지는 이 기기에 남아 있어요. 연결되면 다시 눌러 주세요'; // F1 §4.5 — 「글」 → 「쪽지」(A1 리뷰 5)
 const NOT_YET = '질문을 아직 받지 못했어요';
 const GENERIC = '질문을 보내지 못했어요 — 잠시 뒤 다시 눌러 주세요';
 
@@ -174,6 +174,7 @@ describe('REQ-62 · 실패 문구', () => {
     expect(revisionOrThrow({ kind: 'mismatch', revision: 5 })).toEqual({ revision: 5 });
     expect(caught({ kind: 'offline' })).toBeInstanceOf(NetworkError);
     expect((caught({ kind: 'conflict' }) as ApiError).status).toBe(409);
+    expect((caught({ kind: 'conflict' }) as ApiError).message).toBe('다른 기기에서 이 쪽지가 바뀌었어요 — 그쪽을 불러와 주세요'); // F1 §4.5
     expect(caught({ kind: 'gone' })).toBeInstanceOf(Error);
     expect(caught(null)).toBeInstanceOf(Error);
   });
@@ -185,15 +186,15 @@ test('REQ-140 · /ai가 403이면 알림 문구가 아니라 동의 상태를 �
 });
 
 describe('REQ-138 · 아래 막대 AI 단추', () => {
-  const base = { rounds: 0, body: '', aiIncluded: 3, hasBook: true };
+  const base = { rounds: 0, quote: null as string | null, thought: '남은 생각', boxes: 0 };
 
   test('REQ-138 · 라운드 0이면 질문 받기(ASK), 1 이상이면 꼬리 질문(FOLLOW)이다', () => {
     expect(aiButton(base)).toEqual({ step: 'ASK', label: '질문 받기', disabled: false });
-    expect(aiButton({ ...base, rounds: 1, body: 'ㄱ'.repeat(30) })).toEqual({ step: 'FOLLOW', label: '꼬리 질문', disabled: false });
+    expect(aiButton({ ...base, rounds: 1, thought: 'ㄱ'.repeat(30) })).toEqual({ step: 'FOLLOW', label: '꼬리 질문', disabled: false });
   });
 
   test('REQ-138 · 꼬리 질문은 앞뒤 공백 뺀 본문 29자면 꺼지고 30자면 켜진다', () => {
-    const at = (body: string) => aiButton({ ...base, rounds: 1, body }).disabled;
+    const at = (thought: string) => aiButton({ ...base, rounds: 1, thought }).disabled;
     expect(at('가'.repeat(29))).toBe(true);
     expect(at('가'.repeat(30))).toBe(false);
     expect(at(`     ${'가'.repeat(29)}     `)).toBe(true); // 29자 + 앞뒤 공백 10 — 서버 strip()과 같다
@@ -201,14 +202,45 @@ describe('REQ-138 · 아래 막대 AI 단추', () => {
   });
 
   test('REQ-138 · 라운드 8이면 꺼지고 7이면 켜진다', () => {
-    const body = '가'.repeat(40);
-    expect(aiButton({ ...base, rounds: 8, body }).disabled).toBe(true);
-    expect(aiButton({ ...base, rounds: 7, body }).disabled).toBe(false);
+    const thought = '가'.repeat(40);
+    expect(aiButton({ ...base, rounds: 8, thought }).disabled).toBe(true);
+    expect(aiButton({ ...base, rounds: 7, thought }).disabled).toBe(false);
   });
 
-  test('REQ-138 · 질문 받기는 보낼 여백이 0개이거나 책이 없으면 꺼진다', () => {
-    expect(aiButton({ ...base, aiIncluded: 0 }).disabled).toBe(true);
-    expect(aiButton({ ...base, hasBook: false }).disabled).toBe(true);
-    expect(aiButton(base).disabled).toBe(false);
+  // J98 — 묻는 대상은 지금 쪽지다: 책 유무 · 같은 책 다른 쪽지 수와 무관하게 지금 쪽지에 읽을 것이 있으면 켜진다.
+  test('REQ-225 · 질문 받기는 지금 쪽지의 글만 본다 — 생각만 · 옮긴 문장만 · 박스만이어도 켜짐 · 빈 쪽지 · 문장부호뿐이면 꺼짐', () => {
+    const off = (p: Partial<typeof base>) => aiButton({ ...base, ...p }).disabled;
+    expect(off({ thought: '남은 생각' })).toBe(false); // 생각만(책 없는 쪽지도 같은 입력)
+    expect(off({ thought: '', quote: '새는 알에서 나오려고 투쟁한다.' })).toBe(false); // 옮긴 문장만
+    expect(off({ thought: '.', boxes: 1 })).toBe(false); // 건 블로그 문장 박스만(B1)
+    expect(off({ thought: '' })).toBe(true); // 빈 쪽지
+    expect(off({ thought: '  …?! ', quote: '   ' })).toBe(true); // 문장부호 · 공백뿐
+  });
+});
+
+// A1 리뷰 13 — 새 쪽지 첫 POST를 기다리는 동안 [질문 받기]를 또 누르면 AI 요청이 두 번 나간다(쪽지 몫 · 하루 몫 · 원가). 돌고 있으면 무시한다.
+describe('singleFlight · AI 보내기는 한 번에 하나', () => {
+  test('돌고 있는 동안 또 부르면 아무것도 하지 않고 · 끝나면 다시 받는다', async () => {
+    const once = singleFlight();
+    let calls = 0;
+    let release!: () => void;
+    const first = once(async () => {
+      calls++;
+      await new Promise<void>((r) => (release = r));
+    });
+    await once(async () => void calls++);
+    expect(calls).toBe(1);
+    release();
+    await first;
+    await once(async () => void calls++);
+    expect(calls).toBe(2);
+  });
+
+  test('던져도 잠금이 풀린다', async () => {
+    const once = singleFlight();
+    await expect(once(async () => { throw new Error('x'); })).rejects.toThrow('x');
+    let ran = false;
+    await once(async () => void (ran = true));
+    expect(ran).toBe(true);
   });
 });
