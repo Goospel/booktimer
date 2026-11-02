@@ -321,6 +321,29 @@ class MeasureFinishApiControllerTest {
     }
 
     @Test
+    @DisplayName("REQ-354 · 겹침을 빼고 남은 1초 미만 자투리는 적지 않는다 — 1초는 적는다(독서 · 공부)")
+    void subSecondLeftoverIsNotStored() throws Exception {
+        User u = user("f-sliver");
+        // 독서 실측이 두 문 모두의 바쁜 구간이다 — 앞머리에 0.5초(버림) · 1초(적음) 자투리가 남게 둔다
+        ended(u, yesterday("10:00").plusMillis(500), yesterday("11:00"), null);
+        ended(u, yesterday("12:00").plusSeconds(1), yesterday("13:00"), null);
+        ended(u, yesterday("14:00").plusMillis(500), yesterday("15:00"), null);
+        ended(u, yesterday("16:00").plusSeconds(1), yesterday("17:00"), null);
+
+        finish(READING, u, body(yesterday("10:00"), yesterday("11:00"), null)).andExpect(status().isOk());
+        finish(READING, u, body(yesterday("12:00"), yesterday("13:00"), null)).andExpect(status().isOk());
+        finish(STUDY, u, body(yesterday("14:00"), yesterday("15:00"), null)).andExpect(status().isOk());
+        finish(STUDY, u, body(yesterday("16:00"), yesterday("17:00"), null)).andExpect(status().isOk());
+
+        assertThat(realEnded(u)).extracting(ReadingSession::getStartedAt)
+                .containsExactly(yesterday("10:00").plusMillis(500), yesterday("12:00"),
+                        yesterday("12:00").plusSeconds(1), yesterday("14:00").plusMillis(500),
+                        yesterday("16:00").plusSeconds(1));
+        assertThat(studyEnded(u)).extracting(StudySession::getStartedAt, StudySession::getEndedAt)
+                .containsExactly(tuple(yesterday("16:00"), yesterday("16:00").plusSeconds(1)));
+    }
+
+    @Test
     @DisplayName("REQ-353~354 · 독서 — 다른 사용자의 행은 겹침에 넣지 않고 건드리지 않는다")
     void finish_otherUsersReadingRowsIgnored() throws Exception {
         User u = user("f-iso");
