@@ -403,12 +403,14 @@ test('A1 리뷰 6 · createFirst는 adopt 전에 localId를 비우고 noteId를 
 });
 
 // J5 · J100 — 앱 시작 동기화는 로그인 게이트 안에서 startSlotSync 한 호출이다(호출을 빼거나 게이트를 늘 return으로 만들면 잡힌다 — A1 리뷰 14).
-const START = /useEffect\(\(\) => \{\s*if \(!signedIn\) return;\s*void session\.userId\(\)\.then\(\s*\(userId\) => \{\s*if \(userId === null\) return;\s*return startSlotSync\(AsyncStorage, userId\);\s*\},\s*\(\) => undefined,?\s*\);\s*\}, \[signedIn\]\);/;
+// 타이머 오프라인 T0(REQ-362 · 363) — 같은 게이트 안에서 그 앞에 측정 가게를 열고 표면 맞추기를 켠다(가게를 안 열면 홈이 「불러오는 중」에 멈춘다).
+const START = /useEffect\(\(\) => \{\s*if \(!signedIn\) return;\s*void session\.userId\(\)\.then\(\s*async \(userId\) => \{\s*if \(userId === null\) return;\s*await measureStore\.open\(AsyncStorage, userId\);\s*startSurfaceSync\(\);\s*return startSlotSync\(AsyncStorage, userId\);\s*\},\s*\(\) => undefined,?\s*\);\s*\}, \[signedIn\]\);/;
 test('A1 리뷰 14 · _layout이 signedIn 게이트 안에서 startSlotSync를 부른다(빼면 잡힌다)', () => {
   const s = srcOf(join('app', '_layout.tsx'));
   expect(START.test(s)).toBe(true);
   expect(START.test(s.replace('return startSlotSync(AsyncStorage, userId);', ''))).toBe(false);
   expect(START.test(s.replace('if (!signedIn) return;', 'if (!signedIn || true) return;'))).toBe(false);
+  expect(START.test(s.replace('await measureStore.open(AsyncStorage, userId);', ''))).toBe(false);
 });
 
 // A1 리뷰 2 · 8 — 쪽지 지우기(확인 창 · 서버 지우기 · 기기 칸 지우기)는 한 곳(NoteRow.confirmRemoveNote)을 책 화면 · 서재가 같이 쓴다.
