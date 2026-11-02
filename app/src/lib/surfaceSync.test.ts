@@ -75,7 +75,9 @@ test('REQ-363 · 맞추는 중에 두 번 바뀌면 끝난 뒤 마지막 값으�
   await setBase(baseOf(dash(20 * 60)));
   await setBase(baseOf(dash(30 * 60)));
   hold.resolve('x');
-  await syncSurfacesNow(); // 줄에 선 판에 합류한다 — 새 판을 더 만들지 않는다
+  // 줄에 선 판은 가게 구독만으로 돈다 — 손으로 부르면 구독 줄을 빼도 초록이다
+  await tick();
+  await tick();
   expect(timeline).toHaveBeenCalledTimes(2);
   expect(minutesOf(timeline.mock.calls[0])).toBe(10);
   expect(minutesOf(timeline.mock.calls[1])).toBe(30);
