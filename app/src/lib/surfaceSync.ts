@@ -18,7 +18,8 @@ export function syncSurfacesNow(): Promise<void> {
       queued = false;
       const s = measureStore.get();
       const t = Date.now();
-      if (!s?.base) return syncReminders(null); // 기준 값이 아예 없으면 지금처럼(못 읽으면 null — 다음 읽기가 고친다)
+      if (!s) return; // 닫힌 가게(로그아웃 중) — 표면 정리는 루트의 세션 구독(clearSurfaces)이 한다
+      if (!s.base) return syncReminders(null); // 기준 값이 아예 없으면 지금처럼(못 읽으면 null — 다음 읽기가 고친다)
       await syncSurfaces(rollToDay(s.base, t).d, new Date(t));
     })
     .catch((e) => console.warn('surfaces', e));

@@ -113,3 +113,13 @@ test('REQ-363 · 기준 값이 없으면 알림을 null로 맞춘다 · syncSurf
   await p;
   expect(done).toBe(true);
 });
+
+test('REQ-363 · 가게가 닫혀 있으면(로그아웃 중 — 세션 정리 전) 아무것도 맞추지 않는다 · 열린 가게면 맞춘다', async () => {
+  await measureStore.close();
+  await syncSurfacesNow();
+  expect(reminders).toHaveBeenCalledTimes(0);
+  expect(timeline).toHaveBeenCalledTimes(0);
+  await measureStore.open(kv, 1); // 양성 대조 — 기준 값 없음이면 null로 맞춘다
+  await syncSurfacesNow();
+  expect(reminders).toHaveBeenCalledWith(null);
+});

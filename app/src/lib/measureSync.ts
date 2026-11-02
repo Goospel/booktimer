@@ -32,7 +32,7 @@ const notify = () => listeners.forEach((l) => l());
 export const measureStore = {
   /** 칸을 읽고 연다(그 뒤에 알린다). 디스크 기준 값은 순번 0 — 이 실행의 어떤 새 응답에도 진다 */
   async open(store: KV, userId: number): Promise<void> {
-    const saved = parse(await store.getItem(stateKey(userId)));
+    const saved = parse(await store.getItem(stateKey(userId)).catch(() => null)); // 못 읽어도 연다 — 안 열리면 홈이 「불러오는 중」에 멈춘다
     kv = store;
     state = { userId, base: saved?.base ? { ...saved.base, seq: 0 } : null };
     notify();

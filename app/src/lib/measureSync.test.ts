@@ -77,6 +77,20 @@ test('REQ-362 · 이 실행에서 더 늦게 보낸 요청의 응답만 받는�
   expect(JSON.parse(kv.map.get('timer:1:state')!).base.d).toEqual(dash(1200));
 });
 
+test('REQ-362 · 디스크 칸을 못 읽거나 깨져 있어도 빈 기준 값으로 연다(열리지 않으면 홈이 「불러오는 중」에 멈춘다)', async () => {
+  const kv = memoryKV();
+  kv.getItem = async () => {
+    throw new Error('disk');
+  };
+  await measureStore.open(kv, 1);
+  expect(measureStore.get()).toEqual({ userId: 1, base: null });
+  await measureStore.close();
+  const broken = memoryKV();
+  broken.map.set('timer:1:state', '{깨짐');
+  await measureStore.open(broken, 1);
+  expect(measureStore.get()).toEqual({ userId: 1, base: null });
+});
+
 test('REQ-362 · 가게가 안 열렸으면 대시보드를 읽지 않는다', async () => {
   const get = jest.spyOn(reading, 'dashboard').mockResolvedValue(dash(600));
   await loadDashboard();
