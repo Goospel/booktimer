@@ -55,6 +55,9 @@ class ReadingSessionServiceTest {
     @Mock
     private StudySessionRepository studyRepository;
 
+    @Mock
+    private com.booktimer.user.UserRepository userRepository;
+
     @InjectMocks
     private ReadingSessionService service;
 
@@ -816,8 +819,6 @@ class ReadingSessionServiceTest {
         when(sessionRepository.findByIdAndUser(2L, user)).thenReturn(Optional.of(last));
         when(sessionRepository.findByUserAndEndedAtAndBookIsNullAndManualEntryFalse(user, midnight))
                 .thenReturn(Optional.of(first));
-        when(sessionRepository.findByUserAndEndedAtAndBookIsNullAndManualEntryFalse(user, firstStart))
-                .thenReturn(Optional.empty());
         when(sessionRepository.save(any(ReadingSession.class))).thenAnswer(returnsFirstArg());
 
         ReadingSession result = service.tagBook(user, 2L, book);
@@ -839,8 +840,6 @@ class ReadingSessionServiceTest {
         session.end(started.plusSeconds(1800));
         Book book = Book.register(user, "클린 코드", null, null, null, null, null, BookStatus.READING);
         when(sessionRepository.findByIdAndUser(1L, user)).thenReturn(Optional.of(session));
-        when(sessionRepository.findByUserAndEndedAtAndBookIsNullAndManualEntryFalse(eq(user), any(Instant.class)))
-                .thenReturn(Optional.empty());
         when(sessionRepository.save(any(ReadingSession.class))).thenAnswer(returnsFirstArg());
 
         service.tagBook(user, 1L, book);
@@ -1069,5 +1068,129 @@ class ReadingSessionServiceTest {
 
         verify(sessionRepository, times(1)).save(any(ReadingSession.class));
         assertThat(result.getDurationSeconds()).isEqualTo(420L);
+    }
+
+    // ==========================================================================
+    // 앱 기기 측정 마감(finish) — 순수 함수 (설계 2026-11-02 §6.2)
+    // ==========================================================================
+
+    private static final Instant W0 = Instant.parse("2026-06-01T01:00:00Z");
+
+    /** W0 기준 분 좌표의 구간 — 마감 순수 함수의 경계를 짧게 적으려고. */
+    private static ReadingSessionService.Segment minutes(long from, long to) {
+        return new ReadingSessionService.Segment(W0.plusSeconds(from * 60), W0.plusSeconds(to * 60));
+    }
+
+    private static final ReadingSessionService.Segment WHOLE = minutes(0, 60);
+
+    @Test
+    @DisplayName("REQ-354 · subtract — 겹침 없음 · 가운데 · 서로 겹친 바쁜 구간 · 긴 구간 안의 짧은 구간 · 전부 덮임 · 1초 미만 조각 버림")
+    void subtract_cases() {
+        java.time.Duration oneSecond = java.time.Duration.ofSeconds(1);
+        // 겹침 없음(바쁜 구간이 앞 · 뒤 바깥이면 통째로 남는다 — 맞닿기만 해도 겹침이 아니다)
+        assertThat(ReadingSessionService.subtract(WHOLE, List.of(minutes(-20, 0), minutes(60, 70)), oneSecond))
+                .containsExactly(WHOLE);
+        // 가운데
+        assertThat(ReadingSessionService.subtract(WHOLE, List.of(minutes(20, 30)), oneSecond))
+                .containsExactly(minutes(0, 20), minutes(30, 60));
+        // 서로 겹친 바쁜 구간(넘겨받은 순서가 시간순이 아니어도)
+        assertThat(ReadingSessionService.subtract(WHOLE, List.of(minutes(20, 40), minutes(10, 30)), oneSecond))
+                .containsExactly(minutes(0, 10), minutes(40, 60));
+        // 긴 구간 안의 짧은 구간
+        assertThat(ReadingSessionService.subtract(WHOLE, List.of(minutes(5, 50), minutes(10, 20)), oneSecond))
+                .containsExactly(minutes(0, 5), minutes(50, 60));
+        // 전부 덮임
+        assertThat(ReadingSessionService.subtract(WHOLE, List.of(minutes(-10, 70)), oneSecond)).isEmpty();
+        // 1초 미만 조각 — 저장(1초)은 버리고 셈(0)은 남긴다
+        ReadingSessionService.Segment busy = new ReadingSessionService.Segment(W0.plusMillis(999), WHOLE.end());
+        assertThat(ReadingSessionService.subtract(WHOLE, List.of(busy), oneSecond)).isEmpty();
+        assertThat(ReadingSessionService.subtract(WHOLE, List.of(busy), java.time.Duration.ZERO))
+                .containsExactly(new ReadingSessionService.Segment(W0, W0.plusMillis(999)));
+    }
+
+    @Test
+    @DisplayName("REQ-354 · crossingSeconds — 앞에서 걸침 · 뒤로 걸침 · 앞뒤 둘 다 · 안에 든 것은 세지 않음 · 걸친 것끼리 겹치면 한 번만 · 자정에서 나뉜 걸친 측정의 안쪽 조각은 세지 않는다(알려진 빈틈 — 고정)")
+    void crossingSeconds_cases() {
+        assertThat(ReadingSessionService.crossingSeconds(WHOLE, List.of(minutes(-10, 10)))).isEqualTo(600);
+        assertThat(ReadingSessionService.crossingSeconds(WHOLE, List.of(minutes(50, 70)))).isEqualTo(600);
+        assertThat(ReadingSessionService.crossingSeconds(WHOLE, List.of(minutes(-10, 10), minutes(50, 70)))).isEqualTo(1200);
+        assertThat(ReadingSessionService.crossingSeconds(WHOLE, List.of(minutes(20, 30)))).isZero();
+        // 다시 보낸 자기 조각은 늘 [시작, 끝] 안이다 — 통째로 맞닿은 안쪽 구간도 세지 않는다
+        assertThat(ReadingSessionService.crossingSeconds(WHOLE, List.of(minutes(0, 60)))).isZero();
+        assertThat(ReadingSessionService.crossingSeconds(WHOLE, List.of(minutes(-10, 10), minutes(-5, 15)))).isEqualTo(900);
+        // 자정 분할된 웹 측정 [22:00, 00:00] · [00:00, 00:10] vs 앱 [23:00, 01:00] → 걸친 몫 60분만(빼는 몫은 70분)
+        ReadingSessionService.Segment night =
+                new ReadingSessionService.Segment(kst("2026-06-01T23:00"), kst("2026-06-02T01:00"));
+        List<ReadingSessionService.Segment> web = List.of(
+                new ReadingSessionService.Segment(kst("2026-06-01T22:00"), kst("2026-06-02T00:00")),
+                new ReadingSessionService.Segment(kst("2026-06-02T00:00"), kst("2026-06-02T00:10")));
+        assertThat(ReadingSessionService.crossingSeconds(night, web)).isEqualTo(3600);
+        assertThat(ReadingSessionService.subtract(night, web, java.time.Duration.ofSeconds(1)))
+                .containsExactly(new ReadingSessionService.Segment(kst("2026-06-02T00:10"), kst("2026-06-02T01:00")));
+    }
+
+    @Test
+    @DisplayName("REQ-354 · busySegment — 켜진 행은 [시작, min(지금, 시작 + 6시간)] · 지금 뒤에 시작한 켜진 행은 버린다(null) · 끝난 행은 그대로")
+    void busySegment_cases() {
+        Instant now = W0.plusSeconds(10 * 3600);
+        assertThat(ReadingSessionService.busySegment(now.minusSeconds(3600), null, now))
+                .isEqualTo(new ReadingSessionService.Segment(now.minusSeconds(3600), now));
+        Instant longAgo = now.minusSeconds(7 * 3600);
+        assertThat(ReadingSessionService.busySegment(longAgo, null, now))
+                .isEqualTo(new ReadingSessionService.Segment(longAgo, longAgo.plusSeconds(6 * 3600)));
+        // 컨트롤러가 지금을 잡은 뒤 잠금을 기다리는 사이에 시작된 켜진 측정 — 역순 구간을 만들지 않는다
+        assertThat(ReadingSessionService.busySegment(now.plusMillis(1), null, now)).isNull();
+        assertThat(ReadingSessionService.busySegment(now, null, now)).isNull();
+        assertThat(ReadingSessionService.busySegment(W0, W0.plusSeconds(60), now))
+                .isEqualTo(new ReadingSessionService.Segment(W0, W0.plusSeconds(60)));
+    }
+
+    @Test
+    @DisplayName("REQ-353 · finishWindow — 밀리초로 자르고 6시간 상한을 걸며 끝 ≤ 시작이면 셀 것이 없다(null)")
+    void finishWindow_cases() {
+        Instant s = W0.plusNanos(123_456_789);
+        assertThat(ReadingSessionService.finishWindow(s, s.plusSeconds(60)))
+                .isEqualTo(new ReadingSessionService.Segment(W0.plusMillis(123), W0.plusMillis(123).plusSeconds(60)));
+        assertThat(ReadingSessionService.finishWindow(W0, W0.plusSeconds(8 * 3600)))
+                .isEqualTo(new ReadingSessionService.Segment(W0, W0.plusSeconds(6 * 3600)));
+        assertThat(ReadingSessionService.finishWindow(W0, W0)).isNull();
+        // 같은 밀리초 안의 끝(나노초만 다름)도 셀 것이 없다
+        assertThat(ReadingSessionService.finishWindow(W0.plusNanos(1), W0.plusNanos(999))).isNull();
+    }
+
+    /**
+     * MySQL REPEATABLE READ는 트랜잭션의 첫 일반 SELECT에서 스냅숏을 잡는다 — 잠금 앞에 조회가 하나라도 있으면
+     * 잠금을 기다린 뒤에도 앞 요청이 적은 조각이 안 보여 두 벌을 적는다. H2(READ COMMITTED)는 이 회귀를 못 잡으므로
+     * 순서를 여기서 구조로 잠근다. 스텁이 없어도 된다(목 기본값이 빈 List).
+     */
+    @Test
+    @DisplayName("REQ-355 · 마감의 첫 저장소 호출은 사용자 잠금이다(독서)")
+    void finish_firstRepositoryCallIsUserLock() {
+        service.finish(user, W0, W0.plusSeconds(3600), null, W0.plusSeconds(7200));
+
+        List<org.mockito.invocation.Invocation> calls = java.util.stream.Stream
+                .of(sessionRepository, studyRepository, bookRepository, userRepository)
+                .flatMap(m -> org.mockito.Mockito.mockingDetails(m).getInvocations().stream())
+                .sorted(java.util.Comparator.comparingInt(org.mockito.invocation.Invocation::getSequenceNumber))
+                .toList();
+        assertThat(calls).extracting(c -> c.getMethod().getName())
+                .startsWith("lockById")
+                .contains("findOverlapping", "save"); // 양성 대조: 잠금 뒤에 조회 · 저장이 실제로 이어졌다
+    }
+
+    @Test
+    @DisplayName("REQ-379 · 종료 후 태깅은 자정이 아닌 이음매로 맞닿은 앞 행을 걷지 않는다(독서)")
+    void tagBook_nonMidnightSeam_doesNotWalk() {
+        // 앱 마감 조각 [10:00, 10:30]과 밀리초까지 맞닿은 웹 측정 [10:30, 11:00] — 이음매가 자정이 아니다
+        ReadingSession web = ReadingSession.start(user, kst("2026-06-01T10:30"));
+        web.end(kst("2026-06-01T11:00"));
+        Book book = Book.register(user, "클린 코드", null, null, null, null, null, BookStatus.READING);
+        when(sessionRepository.findByIdAndUser(3L, user)).thenReturn(Optional.of(web));
+        when(sessionRepository.save(any(ReadingSession.class))).thenAnswer(returnsFirstArg());
+
+        service.tagBook(user, 3L, book);
+
+        verify(sessionRepository, never()).findByUserAndEndedAtAndBookIsNullAndManualEntryFalse(any(), any());
+        verify(sessionRepository, times(1)).save(any(ReadingSession.class));
     }
 }

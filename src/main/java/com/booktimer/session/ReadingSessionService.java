@@ -3,6 +3,7 @@ package com.booktimer.session;
 import com.booktimer.book.Book;
 import com.booktimer.book.BookRepository;
 import com.booktimer.user.User;
+import com.booktimer.user.UserRepository;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
@@ -58,13 +59,16 @@ public class ReadingSessionService {
     private final ReadingSessionRepository sessionRepository;
     private final BookRepository bookRepository;
     private final StudySessionRepository studyRepository;
+    private final UserRepository userRepository;
 
     public ReadingSessionService(ReadingSessionRepository sessionRepository,
                                  BookRepository bookRepository,
-                                 StudySessionRepository studyRepository) {
+                                 StudySessionRepository studyRepository,
+                                 UserRepository userRepository) {
         this.sessionRepository = sessionRepository;
         this.bookRepository = bookRepository;
         this.studyRepository = studyRepository;
+        this.userRepository = userRepository;
     }
 
     /**
@@ -171,6 +175,41 @@ public class ReadingSessionService {
         return last;
     }
 
+    /**
+     * <b>앱 기기 측정 마감</b> — 앱이 기기에서 잰 끝난 측정을 기기 시각 그대로 <b>새 행으로만</b> 적는다. 있던 행
+     * (켜진 측정 · 끝난 기록 · 손 기록 · 남의 행)은 닫지도 줄이지도 지우지도 않는다 — 여기엔 {@code save}로 새 행을
+     * 만드는 줄만 있다. 그 사용자의 이미 있는 실측(독서 · 공부)과 겹친 시간은 빼고 적는다(먼저 있는 실측이 이긴다).
+     * 6시간 상한 → 사용자 시간대 자정 분할 순서는 {@link #stop}과 같다. 다시 보내면 앞서 적은 조각이 바쁜 구간이라
+     * 전부 빠진다(멱등). 날짜 정책(끝 ≤ 지금 · 5분 · 7일)은 컨트롤러가 본다.
+     *
+     * @param book 지정한 책(소유 검증은 호출부 — 남의 · 없는 책이면 null로 넘어온다)
+     * @return 걸친 실측과 겹쳐 뺀 초({@link #crossingSeconds})
+     */
+    public long finish(User user, Instant startedAt, Instant endedAt, Book book, Instant now) {
+        // ⚠️ 트랜잭션의 첫 DB 문장이어야 한다. MySQL InnoDB REPEATABLE READ는 첫 일반 SELECT에서 스냅숏을 잡고
+        //    잠금(FOR UPDATE)은 스냅숏을 만들지 않는다 — 이 앞에 조회가 하나라도 있으면 잠금을 기다린 뒤에도
+        //    앞 요청이 적은 조각이 안 보여 두 벌을 적는다. H2 테스트(READ COMMITTED)는 못 잡는다 — 구조 테스트가 지킨다.
+        userRepository.lockById(user.getId());
+        Segment whole = finishWindow(startedAt, endedAt);
+        if (whole == null) {
+            return 0;
+        }
+        List<Segment> busy = busy(sessionRepository, studyRepository, user, whole, now);
+        List<Segment> free = subtract(whole, busy, MIN_PIECE);
+        ZoneId zone = ZoneId.of(user.getTimezone());
+        for (Segment f : free) {
+            for (Segment seg : splitByMidnight(f.start(), f.end(), zone)) {
+                ReadingSession piece = ReadingSession.start(user, seg.start(), book);
+                piece.end(seg.end());
+                sessionRepository.save(piece);
+            }
+        }
+        if (book != null && !free.isEmpty() && book.startReading(whole.start())) {
+            bookRepository.save(book);
+        }
+        return crossingSeconds(whole, busy);
+    }
+
     /** 자정 분할 조각 — 시각 쌍 하나가 저장될 한 행이 된다. */
     record Segment(Instant start, Instant end) {
     }
@@ -271,6 +310,95 @@ public class ReadingSessionService {
         return now.isAfter(cap) ? cap : now;
     }
 
+    /** 마감이 저장하는 조각의 최소 길이 — 이보다 짧은 자투리는 적지 않는다(셈에는 0을 쓴다). */
+    static final Duration MIN_PIECE = Duration.ofSeconds(1);
+
+    /**
+     * 마감 구간 — 밀리초로 자른 뒤(started_at 컬럼 정밀도 · 앱이 보내는 ISO도 밀리초) 6시간 상한을 건다.
+     * 끝 ≤ 시작이면 셀 것이 없어 null. 공부 마감도 쓴다.
+     */
+    static Segment finishWindow(Instant startedAt, Instant endedAt) {
+        Instant s = startedAt.truncatedTo(ChronoUnit.MILLIS);
+        Instant end = clampToCap(s, endedAt.truncatedTo(ChronoUnit.MILLIS));
+        return end.isAfter(s) ? new Segment(s, end) : null;
+    }
+
+    /**
+     * 그 사용자의 바쁜 구간 — 독서 실측(손 기록 제외) · 공부 행 중 {@code w}와 겹치는 것. 끝난 행과 켜진 행을
+     * <b>한 List 조회</b>로 읽는다(켜진 행이 둘이어도 — Optional finder면 500). 공부 마감도 쓴다.
+     */
+    static List<Segment> busy(ReadingSessionRepository reading, StudySessionRepository study,
+                              User user, Segment w, Instant now) {
+        List<Segment> busy = new ArrayList<>();
+        for (ReadingSession r : reading.findOverlapping(user, w.start(), w.end())) {
+            addIfPresent(busy, busySegment(r.getStartedAt(), r.getEndedAt(), now));
+        }
+        for (StudySession s : study.findOverlapping(user, w.start(), w.end())) {
+            addIfPresent(busy, busySegment(s.getStartedAt(), s.getEndedAt(), now));
+        }
+        return busy;
+    }
+
+    private static void addIfPresent(List<Segment> list, Segment s) {
+        if (s != null) {
+            list.add(s);
+        }
+    }
+
+    /**
+     * 행 하나의 바쁜 구간 — 켜진 행(끝 null)은 {@code [시작, min(지금, 시작 + 6시간)]}(스윕 전이어도 상한 뒤는
+     * 세지 않는다), 끝난 행은 그대로. <b>끝 ≤ 시작이면 null</b> — 컨트롤러가 지금을 잡은 뒤 잠금을 기다리는 사이에
+     * 시작된 켜진 측정이다(마감 구간은 지금 전에 끝나 겹칠 수 없다). 공부 행은 벽시계 구간 전체를 쓴다
+     * (자리 비움 구간은 저장되지 않는다 — 보수적으로 더 뺀다).
+     */
+    static Segment busySegment(Instant start, Instant endOrNull, Instant now) {
+        Instant end = endOrNull != null ? endOrNull : clampToCap(start, now);
+        return end.isAfter(start) ? new Segment(start, end) : null;
+    }
+
+    /** {@code whole}에서 바쁜 구간의 합집합을 뺀 조각들(시간순). {@code min}보다 짧은 조각은 버린다. */
+    static List<Segment> subtract(Segment whole, List<Segment> busy, Duration min) {
+        List<Segment> sorted = new ArrayList<>(busy);
+        sorted.sort(java.util.Comparator.comparing(Segment::start));
+        List<Segment> free = new ArrayList<>();
+        Instant cursor = whole.start();
+        for (Segment b : sorted) {
+            if (!cursor.isBefore(whole.end())) {
+                return free;
+            }
+            if (b.start().isAfter(cursor)) {
+                addPiece(free, cursor, b.start().isBefore(whole.end()) ? b.start() : whole.end(), min);
+            }
+            if (b.end().isAfter(cursor)) {
+                cursor = b.end();
+            }
+        }
+        addPiece(free, cursor, whole.end(), min);
+        return free;
+    }
+
+    private static void addPiece(List<Segment> free, Instant from, Instant to, Duration min) {
+        if (to.isAfter(from) && Duration.between(from, to).compareTo(min) >= 0) {
+            free.add(new Segment(from, to));
+        }
+    }
+
+    /**
+     * 앱에 알릴 「겹쳐 뺀 초」 — 바쁜 구간 중 <b>{@code whole}의 시작 앞에서 오거나 끝 뒤로 가는 것</b>만의 합집합이
+     * {@code whole}을 덮는 초. 다시 보낸 앞선 자기 조각은 늘 안쪽이라 세지 않는다(재전송이 거짓 알림을 내지 않는다).
+     * 알려진 빈틈 둘: 안에 통째로 든 짧은 다른 실측 · 자정에서 나뉜 걸친 측정의 안쪽 조각은 빼되 세지 않는다.
+     */
+    static long crossingSeconds(Segment whole, List<Segment> busy) {
+        List<Segment> crossing = busy.stream()
+                .filter(b -> b.start().isBefore(whole.start()) || b.end().isAfter(whole.end()))
+                .toList();
+        Duration covered = Duration.between(whole.start(), whole.end());
+        for (Segment f : subtract(whole, crossing, Duration.ZERO)) {
+            covered = covered.minus(Duration.between(f.start(), f.end()));
+        }
+        return covered.toSeconds();
+    }
+
     /**
      * <b>종료 후 태깅</b>(발견 1) — 책 없이 측정한 세션에 나중에 책을 연결한다. 책 없이 시작한 측정을
      * 종료한 뒤 "무슨 책이었나요?"로 되돌아보며 붙이는 경로다.
@@ -299,9 +427,13 @@ public class ReadingSessionService {
         session.tagBook(book); // 이미 책 있으면 IllegalStateException
         ReadingSession saved = sessionRepository.save(session);
         // 인접한 앞 조각을 따라 올라가며 같은 책을 붙인다(분할이 없었으면 첫 조회가 바로 empty).
+        // 이음매가 유저 TZ 자정일 때만 걷는다(assignBook과 같은 규칙) — 앱 마감 조각은 웹 측정의 시작과 밀리초까지
+        // 맞닿을 수 있어, 자정 조건이 없으면 책 없이 잰 그 조각에도 이 책이 붙는다(REQ-379).
+        ZoneId zone = ZoneId.of(user.getTimezone());
         ReadingSession earliest = session;
         for (Optional<ReadingSession> previous;
-             (previous = sessionRepository.findByUserAndEndedAtAndBookIsNullAndManualEntryFalse(
+             isDayStart(earliest.getStartedAt(), zone)
+                     && (previous = sessionRepository.findByUserAndEndedAtAndBookIsNullAndManualEntryFalse(
                      user, earliest.getStartedAt())).isPresent(); ) {
             earliest = previous.get();
             earliest.tagBook(book);
