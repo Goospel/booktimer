@@ -20,6 +20,7 @@ import ReadingWidget from '../../widgets/ReadingWidget';
 import { session } from '../api/client';
 import type { Dashboard } from '../api/types';
 import type { KV } from './draftSync';
+import { begin, end } from './measureLedger';
 import { measureStore } from './measureSync';
 import { syncReminders } from './notify';
 import { startSurfaceSync, stopSurfaceSync, syncSurfacesNow } from './surfaceSync';
@@ -153,4 +154,29 @@ test('REQ-363 · 가게가 닫혀 있으면(로그아웃 중 — 세션 정리 �
   await measureStore.open(kv, 1); // 양성 대조 — 기준 값 없음이면 null로 맞춘다
   await syncSurfacesNow();
   expect(reminders).toHaveBeenCalledWith(null);
+});
+
+// 타이머 오프라인 T2 — 오프라인 시작 · 정지도 잠금화면 · 위젯 · 알림이 따른다(목표 6의 lib 게이트 · 기기 쪽은 U-165 ①)
+test('REQ-363 · (T2) 원장에 시작을 적으면 표면을 그 시작 시각으로, 끝내면 측정 없음으로 맞춘다', async () => {
+  const d = { ...dash(10 * 60), readingBooks: [], wantToReadBooks: [] } as unknown as Dashboard;
+  await setBase(baseOf(d));
+  startSurfaceSync();
+  await tick();
+  await tick();
+  const startedAt = Date.now() - 1000;
+  mockStart.mockClear();
+  reminders.mockClear();
+  await measureStore.update((s) => ({ ...s, ledger: begin(s.ledger, { mode: 'reading', at: startedAt, bookId: null, bookTitle: '데미안' }) }), 1);
+  await tick();
+  await tick();
+  const on = reminders.mock.calls.at(-1)![0] as Dashboard;
+  expect(on).toMatchObject({ hasActiveSession: true, activeStartedAt: new Date(startedAt).toISOString(), activeBookTitle: '데미안' });
+  expect(mockStart).toHaveBeenCalledTimes(1); // 잠금화면 「읽는 중」
+  reminders.mockClear();
+  await measureStore.update((s) => ({ ...s, ledger: end(s.ledger, Date.now()) }), 1);
+  await tick();
+  await tick();
+  const off = reminders.mock.calls.at(-1)![0] as Dashboard;
+  expect(off).toMatchObject({ hasActiveSession: false, activeStartedAt: null });
+  expect(mockInstances).toHaveLength(0); // 활동이 끝났다
 });
