@@ -366,6 +366,19 @@ test('REQ-359 · 차례 중 사용자가 바뀌면 남은 칸을 보내지 않�
   expect(finish).toHaveBeenCalledTimes(1); // 앞 사람의 b를 새 토큰으로 보내지 않는다
   expect(measureStore.get()!.ledger.done).toEqual([done(30)]); // 새 사용자 원장은 그대로
   expect(JSON.parse(kv.map.get(KEY)!).ledger.done).toEqual([a, b]); // 앞 사람 칸은 디스크에 남는다(다시 로그인하면 보낸다)
+
+  // 칸 사이에 바뀐 경우 — 앞 칸을 받아 적은 바로 뒤(다음 칸을 보내기 전)에 로그아웃 → 다른 계정. 칸마다 사용자를 대조해야 잡힌다
+  await measureStore.close();
+  await measureStore.open(kv, 1);
+  finish.mockClear();
+  const unsub = measureStore.subscribe(() => {
+    if (measureStore.get()?.userId === 1 && slotOf(measureStore.get()!, a)?.settledAt != null) {
+      unsub();
+      void measureStore.close().then(() => measureStore.open(kv, 2));
+    }
+  });
+  await flushMeasures();
+  expect(finish.mock.calls.map((x) => x[0])).toEqual([body(a)]);
 });
 
 test('REQ-359 · 가게가 안 열렸으면 보내지 않는다 · 시작 시각 순서로 보낸다 · 대시보드를 읽기 전에 보낸다', async () => {
