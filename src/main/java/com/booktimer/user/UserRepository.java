@@ -192,6 +192,14 @@ public interface UserRepository extends JpaRepository<User, Long> {
             + " or u.studyAiAccess = com.booktimer.user.StudyAiAccess.APPROVED")
     List<User> lockApprovalCandidates();
 
+    /**
+     * 한 사용자 행 잠금 — 같은 사용자의 앱 마감(독서 · 공부)을 한 줄로 세운다(재전송 · 동시 전송이 두 벌을 적지 않게).
+     * 마감 트랜잭션의 <b>첫 DB 문장</b>이어야 한다(MySQL 스냅숏 — {@code ReadingSessionService.finish}).
+     */
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("select u from User u where u.id = :id")
+    Optional<User> lockById(@Param("id") Long id);
+
     /** 역할 + 온보딩 완료 여부별 사용자 수 — 운영 통계의 "온보딩 완료자" 카드. */
     long countByRoleAndOnboarded(Role role, boolean onboarded);
 

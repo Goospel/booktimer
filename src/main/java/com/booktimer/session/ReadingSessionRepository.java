@@ -78,6 +78,15 @@ public interface ReadingSessionRepository extends JpaRepository<ReadingSession, 
     /** 한 책에 연결된(그 책으로 측정한) 세션들 — 책별 상세(잔디·기록) 집계에 쓰인다. */
     List<ReadingSession> findByUserAndBook(User user, Book book);
 
+    /**
+     * 앱 마감의 겹침 — {@code [from, to)}와 겹치는 실측 행(손 기록 제외). 켜진 행은 시작 &lt; to면 모두
+     * (둘이어도 — 웹 start 경주로 열린 행이 둘일 수 있어 Optional finder를 쓰지 않는다).
+     */
+    @Query("select s from ReadingSession s where s.user = :user and s.manualEntry = false and s.startedAt < :to"
+            + " and (s.endedAt is null or s.endedAt > :from)")
+    List<ReadingSession> findOverlapping(@Param("user") User user, @Param("from") Instant from,
+                                         @Param("to") Instant to);
+
     /** 진행 중(endedAt == null) 세션. 서비스의 중복 start 방지에 쓰인다. */
     Optional<ReadingSession> findByUserAndEndedAtIsNull(User user);
 
