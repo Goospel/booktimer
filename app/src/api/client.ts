@@ -12,6 +12,8 @@ import type {
   Dashboard,
   DeleteRequest,
   EditMargin,
+  FinishBody,
+  FinishResult,
   MarginSummary,
   MarginView,
   MaterialsView,
@@ -222,6 +224,8 @@ export const reading = {
   dashboard: () => request<Dashboard>('/api/dashboard', { timeoutMs: DASHBOARD_TIMEOUT_MS }),
   start: (bookId: number | null) => request<unknown>('/api/sessions/start', { body: { bookId } }),
   stop: () => request<unknown>('/api/sessions/stop', { method: 'POST', timeoutMs: MEASURE_TIMEOUT_MS }),
+  /** 기기에서 끝난 측정을 기기 시각 그대로(타이머 오프라인 T2 — 422만 칸을 지운다, lib/measureSync) */
+  finish: (b: FinishBody) => request<FinishResult>('/api/sessions/finish', { body: b, timeoutMs: MEASURE_TIMEOUT_MS }),
   setGoal: (seconds: number) => request<void>('/api/app/goal', { body: { dailyIncrementSeconds: seconds } }),
 };
 
@@ -268,6 +272,7 @@ export const account = {
 export const study = {
   start: (bookId: number | null) => request<unknown>('/api/study/start', { body: { bookId } }),
   stop: () => request<unknown>('/api/study/stop', { body: {}, timeoutMs: MEASURE_TIMEOUT_MS }),
+  finish: (b: FinishBody) => request<FinishResult>('/api/study/finish', { body: b, timeoutMs: MEASURE_TIMEOUT_MS }),
   /** 담기 화면의 「담음」 판정용(공부 서재 isbn) */
   shelf: () => request<StudyShelfResponse>('/api/study/books'),
   add: (body: StudyAddRequest) => request<StudyBook>('/api/study/books', { body }),

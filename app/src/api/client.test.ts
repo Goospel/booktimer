@@ -337,4 +337,19 @@ describe('REQ-356 · 요청 상한', () => {
     await study.start(1);
     expect(fetchMock.mock.calls.map((c) => c[1].signal)).toEqual([undefined, undefined]);
   });
+
+  // 타이머 오프라인 T2 — 기기에서 끝난 측정을 기기 시각 그대로 마감 문으로 올린다(설계 §6.2 · §6.5)
+  test('REQ-359 · 마감 요청은 모드별 문에 {startedAt, endedAt, bookId}를 10초 상한으로 싣는다', async () => {
+    const b = { startedAt: '2026-11-03T01:00:00.000Z', endedAt: '2026-11-03T01:10:00.000Z', bookId: 3 };
+    fetchMock.mockResolvedValueOnce(reply(200, '{"trimmedSeconds":120}')).mockResolvedValueOnce(reply(200, '{"trimmedSeconds":0}'));
+    expect(await reading.finish(b)).toEqual({ trimmedSeconds: 120 });
+    expect(await study.finish({ ...b, bookId: null })).toEqual({ trimmedSeconds: 0 });
+    expect(fetchMock.mock.calls.map((c) => [c[0], c[1].method, JSON.parse(c[1].body)])).toEqual([
+      ['https://booktimer.app/api/sessions/finish', 'POST', b],
+      ['https://booktimer.app/api/study/finish', 'POST', { ...b, bookId: null }],
+    ]);
+    hang();
+    await cutAt(() => reading.finish(b), 10_000);
+    await cutAt(() => study.finish(b), 10_000);
+  });
 });
