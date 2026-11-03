@@ -2,17 +2,26 @@ package com.booktimer.book;
 
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
+import org.springframework.boot.test.system.CapturedOutput;
+import org.springframework.boot.test.system.OutputCaptureExtension;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
+import org.springframework.http.client.support.HttpRequestWrapper;
 import org.springframework.test.web.client.MockRestServiceServer;
 import org.springframework.web.client.RestClient;
 
+import java.net.InetAddress;
+import java.net.ServerSocket;
 import java.net.SocketTimeoutException;
+import java.net.URI;
+import java.time.Duration;
 import java.util.List;
 import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.junit.jupiter.api.Assertions.assertTimeoutPreemptively;
 import static org.hamcrest.Matchers.allOf;
 import static org.hamcrest.Matchers.containsString;
 import static org.hamcrest.Matchers.not;
@@ -26,6 +35,7 @@ import static org.springframework.test.web.client.response.MockRestResponseCreat
  *
  * <p>픽스처는 카카오 개발 가이드의 응답 예시(『미움받을 용기』)를 줄인 것이다.
  */
+@ExtendWith(OutputCaptureExtension.class)
 class KakaoBookSearchClientTest {
 
     private static final String KEY = "TESTKEY123";
@@ -297,6 +307,52 @@ class KakaoBookSearchClientTest {
 
         assertThatThrownBy(() -> f.client().search("데미안", BookSearchType.TITLE, 1))
                 .isInstanceOf(BookSearchUnavailableException.class);
+    }
+
+    /**
+     * 카카오는 잘못된 키에 그 키를 본문으로 되돌려준다(「wrong appKey(&lt;보낸 키&gt;) format」). SSM 값에 군더더기가 섞이면
+     * 진짜 키가 실린다 — 그 본문은 로그에도, 예외 메시지 · cause 사슬에도 남지 않아야 한다.
+     */
+    @Test
+    @DisplayName("REQ-380 · HTTP 오류 본문에 되돌아온 키는 로그 · 예외 어디에도 남지 않는다")
+    void errorBodyEchoingKey_isNotLoggedOrChained(CapturedOutput output) {
+        Fixture f = fixture();
+        f.server().expect(requestTo(containsString("target=title")))
+                .andRespond(withStatus(HttpStatus.UNAUTHORIZED)
+                        .body("{\"errorType\":\"AccessDeniedError\",\"message\":\"wrong appKey(" + KEY + ") format\"}")
+                        .contentType(MediaType.APPLICATION_JSON));
+
+        Throwable thrown = org.assertj.core.api.Assertions.catchThrowable(
+                () -> f.client().search("데미안", BookSearchType.TITLE, 1));
+
+        assertThat(thrown).isInstanceOf(BookSearchUnavailableException.class);
+        for (Throwable t = thrown; t != null; t = t.getCause()) {
+            assertThat(String.valueOf(t.getMessage())).as("예외 사슬: %s", t.getClass()).doesNotContain(KEY);
+        }
+        assertThat(output.getAll()).contains("http=401").doesNotContain(KEY);
+    }
+
+    /** 응답하지 않는 서버에 붙으면 읽기 상한(5초) 안에 장애로 끝난다 — 상한이 없으면 앱의 「찾는 중」이 무한히 돈다(E21). */
+    @Test
+    @DisplayName("REQ-380 · 응답 없는 서버는 읽기 상한 안에 장애로 끝난다")
+    void silentServer_timesOutAsUnavailable() throws Exception {
+        try (ServerSocket silent = new ServerSocket(0, 1, InetAddress.getLoopbackAddress())) {
+            // accept하지 않는다 — 연결은 백로그에서 맺어지지만 응답이 영영 오지 않는다
+            URI local = URI.create("http://127.0.0.1:" + silent.getLocalPort() + "/v3/search/book");
+            RestClient toLocal = KakaoBookSearchClient.defaultRestClient().mutate()
+                    .requestInterceptor((req, body, exec) -> exec.execute(new HttpRequestWrapper(req) {
+                        @Override
+                        public URI getURI() {
+                            return local.resolve("?" + req.getURI().getRawQuery());
+                        }
+                    }, body))
+                    .build();
+            KakaoBookSearchClient client = new KakaoBookSearchClient(KEY, toLocal);
+
+            assertTimeoutPreemptively(Duration.ofSeconds(7), () ->
+                    assertThatThrownBy(() -> client.search("데미안", BookSearchType.TITLE, 1))
+                            .isInstanceOf(BookSearchUnavailableException.class));
+        }
     }
 
     @Test

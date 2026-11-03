@@ -61,7 +61,7 @@ public class KakaoBookSearchClient implements BookSearchClient {
     }
 
     /** 연결 3초 · 읽기 5초 — 앱의 「찾는 중이에요」가 무한히 돌지 않게(E21, CoupangDeeplinkClient와 같은 꼴). */
-    private static RestClient defaultRestClient() {
+    static RestClient defaultRestClient() {
         SimpleClientHttpRequestFactory factory = new SimpleClientHttpRequestFactory();
         factory.setConnectTimeout(Duration.ofSeconds(3));
         factory.setReadTimeout(Duration.ofSeconds(5));
@@ -101,7 +101,10 @@ public class KakaoBookSearchClient implements BookSearchClient {
                 .findFirst();
     }
 
-    /** 장애를 0건과 가르는 단 한 곳. 검색어 · 키 · 헤더는 로그에 남기지 않는다. */
+    /**
+     * 장애를 0건과 가르는 단 한 곳. 키 · 헤더 · 검색어는 로그에 남기지 않는다 — HTTP 오류는 상태 코드만(오류 본문에 키가
+     * 되돌아온다), 연결 · 시간 초과는 예외 종류만. documents 없는 200 본문 앞부분만 남긴다(키가 실리지 않는 응답이다).
+     */
     private JsonNode call(URI url) {
         if (!isEnabled()) {
             throw new BookSearchUnavailableException("카카오 REST 키가 없다");
@@ -119,12 +122,13 @@ public class KakaoBookSearchClient implements BookSearchClient {
             }
             return root;
         } catch (RestClientResponseException e) {
-            String body = e.getResponseBodyAsString();
-            log.warn("카카오 책 검색 실패 — http={} body={}", e.getStatusCode().value(),
-                    body.substring(0, Math.min(200, body.length())));
-            throw new BookSearchUnavailableException("카카오 책 검색 HTTP " + e.getStatusCode().value(), e);
+            // 상태 코드만 — 카카오는 잘못된 키를 오류 본문에 되돌려준다(「wrong appKey(<키>) format」). 본문도, 본문이 실린
+            // 원 예외(cause)도 로그 · 예외 사슬에 싣지 않는다
+            log.warn("카카오 책 검색 실패 — http={}", e.getStatusCode().value());
+            throw new BookSearchUnavailableException("카카오 책 검색 HTTP " + e.getStatusCode().value());
         } catch (RestClientException | JacksonException e) {
-            log.warn("카카오 책 검색 실패 — {}", e.toString());
+            // 예외 메시지엔 검색어가 든 요청 URL이 실리므로 종류만 로그에 남긴다
+            log.warn("카카오 책 검색 실패 — {}", e.getClass().getSimpleName());
             throw new BookSearchUnavailableException("카카오 책 검색 실패", e);
         }
     }
