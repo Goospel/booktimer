@@ -38,7 +38,7 @@ case "\$*" in
     *get-parameters-by-path*)
         # 앱이 실제로 쓰는 시크릿 전부 — 하나라도 빠지면 render-env.sh가 누락으로 죽는다.
         for n in SPRING_DATASOURCE_URL SPRING_DATASOURCE_USERNAME SPRING_DATASOURCE_PASSWORD \\
-                 GOOGLE_CLIENT_ID GOOGLE_CLIENT_SECRET ALADIN_TTB_KEY \\
+                 GOOGLE_CLIENT_ID GOOGLE_CLIENT_SECRET \\
                  COUPANG_SEARCH_URL_TEMPLATE YES24_TRACKING_CODE YES24_SEARCH_URL_TEMPLATE \\
                  KYOBO_TRACKING_CODE KYOBO_SEARCH_URL_TEMPLATE KYOBO_MOBILE_SEARCH_URL_TEMPLATE \\
                  ADMIN_LOGIN_IDS LLM_API_KEY CLAUDE_API_KEY SPRING_MAIL_USERNAME SPRING_MAIL_PASSWORD \\
@@ -52,7 +52,7 @@ case "\$*" in
                  TOSS_READING_REMINDER_REST_TEMPLATE_CODE \\
                  TOSS_UNLINK_BASIC_AUTH \\
                  APPLE_BUNDLE_ID APPLE_TEAM_ID APPLE_SIGNIN_KEY_ID APPLE_SIGNIN_P8 \\
-                 GOOGLE_IOS_CLIENT_ID KAKAO_NATIVE_APP_KEY \\
+                 GOOGLE_IOS_CLIENT_ID KAKAO_NATIVE_APP_KEY KAKAO_REST_API_KEY \\
                  APP_LINK_CARD_USERS; do
             printf '/booktimer/%s\tvalue-of-%s\n' "\$n" "\$n"
         done
@@ -158,6 +158,9 @@ assert_has "  .env 에 Apple 로그인 .p8" "$env_out" "BOOKTIMER_APPLE_SIGNIN_P
 # 아이폰 앱 구글·카카오 로그인(PR-M) — 빠지면 앱 값이 비어 /api/app/auth/google · /kakao가 503으로 닫힌다.
 assert_has "  .env 에 구글 iOS 클라이언트 ID" "$env_out" "BOOKTIMER_GOOGLE_IOS_CLIENT_ID=value-of-GOOGLE_IOS_CLIENT_ID"
 assert_has "  .env 에 카카오 네이티브 앱 키" "$env_out" "BOOKTIMER_KAKAO_NATIVE_APP_KEY=value-of-KAKAO_NATIVE_APP_KEY"
+# 책 검색(2026-11-03 알라딘 종료로 카카오 교체) — 빠지면 어댑터가 not-configured로 떠 검색 · 바코드가 전부 503이다.
+assert_has "  .env 에 카카오 REST 키(REQ-387)" "$env_out" "BOOKTIMER_KAKAO_REST_API_KEY=value-of-KAKAO_REST_API_KEY"
+assert_eq "  .env 에 알라딘 키가 없다(REQ-387)" "$(printf '%s' "$env_out" | grep -cF 'BOOKTIMER_ALADIN_TTB_KEY')" "0"
 # 웹 「앱 연결」 카드 허용 목록(v1 REQ-73) — 빠지면 기본값 none이라 본인(17)에게도 카드가 안 보인다.
 assert_has "  .env 에 앱 연결 카드 허용 목록" "$env_out" "BOOKTIMER_APP_LINK_CARD_USERS=value-of-APP_LINK_CARD_USERS"
 

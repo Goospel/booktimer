@@ -39,7 +39,7 @@ public class CoupangDeeplinkClient {
     private final Clock clock;
     private final RestClient restClient;
     private final Map<String, String> cache = new ConcurrentHashMap<>();
-    // AladinBookSearchClient와 동일 이유 — 앱에 Jackson ObjectMapper 빈이 자동 등록되지 않아 자체 인스턴스를 둔다.
+    // KakaoBookSearchClient와 동일 이유 — 앱에 Jackson ObjectMapper 빈이 자동 등록되지 않아 자체 인스턴스를 둔다.
     private final ObjectMapper objectMapper = JsonMapper.builder().build();
 
     @Autowired

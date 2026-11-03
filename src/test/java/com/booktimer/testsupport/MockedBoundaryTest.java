@@ -42,7 +42,8 @@ import java.lang.annotation.Target;
  *
  * <p>목·스파이는 매 테스트가 끝나면 Spring이 리셋한다 — 스텁이 다음 테스트로 새지 않는다.
  * 목 기본값(false·null·빈 컬렉션·Optional.empty)은 테스트 환경의 실제 빈(키 미설정 = 비활성)과 대부분 같다.
- * 다른 자리: {@code BookSearchClient.search()}는 목이면 null이고 실제 비활성 빈은 빈 페이지다 —
+ * 다른 자리: {@code BookSearchClient.search()}는 목이면 null이고, {@code search()}·{@code lookupByIsbn()}의
+ * 실제 비활성 빈은 {@code BookSearchUnavailableException}(503)이다 —
  * 검색을 타는 테스트는 직접 스텁한다.
  */
 @Target(ElementType.TYPE)

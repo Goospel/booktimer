@@ -13,7 +13,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 /**
  * 구글 뉴스 RSS 어댑터의 XML 매핑·게이트 단위테스트 — 네트워크 없이 정적 파싱만 본다
- * ({@link AladinBookSearchClientTest}와 동일 정신).
+ * ({@link KakaoBookSearchClientTest}와 동일 정신).
  *
  * <p>픽스처는 <b>실제 응답에서 잘라온 item 3건</b>이다(질의 {@code "미움받을 용기" 기시미 이치로},
  * 2026-08-14 실측). 공개 문서 기준의 추측 픽스처를 쓰지 않는 이유: 직전 네이버 전환에서 미검증 가정이

@@ -9,7 +9,8 @@ package com.booktimer.book;
  *
  * <p>그래서 ① 하이픈·공백을 제거해 숫자열로 모으고, ② 알맹이가 없으면(빈 값/구분자뿐) {@code null}로
  * 통일한다. {@code null} 키는 인기 카운트에서 자연 제외된다({@code isbn13 in :isbns}에 NULL 미매칭 +
- * 서비스가 blank 키 선제외). ISBN10→13 변환·개정판/세트 동일성은 별도 작업(plan.md 후속).
+ * 서비스가 blank 키 선제외). ISBN-10 → 13 변환은 {@link #toIsbn13}(카카오가 10자리만 줄 때 — REQ-381).
+ * 개정판/세트 동일성은 별도 작업(plan.md 후속).
  */
 public final class Isbn {
 
@@ -29,5 +30,23 @@ public final class Isbn {
         }
         String stripped = raw.replaceAll("[\\s-]", "");
         return stripped.isEmpty() ? null : stripped;
+    }
+
+    /**
+     * ISBN-10을 978 ISBN-13으로 바꾼다 — 앞 9자리에 978을 붙이고 체크 숫자(가중치 1·3)를 다시 계산한다.
+     *
+     * @param isbn10 10자리(마지막은 숫자 또는 X)
+     * @return ISBN-13. 10자리 꼴이 아니면 {@code null}
+     */
+    public static String toIsbn13(String isbn10) {
+        if (isbn10 == null || !isbn10.matches("\\d{9}[\\dXx]")) {
+            return null;
+        }
+        String body = "978" + isbn10.substring(0, 9);
+        int sum = 0;
+        for (int i = 0; i < 12; i++) {
+            sum += (body.charAt(i) - '0') * (i % 2 == 0 ? 1 : 3);
+        }
+        return body + ((10 - sum % 10) % 10);
     }
 }

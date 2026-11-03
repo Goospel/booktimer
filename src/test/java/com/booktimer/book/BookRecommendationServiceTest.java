@@ -159,6 +159,20 @@ class BookRecommendationServiceTest {
     }
 
     @Test
+    @DisplayName("REQ-385 · 저자 검색이 장애여도 추천은 빈 것으로 끝난다")
+    void authorSearchDown_returnsEmpty() {
+        User u = newUser("searchdown-rec@booktimer.com");
+        bookService.addFromSearch(u, book("불편한 편의점", "김호연", "9791168340084"), BookStatus.READING);
+        when(searchClient.isEnabled()).thenReturn(true);
+        when(searchClient.search(any(), any(), anyInt())).thenThrow(new BookSearchUnavailableException("x"));
+
+        BookRecommendation rec = recommendationService.recommendFor(u);
+
+        assertThat(rec.title()).isNull();
+        assertThat(rec.books()).isEmpty();
+    }
+
+    @Test
     @DisplayName("남의 책은 근거로 세지 않는다 — 추천이 남의 책장을 새어 나오면 안 된다")
     void otherUsersBooks_areNotCounted() {
         User me = newUser("me@booktimer.com");

@@ -7,28 +7,29 @@ package com.booktimer.book;
  * 저자 이름에 "모기"가 든 책이 먼저 떠 사용자 의도(제목)와 어긋났다. 그래서 기준을 분리한다 —
  * 기본은 제목, 필요하면 저자로 전환한다.
  *
- * <p>각 값은 알라딘 ItemSearch의 {@code QueryType} 파라미터로 매핑된다.
+ * <p>각 값은 카카오 책 검색의 {@code target} 파라미터로 매핑된다(저자 = {@code person} — 옮긴이도 맞춘다).
+ * 2026-11-03 알라딘 OpenAPI 종료로 교체(T-278).
  */
 public enum BookSearchType {
 
-    TITLE("제목", "Title"),
-    AUTHOR("저자", "Author"),
-    PUBLISHER("출판사", "Publisher");
+    TITLE("제목", "title"),
+    AUTHOR("저자", "person"),
+    PUBLISHER("출판사", "publisher");
 
     private final String label;
-    private final String aladinQueryType;
+    private final String kakaoTarget;
 
-    BookSearchType(String label, String aladinQueryType) {
+    BookSearchType(String label, String kakaoTarget) {
         this.label = label;
-        this.aladinQueryType = aladinQueryType;
+        this.kakaoTarget = kakaoTarget;
     }
 
     public String getLabel() {
         return label;
     }
 
-    public String getAladinQueryType() {
-        return aladinQueryType;
+    public String getKakaoTarget() {
+        return kakaoTarget;
     }
 
     /**

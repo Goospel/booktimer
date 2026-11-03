@@ -46,7 +46,7 @@ public class AdminController {
 
     @GetMapping("/admin")
     public String dashboard(Principal principal, jakarta.servlet.http.HttpServletRequest request, Model model) {
-        CsrfTokenUtil.precommit(request); // 승인·백필 폼이 많은 큰 페이지(T-033·T-049)
+        CsrfTokenUtil.precommit(request); // 승인·수집 폼이 많은 큰 페이지(T-033·T-049)
         User admin = currentUserService.resolve(principal);
         // 신고 대응 배너(정책 문서 §2 「알림」) — 토스 푸시가 꺼져 있어도 운영자는 여기서 본다.
         model.addAttribute("openReportCount", reportRepository.countByStatus(ReportStatus.OPEN));

@@ -24,7 +24,7 @@ import java.util.Optional;
 /**
  * Gemini Flash 기반 독서 성향 서술 어댑터(책BTI Phase 3).
  *
- * <p>{@link com.booktimer.book.AladinBookSearchClient}와 같은 패턴: API 키를 {@code @Value}로 주입받아
+ * <p>옛 알라딘 검색 어댑터와 같은 패턴: API 키를 {@code @Value}로 주입받아
  * {@link #isEnabled()} 게이트로 키 없으면 폴백, HTTP는 {@link RestClient}로, JSON 매핑은 정적 메서드로
  * 분리해 네트워크 없이 단위테스트한다. 외부 호출 실패/지연은 빈 결과로 격리한다(화면 안 깨짐).
  *

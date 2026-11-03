@@ -17,7 +17,7 @@ import java.util.List;
  * (킬스위치 {@code booktimer.news.enabled}). 빈이 항상 등록되므로 테스트에서 끄고 켜기가 쉽다.
  *
  * <p>{@code @Transactional}로 감싸지 않는다 — 후보마다 외부 HTTP를 부르는데 트랜잭션을 연 채 네트워크를
- * 기다리면 DB 커넥션을 오래 점유한다({@link BookCatalogBackfillService}와 동일 사유). 쓰기는 짧은
+ * 기다리면 DB 커넥션을 오래 점유한다(지금은 지운 알라딘 카탈로그 백필과 동일 사유). 쓰기는 짧은
  * 리포지토리 호출로만 한다.
  */
 @Component
