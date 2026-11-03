@@ -511,6 +511,19 @@ test('REQ-366 리뷰 · 가게를 닫으면 알림 칸도 비운다 — 앞 계�
   await measureStore.close(); // 로그아웃 → 다른 계정
   await measureStore.open(kv, 2);
   expect(measureNotice.take()).toBeNull();
+  // 차례 중(마지막 보내기 사이)에 계정이 바뀌면 앞 계정 몫을 다음 계정 칸에 알리지 않는다
+  await measureStore.close();
+  withLedger(kv, { active: null, done: [done(0), done(10)] });
+  await measureStore.open(kv, 1);
+  const hang = deferred<{ trimmedSeconds: number }>();
+  jest.spyOn(reading, 'finish').mockRejectedValueOnce(new ApiError(422, '올릴 수 없는 측정 구간입니다')).mockReturnValueOnce(hang.promise);
+  const p = flushMeasures();
+  await tick();
+  await measureStore.close();
+  await measureStore.open(kv, 2);
+  hang.reject(new NetworkError()); // 연결 실패 — 차례가 멈춘다
+  await p;
+  expect(measureNotice.take()).toBeNull();
   // 양성 대조 — 닫지 않았으면 남는다
   withLedger(kv, { active: null, done: [done(0)] }, undefined, 'timer:2:state');
   await measureStore.close();
