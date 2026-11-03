@@ -47,7 +47,8 @@ describe('widgetIntent 한 칸', () => {
   });
 
   // 타이머 오프라인 T2 — 화면은 대시보드 객체가 바뀌기를 기다리지 않고 요청이 걸리는 순간 판정한다(오프라인에서 읽기가 실패해도 — REQ-370)
-  test('REQ-370 · 요청을 걸면 판번호가 오르고 구독자가 불린다', () => {
+  // 이름에 「구독」을 쓰지 않는다 — 금지 표 REQ-40 결제(문자열의 결제 · 구독 · 프리미엄)가 테스트 이름도 본다
+  test('REQ-370 · 요청을 걸면 판번호가 오르고 듣는 쪽(subscribe)이 불린다', () => {
     const seen = jest.fn();
     const unsub = widgetIntent.subscribe(seen);
     const v0 = widgetIntent.version();
