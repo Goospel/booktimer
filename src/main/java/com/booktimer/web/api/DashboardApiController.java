@@ -51,10 +51,10 @@ public class DashboardApiController {
     private static final int QUOTE_ROTATION_MAX = 10;
 
     /** 올려받을 완료 세션의 종료 시각 허용 미래폭 — 기기 시계가 조금 앞선 것까지는 받는다. */
-    private static final Duration IMPORT_FUTURE_TOLERANCE = Duration.ofMinutes(5);
+    static final Duration IMPORT_FUTURE_TOLERANCE = Duration.ofMinutes(5);
 
     /** 올려받을 완료 세션의 최대 나이 — 이보다 묵은 체험은 거부한다(클라가 저장분을 지운다). */
-    private static final Duration IMPORT_MAX_AGE = Duration.ofDays(7);
+    static final Duration IMPORT_MAX_AGE = Duration.ofDays(7);
 
     private final CurrentUserService currentUserService;
     private final DashboardModel dashboardModel;
@@ -193,7 +193,7 @@ public class DashboardApiController {
     }
 
     /** ISO-8601 시각 문자열 → Instant. 못 읽으면 400(서버 결함이 아니라 클라 입력이라 500이면 안 된다). */
-    private static Instant parseInstant(String iso) {
+    static Instant parseInstant(String iso) {
         if (iso == null) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "시각이 없습니다");
         }

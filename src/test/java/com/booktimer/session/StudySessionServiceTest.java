@@ -48,6 +48,9 @@ class StudySessionServiceTest {
     @Mock
     private ReadingSessionRepository readingRepository;
 
+    @Mock
+    private com.booktimer.user.UserRepository userRepository;
+
     @InjectMocks
     private StudySessionService service;
 
@@ -443,8 +446,6 @@ class StudySessionServiceTest {
         last.end(kst("2026-06-02T00:40"));
         when(studyRepository.findByIdAndUser(7L, user)).thenReturn(Optional.of(last));
         when(studyRepository.findByUserAndEndedAtAndBookIsNull(user, midnight)).thenReturn(Optional.of(earlier));
-        when(studyRepository.findByUserAndEndedAtAndBookIsNull(user, earlier.getStartedAt()))
-                .thenReturn(Optional.empty());
         when(studyRepository.save(any(StudySession.class))).thenAnswer(returnsFirstArg());
 
         service.tagBook(user, 7L, book);
@@ -460,8 +461,6 @@ class StudySessionServiceTest {
         StudySession ended = StudySession.start(user, kst("2026-06-01T10:00"));
         ended.end(kst("2026-06-01T10:30"));
         when(studyRepository.findByIdAndUser(7L, user)).thenReturn(Optional.of(ended));
-        when(studyRepository.findByUserAndEndedAtAndBookIsNull(user, ended.getStartedAt()))
-                .thenReturn(Optional.empty());
         when(studyRepository.save(ended)).thenReturn(ended);
 
         service.tagBook(user, 7L, book);
@@ -603,5 +602,37 @@ class StudySessionServiceTest {
     @DisplayName("excludedSeconds: 빈 목록이면 0")
     void excludedSeconds_empty() {
         assertThat(StudySessionService.excludedSeconds(T0, T0.plusSeconds(3600), List.of())).isZero();
+    }
+
+    // --- 앱 기기 측정 마감(finish) · 종료 후 태깅 이음매 (설계 2026-11-02 §6.2) ---
+
+    /** 독서 쪽 같은 이름의 테스트와 같은 이유(MySQL 스냅숏) — 순서를 구조로 잠근다. */
+    @Test
+    @DisplayName("REQ-355 · 마감의 첫 저장소 호출은 사용자 잠금이다(공부)")
+    void finish_firstRepositoryCallIsUserLock() {
+        service.finish(user, T0, T0.plusSeconds(3600), null, T0.plusSeconds(7200));
+
+        List<org.mockito.invocation.Invocation> calls = java.util.stream.Stream
+                .of(studyRepository, readingRepository, userRepository)
+                .flatMap(m -> org.mockito.Mockito.mockingDetails(m).getInvocations().stream())
+                .sorted(java.util.Comparator.comparingInt(org.mockito.invocation.Invocation::getSequenceNumber))
+                .toList();
+        assertThat(calls).extracting(c -> c.getMethod().getName())
+                .startsWith("lockById")
+                .contains("findOverlapping", "save"); // 양성 대조: 잠금 뒤에 조회 · 저장이 실제로 이어졌다
+    }
+
+    @Test
+    @DisplayName("REQ-379 · 종료 후 태깅은 자정이 아닌 이음매로 맞닿은 앞 행을 걷지 않는다(공부)")
+    void tagBook_nonMidnightSeam_doesNotWalk() {
+        StudySession web = StudySession.start(user, kst("2026-06-01T10:30"));
+        web.end(kst("2026-06-01T11:00"));
+        when(studyRepository.findByIdAndUser(7L, user)).thenReturn(Optional.of(web));
+        when(studyRepository.save(any(StudySession.class))).thenAnswer(returnsFirstArg());
+
+        service.tagBook(user, 7L, book);
+
+        verify(studyRepository, never()).findByUserAndEndedAtAndBookIsNull(any(), any());
+        verify(studyRepository, times(1)).save(any(StudySession.class));
     }
 }

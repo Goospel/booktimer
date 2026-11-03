@@ -33,6 +33,15 @@ public interface StudySessionRepository extends JpaRepository<StudySession, Long
     @Query("select s from StudySession s left join fetch s.book where s.user = :user and s.endedAt is null")
     Optional<StudySession> findByUserAndEndedAtIsNull(@Param("user") User user);
 
+    /**
+     * 앱 마감의 겹침 — {@code [from, to)}와 겹치는 공부 행. 켜진 행은 시작 &lt; to면 모두(둘이어도 — Optional
+     * finder를 쓰지 않는다). 공부엔 손 기록이 없다.
+     */
+    @Query("select s from StudySession s where s.user = :user and s.startedAt < :to"
+            + " and (s.endedAt is null or s.endedAt > :from)")
+    List<StudySession> findOverlapping(@Param("user") User user, @Param("from") Instant from,
+                                       @Param("to") Instant to);
+
     /** 소유권 확인용 — 내 세션일 때만 조회된다(종료 후 태깅의 IDOR 경계). */
     Optional<StudySession> findByIdAndUser(Long id, User user);
 

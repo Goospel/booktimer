@@ -2,6 +2,7 @@ package com.booktimer.session;
 
 import com.booktimer.book.StudyBook;
 import com.booktimer.user.User;
+import com.booktimer.user.UserRepository;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
@@ -47,11 +48,41 @@ public class StudySessionService {
 
     private final StudySessionRepository studyRepository;
     private final ReadingSessionRepository readingRepository;
+    private final UserRepository userRepository;
 
     public StudySessionService(StudySessionRepository studyRepository,
-                               ReadingSessionRepository readingRepository) {
+                               ReadingSessionRepository readingRepository,
+                               UserRepository userRepository) {
         this.studyRepository = studyRepository;
         this.readingRepository = readingRepository;
+        this.userRepository = userRepository;
+    }
+
+    /**
+     * <b>앱 기기 측정 마감(공부)</b> — {@link ReadingSessionService#finish}의 공부판. 순서 · 규칙이 같다(첫 줄 잠금 →
+     * 6시간 상한 → 두 원장의 바쁜 구간 빼기 → 자정 분할 → 새 행만 저장). 공부 책엔 상태 전이가 없다.
+     *
+     * @param book 지정한 공부 책(소유 검증은 호출부 — 남의 · 없는 책이면 null로 넘어온다)
+     * @return 걸친 실측과 겹쳐 뺀 초
+     */
+    public long finish(User user, Instant startedAt, Instant endedAt, StudyBook book, Instant now) {
+        // ⚠️ 트랜잭션의 첫 DB 문장 — 이유는 ReadingSessionService.finish 주석(MySQL REPEATABLE READ 스냅숏).
+        userRepository.lockById(user.getId());
+        ReadingSessionService.Segment whole = ReadingSessionService.finishWindow(startedAt, endedAt);
+        if (whole == null) {
+            return 0;
+        }
+        List<ReadingSessionService.Segment> busy =
+                ReadingSessionService.busy(readingRepository, studyRepository, user, whole, now);
+        ZoneId zone = ZoneId.of(user.getTimezone());
+        for (ReadingSessionService.Segment f : ReadingSessionService.subtract(whole, busy, ReadingSessionService.MIN_PIECE)) {
+            for (ReadingSessionService.Segment seg : ReadingSessionService.splitByMidnight(f.start(), f.end(), zone)) {
+                StudySession piece = StudySession.start(user, seg.start(), book);
+                piece.end(seg.end(), 0);
+                studyRepository.save(piece);
+            }
+        }
+        return ReadingSessionService.crossingSeconds(whole, busy);
     }
 
     /**
@@ -195,9 +226,12 @@ public class StudySessionService {
         session.tagBook(book);
         StudySession saved = studyRepository.save(session);
         // 인접한 앞 조각을 따라 올라가며 같은 책을 붙인다(분할이 없었으면 첫 조회가 바로 empty).
+        // 이음매가 유저 TZ 자정일 때만 걷는다(독서 tagBook · assignBook과 같은 규칙 — REQ-379).
+        ZoneId zone = ZoneId.of(user.getTimezone());
         StudySession earliest = session;
         for (Optional<StudySession> previous;
-             (previous = studyRepository.findByUserAndEndedAtAndBookIsNull(
+             ReadingSessionService.isDayStart(earliest.getStartedAt(), zone)
+                     && (previous = studyRepository.findByUserAndEndedAtAndBookIsNull(
                      user, earliest.getStartedAt())).isPresent(); ) {
             earliest = previous.get();
             earliest.tagBook(book);
