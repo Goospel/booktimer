@@ -117,7 +117,7 @@ export interface RequestOptions {
   timeoutMs?: number;
 }
 
-/** 요청 상한(REQ-356 — 조절 상수). 정지는 실패해도 늘 다시 읽으므로 늦게 닿은 정지가 화면을 속이지 않는다. 서버 시작은 비멱등이라 걸지 않는다 */
+/** 요청 상한(REQ-356 — 조절 상수). 정지는 실패해도 늘 다시 읽으므로 늦게 닿은 정지가 화면을 속이지 않는다. 마감은 겹침 빼기로 멱등이라 다시 보내도 한 번이다 */
 export const MEASURE_TIMEOUT_MS = 10_000;
 export const DASHBOARD_TIMEOUT_MS = 30_000;
 
@@ -220,9 +220,9 @@ export async function idTokenSignIn(p: {
 }
 
 // ── 독서 측정 · 하루 목표(PR-F) — 앱은 /api/app/goal 별칭만 부른다(REQ-109) ──────────
+// 앱 측정의 시작은 서버에 보내지 않는다(타이머 오프라인 Q1 · 금지 표 REQ-377) — 기기 원장에 적고 끝나면 finish로 올린다. stop은 웹에서 시작한 측정에만(REQ-376)
 export const reading = {
   dashboard: () => request<Dashboard>('/api/dashboard', { timeoutMs: DASHBOARD_TIMEOUT_MS }),
-  start: (bookId: number | null) => request<unknown>('/api/sessions/start', { body: { bookId } }),
   stop: () => request<unknown>('/api/sessions/stop', { method: 'POST', timeoutMs: MEASURE_TIMEOUT_MS }),
   /** 기기에서 끝난 측정을 기기 시각 그대로(타이머 오프라인 T2 — 422만 칸을 지운다, lib/measureSync) */
   finish: (b: FinishBody) => request<FinishResult>('/api/sessions/finish', { body: b, timeoutMs: MEASURE_TIMEOUT_MS }),
@@ -270,7 +270,6 @@ export const account = {
 
 // ── 공부 타이머 · 공부 서재(PR-S1) — 회당 시간 · 회독 문은 부르지 않는다(v1 REQ-98 — 금지 표). 공부 탭은 대시보드 study로 그린다 ──
 export const study = {
-  start: (bookId: number | null) => request<unknown>('/api/study/start', { body: { bookId } }),
   stop: () => request<unknown>('/api/study/stop', { body: {}, timeoutMs: MEASURE_TIMEOUT_MS }),
   finish: (b: FinishBody) => request<FinishResult>('/api/study/finish', { body: b, timeoutMs: MEASURE_TIMEOUT_MS }),
   /** 담기 화면의 「담음」 판정용(공부 서재 isbn) */

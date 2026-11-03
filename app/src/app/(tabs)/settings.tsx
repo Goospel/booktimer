@@ -17,6 +17,7 @@ import { deleteVia } from '../../lib/deleteVia';
 import { clearAll, pendingAll } from '../../lib/draftSync';
 import { dateLabel } from '../../lib/format';
 import { logout } from '../../lib/logout';
+import { isDirty } from '../../lib/measureLedger';
 import { loadDashboard, measureStore } from '../../lib/measureSync';
 import { askPermission, permission, type PermissionState, reminderStore, syncReminders } from '../../lib/notify';
 import { clampTime, DEFAULT_REMINDER, type ReminderSetting } from '../../lib/reminders';
@@ -159,12 +160,13 @@ export default function Settings() {
     setNotice(null);
     const [userId, a] = await Promise.all([session.userId(), session.account()]);
     await logout({
-      pending: async () => (userId === null ? 0 : pendingAll(AsyncStorage, userId)),
+      // 기기 원장도 센다 — 진행 중 측정 · 보낼 측정은 서버가 모른다(타이머 오프라인 Q1 · REQ-364). 보내기는 기다리지 않는다(지하에서 무반응 10초를 피한다)
+      pending: async () => (userId === null ? 0 : await pendingAll(AsyncStorage, userId)) + (isDirty(measureStore.get()?.ledger) ? 1 : 0),
       confirm: () =>
         new Promise<boolean>((ok) =>
           Alert.alert(
             '로그아웃할까요?',
-            '이 기기에만 있는 저장 안 된 글이 있어요 — 로그아웃하면 지워져요',
+            '이 기기에만 있는 저장 안 된 글이나 측정 기록이 있어요 — 로그아웃하면 지워져요',
             [
               { text: '취소', style: 'cancel', onPress: () => ok(false) },
               { text: '그래도 로그아웃', style: 'destructive', onPress: () => ok(true) },

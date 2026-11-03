@@ -77,6 +77,8 @@ const ROWS: Row[] = [
     planted: "const LAST_ROUND = '이 글에서 받을 수 있는 질문을 모두 받았어요';",
     strip: true,
   },
+  // 앱 측정의 시작은 서버에 보내지 않는다(타이머 오프라인 Q1) — 기기 원장에 적고, 끝나면 마감 문으로만 올린다. 서버 시작은 비멱등이라 지하에서 유령 측정을 남긴다.
+  { id: 'REQ-377', pattern: /\/api\/(?:sessions|study)\/start\b/, skip: [], planted: "request('/api/sessions/start', { body: { bookId } })", strip: true },
 ];
 
 // 블록 주석 · 줄 주석을 걷는다. URL의 //(앞이 :)는 주석이 아니다.
@@ -118,6 +120,14 @@ test('REQ-107 · 화면 코드에 밤 토큰 사용이 없다(위젯·테마 제
 
 test('REQ-109 · 앱 소스에 /api/miniapp/·/api/toss/ 호출이 없다(심은 픽스처는 잡힌다)', () => {
   expect(hits(ROWS[1])).toEqual([]);
+});
+
+test('REQ-377 · 앱 소스에 서버 시작 문 호출이 없다(심은 픽스처는 잡힌다)', () => {
+  const row = ROWS.find((r) => r.id === 'REQ-377')!;
+  expect(hits(row)).toEqual([]);
+  // 양성 대조 — 공부 문 · 템플릿 문자열도 잡힌다. 음성 대조 — 주석의 낱말 · 마감 문 · 정지 문은 걸리지 않는다
+  expect(hits(row, [{ rel: join('lib', 'planted.ts'), text: "request<unknown>(`/api/study/start`, { body: { bookId } })" }])).toHaveLength(1);
+  expect(hits(row, [{ rel: join('lib', 'planted.ts'), text: "// 옛 /api/sessions/start는 부르지 않는다\nrequest('/api/sessions/finish'); request('/api/study/stop');" }])).toEqual([]);
 });
 
 test('REQ-91 · 앱 소스에 부채 필드 읽기와 지우개 호출이 없다(심은 픽스처는 잡힌다)', () => {
@@ -404,13 +414,32 @@ test('A1 리뷰 6 · createFirst는 adopt 전에 localId를 비우고 noteId를 
 
 // J5 · J100 — 앱 시작 동기화는 로그인 게이트 안에서 startSlotSync 한 호출이다(호출을 빼거나 게이트를 늘 return으로 만들면 잡힌다 — A1 리뷰 14).
 // 타이머 오프라인 T0(REQ-362 · 363) — 같은 게이트 안에서 그 앞에 측정 가게를 열고 표면 맞추기를 켠다(가게를 안 열면 홈이 「불러오는 중」에 멈춘다).
-const START = /useEffect\(\(\) => \{\s*if \(!signedIn\) return;\s*void session\.userId\(\)\.then\(\s*async \(userId\) => \{\s*if \(userId === null\) return;\s*await measureStore\.open\(AsyncStorage, userId\);\s*startSurfaceSync\(\);\s*return startSlotSync\(AsyncStorage, userId\);\s*\},\s*\(\) => undefined,?\s*\);\s*\}, \[signedIn\]\);/;
+// 타이머 오프라인 T2(REQ-359) — 같은 게이트 안에서 앱이 꺼져 남은 끝난 측정을 보낸다(기다리지 않는다 — 앞 줄 둘이 화면을 막지 않게).
+const START = /useEffect\(\(\) => \{\s*if \(!signedIn\) return;\s*void session\.userId\(\)\.then\(\s*async \(userId\) => \{\s*if \(userId === null\) return;\s*await measureStore\.open\(AsyncStorage, userId\);\s*startSurfaceSync\(\);\s*void flushMeasures\(\)\.catch\(\(\) => undefined\);\s*return startSlotSync\(AsyncStorage, userId\);\s*\},\s*\(\) => undefined,?\s*\);\s*\}, \[signedIn\]\);/;
 test('A1 리뷰 14 · _layout이 signedIn 게이트 안에서 startSlotSync를 부른다(빼면 잡힌다)', () => {
   const s = srcOf(join('app', '_layout.tsx'));
   expect(START.test(s)).toBe(true);
   expect(START.test(s.replace('return startSlotSync(AsyncStorage, userId);', ''))).toBe(false);
   expect(START.test(s.replace('if (!signedIn) return;', 'if (!signedIn || true) return;'))).toBe(false);
   expect(START.test(s.replace('await measureStore.open(AsyncStorage, userId);', ''))).toBe(false);
+  expect(START.test(cut(s, /void flushMeasures\(\)\.catch\(\(\) => undefined\);\s*return startSlotSync/, 'return startSlotSync'))).toBe(false);
+});
+
+/** 음성 대조용 돌연변이 — 심기가 실제로 들어갔는지 먼저 본다(줄 끝이 CRLF라 안 들어가면 늘 초록) */
+function cut(s: string, from: string | RegExp, to: string): string {
+  const m = s.replace(from, to);
+  expect(m).not.toBe(s);
+  return m;
+}
+
+// 타이머 오프라인 T2(REQ-359) — 보낼 측정이 있고 앱이 앞에 있으면 루트가 20초마다 보낸다(로그인 동안 · 화면과 무관)
+const RETRY = /useEffect\(\(\) => \{\s*if \(!signedIn\) return;\s*const id = setInterval\(\(\) => \{\s*const s = measureStore\.get\(\);\s*if \(AppState\.currentState === 'active' && s && pending\(s\.ledger\)\.length > 0\) void flushMeasures\(\)\.catch\(\(\) => undefined\);\s*\}, RETRY_MS\);\s*return \(\) => clearInterval\(id\);\s*\}, \[signedIn\]\);/;
+test('REQ-359 · 루트가 로그인 동안 보낼 측정이 있으면 앞에 있을 때 20초마다 보낸다(빼면 잡힌다)', () => {
+  const s = srcOf(join('app', '_layout.tsx'));
+  expect(RETRY.test(s)).toBe(true);
+  expect(RETRY.test(cut(s, "AppState.currentState === 'active' && ", ''))).toBe(false);
+  expect(RETRY.test(cut(s, '}, RETRY_MS);', '}, 600_000);'))).toBe(false);
+  expect(RETRY.test(cut(s, 'pending(s.ledger).length > 0', 'true'))).toBe(false);
 });
 
 // 타이머 오프라인 T0 리뷰 — 로그아웃 · 탈퇴는 측정 가게를 닫고(줄에 선 쓰기를 기다리고) 나서 칸을 지운다 · 로그인 화면이 되면 표면 맞추기를 끄고 가게를 닫는다(REQ-364).
@@ -551,6 +580,9 @@ const WIRES: { id: string; rel: string; needle: string; n: number; mutant: strin
   { id: 'REQ-357 공부 시작 막힘 = 보이는 독서 측정', rel: join('app', '(tabs)', 'study.tsx'), needle: 'blocked: !!dash?.hasActiveSession', n: 1, mutant: 'blocked: false' },
   { id: 'REQ-370 홈 위젯 판정 = 보이는 대시보드', rel: join('app', '(tabs)', 'index.tsx'), needle: 'ready: dash !== null', n: 1, mutant: 'ready: true' },
   { id: 'REQ-370 공부 위젯 판정 = 보이는 대시보드', rel: join('app', '(tabs)', 'study.tsx'), needle: 'ready: dash !== null', n: 1, mutant: 'ready: true' },
+  // 로그아웃 확인은 기기 원장(진행 중 · 보낼 측정)도 센다 — 서버가 모르는 측정이 확인 없이 지워지지 않게(REQ-364 · D6 문구)
+  { id: 'REQ-364 로그아웃 확인 = 원장 isDirty', rel: join('app', '(tabs)', 'settings.tsx'), needle: '(isDirty(measureStore.get()?.ledger) ? 1 : 0)', n: 1, mutant: '0' },
+  { id: 'REQ-364 로그아웃 확인 문구(D6)', rel: join('app', '(tabs)', 'settings.tsx'), needle: "'이 기기에만 있는 저장 안 된 글이나 측정 기록이 있어요 — 로그아웃하면 지워져요'", n: 1, mutant: "'이 기기에만 있는 저장 안 된 글이 있어요 — 로그아웃하면 지워져요'" },
 ];
 test.each(WIRES)('A1 리뷰 15 · $id — 화면이 lib 판정을 쓴다(돌연변이를 심으면 잡힌다)', ({ rel, needle, n, mutant }) => {
   const s = srcOf(rel);

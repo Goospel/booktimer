@@ -1,14 +1,15 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { SplashScreen, Stack } from 'expo-router';
 import { useEffect, useState } from 'react';
-import { LogBox, View } from 'react-native';
+import { AppState, LogBox, View } from 'react-native';
 
 // 앱 시작 때 위젯·Live Activity 레이아웃을 등록한다(보충 REQ-03 「위젯 레이아웃」).
 import '../../widgets/ReadingWidget';
 import '../../widgets/ReadingActivity';
 import { session } from '../api/client';
 import { startSlotSync } from '../lib/draftMigrate';
-import { measureStore } from '../lib/measureSync';
+import { pending } from '../lib/measureLedger';
+import { flushMeasures, measureStore, RETRY_MS } from '../lib/measureSync';
 import { startSurfaceSync, stopSurfaceSync } from '../lib/surfaceSync';
 import { clearSurfaces } from '../lib/surfaces';
 import { useAppFonts } from '../theme/fonts';
@@ -53,8 +54,8 @@ export default function RootLayout() {
   }, []);
 
   // 로그인된 채 켜지면(또는 로그인하면) 한 번 — 측정 가게(마지막 대시보드 — 오프라인으로 켜도 홈이 그려진다, REQ-362)를 열고
-  // 위젯 · LA · 알림 맞추기를 켠다(REQ-363). 옛 글 화면의 기기 칸을 쪽지로 옮기고, 앱이 꺼져 남은 새 쪽지 칸을 보낸다(J5 · J100).
-  // 화면을 막지 않는다 — 실패한 칸은 남아 다음 실행에 다시 간다.
+  // 위젯 · LA · 알림 맞추기를 켜고, 앱이 꺼져 남은 끝난 측정을 마감 문으로 보낸다(REQ-359). 옛 글 화면의 기기 칸을 쪽지로 옮기고,
+  // 앱이 꺼져 남은 새 쪽지 칸을 보낸다(J5 · J100). 화면을 막지 않는다 — 실패한 칸은 남아 다음 실행에 다시 간다.
   useEffect(() => {
     if (!signedIn) return;
     void session.userId().then(
@@ -62,10 +63,22 @@ export default function RootLayout() {
         if (userId === null) return;
         await measureStore.open(AsyncStorage, userId);
         startSurfaceSync();
+        void flushMeasures().catch(() => undefined);
         return startSlotSync(AsyncStorage, userId);
       },
       () => undefined,
     );
+  }, [signedIn]);
+
+  // 보낼 측정이 있고 앱이 앞에 있으면 20초마다 보낸다(REQ-359 — 역에 서는 동안 한 번은 걸리게). 루트라 여백 쓰기처럼 탭을 덮는 화면에서도 돈다.
+  // 대시보드는 읽지 않는다(보내기만 — 화면은 다음 포커스 · 앞으로 올 때 읽는다)
+  useEffect(() => {
+    if (!signedIn) return;
+    const id = setInterval(() => {
+      const s = measureStore.get();
+      if (AppState.currentState === 'active' && s && pending(s.ledger).length > 0) void flushMeasures().catch(() => undefined);
+    }, RETRY_MS);
+    return () => clearInterval(id);
   }, [signedIn]);
 
   const ready = fontsOk && signedIn !== null;
