@@ -403,12 +403,41 @@ test('A1 리뷰 6 · createFirst는 adopt 전에 localId를 비우고 noteId를 
 });
 
 // J5 · J100 — 앱 시작 동기화는 로그인 게이트 안에서 startSlotSync 한 호출이다(호출을 빼거나 게이트를 늘 return으로 만들면 잡힌다 — A1 리뷰 14).
-const START = /useEffect\(\(\) => \{\s*if \(!signedIn\) return;\s*void session\.userId\(\)\.then\(\s*\(userId\) => \{\s*if \(userId === null\) return;\s*return startSlotSync\(AsyncStorage, userId\);\s*\},\s*\(\) => undefined,?\s*\);\s*\}, \[signedIn\]\);/;
+// 타이머 오프라인 T0(REQ-362 · 363) — 같은 게이트 안에서 그 앞에 측정 가게를 열고 표면 맞추기를 켠다(가게를 안 열면 홈이 「불러오는 중」에 멈춘다).
+const START = /useEffect\(\(\) => \{\s*if \(!signedIn\) return;\s*void session\.userId\(\)\.then\(\s*async \(userId\) => \{\s*if \(userId === null\) return;\s*await measureStore\.open\(AsyncStorage, userId\);\s*startSurfaceSync\(\);\s*return startSlotSync\(AsyncStorage, userId\);\s*\},\s*\(\) => undefined,?\s*\);\s*\}, \[signedIn\]\);/;
 test('A1 리뷰 14 · _layout이 signedIn 게이트 안에서 startSlotSync를 부른다(빼면 잡힌다)', () => {
   const s = srcOf(join('app', '_layout.tsx'));
   expect(START.test(s)).toBe(true);
   expect(START.test(s.replace('return startSlotSync(AsyncStorage, userId);', ''))).toBe(false);
   expect(START.test(s.replace('if (!signedIn) return;', 'if (!signedIn || true) return;'))).toBe(false);
+  expect(START.test(s.replace('await measureStore.open(AsyncStorage, userId);', ''))).toBe(false);
+});
+
+// 타이머 오프라인 T0 리뷰 — 로그아웃 · 탈퇴는 측정 가게를 닫고(줄에 선 쓰기를 기다리고) 나서 칸을 지운다 · 로그인 화면이 되면 표면 맞추기를 끄고 가게를 닫는다(REQ-364).
+// 빠지면 늦게 온 대시보드 응답이 지운 timer 칸을 되살려 로그아웃한 기기에 책 제목 · 오늘 시간이 남는다.
+const CLOSE_THEN_CLEAR = /clearDrafts: async \(\) => \{\s*await measureStore\.close\(\);[^}]*clearAll\(/;
+const SIGNED_OUT = /if \(!v\) \{\s*stopSurfaceSync\(\);\s*void measureStore\.close\(\);/;
+test('REQ-364 · 로그아웃 · 탈퇴는 가게를 닫은 뒤 칸을 지우고, 루트는 로그인 화면이 되면 표면 맞추기를 끄고 가게를 닫는다(빼면 잡힌다)', () => {
+  for (const rel of [join('app', '(tabs)', 'settings.tsx'), join('app', 'account-delete.tsx')]) {
+    const s = srcOf(rel);
+    expect(CLOSE_THEN_CLEAR.test(s)).toBe(true);
+    expect(CLOSE_THEN_CLEAR.test(s.replace('await measureStore.close();', ''))).toBe(false);
+  }
+  const root = srcOf(join('app', '_layout.tsx'));
+  expect(SIGNED_OUT.test(root)).toBe(true);
+  expect(SIGNED_OUT.test(root.replace('void measureStore.close();', ''))).toBe(false);
+  expect(SIGNED_OUT.test(root.replace('stopSurfaceSync();', ''))).toBe(false);
+});
+
+// 타이머 오프라인 T0 기기 확인(2026-11-03) — [측정 종료]는 누를 때 이전 안내를 지운다. 안 지우면 오프라인 실패 띠가 다음 정지 성공 뒤에도 남는다.
+// 화면은 하니스가 렌더하지 않아 처리기 모양을 잠근다 — 위젯 [측정 종료] · Option+P도 같은 처리기를 부른다.
+const STOP_CLEARS = /async function stop\(\) \{\s*if \(busy\) return;\s*setBusy\(true\);\s*setNotice\(null\);\s*const r = await stopMeasure\(/;
+test('기기 확인 2026-11-03 · 홈 · 공부의 [측정 종료]는 이전 안내를 지우고 시작한다(옛 홈 꼴을 심으면 잡힌다)', () => {
+  for (const rel of [join('app', '(tabs)', 'index.tsx'), join('app', '(tabs)', 'study.tsx')]) {
+    expect(STOP_CLEARS.test(srcOf(rel))).toBe(true);
+  }
+  const old = 'async function stop() {\n    if (busy) return;\n    setBusy(true);\n    const r = await stopMeasure({ stop: reading.stop, reload: load });';
+  expect(STOP_CLEARS.test(old)).toBe(false);
 });
 
 // A1 리뷰 2 · 8 — 쪽지 지우기(확인 창 · 서버 지우기 · 기기 칸 지우기)는 한 곳(NoteRow.confirmRemoveNote)을 책 화면 · 서재가 같이 쓴다.

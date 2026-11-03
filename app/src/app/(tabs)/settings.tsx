@@ -8,7 +8,7 @@ import * as Updates from 'expo-updates';
 import { type ReactNode, useCallback, useEffect, useRef, useState } from 'react';
 import { Alert, AppState, Linking, View } from 'react-native';
 
-import { account, type AccountInfo, ApiError, failText, reading, session, writing } from '../../api/client';
+import { account, type AccountInfo, ApiError, failText, session, writing } from '../../api/client';
 import type { ConsentView } from '../../api/types';
 import { base, Button, Notice, Row, Screen, SwitchRow, Txt, useStacked } from '../../components/ui';
 import { kakaoLogout } from '../../lib/auth/kakao';
@@ -16,10 +16,11 @@ import { buildInfoLine } from '../../lib/buildInfo';
 import { deleteVia } from '../../lib/deleteVia';
 import { clearAll, pendingAll } from '../../lib/draftSync';
 import { dateLabel } from '../../lib/format';
-import { todayDashboard } from '../../lib/goalProgress';
 import { logout } from '../../lib/logout';
+import { loadDashboard, measureStore } from '../../lib/measureSync';
 import { askPermission, permission, type PermissionState, reminderStore, syncReminders } from '../../lib/notify';
 import { clampTime, DEFAULT_REMINDER, type ReminderSetting } from '../../lib/reminders';
+import { syncSurfacesNow } from '../../lib/surfaceSync';
 import { color, line, space } from '../../theme/tokens';
 
 // 맨 아래 줄은 지금 뜬 JS가 무엇인지 기기에서 읽는 자리다(앞당김 보충 REQ-72 · U-40).
@@ -42,10 +43,13 @@ const todayAt = (h: number, m: number) => {
   return new Date(d.getFullYear(), d.getMonth(), d.getDate(), h, m);
 };
 
-/** 알림을 오늘 대시보드로 다시 맞춘다(REQ-348 · 349). 계획은 판정한 순간으로 — 알림 줄은 늦게 돌아(notify.ts:68) 자정 직전에 받은 전날 값을 자정 뒤 「오늘」로 셀 수 있다. 못 읽으면 null — 오늘 것도 건다(다음 읽기가 고친다). */
+/**
+ * 알림을 오늘 대시보드로 다시 맞춘다(REQ-348 · 349). 읽기는 가게를 지나고(loadDashboard), 맞추기는 루트와 같은 한 줄이다(syncSurfacesNow — REQ-363).
+ * 맞추는 순간의 시각으로 굴려 계산한다. 못 읽으면 마지막 대시보드(캐시)로 — 그것도 없으면 null(오늘 것도 건다 — 다음 읽기가 고친다).
+ */
 async function resyncReminders() {
-  const r = await todayDashboard(reading.dashboard).catch(() => null);
-  await syncReminders(r && r.d, r ? new Date(r.at) : undefined);
+  await loadDashboard().catch(() => undefined);
+  await syncSurfacesNow();
 }
 
 export default function Settings() {
@@ -170,6 +174,7 @@ export default function Settings() {
         ),
       revoke: () => account.logout(),
       clearDrafts: async () => {
+        await measureStore.close(); // 줄에 선 측정 칸 쓰기가 끝난 뒤에 지운다 — 지운 칸이 되살아나지 않게(REQ-364)
         if (userId !== null) await clearAll(AsyncStorage, userId);
       },
       clearSession: () => session.clear(), // 루트 세션 구독이 로그인 화면 + 기기 표면 정리

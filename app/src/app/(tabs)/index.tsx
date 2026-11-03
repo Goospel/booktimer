@@ -3,19 +3,18 @@
 // 밀린 시간(부채)은 읽지도 그리지도 않는다(REQ-91).
 import { router, useFocusEffect } from 'expo-router';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { ActivityIndicator, AppState, Pressable, View } from 'react-native';
+import { ActivityIndicator, Pressable, View } from 'react-native';
 
 import { reading } from '../../api/client';
-import type { Dashboard } from '../../api/types';
 import { Cover } from '../../components/Cover';
 import { Sheet } from '../../components/Sheet';
 import { Button, Notice, Row, Screen, Txt, useStacked } from '../../components/ui';
 import { clockLabel, dateLabel, durationLabel } from '../../lib/format';
-import { goalChoices, goalProgress, goalStatus, isStaleDay, midnightRereadDelay, nextMidnightOf, SESSION_CAP_MS, todayDashboard } from '../../lib/goalProgress';
+import { goalChoices, goalProgress, goalStatus, nextMidnightOf, SESSION_CAP_MS } from '../../lib/goalProgress';
 import { savedNotice } from '../../lib/marginSave';
 import { ALREADY_STOPPED, startMeasure, stopMeasure } from '../../lib/measureStart';
-import { goalMetNotice } from '../../lib/reminders';
-import { syncSurfaces } from '../../lib/surfaces';
+import { goalNoticeStep } from '../../lib/reminders';
+import { useMeasureDashboard } from '../../lib/useMeasureDashboard';
 import { useMeasureShortcut } from '../../lib/useMeasureShortcut';
 import { useWidgetIntent } from '../../lib/useWidgetIntent';
 import { color, layout, space } from '../../theme/tokens';
@@ -23,63 +22,22 @@ import { color, layout, space } from '../../theme/tokens';
 type NoticeState = { message: string; tone?: 'info' | 'error' } | null;
 
 export default function Home() {
-  const [dash, setDash] = useState<Dashboard | null>(null);
-  const [loadError, setLoadError] = useState<string | null>(null);
+  // 읽기 · 앞으로 올 때 · 포커스 · 1초 틱 · 자정은 훅이 한다(타이머 오프라인 T0 — 캐시로 오프라인에서도 그린다). 위젯 · LA · 알림은 루트가 맞춘다
+  const { dash, now, rolled, loadError, load, fresh } = useMeasureDashboard({ mode: 'reading' });
   const [notice, setNotice] = useState<NoticeState>(null);
   const [busy, setBusy] = useState(false);
   const [goalOpen, setGoalOpen] = useState(false);
   const [pickedId, setPickedId] = useState<number | null>(null);
-  const [now, setNow] = useState(Date.now());
-  const [loadedMidnight, setLoadedMidnight] = useState(0);
   const stacked = useStacked();
 
-  const load = useCallback(async () => {
-    try {
-      // 판정한 순간(at)을 그 값의 시각으로(REQ-349)
-      const { d, at } = await todayDashboard(reading.dashboard);
-      setDash(d);
-      setLoadError(null);
-      setNow(at);
-      setLoadedMidnight(nextMidnightOf(at));
-      void syncSurfaces(d, new Date(at));
-    } catch (e) {
-      setLoadError(e instanceof Error ? e.message : String(e));
-    }
-  }, []);
-
-  useEffect(() => {
-    const sub = AppState.addEventListener('change', (s) => s === 'active' && void load());
-    return () => sub.remove();
-  }, [load]);
-
-  // 포커스마다 다시 읽는다 — 쌓는 화면(책 담기 · 여백 쓰기)이나 서재 탭에서 돌아오면 옛 dash다(첫 마운트도 여기서 읽는다).
   // 여백 쓰기에서 남기고 돌아오면 맨 위 흐름 안 알림(REQ-135)
   useFocusEffect(
     useCallback(() => {
       if (savedNotice.take()) setNotice({ message: '여백을 남겼어요' });
-      void load();
-    }, [load]),
+    }, []),
   );
 
   const measuring = !!dash?.hasActiveSession && !!dash.activeStartedAt;
-  useEffect(() => {
-    if (!measuring) return;
-    const id = setInterval(() => setNow(Date.now()), 1000);
-    return () => clearInterval(id);
-  }, [measuring]);
-
-  // 자정을 넘기면 다시 읽는다 — 끝난 몫 · 연속이 전날 값이다. 측정 중엔 1초 틱이, 측정 전엔 자정 예약이 깨운다.
-  const staleDay = dash !== null && isStaleDay(loadedMidnight, now);
-  useEffect(() => {
-    if (staleDay) void load();
-  }, [staleDay, load]);
-  // 측정 전 자정 예약은 읽은 날의 자정 기준(REQ-349 — effect가 자정 뒤에 돌아도 다음 날로 밀리지 않게)
-  useEffect(() => {
-    if (measuring || !dash) return;
-    const id = setTimeout(() => void load(), midnightRereadDelay(loadedMidnight, Date.now()));
-    return () => clearTimeout(id);
-  }, [measuring, dash, loadedMidnight, load]);
-
   const startedAt = measuring && dash?.activeStartedAt ? Date.parse(dash.activeStartedAt) : null;
   const progress = dash
     ? goalProgress({
@@ -93,19 +51,16 @@ export default function Home() {
     : null;
 
   // 달성 순간 — 앱이 앞에 있을 때 흐름 안 Notice(모달 · 축하 효과 없음). 처음 읽은 값이 이미 채움이면 알리지 않는다.
-  // 낡은 날(전날 끝난 몫 + 자정부터의 몫)로는 판정하지 않는다 — 새날 첫 값은 다시 「처음 읽은 값」이다.
+  // 굴린 값(지난날 기준 값)과 디스크 값으로는 판정하지 않는다 — 그다음 새 값이 다시 「처음 읽은 값」이다(goalNoticeStep — REQ-371).
   // 판정은 goalMetNotice 하나(REQ-178 — 목표 0엔 달성이 없다). deps에 목표가 없어도 된다: 판정 축은 filled 전환이고 그 렌더의 목표를 읽는다.
   const wasFilled = useRef<boolean | null>(null);
+  const cached = fresh === null;
   useEffect(() => {
     if (!dash || !progress) return;
-    if (staleDay) {
-      wasFilled.current = null;
-      return;
-    }
-    const message = goalMetNotice(wasFilled.current, progress, dash.todayGoalSeconds);
-    if (message) setNotice({ message });
-    wasFilled.current = progress.filled;
-  }, [progress?.filled, progress?.streak, staleDay]);
+    const step = goalNoticeStep(wasFilled.current, { rolled, cached, progress, goal: dash.todayGoalSeconds });
+    if (step.message) setNotice({ message: step.message });
+    wasFilled.current = step.prev;
+  }, [progress?.filled, progress?.streak, rolled, cached]);
 
   async function start(bookId: number | null) {
     if (busy) return;
@@ -119,6 +74,7 @@ export default function Home() {
   async function stop() {
     if (busy) return;
     setBusy(true);
+    setNotice(null); // 앞 실패 띠(오프라인)가 이번 정지 성공 뒤에 남지 않게 — 공부 탭과 같다
     const r = await stopMeasure({ stop: reading.stop, reload: load });
     if (r.error) setNotice({ message: r.error, tone: 'error' });
     else if (r.info) setNotice({ message: r.info });
@@ -142,7 +98,7 @@ export default function Home() {
   const measureButton = !dash || !progress ? null : measuring ? stop : books.length === 0 ? () => start(null) : () => start(book.id);
   useMeasureShortcut({ button: measureButton, busy, covered: goalOpen });
   // 위젯 [읽기 시작] · [측정 종료](위젯 확장 REQ-183) — 새로 읽은 대시보드로 판정해 같은 버튼을 누른다. 목표 시트가 열려 있어도 누른다(판단 J8)
-  useWidgetIntent({ mode: 'reading', fresh: dash, measuring, button: measureButton, onAlreadyStopped: () => setNotice({ message: ALREADY_STOPPED }) });
+  useWidgetIntent({ mode: 'reading', fresh, measuring, button: measureButton, onAlreadyStopped: () => setNotice({ message: ALREADY_STOPPED }) });
 
   if (!dash || !progress) {
     return (

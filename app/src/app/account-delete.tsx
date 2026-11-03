@@ -13,6 +13,7 @@ import { kakaoIdToken, kakaoUnlink } from '../lib/auth/kakao';
 import { APPLE_AGAIN_LINE, confirmFor, deleteAccount, deleteCopy, deleteVia, type Via, WEB_DELETE_URL } from '../lib/deleteVia';
 import { clearAll, pendingAll } from '../lib/draftSync';
 import { signedOutNotice } from '../lib/logout';
+import { measureStore } from '../lib/measureSync';
 import { color, space } from '../theme/tokens';
 
 const openWeb = () => void Linking.openURL(WEB_DELETE_URL);
@@ -47,6 +48,7 @@ export default function AccountDelete() {
           unlinkKakao: kakaoUnlink,
           revokeGoogle,
           clearDrafts: async () => {
+            await measureStore.close(); // 줄에 선 측정 칸 쓰기가 끝난 뒤에 지운다(REQ-364)
             if (i.userId !== null) await clearAll(AsyncStorage, i.userId);
           },
           // 표지는 세션을 지우기 전에 — 지우는 순간 루트 틀이 로그인 화면을 그린다

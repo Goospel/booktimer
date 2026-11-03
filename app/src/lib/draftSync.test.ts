@@ -202,6 +202,17 @@ describe('REQ-229 · 기기 칸 접두어 셋(J80)', () => {
     expect([...kv.map.keys()].sort()).toEqual(['booktimer.other', 'draft:10:7', 'margin:2:70']);
   });
 
+  // 타이머 오프라인 T0 — 측정 칸(timer:{uid}:state — 마지막 대시보드 · T2부터 원장)도 로그아웃 · 탈퇴에서 지운다(설계 §6.9)
+  test('REQ-364 · clearAll은 timer 칸(캐시 · 원장)도 지운다 · 다른 사용자 칸 · 글 수 세기는 그대로', async () => {
+    const kv = memoryKV();
+    kv.map.set('timer:1:state', dirty); // dirty 필드가 있어도 글 수에 들지 않아야 한다
+    kv.map.set('timer:10:state', clean); // userId 10 — 「1:」 접두로 걸리면 안 된다
+    kv.map.set('draft:1:7', dirty);
+    expect(await pendingAll(kv, 1)).toBe(1); // 글 칸만 센다(측정 칸의 dirty 같은 필드를 세지 않는다)
+    await clearAll(kv, 1);
+    expect([...kv.map.keys()].sort()).toEqual(['timer:10:state']);
+  });
+
   test('REQ-229 · 같은 책 새 쪽지 둘(오프라인)이 서로 다른 칸 · 칸 안에 bookId(책 없으면 null)', async () => {
     const kv = memoryKV();
     const a = await startNewNote(kv, 1, { bookId: 3, quote: null, text: '첫째', dirty: true });

@@ -1,6 +1,6 @@
 import type { Dashboard } from '../api/types';
 import { type GoalInput, goalProgress } from './goalProgress';
-import { clampTime, DEFAULT_REMINDER, goalMetNotice, planNotifications, REMINDER_DAYS, scheduleDiff } from './reminders';
+import { clampTime, DEFAULT_REMINDER, goalMetNotice, goalNoticeStep, planNotifications, REMINDER_DAYS, scheduleDiff } from './reminders';
 
 // 독서 알림 · 목표 달성 알림 계획(v1 REQ-33 · REQ-92 · REQ-153). 시계는 2026-10-24 기기 시간대로 고정한다.
 const at = (h: number, m: number, day = 24) => new Date(2026, 9, day, h, m).getTime();
@@ -139,4 +139,34 @@ test('REQ-179 · 목표를 0으로 바꾸면 걸려 있던 독서 알림 30통�
 test('REQ-179 · 목표 없음에서도 오늘 1초라도 읽었으면 오늘 독서 알림은 뺀다', () => {
   expect(plan({ dash: idle(0, 0) }).map((x) => x.id)).toContain('reminder-202610242000-nogoal'); // 양성 대조
   expect(plan({ dash: idle(5 * 60, 0) }).map((x) => x.id)).not.toContain('reminder-202610242000-nogoal');
+});
+
+// 타이머 오프라인 T0 REQ-371 — 홈의 목표 달성 띠 판정을 훅으로 옮겨도 지금 그대로다(설계 §6.7). 관측 차례를 순서대로 넣는다.
+describe('goalNoticeStep', () => {
+  const p = (filled: boolean, streak = 5) => ({ todaySeconds: filled ? 1800 : 600, filled, streak, reachAt: null });
+  type Obs = { rolled?: boolean; cached?: boolean; filled: boolean };
+  /** 관측을 차례로 밟아 뜬 띠 글을 모은다 */
+  function run(obs: Obs[]): (string | null)[] {
+    let prev: boolean | null = null;
+    return obs.map((o) => {
+      const s = goalNoticeStep(prev, { rolled: !!o.rolled, cached: !!o.cached, progress: p(o.filled), goal: 1800 });
+      prev = s.prev;
+      return s.message;
+    });
+  }
+
+  test('REQ-371 · 목표 달성 띠 — 처음 읽은 값이 이미 채움이면 알리지 않는다 · 채우는 순간 한 번 · 굴린 값에서는 알리지 않고 다음 값을 처음 값으로 본다', () => {
+    expect(run([{ filled: true }, { filled: true }])).toEqual([null, null]);
+    expect(run([{ filled: false }, { filled: true }, { filled: true }])).toEqual([null, '오늘 목표를 채웠어요 · 5일째', null]);
+    // 굴린 값(지난날 기준 값) 뒤 첫 값이 채움이어도 그건 처음 값이다 — 그다음 채움 전환만 알린다
+    expect(run([{ filled: false }, { rolled: true, filled: false }, { filled: true }])).toEqual([null, null, null]);
+    expect(run([{ rolled: true, filled: false }, { filled: false }, { filled: true }])).toEqual([null, null, '오늘 목표를 채웠어요 · 5일째']);
+  });
+
+  test('REQ-371 · 디스크에서 온 값(이 실행에서 아직 새로 읽지 않음)은 처음 값으로 삼지 않는다 — 캐시 미달 → 새로 읽은 채움이면 띠 없음', () => {
+    // 앱이 닫힌 동안 다른 기기에서 채웠다 — 지금(캐시 없음)은 첫 읽기가 채움이면 띠가 없다. 캐시가 있어도 같다
+    expect(run([{ cached: true, filled: false }, { filled: true }])).toEqual([null, null]);
+    // 새로 읽은 값부터는 지금처럼 — 미달에서 채우는 순간 한 번
+    expect(run([{ cached: true, filled: false }, { filled: false }, { filled: true }])).toEqual([null, null, '오늘 목표를 채웠어요 · 5일째']);
+  });
 });

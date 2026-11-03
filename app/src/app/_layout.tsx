@@ -8,6 +8,8 @@ import '../../widgets/ReadingWidget';
 import '../../widgets/ReadingActivity';
 import { session } from '../api/client';
 import { startSlotSync } from '../lib/draftMigrate';
+import { measureStore } from '../lib/measureSync';
+import { startSurfaceSync, stopSurfaceSync } from '../lib/surfaceSync';
 import { clearSurfaces } from '../lib/surfaces';
 import { useAppFonts } from '../theme/fonts';
 import { color } from '../theme/tokens';
@@ -39,19 +41,27 @@ export default function RootLayout() {
       () => setSignedIn(false),
     );
     // 로그인 · 401이 화면 틀을 바꾼다. 로그인 화면이 되면(로그아웃 · 탈퇴 · 401) 예약 알림 · LA · 위젯을 비운다 — 초안은 남긴다(PR-I §8-15)
+    // 측정 가게는 메모리만 닫는다 — 디스크 칸은 남아 같은 사용자가 다시 로그인하면 쓴다(로그아웃 · 탈퇴는 그 전에 칸을 지웠다 — REQ-364)
     return session.subscribe((v) => {
       setSignedIn(v);
-      if (!v) void clearSurfaces();
+      if (!v) {
+        stopSurfaceSync();
+        void measureStore.close();
+        void clearSurfaces();
+      }
     });
   }, []);
 
-  // 로그인된 채 켜지면(또는 로그인하면) 한 번 — 옛 글 화면의 기기 칸을 쪽지로 옮기고, 앱이 꺼져 남은 새 쪽지 칸을 보낸다(J5 · J100).
+  // 로그인된 채 켜지면(또는 로그인하면) 한 번 — 측정 가게(마지막 대시보드 — 오프라인으로 켜도 홈이 그려진다, REQ-362)를 열고
+  // 위젯 · LA · 알림 맞추기를 켠다(REQ-363). 옛 글 화면의 기기 칸을 쪽지로 옮기고, 앱이 꺼져 남은 새 쪽지 칸을 보낸다(J5 · J100).
   // 화면을 막지 않는다 — 실패한 칸은 남아 다음 실행에 다시 간다.
   useEffect(() => {
     if (!signedIn) return;
     void session.userId().then(
-      (userId) => {
+      async (userId) => {
         if (userId === null) return;
+        await measureStore.open(AsyncStorage, userId);
+        startSurfaceSync();
         return startSlotSync(AsyncStorage, userId);
       },
       () => undefined,
