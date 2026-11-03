@@ -431,13 +431,19 @@ test('REQ-364 · 로그아웃 · 탈퇴는 가게를 닫은 뒤 칸을 지우고
 
 // 타이머 오프라인 T0 기기 확인(2026-11-03) — [측정 종료]는 누를 때 이전 안내를 지운다. 안 지우면 오프라인 실패 띠가 다음 정지 성공 뒤에도 남는다.
 // 화면은 하니스가 렌더하지 않아 처리기 모양을 잠근다 — 위젯 [측정 종료] · Option+P도 같은 처리기를 부른다.
-const STOP_CLEARS = /async function stop\(\) \{\s*if \(busy\) return;\s*setBusy\(true\);\s*setNotice\(null\);\s*const r = await stopMeasure\(/;
+// 타이머 오프라인 T2 — 첫 줄에 시간 문(gate — REQ-372)이 붙었다. 문은 아래 WIRES가 따로 잠그고, 여기는 「지운다」만 본다(정규식은 그 한 군데만 넓혔다).
+const STOP_CLEARS = /async function stop\(\) \{\s*if \(busy(?: \|\| !gate\(\))?\) return;\s*setBusy\(true\);\s*setNotice\(null\);\s*const r = await stopMeasure\(/;
 test('기기 확인 2026-11-03 · 홈 · 공부의 [측정 종료]는 이전 안내를 지우고 시작한다(옛 홈 꼴을 심으면 잡힌다)', () => {
   for (const rel of [join('app', '(tabs)', 'index.tsx'), join('app', '(tabs)', 'study.tsx')]) {
     expect(STOP_CLEARS.test(srcOf(rel))).toBe(true);
   }
   const old = 'async function stop() {\n    if (busy) return;\n    setBusy(true);\n    const r = await stopMeasure({ stop: reading.stop, reload: load });';
   expect(STOP_CLEARS.test(old)).toBe(false);
+  // T2 꼴에서 지우기를 빼도 잡힌다
+  const t2 = srcOf(join('app', '(tabs)', 'index.tsx'));
+  const t2Mutant = t2.replace(/(async function stop\(\) \{\s*if \(busy \|\| !gate\(\)\) return;\s*setBusy\(true\);)\s*setNotice\(null\);/, '$1');
+  expect(t2Mutant).not.toBe(t2);
+  expect(STOP_CLEARS.test(t2Mutant)).toBe(false);
 });
 
 // A1 리뷰 2 · 8 — 쪽지 지우기(확인 창 · 서버 지우기 · 기기 칸 지우기)는 한 곳(NoteRow.confirmRemoveNote)을 책 화면 · 서재가 같이 쓴다.
@@ -538,6 +544,13 @@ const WIRES: { id: string; rel: string; needle: string; n: number; mutant: strin
   { id: 'M7b 내보내기 책 줄 = bookSourceLine(재료 · 새 쪽지 둘)', rel: NOTE, needle: 'bookSourceLine(m.book)', n: 2, mutant: 'null' },
   { id: 'M9b AI 배지 = noteRow().ai', rel: join('components', 'NoteRow.tsx'), needle: 'r.ai ?', n: 1, mutant: 'true ?' },
   { id: 'M10b 책 없는 여백 = bookless 결과', rel: LIBRARY, needle: '.then(setBookless', n: 1, mutant: '.then(() => setBookless([])' },
+  // 타이머 오프라인 T2 — 시작 · 정지의 시간 문(REQ-372) · 다른 모드 재는 중 판정(REQ-357 — 보이는 대시보드) · 위젯 판정 계기(REQ-370)
+  { id: 'REQ-372 홈 시작 · 정지 = gate()', rel: join('app', '(tabs)', 'index.tsx'), needle: 'if (busy || !gate()) return;', n: 2, mutant: 'if (busy) return;' },
+  { id: 'REQ-372 공부 시작 · 정지 = gate()', rel: join('app', '(tabs)', 'study.tsx'), needle: 'if (busy || !gate()) return;', n: 2, mutant: 'if (busy) return;' },
+  { id: 'REQ-357 홈 시작 막힘 = 보이는 공부 측정', rel: join('app', '(tabs)', 'index.tsx'), needle: 'blocked: !!dash?.study.hasActiveSession', n: 1, mutant: 'blocked: false' },
+  { id: 'REQ-357 공부 시작 막힘 = 보이는 독서 측정', rel: join('app', '(tabs)', 'study.tsx'), needle: 'blocked: !!dash?.hasActiveSession', n: 1, mutant: 'blocked: false' },
+  { id: 'REQ-370 홈 위젯 판정 = 보이는 대시보드', rel: join('app', '(tabs)', 'index.tsx'), needle: 'ready: dash !== null', n: 1, mutant: 'ready: true' },
+  { id: 'REQ-370 공부 위젯 판정 = 보이는 대시보드', rel: join('app', '(tabs)', 'study.tsx'), needle: 'ready: dash !== null', n: 1, mutant: 'ready: true' },
 ];
 test.each(WIRES)('A1 리뷰 15 · $id — 화면이 lib 판정을 쓴다(돌연변이를 심으면 잡힌다)', ({ rel, needle, n, mutant }) => {
   const s = srcOf(rel);
