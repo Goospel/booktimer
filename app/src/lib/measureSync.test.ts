@@ -486,6 +486,40 @@ test('REQ-366 · 지운 측정 · 겹쳐 뺀 시간(1분 이상)을 한 번만 �
   expect(measureNotice.take()).toBeNull();
 });
 
+test('REQ-366 리뷰 · 한 차례의 결과는 끝날 때 한 번에 알린다 — 알릴 때마다 가져가는 탭이 있어도 지운 개수 · 겹친 시간의 합이 한 띠에 보인다', async () => {
+  const kv = memoryKV();
+  withLedger(kv, { active: null, done: [done(0), done(10), done(20), done(30)] });
+  await measureStore.open(kv, 1);
+  const shown: string[] = [];
+  const unsub = measureNotice.subscribe(() => {
+    const m = measureNotice.take(); // 포커스된 측정 탭(useMeasureDashboard)처럼 알릴 때마다 가져간다
+    if (m) shown.push(m);
+  });
+  const e422 = new ApiError(422, '올릴 수 없는 측정 구간입니다');
+  jest.spyOn(reading, 'finish').mockRejectedValueOnce(e422).mockResolvedValueOnce({ trimmedSeconds: 30 }).mockRejectedValueOnce(e422).mockResolvedValueOnce({ trimmedSeconds: 40 });
+  await flushMeasures();
+  unsub();
+  expect(shown).toEqual(['올릴 수 없는 측정 2개를 지웠어요 — 7일이 지났거나 기기 시계가 맞지 않았어요\n다른 곳에서 재던 측정과 겹친 1분은 빼고 올렸어요']);
+});
+
+test('REQ-366 리뷰 · 가게를 닫으면 알림 칸도 비운다 — 앞 계정의 보내기 알림이 다음 계정 화면에 뜨지 않는다', async () => {
+  const kv = memoryKV();
+  withLedger(kv, { active: null, done: [done(0)] });
+  await measureStore.open(kv, 1);
+  jest.spyOn(reading, 'finish').mockRejectedValueOnce(new ApiError(422, '올릴 수 없는 측정 구간입니다'));
+  await flushMeasures(); // 아무 탭도 가져가지 않았다(설정 탭에 있었다)
+  await measureStore.close(); // 로그아웃 → 다른 계정
+  await measureStore.open(kv, 2);
+  expect(measureNotice.take()).toBeNull();
+  // 양성 대조 — 닫지 않았으면 남는다
+  withLedger(kv, { active: null, done: [done(0)] }, undefined, 'timer:2:state');
+  await measureStore.close();
+  await measureStore.open(kv, 2);
+  jest.spyOn(reading, 'finish').mockRejectedValueOnce(new ApiError(422, '올릴 수 없는 측정 구간입니다'));
+  await flushMeasures();
+  expect(measureNotice.take()).toBe('올릴 수 없는 측정 1개를 지웠어요 — 7일이 지났거나 기기 시계가 맞지 않았어요');
+});
+
 test('REQ-366 · 하루 넘게 실패한 칸이 있으면 실행마다 한 번 알린다', async () => {
   const DAY = 24 * 60 * MIN_MS;
   const now = T + 10 * DAY;
@@ -501,4 +535,9 @@ test('REQ-366 · 하루 넘게 실패한 칸이 있으면 실행마다 한 번 �
   expect(measureNotice.take()).toBe('아직 올리지 못한 측정이 있어요 — 기기에 남겨 두고 다시 보낼게요');
   await flushMeasures();
   expect(measureNotice.take()).toBeNull(); // 이 실행에선 한 번
+  // 가게를 닫고 다시 열면(계정 바꾸기 · 다시 로그인) 그 사용자에게 다시 한 번 알린다(리뷰 반영)
+  await measureStore.close();
+  await measureStore.open(kv, 1);
+  await flushMeasures();
+  expect(measureNotice.take()).toBe('아직 올리지 못한 측정이 있어요 — 기기에 남겨 두고 다시 보낼게요');
 });

@@ -54,6 +54,8 @@ export const measureStore = {
   /** 메모리만 닫는다(디스크 칸은 남는다 — 401 · 계정 바꾸기). 줄에 선 쓰기가 끝난 뒤 돌아온다 — 로그아웃은 그다음에 칸을 지운다(REQ-364) */
   close(): Promise<void> {
     state = null;
+    noted = NO_NOTICE; // 알림 칸은 계정에 묶인다 — 앞 계정의 보내기 알림이 다음 계정 화면에 뜨지 않게
+    stuckSaid = false;
     notify();
     return tail.then(() => undefined);
   },
@@ -124,7 +126,8 @@ export async function loadDashboard(): Promise<void> {
 }
 
 // ── 알림 칸(REQ-366) — 어느 차례(화면 · 루트)에서 처리돼도 포커스된 측정 탭이 한 번 가져간다(savedNotice와 같은 꼴 + 구독) ──
-let noted = { dropped: 0, trimmed: 0, stuck: false };
+const NO_NOTICE = { dropped: 0, trimmed: 0, stuck: false };
+let noted = NO_NOTICE;
 let noticeVersion = 0;
 const noticeListeners = new Set<() => void>();
 export const measureNotice = {
@@ -136,7 +139,7 @@ export const measureNotice = {
   /** 한 번 쓰고 비운다. 셋은 드물어 한 띠에 줄을 바꿔 잇는다 · 겹쳐 뺀 시간은 1분 이상일 때만 */
   take(): string | null {
     const n = noted;
-    noted = { dropped: 0, trimmed: 0, stuck: false };
+    noted = NO_NOTICE;
     const lines = [
       n.dropped > 0 && `올릴 수 없는 측정 ${n.dropped}개를 지웠어요 — 7일이 지났거나 기기 시계가 맞지 않았어요`,
       n.trimmed >= 60 && `다른 곳에서 재던 측정과 겹친 ${Math.floor(n.trimmed / 60)}분은 빼고 올렸어요`,
@@ -184,6 +187,9 @@ async function flushOnce(): Promise<void> {
   const uid = state?.userId;
   if (uid === undefined) return;
   await measureStore.update(ledgerStep((l) => capActive(l, Date.now())), uid); // 6시간 넘게 켜진 기기 측정은 시작 + 6시간으로 끝내고 보낸다
+  // 알림은 차례가 끝날 때 한 번 — 칸마다 알리면 포커스된 탭이 그때마다 가져가 「N개」 · 겹친 시간의 합이 쌓이지 못한다(§6.5 · 리뷰 반영)
+  let dropped = 0;
+  let trimmed = 0;
   for (const x of pending(state?.ledger ?? EMPTY_LEDGER)) {
     if (state?.userId !== uid) return; // 보내는 도중 다른 계정 — 앞 사람 칸을 새 토큰으로 보내지 않는다
     const r = await send(x);
@@ -191,18 +197,18 @@ async function flushOnce(): Promise<void> {
     if ('ok' in r) {
       const at = Date.now();
       await measureStore.update(ledgerStep((l) => settle(l, x, at)), uid);
-      if (r.ok > 0) measureNotice.add({ trimmed: r.ok });
+      trimmed += r.ok;
     } else if ('drop' in r) {
       await measureStore.update(ledgerStep((l) => drop(l, x)), uid);
-      measureNotice.add({ dropped: 1 });
+      dropped++;
     } else {
       const at = Date.now();
       await measureStore.update(ledgerStep((l) => markFailed(l, x, at)), uid);
     }
   }
+  if (state?.userId !== uid) return; // 마지막 보내기 사이에 닫혔다 — 알림 칸은 다음 계정 것이다
   const now = Date.now();
-  if (!stuckSaid && state?.userId === uid && pending(state.ledger).some((d) => d.failedSince !== null && d.failedSince <= now - DAY_MS)) {
-    stuckSaid = true;
-    measureNotice.add({ stuck: true });
-  }
+  const stuck = !stuckSaid && pending(state.ledger).some((d) => d.failedSince !== null && d.failedSince <= now - DAY_MS);
+  if (stuck) stuckSaid = true;
+  if (dropped > 0 || trimmed > 0 || stuck) measureNotice.add({ dropped, trimmed, stuck });
 }
