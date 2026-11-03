@@ -156,6 +156,17 @@ test('REQ-363 · 가게가 닫혀 있으면(로그아웃 중 — 세션 정리 �
   expect(reminders).toHaveBeenCalledWith(null);
 });
 
+test('REQ-378 리뷰 · 확인 안 된 기준 값이면 웹 시작 서버 진행 중을 표면에서도 내린다 · 확인된 값이면 그대로', async () => {
+  jest.replaceProperty(Platform, 'OS', 'android'); // 알림 인자 = 맞춘 보이는 값(iOS도 같은 값을 syncSurfaces에 넘긴다)
+  const web = dash(10 * 60, new Date(Date.now() - 60_000).toISOString());
+  await measureStore.update((s) => ({ ...s, base: baseOf(web), failedSeq: 2 }), 1); // 기준 값(순번 1)보다 늦게 보낸 읽기가 실패했다
+  await syncSurfacesNow();
+  expect(reminders.mock.calls.at(-1)![0]).toMatchObject({ hasActiveSession: false, activeStartedAt: null });
+  await measureStore.update((s) => ({ ...s, failedSeq: 0 }), 1); // 양성 대조 — 확인된 값
+  await syncSurfacesNow();
+  expect(reminders.mock.calls.at(-1)![0]).toMatchObject({ hasActiveSession: true, activeStartedAt: web.activeStartedAt });
+});
+
 // 타이머 오프라인 T2 — 오프라인 시작 · 정지도 잠금화면 · 위젯 · 알림이 따른다(목표 6의 lib 게이트 · 기기 쪽은 U-165 ①)
 test('REQ-363 · (T2) 원장에 시작을 적으면 표면을 그 시작 시각으로, 끝내면 측정 없음으로 맞춘다', async () => {
   const d = { ...dash(10 * 60), readingBooks: [], wantToReadBooks: [] } as unknown as Dashboard;

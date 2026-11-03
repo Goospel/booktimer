@@ -583,6 +583,19 @@ const WIRES: { id: string; rel: string; needle: string; n: number; mutant: strin
   // 로그아웃 확인은 기기 원장(진행 중 · 보낼 측정)도 센다 — 서버가 모르는 측정이 확인 없이 지워지지 않게(REQ-364 · D6 문구)
   { id: 'REQ-364 로그아웃 확인 = 원장 isDirty', rel: join('app', '(tabs)', 'settings.tsx'), needle: '(isDirty(measureStore.get()?.ledger) ? 1 : 0)', n: 1, mutant: '0' },
   { id: 'REQ-364 로그아웃 확인 문구(D6)', rel: join('app', '(tabs)', 'settings.tsx'), needle: "'이 기기에만 있는 저장 안 된 글이나 측정 기록이 있어요 — 로그아웃하면 지워져요'", n: 1, mutant: "'이 기기에만 있는 저장 안 된 글이 있어요 — 로그아웃하면 지워져요'" },
+  // T2 리뷰 반영 — 기기 확인만이 가르던 연결(돌연변이 M2 · M9 · M11 · M8b · M24가 살던 자리)
+  {
+    id: 'REQ-364 로그아웃 확인은 보내기를 기다리지 않는다(세기만)',
+    rel: join('app', '(tabs)', 'settings.tsx'),
+    needle: 'pending: async () => (userId === null ? 0 : await pendingAll(AsyncStorage, userId)) + (isDirty(measureStore.get()?.ledger) ? 1 : 0),',
+    n: 1,
+    mutant: 'pending: async () => (await flushMeasures().catch(() => undefined), userId === null ? 0 : await pendingAll(AsyncStorage, userId)) + (isDirty(measureStore.get()?.ledger) ? 1 : 0),',
+  },
+  { id: 'REQ-370 위젯 요청이 걸리는 순간 판정 = version 구독', rel: join('lib', 'useWidgetIntent.ts'), needle: 'useSyncExternalStore(widgetIntent.subscribe, widgetIntent.version)', n: 1, mutant: '0' },
+  { id: 'REQ-370 위젯 판정 효과 계기에 version', rel: join('lib', 'useWidgetIntent.ts'), needle: '}, [version, p.ready, focused]);', n: 1, mutant: '}, [p.ready, focused]);' },
+  { id: 'REQ-366 포커스된 측정 탭만 알림을 가져간다', rel: join('lib', 'useMeasureDashboard.ts'), needle: 'if (!focused) return;', n: 1, mutant: '' },
+  { id: 'REQ-372 훅의 시간 문 = TOGGLE_GAP_MS', rel: join('lib', 'useMeasureDashboard.ts'), needle: 'repeatGate(TOGGLE_GAP_MS)', n: 1, mutant: 'repeatGate(0)' },
+  { id: 'REQ-378 화면 보이는 값 = confirmedOf(가게)', rel: join('lib', 'useMeasureDashboard.ts'), needle: 'confirmedOf(snap)', n: 1, mutant: 'true' },
 ];
 test.each(WIRES)('A1 리뷰 15 · $id — 화면이 lib 판정을 쓴다(돌연변이를 심으면 잡힌다)', ({ rel, needle, n, mutant }) => {
   const s = srcOf(rel);

@@ -10,7 +10,7 @@ import { ApiError, NetworkError, reading, study, UnauthorizedError } from '../ap
 import type { Dashboard } from '../api/types';
 import { clearAll, type KV } from './draftSync';
 import { type DoneMeasure, EMPTY_LEDGER, type Ledger } from './measureLedger';
-import { confirmedOf, flushMeasures, loadDashboard, measureNotice, MeasureStoreClosed, measureStore } from './measureSync';
+import { confirmedOf, flushMeasures, loadDashboard, measureNotice, MeasureStoreClosed, measureStore, RETRY_MS } from './measureSync';
 import { effectiveDashboard } from './visibleDashboard';
 
 function memoryKV(): KV & { map: Map<string, string> } {
@@ -225,6 +225,29 @@ test('REQ-368 · 기준 값과 원장은 한 칸에 함께 쓴다 — 그 쓰기
   expect(effectiveDashboard(s.base!, s.ledger, 300, confirmedOf(s)).d.todayReadSeconds).toBe(660);
 });
 
+test('REQ-368 리뷰 · 한 번의 성공 읽기는 칸에 한 번만 쓴다 — 두 번째 쓰기만 실패해도 다시 열면 오늘 몫이 그대로다(원장만 쓰인 반쪽 상태가 없다)', async () => {
+  const kv = memoryKV();
+  const got: DoneMeasure = { mode: 'reading', startedAt: new Date(60).toISOString(), endedAt: new Date(60_060).toISOString(), bookId: 1, failedSince: null, settledAt: 100 };
+  withLedger(kv, { active: null, done: [got] }, { d: dash(600), at: 50, sentAt: 50 });
+  await measureStore.open(kv, 1);
+  jest.spyOn(Date, 'now').mockReturnValue(200);
+  jest.spyOn(reading, 'dashboard').mockResolvedValueOnce(dash(660));
+  jest.spyOn(console, 'warn').mockImplementation(() => undefined);
+  const setItem = kv.setItem;
+  let calls = 0;
+  kv.setItem = async (k, v) => {
+    if (++calls >= 2) throw new Error('disk full'); // 두 번째 쓰기부터 실패 — 칸을 둘로 나눠 쓰면 원장만 남는다
+    return setItem(k, v);
+  };
+  await loadDashboard();
+  expect(calls).toBe(1);
+  kv.setItem = setItem;
+  await measureStore.close(); // 앱이 죽었다 다시 켬
+  await measureStore.open(kv, 1);
+  const s = measureStore.get()!;
+  expect(effectiveDashboard(s.base!, s.ledger, 300, confirmedOf(s)).d.todayReadSeconds).toBe(660);
+});
+
 test('REQ-378 · 기준 값보다 늦게 보낸 읽기가 실패하면 확인 안 된 값이 되고, 그 뒤 읽기가 성공하면 다시 확인된다 · 더 일찍 보낸 읽기의 실패는 확인을 지우지 않는다 · 디스크 값은 실패 전까진 확인된 것이다', async () => {
   const kv = memoryKV();
   kv.map.set(KEY, JSON.stringify({ base: { d: dash(60), at: 1, sentAt: 1 } }));
@@ -265,6 +288,24 @@ test('REQ-378 · 기준 값보다 늦게 보낸 읽기가 실패하면 확인 �
   await expect(lc).rejects.toBeInstanceOf(NetworkError);
   expect(measureStore.get()!.base!.d).toEqual(dash(1000));
   expect(confirmedOf(measureStore.get()!)).toBe(true);
+
+  // 실패 순번은 가장 큰 값만 남는다 — 늦게 보낸 읽기 실패 → 그보다 이른 읽기 성공 → 더 이른 읽기가 늦게 실패해도 확인 안 됨 그대로(리뷰 반영)
+  const [e1, e2, e3] = [deferred<Dashboard>(), deferred<Dashboard>(), deferred<Dashboard>()];
+  get.mockReturnValueOnce(e1.promise).mockReturnValueOnce(e2.promise).mockReturnValueOnce(e3.promise);
+  const l1 = loadDashboard();
+  await tick();
+  const l2 = loadDashboard();
+  await tick();
+  const l3 = loadDashboard();
+  await tick();
+  e3.reject(new NetworkError());
+  await expect(l3).rejects.toBeInstanceOf(NetworkError);
+  e2.resolve(dash(1100));
+  await l2;
+  e1.reject(new NetworkError());
+  await expect(l1).rejects.toBeInstanceOf(NetworkError);
+  expect(measureStore.get()!.base!.d).toEqual(dash(1100));
+  expect(confirmedOf(measureStore.get()!)).toBe(false);
 });
 
 test('REQ-359 · 받은 마감은 칸에 받은 시각을 적고 · 연결 실패면 남기고 뒤 칸을 부르지 않는다', async () => {
@@ -401,6 +442,10 @@ test('REQ-359 · 가게가 안 열렸으면 보내지 않는다 · 시작 시각
   expect(order).toEqual([`finish ${early.startedAt}`, `finish ${late.startedAt}`, 'dashboard']);
 });
 
+test('REQ-359 · 루트의 보내기 간격은 20초다(역에 서는 30초 남짓 안에 한 번은 걸리게 — 조절 상수를 바꾸면 여기서 의도를 다시 본다)', () => {
+  expect(RETRY_MS).toBe(20_000);
+});
+
 test('REQ-359 · 6시간 넘게 켜진 기기 측정은 차례가 시작 + 6시간으로 끝내고 보낸다', async () => {
   const kv = memoryKV();
   withLedger(kv, { active: { mode: 'study', startedAt: new Date(T).toISOString(), bookId: 9, bookTitle: '선형대수학' }, done: [] });
@@ -432,6 +477,8 @@ test('REQ-366 · 지운 측정 · 겹쳐 뺀 시간(1분 이상)을 한 번만 �
   expect(measureNotice.take()).toBeNull(); // 한 번만
   measureNotice.add({ trimmed: 59 }); // 1분 미만은 띠에 안 보인다
   expect(measureNotice.take()).toBeNull();
+  measureNotice.add({ trimmed: 60 }); // 정확히 1분은 보인다(「1분 이상」)
+  expect(measureNotice.take()).toBe('다른 곳에서 재던 측정과 겹친 1분은 빼고 올렸어요');
   // 겹침 없이 받았으면 알림 없음
   await measureStore.update((s) => ({ ...s, ledger: { active: null, done: [done(40)] } }), 1);
   jest.spyOn(reading, 'finish').mockResolvedValueOnce({ trimmedSeconds: 0 });

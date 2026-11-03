@@ -114,6 +114,17 @@ test('REQ-375 · 시작 + 6시간 10분이 지난 서버 진행 중(독서 · �
   expect(soff.study).toMatchObject({ hasActiveSession: false, activeStartedAt: null, activeBook: null, todaySeconds: 25 * MIN, books: [studyBook] });
 });
 
+test('REQ-375 리뷰 · 상한 지난 서버 진행 중은 굴린 뒤에 멈춘다 — 어젯밤 측정이 어제 목표를 채운 사실은 접기가 먼저 반영한다(§6.4-4)', () => {
+  // 어제 20:30에 받은 값 — 20:00에 켠 독서 진행 중 · 끝난 몫 25분 / 목표 30분 · 연속 5. 오늘 02:20(시작 + 6시간 20분 — 상한 지남)
+  const yesterday = new Date(2026, 9, 30, 20, 30);
+  const b = base(yesterday, { todayReadSeconds: 25 * MIN, hasActiveSession: true, activeStartedAt: new Date(2026, 9, 30, 20, 0).toISOString(), activeBookTitle: '데미안', activeBook: book(1, '데미안') });
+  const now = new Date(2026, 9, 31, 2, 20).getTime();
+  for (const d of [rollToDay(b, now).d, effectiveDashboard(b, EMPTY_LEDGER, now, true).d]) {
+    expect(d.graph.goalStreak).toBe(6);
+    expect(d.hasActiveSession).toBe(false);
+  }
+});
+
 // ── 타이머 오프라인 T2(§6.4) — 원장 얹기 · 날마다 접기 · 확인 안 된 서버 진행 중 ──────────────────────────
 const at = (d: Date, h: number, m = 0) => new Date(d.getFullYear(), d.getMonth(), d.getDate(), h, m).getTime();
 const part = (s: number, e: number, p: Partial<DoneMeasure> = {}): DoneMeasure => ({
