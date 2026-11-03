@@ -74,6 +74,7 @@ export default function Home() {
   async function stop() {
     if (busy) return;
     setBusy(true);
+    setNotice(null); // 앞 실패 띠(오프라인)가 이번 정지 성공 뒤에 남지 않게 — 공부 탭과 같다
     const r = await stopMeasure({ stop: reading.stop, reload: load });
     if (r.error) setNotice({ message: r.error, tone: 'error' });
     else if (r.info) setNotice({ message: r.info });

@@ -429,6 +429,17 @@ test('REQ-364 · 로그아웃 · 탈퇴는 가게를 닫은 뒤 칸을 지우고
   expect(SIGNED_OUT.test(root.replace('stopSurfaceSync();', ''))).toBe(false);
 });
 
+// 타이머 오프라인 T0 기기 확인(2026-11-03) — [측정 종료]는 누를 때 이전 안내를 지운다. 안 지우면 오프라인 실패 띠가 다음 정지 성공 뒤에도 남는다.
+// 화면은 하니스가 렌더하지 않아 처리기 모양을 잠근다 — 위젯 [측정 종료] · Option+P도 같은 처리기를 부른다.
+const STOP_CLEARS = /async function stop\(\) \{\s*if \(busy\) return;\s*setBusy\(true\);\s*setNotice\(null\);\s*const r = await stopMeasure\(/;
+test('기기 확인 2026-11-03 · 홈 · 공부의 [측정 종료]는 이전 안내를 지우고 시작한다(옛 홈 꼴을 심으면 잡힌다)', () => {
+  for (const rel of [join('app', '(tabs)', 'index.tsx'), join('app', '(tabs)', 'study.tsx')]) {
+    expect(STOP_CLEARS.test(srcOf(rel))).toBe(true);
+  }
+  const old = 'async function stop() {\n    if (busy) return;\n    setBusy(true);\n    const r = await stopMeasure({ stop: reading.stop, reload: load });';
+  expect(STOP_CLEARS.test(old)).toBe(false);
+});
+
 // A1 리뷰 2 · 8 — 쪽지 지우기(확인 창 · 서버 지우기 · 기기 칸 지우기)는 한 곳(NoteRow.confirmRemoveNote)을 책 화면 · 서재가 같이 쓴다.
 test('A1 리뷰 2 · 서재 「책 없는 여백」 줄도 지운다 — 확인 창은 한 곳 · 책 화면과 서재가 같이 부른다(복붙 · 빠짐을 심으면 잡힌다)', () => {
   const dialogs = (all: { rel: string; text: string }[]) => all.filter((f) => !f.rel.startsWith(SELF) && stripComments(f.text).includes("'이 여백을 지울까요?'")).map((f) => f.rel);
