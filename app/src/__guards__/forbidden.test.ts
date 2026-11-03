@@ -604,3 +604,24 @@ test.each(WIRES)('A1 리뷰 15 · $id — 화면이 lib 판정을 쓴다(돌연�
   expect(mutated).not.toBe(s); // 심기가 실제로 들어갔다
   expect(count(mutated, needle)).not.toBe(n);
 });
+
+// T2 재확인 남은 지적 — 위 WIRES는 한 줄만 본다. 로그아웃 확인 앞 어느 줄에서도 보내기 · 읽기를 기다리지 않고(REQ-364 — 지하에서 무반응 10초),
+// 알림은 포커스 확인을 지난 뒤에만 가져간다(REQ-366 — take()를 그 위로 옮기면 숨은 탭이 가져간다).
+const LOGOUT_WAITS = /flushMeasures|loadDashboard|\.finish\(/;
+const FOCUSED_TAKE = /if \(!focused\) return;\s*const m = measureNotice\.take\(\);/;
+test('T2 재확인 · 로그아웃 확인 전엔 보내기를 기다리지 않고, 알림은 포커스된 탭만 가져간다(옮기거나 끼우면 잡힌다)', () => {
+  const settings = srcOf(join('app', '(tabs)', 'settings.tsx'));
+  const beforeConfirm = (s: string) => bodyOf(s, 'async function onLogout()').split('confirm:')[0];
+  expect(beforeConfirm(settings)).toContain('pending:'); // 빈 조각이면 늘 초록
+  expect(LOGOUT_WAITS.test(beforeConfirm(settings))).toBe(false);
+  const planted = settings.replace('const [userId, a] = await Promise.all(', 'await flushMeasures(); const [userId, a] = await Promise.all(');
+  expect(planted).not.toBe(settings);
+  expect(LOGOUT_WAITS.test(beforeConfirm(planted))).toBe(true);
+
+  const hook = srcOf(join('lib', 'useMeasureDashboard.ts'));
+  expect(count(hook, 'measureNotice.take()')).toBe(1);
+  expect(FOCUSED_TAKE.test(hook)).toBe(true);
+  const moved = hook.replace(/if \(!focused\) return;(\s*)const m = measureNotice\.take\(\);/, 'const m = measureNotice.take();$1if (!focused) return;'); // 소스가 CRLF라 줄바꿈은 정규식으로
+  expect(moved).not.toBe(hook);
+  expect(FOCUSED_TAKE.test(moved)).toBe(false);
+});
