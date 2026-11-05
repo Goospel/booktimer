@@ -44,3 +44,11 @@ jobs:
         run: bash deploy/health-probe.sh
         env:
           BASE_URL: https://booktimer.app
+
+      # 책 검색 제공자 — 서버가 10분마다 알려진 책 한 권을 조회해 둔 결과를 읽는다.
+      # 알라딘 OpenAPI가 2026-10-30에 끝났는데 4일간 아무도 몰랐다(T-278).
+      - name: Probe book search
+        run: bash deploy/health-probe.sh
+        env:
+          BASE_URL: https://booktimer.app
+          PROBE_PATH: /api/public/status/book-search
