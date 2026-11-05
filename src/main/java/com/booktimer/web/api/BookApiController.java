@@ -4,6 +4,7 @@ import com.booktimer.book.Book;
 import com.booktimer.book.BookRecommendation;
 import com.booktimer.book.BookRecommendationService;
 import com.booktimer.book.BookSearchResult;
+import com.booktimer.book.BookSearchUnavailableException;
 import com.booktimer.book.BookSearchType;
 import com.booktimer.book.BookService;
 import com.booktimer.book.BookStatus;
@@ -20,6 +21,7 @@ import com.booktimer.story.StoryRepository;
 import com.booktimer.user.User;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -48,6 +50,9 @@ import java.util.stream.Collectors;
  */
 @RestController
 public class BookApiController {
+
+    /** 검색 제공자 장애 문구(REQ-384) — 「0건」 문구와 달라야 사용자가 고장을 안다(T-278). 앱 · 웹이 그대로 띄운다 */
+    static final String SEARCH_UNAVAILABLE = "책 검색이 지금 안 돼요 — 잠시 뒤 다시 찾아 주세요";
 
     private final CurrentUserService currentUserService;
     private final BookService bookService;
@@ -115,6 +120,12 @@ public class BookApiController {
         Map<String, FollowScopePopularity> pop = popularityService.countByIsbn(user, resultIsbns);
         // 「여백 N」 배지는 없다 — 책생글 M1부터 여백은 본인만(C3). 키 없는 맵 = 배지 미표시(웹 · 동결 미니앱이 읽는 모양은 그대로)
         return new SearchResponse(rows, toPopularityMap(pop), Map.of());
+    }
+
+    /** 검색 제공자 장애 → 503 평문(REQ-384). HTML 오류 페이지면 앱이 「요청에 실패했어요 (503)」만 띄운다 — 평문이라야 문구가 닿는다. */
+    @ExceptionHandler(BookSearchUnavailableException.class)
+    public ResponseEntity<String> searchUnavailable() {
+        return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE).body(SEARCH_UNAVAILABLE);
     }
 
     /**
@@ -237,7 +248,7 @@ public class BookApiController {
      * 원문이어야 한다. 축약본을 그 자리에 넣으면 책 저자가 「미겔 데 세르반떼스 외 32명」으로 영구 저장된다.
      * 목록에 그릴 때만 {@code authorShort}를 쓴다.
      *
-     * @param author      알라딘 원문 — <b>저장되는 값</b>
+     * @param author      검색 제공자 원문 — <b>저장되는 값</b>
      * @param authorShort 목록 표시용 한 줄(「이름」/「이름 외 N명」). 글쓴이가 없으면 null
      */
     public record SearchRow(String title, String author, String authorShort, String isbn13, String coverUrl,

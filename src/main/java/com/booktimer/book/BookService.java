@@ -80,19 +80,21 @@ public class BookService {
         return kyoboLinkBuilder.isEnabled();
     }
 
-    @Transactional(readOnly = true)
+    // noRollbackFor: 추천처럼 바깥 트랜잭션이 이 장애를 삼키면, rollback-only 표시가 커밋 때
+    // UnexpectedRollbackException(500)이 된다 — 읽기 전용이라 되돌릴 것도 없다(REQ-385)
+    @Transactional(readOnly = true, noRollbackFor = BookSearchUnavailableException.class)
     public BookSearchPage search(String query, BookSearchType type, int page) {
         BookSearchPage raw = searchClient.search(query, type, page);
         return dropBoxSets(filterToSearchType(raw, query, type), query);
     }
 
     /**
-     * 바코드로 읽은 ISBN 한 건 조회(알라딘 ItemLookUp) — 앱 서재의 「바코드 추가」용(v1 REQ-17).
+     * 바코드로 읽은 ISBN 한 건 조회(검색 제공자의 ISBN 조회) — 앱 서재의 「바코드 추가」용(v1 REQ-17).
      *
      * <p>정규화 뒤 숫자 13자리가 아니면 <b>부르기 전에</b> 빈 페이지다(외부 호출·500 없음). 정확한 단건이라
      * {@link #search}의 기준 필드 거르기·세트 빼기를 거치지 않는다 — 스캔한 그 책을 그대로 돌려준다.
      */
-    @Transactional(readOnly = true)
+    @Transactional(readOnly = true, noRollbackFor = BookSearchUnavailableException.class) // search와 같은 이유
     public BookSearchPage searchByIsbn(String query) {
         String isbn13 = Isbn.normalize(query);
         if (isbn13 == null || !isbn13.matches("\\d{13}")) {

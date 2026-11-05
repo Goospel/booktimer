@@ -14,7 +14,7 @@ import org.springframework.web.servlet.mvc.support.RedirectAttributes;
  *
  * <p>접근 제어는 {@link com.booktimer.config.SecurityConfig}가 {@code /admin/**} →
  * {@code hasRole("ADMIN")}로 강제한다(여기서 다시 검사하지 않음). 쓰기 액션이라 POST + CSRF —
- * {@link AdminBackfillController}와 같은 경계·같은 결과 플래시 방식이다.
+ * 지금은 지운 알라딘 백필 컨트롤러와 같은 경계·같은 결과 플래시 방식이다.
  *
  * <p>수집 자체가 멱등(isbn당 delete-then-insert)이라 여러 번 눌러도 중복이 쌓이지 않는다.
  * 다만 isbn 종수만큼 외부 호출이 나가므로 연타할 이유는 없다.

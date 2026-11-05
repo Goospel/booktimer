@@ -10,8 +10,8 @@ import java.util.regex.Pattern;
 /**
  * Yes24 제휴 검색 링크 빌더 — 책의 ISBN/제목과 추적코드·URL 템플릿에서 구매 링크를 <b>런타임 생성</b>한다.
  *
- * <p>{@link CoupangLinkBuilder}와 동형(제휴 3제공자를 대칭 유지). 알라딘({@link AladinBookSearchClient})이
- * 검색 API가 통째로 준 링크를 DB에 저장하는 것과 달리, Yes24 검색 링크는 {@code f(책 제목·ISBN, 추적코드, 템플릿)}로
+ * <p>{@link CoupangLinkBuilder}와 동형(제휴 3제공자를 대칭 유지). 알라딘(2026-10-30 종료된
+ * 검색 API)이 통째로 준 링크를 DB에 저장하는 것과 달리, Yes24 검색 링크는 {@code f(책 제목·ISBN, 추적코드, 템플릿)}로
  * 결정적이라 저장하지 않는다 — 백필 부담 0, 추적코드/템플릿이 바뀌면 환경변수 교체만으로 즉시 반영된다.
  *
  * <p>추적코드가 {@code not-configured}(가입 전 기본값)면 {@link #isEnabled()}가 false라 화면에서 Yes24

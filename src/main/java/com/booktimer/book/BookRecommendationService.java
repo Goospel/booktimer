@@ -21,7 +21,7 @@ import java.util.stream.Collectors;
  * <p>화면 아래가 통째로 빈 종이였다(검색 버튼을 걷기 전 실측 460px, 화면의 55%). 그 자리를 채우는 데
  * 새 추천 엔진은 필요 없었다 — 필요한 조각이 이미 다 있었기 때문이다:
  * 성향 집계기({@link ReadingProfileAggregator}) · 저자명 정규화({@link WriterName}) ·
- * 알라딘 저자 검색({@link BookService#search}) · 이미 가진 책 판정(isbn 집합).
+ * 저자 검색({@link BookService#search}) · 이미 가진 책 판정(isbn 집합).
  *
  * <p>그래서 이건 추천이라기보다 <b>「이어 읽기」</b>다: 내가 읽은(또는 읽는 중인) 책의 저자가 쓴 다른 책.
  *
@@ -66,7 +66,12 @@ public class BookRecommendationService {
         Set<String> myIsbns = mine.stream()
                 .map(Book::getIsbn13).filter(Objects::nonNull).collect(Collectors.toSet());
 
-        Optional<BookRecommendation> byAuthor = recommendByAuthor(mine, myIsbns);
+        Optional<BookRecommendation> byAuthor;
+        try {
+            byAuthor = recommendByAuthor(mine, myIsbns);
+        } catch (BookSearchUnavailableException e) {
+            return BookRecommendation.empty(); // 추천은 있으면 좋은 것 — 검색 장애가 추천 문을 깨지 않는다(REQ-385)
+        }
         if (byAuthor.isPresent()) {
             return byAuthor.get();
         }

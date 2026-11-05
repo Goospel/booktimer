@@ -53,4 +53,20 @@ class IsbnTest {
     void alreadyNormalizedUnchanged() {
         assertThat(Isbn.normalize("9788995432107")).isEqualTo("9788995432107");
     }
+
+    @Test
+    @DisplayName("REQ-381 · ISBN-10을 978 ISBN-13으로 바꾼다")
+    void toIsbn13_convertsIsbn10() {
+        assertThat(Isbn.toIsbn13("8996991341")).isEqualTo("9788996991342");
+        assertThat(Isbn.toIsbn13("080442957X")).isEqualTo("9780804429573");
+        assertThat(Isbn.toIsbn13("080442957x")).isEqualTo("9780804429573");
+    }
+
+    @Test
+    @DisplayName("REQ-381 · 10자리 꼴이 아니면 null")
+    void toIsbn13_rejectsNonIsbn10() {
+        assertThat(Isbn.toIsbn13(null)).isNull();
+        assertThat(Isbn.toIsbn13("12345")).isNull();
+        assertThat(Isbn.toIsbn13("9788996991342")).isNull();
+    }
 }

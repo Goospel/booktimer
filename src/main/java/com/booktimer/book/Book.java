@@ -243,9 +243,9 @@ public class Book extends BaseTimeEntity {
     }
 
     /**
-     * 카탈로그 메타(장르·출간일)를 채운다 — 기존 책 백필(알라딘 ItemLookUp) 경로에서 쓴다.
-     * register와 동일하게 빈/공백은 null로 정규화한다("없음"을 한 표기로). 덮어쓸지(이미 값 있는 책)는
-     * 호출자(백필 서비스)가 대상 선별로 결정한다 — 서비스는 category가 null인 책만 고른다.
+     * 카탈로그 메타(장르·출간일)를 채운다. register와 동일하게 빈/공백은 null로 정규화한다("없음"을 한 표기로).
+     * 지금 운영 코드의 호출자는 없다 — 쓰던 알라딘 카탈로그 백필은 2026-11-03 알라딘 종료로 지웠고(T-278),
+     * 장르 제공자를 다시 붙이는 날(plan.md ⏸ PR-4) 쓴다. 덮어쓸지(이미 값 있는 책)는 호출자가 대상 선별로 정한다.
      */
     public void applyCatalogMetadata(String category, String pubDate) {
         this.category = blankToNull(category);
@@ -253,9 +253,9 @@ public class Book extends BaseTimeEntity {
     }
 
     /**
-     * 제휴 구매링크를 갱신한다 — 기존 책 purchaseLink 백필(알라딘 ItemLookUp, includeKey=1 재조회) 경로에서 쓴다.
-     * TTBKey가 빠진 옛 링크를 ttbkey 실린 정식 링크로 교체한다. 대상 선별과 유효성(ttbkey 포함 여부) 판단은
-     * 호출자(백필 서비스)가 하므로 여기선 단순 대입만 한다 — 무추적 링크로 덮어쓰지 않게 막는 건 호출자 책임.
+     * 제휴 구매링크를 갱신한다(단순 대입). 지금 운영 코드의 호출자는 없다 — 쓰던 알라딘 제휴링크 백필(TTBKey 빠진 옛 링크를
+     * includeKey=1 재조회로 교체)은 2026-11-03 알라딘 종료로 지웠다(T-278). 다시 쓰는 호출자는 무추적 링크로
+     * 덮어쓰지 않게 대상 선별과 유효성 판단을 스스로 해야 한다.
      */
     public void updatePurchaseLink(String purchaseLink) {
         this.purchaseLink = purchaseLink;
