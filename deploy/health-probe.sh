@@ -16,13 +16,18 @@
 # ⚠️ 재시도가 있는 이유는 **오탐이 감시를 죽이기 때문**이다. 멀쩡한데 메일이 오면 사람은 두 번째
 #    메일부터 안 읽는다. 네트워크 blip 한 번은 장애가 아니므로, 연속 PROBE_TRIES번 실패해야 쏜다.
 #
+# 쓰는 곳 둘(uptime.yml): ① 서버 생존 `/actuator/health`(기본) ② 책 검색 제공자 `/api/public/status/book-search`
+#   (PROBE_PATH로 준다 — 서버가 10분마다 알려진 책 한 권을 조회해 둔 결과. 알라딘 종료가 4일간 「0건」으로
+#   숨었던 T-278 대책). 둘 다 본문 `"status":"UP"`으로 판정한다.
+#
 # 사용: BASE_URL=https://booktimer.app bash deploy/health-probe.sh
+#       BASE_URL=https://booktimer.app PROBE_PATH=/api/public/status/book-search bash deploy/health-probe.sh
 # 테스트: bash deploy/tests/test-health-probe.sh (curl을 PATH 스텁으로 갈아 오프라인에서 돈다)
 
 BASE_URL="${BASE_URL:-https://booktimer.app}"
 PROBE_TRIES="${PROBE_TRIES:-3}"
 PROBE_DELAY="${PROBE_DELAY:-20}"
-URL="${BASE_URL}/actuator/health"
+URL="${BASE_URL}${PROBE_PATH:-/actuator/health}"
 
 for i in $(seq 1 "$PROBE_TRIES"); do
     # 본문과 HTTP 코드를 한 번에 받는다(마지막 줄 = 코드). curl이 아예 실패하면 출력이 비어 둘 다 없다.
