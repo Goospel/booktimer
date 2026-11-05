@@ -9,7 +9,7 @@ import java.nio.charset.StandardCharsets;
 /**
  * 쿠팡 파트너스 검색 링크 빌더 — 책의 ISBN/제목과 URL 템플릿에서 검색 링크를 <b>런타임 생성</b>한다.
  *
- * <p>알라딘({@link AladinBookSearchClient})이 검색 API가 통째로 준 링크를 DB에 저장하는 것과 달리,
+ * <p>알라딘(2026-10-30 종료된 검색 API)이 통째로 준 링크를 DB에 저장하는 것과 달리,
  * 쿠팡 검색 링크는 {@code f(책 제목·ISBN, 템플릿)}로 결정적이라 저장하지 않는다 — 백필 부담 0.
  *
  * <p>이 링크는 그 자체로 추적되지 않는다({@code lptag}만 붙인 자작 URL은 파트너스 리포트에 잡히지 않음 —

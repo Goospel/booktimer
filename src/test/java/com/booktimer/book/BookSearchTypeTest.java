@@ -8,7 +8,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 /**
  * 검색 기준(제목/저자) 파싱·매핑 단위테스트.
  *
- * <p>사용자가 고른 검색 기준을 알라딘 QueryType으로 옮기는 규칙을 고정한다 — 기본은 제목(TITLE),
+ * <p>사용자가 고른 검색 기준을 카카오 책 검색 target으로 옮기는 규칙을 고정한다 — 기본은 제목(TITLE),
  * 잘못된/빈 값도 제목으로 폴백한다(검색이 깨지지 않게).
  */
 class BookSearchTypeTest {
@@ -33,10 +33,10 @@ class BookSearchTypeTest {
     }
 
     @Test
-    @DisplayName("알라딘 QueryType으로 매핑된다")
-    void mapsToAladinQueryType() {
-        assertThat(BookSearchType.TITLE.getAladinQueryType()).isEqualTo("Title");
-        assertThat(BookSearchType.AUTHOR.getAladinQueryType()).isEqualTo("Author");
-        assertThat(BookSearchType.PUBLISHER.getAladinQueryType()).isEqualTo("Publisher");
+    @DisplayName("REQ-380 · 검색 기준이 카카오 target으로 간다")
+    void mapsToKakaoTarget() {
+        assertThat(BookSearchType.TITLE.getKakaoTarget()).isEqualTo("title");
+        assertThat(BookSearchType.AUTHOR.getKakaoTarget()).isEqualTo("person");
+        assertThat(BookSearchType.PUBLISHER.getKakaoTarget()).isEqualTo("publisher");
     }
 }

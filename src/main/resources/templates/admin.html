@@ -51,7 +51,7 @@
     </header>
     <p class="greeting"><span th:text="${nickname}">운영자</span>님 — 운영 데이터 확인 화면입니다.</p>
 
-    <!-- 운영 액션 결과(예: 백필) 알림 — POST→리다이렉트 후 1회 노출 -->
+    <!-- 운영 액션 결과(예: 책 뉴스 수집) 알림 — POST→리다이렉트 후 1회 노출 -->
     <p class="alert" th:if="${message}" th:text="${message}">결과</p>
     <!-- 실패한 액션(예: 이미 처리된 신청) — 500으로 튀지 않고 여기서 말한다 -->
     <p class="alert" th:if="${error}" th:text="${error}">오류</p>
@@ -195,26 +195,6 @@
         <nav class="link-row" aria-label="페이지 이동">
             <th:block th:replace="~{fragments/nav-links :: navLink(@{/admin/reports}, 'report', '신고함')}"></th:block>
         </nav>
-    </section>
-
-    <section class="card">
-        <h2>책BTI 카탈로그 백필</h2>
-        <p class="status-line muted">
-            기존 책의 장르·출간일을 알라딘에서 채운다(책BTI 입력). 한 번에 일부만 처리하니, 남은 권수가 있으면 다시 누르세요.
-        </p>
-        <form method="post" th:action="@{/admin/books/backfill-catalog}">
-            <button type="submit" class="btn-primary">카탈로그 백필 실행</button>
-        </form>
-    </section>
-
-    <section class="card">
-        <h2>알라딘 제휴링크 백필</h2>
-        <p class="status-line muted">
-            TTBKey가 빠진 옛 구매링크(제휴 추적 안 됨)를 알라딘에서 재조회해 정식 제휴링크로 교체한다. 한 번에 일부만 처리하니, 남은 권수가 있으면 다시 누르세요.
-        </p>
-        <form method="post" th:action="@{/admin/books/backfill-purchase-links}">
-            <button type="submit" class="btn-primary">제휴링크 백필 실행</button>
-        </form>
     </section>
 
     <section class="card">

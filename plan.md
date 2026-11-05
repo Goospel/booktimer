@@ -771,6 +771,23 @@ HTTP→HTTPS 301 리다이렉트 + Route 53 alias. 배경 개념 **N-021**.
   키 없으면 수동 입력 폴백. 구매링크에 제휴 태그 토대(제휴 고지 푸터 포함). Flyway V3.
   ✅ 외부 완료: **알라딘 TTBKey 발급 + SSM 주입**(검색·제휴 라이브 활성화, 2026-06-03 갱신 이력 참고).
   ⚠️ **제휴 추적 결함 발견·수정 2026-07-04**: TTBKey는 검색 *요청*엔 실렸으나(검색은 정상 작동) *응답 link*에 실리려면 `includeKey=1`이 필요한데(알라딘 기본 0) 이를 안 보내, 저장·302 재생되는 구매링크에 ttbkey가 빠져 **제휴 추적이 실제론 0**이었다(운영 Chrome 실측 2건 확정 — `/buy` 목적지가 `…&partner=openAPI&start=api`로 ttbkey 부재; 쿠팡 N-146/T-129와 동일 계열이나 '합성'이 아니라 'API 옵션 미설정'). `includeKey=1` 추가 + 기존 저장분 백필(`BookCatalogBackfillService.backfillPurchaseLinks` + `/admin/books/backfill-purchase-links`)로 복구. **✅ 운영 백필 실행 완료·실측 확정 2026-07-04**: admin `POST /admin/books/backfill-purchase-links` 1회 실행 = 조회 45·갱신 45·미발견 0·남은 0(등록 전량, limit 50 ≥ 45), 운영 Chrome 재실측으로 `/buy` 302 목적지가 백필 전 `…&partner=openAPI&start=api`(ttbkey 부재) → 후 `…&ttbkey=ttbkimsadol…&partner=openAPI&start=api`(실림)로 전환 확정 — 신규 검색은 `includeKey=1`, 기존 45권은 백필로 전량 추적 복구(남은 0이라 더 돌릴 것 없음). 상세 changelog 2026-07-04, 자동 메모리 `aladin-affiliate-tracking-broken`.
+- **🔁 검색 제공자 교체 — 알라딘 → 카카오 (2026-11-03, 사용자 결정 Q1~Q6 전부 (가) · 설계 `2026-11-03-book-search-provider.md`)**:
+  알라딘 OpenAPI가 2026-10-30에 끝나 웹 · 앱 검색과 바코드 조회가 멈췄는데, 어댑터가 HTTP 200 + errorCode 999를 빈 목록으로 삼켜
+  4일간 「찾은 책이 없어요」로만 보였다(T-278).
+  - ✅ **PR-1 서버** — `KakaoBookSearchClient`(키는 헤더로만 · 연결 3초 · 읽기 5초) · 장애는 `BookSearchUnavailableException` →
+    `GET /api/books/search` 503 평문 「책 검색이 지금 안 돼요 — 잠시 뒤 다시 찾아 주세요」(앱 코드 0줄 · 새 빌드 불필요) ·
+    추천은 장애에도 빈 추천 · 알라딘 어댑터 · 카탈로그/제휴링크 백필 · 관리자 버튼 2개 삭제(기존 알라딘 링크 · 리다이렉트는 그대로) ·
+    render-env `KAKAO_REST_API_KEY`. 배포 직후 확인: U-186(운영 스모크) · U-182(바코드 20권) · U-183(제목 5개) · U-185(표지).
+  - 🔜 **PR-2 웹 오류 문구** — 웹 책장 검색 · 책 고르기 시트가 503이면 「검색 결과가 없…」 대신 장애 문구(REQ-388 · U-190).
+  - 🔜 **PR-3 검색 감시** — 서버가 10분마다 데미안(9788937460449)을 조회해 두 번 잇달아 실패면 DOWN, `/api/public/status/book-search`를
+    uptime 워크플로가 본다(REQ-389 · 390 · U-189).
+  - ⏸ **장르 · 제휴 보강(PR-4)** — 예스24 서버 전용 또는 국중 KDC. 왜 지금 안 하나: 실사용 본인뿐이라 제휴 수익 ≈ 0, 책BTI는 웹 전용 ·
+    본인용. 다시 볼 때: 앱 공개 출시 뒤 구매 클릭이 생기거나 책BTI를 앱에 넣을 때.
+  - ⏸ **베스트셀러 콜드스타트** — 동결 미니앱만 쓴다. 미니앱 폐기 설계 때 `bestsellers()` · `FALLBACK_TITLE`을 함께 지울지 정한다.
+  - ⏸ **표지 해상도**(카카오 120×174) — U-185가 「흐리다」면. ⏸ **기존 알라딘 표지 핫링크가 막히면** 카카오 ISBN 재조회로 갈아 끼우기.
+  - ⏸ **앱 검색이 제목만 찾는다** — 입력칸 안내 「제목이나 저자」와 서버 기본값 TITLE이 어긋난다(이번 고장과 별개).
+  - ⏸ **전자책 거르기**(U-184 결과에 따라) · ⏸ **카카오가 바뀌면** 예스24 어댑터 + 화면 출처 표기 설계.
+  - 출시 전: U-187(카카오에 AI 맥락 전송 문의 — 사용자) · 정보: U-188(기존 알라딘 링크 적립 유지 — 사용자 문의).
 - **2단계 완료 ✅ 2026-06-03**: `ReadingSession`에 nullable `book` 연결(Flyway V4) + 타이머 시작 시 책 선택
   (대시보드 드롭다운, "선택 안 함" 포함, 소유권 검사) + 책별 누적 시간 집계(`BookReadingStatsService`,
   완료·책지정 세션 합) → `/books`에 책별 시간 표시. 측정 중 책은 대시보드에 노출.
