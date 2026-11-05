@@ -31,6 +31,7 @@ make_stub() {
     cat > "$STUB_DIR/curl" <<'STUB'
 #!/usr/bin/env bash
 echo "call" >> "$COUNT_FILE"
+[ -n "$URL_FILE" ] && printf '%s\n' "${@: -1}" >> "$URL_FILE"   # 마지막 인자 = 두드린 URL(REQ-390)
 n=$(wc -l < "$COUNT_FILE" | tr -d ' ')
 case "$SCENARIO" in
     up)        printf '{"status":"UP","groups":["liveness","readiness"]}\n200\n' ;;
@@ -103,6 +104,31 @@ else
     printf '%s\n' "$OUT" | sed 's/^/      /'
     FAILED=1
 fi
+
+# ── ⑧⑨ 경로 — 같은 스크립트가 서버 생존과 책 검색 상태 문을 둘 다 본다(REQ-390)
+# $1=label $2=PROBE_PATH(빈 값 = 넘기지 않음) $3=기대 URL
+check_url() {
+    COUNT_FILE="$STUB_DIR/count"; : > "$COUNT_FILE"
+    URL_FILE="$STUB_DIR/urls"; : > "$URL_FILE"
+    if [ -n "$2" ]; then
+        PATH="$STUB_DIR:$PATH" COUNT_FILE="$COUNT_FILE" URL_FILE="$URL_FILE" SCENARIO=up PROBE_PATH="$2" \
+            PROBE_DELAY=0 PROBE_TRIES=1 BASE_URL="https://example.test" bash "$PROBE" >/dev/null 2>&1
+    else
+        PATH="$STUB_DIR:$PATH" COUNT_FILE="$COUNT_FILE" URL_FILE="$URL_FILE" SCENARIO=up \
+            PROBE_DELAY=0 PROBE_TRIES=1 BASE_URL="https://example.test" bash "$PROBE" >/dev/null 2>&1
+    fi
+    GOT=$(cat "$URL_FILE")
+    if [ "$GOT" = "$3" ]; then
+        echo "PASS: $1"
+    else
+        echo "FAIL: $1 — URL 기대 $3, 실제 ${GOT:-없음}"
+        FAILED=1
+    fi
+}
+check_url "REQ-390 · PROBE_PATH가 없으면 /actuator/health를 본다(기존 감시 불변)" "" \
+    "https://example.test/actuator/health"
+check_url "REQ-390 · PROBE_PATH를 주면 그 경로를 본다" "/api/public/status/book-search" \
+    "https://example.test/api/public/status/book-search"
 
 echo
 if [ "$FAILED" = "0" ]; then echo "✅ 전부 통과"; else echo "❌ 실패 있음"; fi
