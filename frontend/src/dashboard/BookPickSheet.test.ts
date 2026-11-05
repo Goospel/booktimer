@@ -62,6 +62,30 @@ describe('책 시트 검색 결과 — 이미 책장에 있는 책', () => {
     });
 });
 
+describe('책 시트 검색 — 제공자 장애(503)', () => {
+    test('REQ-388 · 책 고르기 시트도 503이면 오류를 보이고 「검색 결과가 없어요」를 숨긴다', async () => {
+        vi.mocked(fetch).mockResolvedValueOnce(okJson({ books: [], searchEnabled: true }));
+        const wrapper = mount(BookPickSheet, {
+            attachTo: document.body,
+            props: { mode: 'start', readingBooks: [], finishedBooks: [], wantToReadBooks: [] },
+        });
+        await vi.waitFor(() => expect(wrapper.find('.book-sheet-search').exists()).toBe(true));
+
+        // 서버가 검색 제공자 장애에 주는 503 평문(REQ-384) — `json()`은 던진다(평문이라 파싱 불가).
+        vi.mocked(fetch).mockResolvedValueOnce({
+            ok: false, status: 503,
+            text: async () => '책 검색이 지금 안 돼요 — 잠시 뒤 다시 찾아 주세요',
+            json: async () => { throw new SyntaxError('x'); },
+        } as unknown as Response);
+        await wrapper.find('.book-sheet-search input').setValue('데미안');
+        await wrapper.find('.book-sheet-search').trigger('submit');
+
+        await vi.waitFor(() => expect(wrapper.find('.book-sheet-error').exists()).toBe(true));
+        expect(wrapper.find('.book-sheet-error').text()).toBe('책 검색이 지금 안 돼요 — 잠시 뒤 다시 찾아 주세요');
+        expect(wrapper.text()).not.toContain('검색 결과가 없어요');
+    });
+});
+
 describe('책 시트 상태 배지 — 에디토리얼 3톤(PR-2)', () => {
     test('REQ-08 · 읽는 중 책의 배지가 인라인 가는 선을 받는다', async () => {
         vi.mocked(fetch).mockResolvedValueOnce(okJson({
