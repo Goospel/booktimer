@@ -113,16 +113,21 @@ async function loadShelf() {
 const q = ref('')
 const rows = ref<SearchRow[]>([])
 const searched = ref(false)
+// 서버 503 평문과 같은 글자 — 본문을 파싱하지 않아 HTML 오류 페이지를 그대로 보일 일이 없다(REQ-388).
+const SEARCH_DOWN = '책 검색이 지금 안 돼요 — 잠시 뒤 다시 찾아 주세요'
 async function runSearch() {
     if (!q.value.trim()) return
+    addError.value = null
     try {
         const params = new URLSearchParams({ q: q.value, type: 'TITLE', page: '1' })
         const res = await fetch(`/api/books/search?${params}`, { credentials: 'same-origin' })
+        if (!res.ok) throw new Error('search failed')
         const data = await res.json()
         rows.value = data.results ?? []
         searched.value = true
     } catch {
-        rows.value = []; searched.value = true
+        rows.value = []; searched.value = false
+        addError.value = SEARCH_DOWN
     }
 }
 async function addRow(row: SearchRow) {

@@ -148,10 +148,14 @@ onMounted(load)
 function selectStatus(name: string | null) { statusFilter.value = name }
 function selectVis(name: string | null) { visFilter.value = name }
 
+// 서버 503 평문과 같은 글자 — 본문을 파싱하지 않아 HTML 오류 페이지를 그대로 보일 일이 없다(REQ-388).
+const SEARCH_DOWN = '책 검색이 지금 안 돼요 — 잠시 뒤 다시 찾아 주세요'
+
 async function runSearch() {
     if (!q.value.trim()) return
     const params = new URLSearchParams({ q: q.value, type: searchType.value, page: '1' })
     const res = await fetch(`/api/books/search?${params}`, { credentials: 'same-origin' })
+    if (!res.ok) { error.value = SEARCH_DOWN; return }
     const data = await res.json()
     searchResults.value = (data.results ?? []).map((r: Omit<SearchRow, 'selectedStatus'>) =>
         ({ ...r, selectedStatus: 'WANT_TO_READ' })
