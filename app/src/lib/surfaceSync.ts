@@ -2,10 +2,10 @@
 // 두 탭이 각자 맞추면 겹친 두 판이 둘 다 「활동 없음」을 보고 Live Activity를 둘 띄운다(surfaces.ts getInstances → start).
 import { Platform } from 'react-native';
 
-import { measureStore } from './measureSync';
+import { confirmedOf, measureStore } from './measureSync';
 import { syncReminders } from './notify';
 import { syncSurfaces } from './surfaces';
-import { rollToDay } from './visibleDashboard';
+import { effectiveDashboard } from './visibleDashboard';
 
 let unsub: (() => void) | null = null;
 let tail: Promise<void> = Promise.resolve();
@@ -22,7 +22,8 @@ export function syncSurfacesNow(): Promise<void> {
       const t = Date.now();
       if (!s) return; // 닫힌 가게(로그아웃 중) — 표면 정리는 루트의 세션 구독(clearSurfaces)이 한다
       if (!s.base) return syncReminders(null); // 기준 값이 아예 없으면 지금처럼(못 읽으면 null — 다음 읽기가 고친다)
-      const d = rollToDay(s.base, t).d;
+      // 원장을 얹은 보이는 값(T2) — 오프라인 시작 · 정지도 LA · 위젯 · 알림이 따른다. 확인 안 된 값이면 웹 시작 측정은 내려간다(REQ-378)
+      const d = effectiveDashboard(s.base, s.ledger, t, confirmedOf(s)).d;
       if (Platform.OS !== 'ios') return syncReminders(d, new Date(t)); // syncSurfaces는 iOS 밖에서 알림 전에 돌아온다 — 알림은 어느 기기든 맞춘다
       await syncSurfaces(d, new Date(t));
     })

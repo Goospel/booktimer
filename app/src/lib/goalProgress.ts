@@ -29,7 +29,7 @@ export interface GoalProgress {
   reachAt: number | null;
 }
 
-const isFilled = (seconds: number, goal: number) => seconds > 0 && seconds >= goal;
+export const isFilled = (seconds: number, goal: number) => seconds > 0 && seconds >= goal;
 
 export function goalProgress(p: GoalInput): GoalProgress {
   // ponytail: 오늘 0시 = 다음 자정 − 24시간. 서머타임 날엔 1시간 어긋난다(한국은 없음) — 필요하면 todayStart를 입력으로 받는다.

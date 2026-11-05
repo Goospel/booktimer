@@ -13,6 +13,7 @@ import { clockLabel, dateLabel, durationLabel } from '../../lib/format';
 import { goalChoices, goalProgress, goalStatus, nextMidnightOf, SESSION_CAP_MS } from '../../lib/goalProgress';
 import { savedNotice } from '../../lib/marginSave';
 import { ALREADY_STOPPED, startMeasure, stopMeasure } from '../../lib/measureStart';
+import { measureStore } from '../../lib/measureSync';
 import { goalNoticeStep } from '../../lib/reminders';
 import { useMeasureDashboard } from '../../lib/useMeasureDashboard';
 import { useMeasureShortcut } from '../../lib/useMeasureShortcut';
@@ -22,9 +23,10 @@ import { color, layout, space } from '../../theme/tokens';
 type NoticeState = { message: string; tone?: 'info' | 'error' } | null;
 
 export default function Home() {
-  // 읽기 · 앞으로 올 때 · 포커스 · 1초 틱 · 자정은 훅이 한다(타이머 오프라인 T0 — 캐시로 오프라인에서도 그린다). 위젯 · LA · 알림은 루트가 맞춘다
-  const { dash, now, rolled, loadError, load, fresh } = useMeasureDashboard({ mode: 'reading' });
+  // 읽기 · 앞으로 올 때 · 포커스 · 1초 틱 · 자정 · 보내기 알림은 훅이 한다(타이머 오프라인 — 캐시 + 기기 원장으로 오프라인에서도 그리고 잰다).
+  // 위젯 · LA · 알림은 루트가 맞춘다
   const [notice, setNotice] = useState<NoticeState>(null);
+  const { dash, now, rolled, cached, loadError, load, gate } = useMeasureDashboard({ mode: 'reading', onNotice: (message) => setNotice({ message }) });
   const [busy, setBusy] = useState(false);
   const [goalOpen, setGoalOpen] = useState(false);
   const [pickedId, setPickedId] = useState<number | null>(null);
@@ -54,7 +56,6 @@ export default function Home() {
   // 굴린 값(지난날 기준 값)과 디스크 값으로는 판정하지 않는다 — 그다음 새 값이 다시 「처음 읽은 값」이다(goalNoticeStep — REQ-371).
   // 판정은 goalMetNotice 하나(REQ-178 — 목표 0엔 달성이 없다). deps에 목표가 없어도 된다: 판정 축은 filled 전환이고 그 렌더의 목표를 읽는다.
   const wasFilled = useRef<boolean | null>(null);
-  const cached = fresh === null;
   useEffect(() => {
     if (!dash || !progress) return;
     const step = goalNoticeStep(wasFilled.current, { rolled, cached, progress, goal: dash.todayGoalSeconds });
@@ -62,20 +63,23 @@ export default function Home() {
     wasFilled.current = step.prev;
   }, [progress?.filled, progress?.streak, rolled, cached]);
 
-  async function start(bookId: number | null) {
-    if (busy) return;
+  // 시작 · 정지는 기기 원장에 먼저 적는다(서버를 기다리지 않는다 — REQ-357). busy는 서버에 열린 측정(웹 시작)의 정지만 실제로 기다린다.
+  // 기기 쪽은 몇 ms라 busy가 두 번째 탭을 막지 못해 시간 문(gate — 700ms)으로 막는다(REQ-372). load는 훅의 load — 실패를 loadError로 바꾼다
+  const deps = { store: measureStore, load };
+  async function start(bookId: number | null, bookTitle: string | null) {
+    if (busy || !gate()) return;
     setBusy(true);
     setNotice(null);
-    const r = await startMeasure({ start: reading.start, reload: load }, bookId);
+    const r = await startMeasure(deps, { mode: 'reading', bookId, bookTitle, blocked: !!dash?.study.hasActiveSession });
     if (r.error) setNotice({ message: r.error, tone: 'error' });
     setBusy(false);
   }
 
   async function stop() {
-    if (busy) return;
+    if (busy || !gate()) return;
     setBusy(true);
     setNotice(null); // 앞 실패 띠(오프라인)가 이번 정지 성공 뒤에 남지 않게 — 공부 탭과 같다
-    const r = await stopMeasure({ stop: reading.stop, reload: load });
+    const r = await stopMeasure({ ...deps, serverStop: reading.stop }, 'reading');
     if (r.error) setNotice({ message: r.error, tone: 'error' });
     else if (r.info) setNotice({ message: r.info });
     setBusy(false);
@@ -95,10 +99,10 @@ export default function Home() {
   const books = dash ? (dash.readingBooks.length > 0 ? dash.readingBooks : dash.wantToReadBooks) : [];
   const book = books.find((b) => b.id === pickedId) ?? books.find((b) => b.id === dash?.recentBookId) ?? books[0];
   // Option+P = 지금 보이는 측정 버튼(REQ-105): 측정 중 「측정 종료」 · 빈 홈 「책 없이 시간만 재기」 · 측정 전 「읽기 시작」
-  const measureButton = !dash || !progress ? null : measuring ? stop : books.length === 0 ? () => start(null) : () => start(book.id);
+  const measureButton = !dash || !progress ? null : measuring ? stop : books.length === 0 ? () => start(null, null) : () => start(book.id, book.title);
   useMeasureShortcut({ button: measureButton, busy, covered: goalOpen });
-  // 위젯 [읽기 시작] · [측정 종료](위젯 확장 REQ-183) — 새로 읽은 대시보드로 판정해 같은 버튼을 누른다. 목표 시트가 열려 있어도 누른다(판단 J8)
-  useWidgetIntent({ mode: 'reading', fresh, measuring, button: measureButton, onAlreadyStopped: () => setNotice({ message: ALREADY_STOPPED }) });
+  // 위젯 [읽기 시작] · [측정 종료](위젯 확장 REQ-183 · 타이머 오프라인 REQ-370) — 보이는 대시보드로 판정해 같은 버튼을 누른다. 목표 시트가 열려 있어도 누른다(판단 J8)
+  useWidgetIntent({ mode: 'reading', ready: dash !== null, measuring, button: measureButton, onAlreadyStopped: () => setNotice({ message: ALREADY_STOPPED }) });
 
   if (!dash || !progress) {
     return (
@@ -201,7 +205,7 @@ export default function Home() {
         <Button kind="ink" label="첫 책 담기" onPress={() => router.push('/add')} />
         <Button kind="outline" label="바코드로 담기" onPress={() => router.push('/add?scan=1')} />
         <View style={{ height: layout.sectionGap }} />
-        <Button kind="text" label="책 없이 시간만 재기" busy={busy} onPress={() => void start(null)} />
+        <Button kind="text" label="책 없이 시간만 재기" busy={busy} onPress={() => void start(null, null)} />
       </Screen>
     );
   }
@@ -230,7 +234,7 @@ export default function Home() {
       {noticeBand}
       <View style={{ gap: space[3] }}>
         <Button kind="ink" label="여백 남기기" onPress={() => router.push(`/margin/${book.id}`)} />
-        <Button kind="outline" label="읽기 시작" busy={busy} onPress={() => void start(book.id)} />
+        <Button kind="outline" label="읽기 시작" busy={busy} onPress={() => void start(book.id, book.title)} />
       </View>
       {others.length > 0 ? (
         <View style={{ marginTop: space[4] }}>

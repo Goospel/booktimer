@@ -1,5 +1,7 @@
 // Option+P 판정(REQ-105). import 0 — 테스트가 그대로 읽는다.
 export const REPEAT_GAP_MS = 1000; // 조절 상수 — U-99 ③(누르고 있기)이 실패하면 키 반복 지연에 맞춰 올린다
+/** 시작 · 정지 뒤 두 번째 누름을 버리는 간격(타이머 오프라인 REQ-372 — 조절 상수). 기기 쪽 시작 · 정지는 몇 ms라 busy가 막지 못한다 */
+export const TOGGLE_GAP_MS = 700;
 
 /** 화면에 측정 버튼이 없거나 시트가 덮으면 꺼짐(on=false) · 요청 중이면 켠 채 무시(target=null). target은 버튼의 처리기 그 함수다. */
 export function measureShortcut(p: { button: (() => unknown) | null; busy: boolean; covered: boolean }) {
