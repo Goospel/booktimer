@@ -87,6 +87,17 @@ export interface StudyState {
   books: StudyBook[];
 }
 
+/** 마감 문 본문(타이머 오프라인 T1 — `MeasureFinishApiController.FinishRequest`). 기기에서 누른 시각 그대로(밀리초 ISO) */
+export interface FinishBody {
+  startedAt: string;
+  endedAt: string;
+  bookId: number | null;
+}
+/** 마감 응답 — 걸친 다른 실측과 겹쳐 빼고 적은 초(REQ-354) */
+export interface FinishResult {
+  trimmedSeconds: number;
+}
+
 /** `StudyBookApiController.StudyShelfResponse` 중 앱이 읽는 것만 — 담기 화면의 「담음」 판정용. */
 export interface StudyShelfResponse {
   books: StudyBook[];

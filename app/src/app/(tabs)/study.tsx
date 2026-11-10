@@ -12,6 +12,7 @@ import { Badge, Button, Notice, Screen, Txt, useStacked } from '../../components
 import { clockLabel, durationLabel, objectParticle } from '../../lib/format';
 import { nextMidnightOf, SESSION_CAP_MS } from '../../lib/goalProgress';
 import { ALREADY_STOPPED, startMeasure, stopMeasure } from '../../lib/measureStart';
+import { measureStore } from '../../lib/measureSync';
 import { defaultStudyBook, removeStudyBook, studyMeta } from '../../lib/studyShelf';
 import { studyToday } from '../../lib/studyTimer';
 import { useMeasureDashboard } from '../../lib/useMeasureDashboard';
@@ -23,9 +24,10 @@ import { color, layout, line, space } from '../../theme/tokens';
 type NoticeState = { message: string; tone?: 'info' | 'error'; at: 'bar' | 'shelf' } | null;
 
 export default function Study() {
-  // 대시보드 한 번으로 그린다(study 필드). 읽기 · 앞으로 올 때 · 포커스 · 1초 틱 · 자정은 홈과 같은 훅(타이머 오프라인 T0), 위젯 · LA는 루트가 같은 값으로 맞춘다(사양 §8-12)
-  const { dash, now, loadError, load, fresh } = useMeasureDashboard({ mode: 'study' });
+  // 대시보드 한 번으로 그린다(study 필드). 읽기 · 앞으로 올 때 · 포커스 · 1초 틱 · 자정 · 보내기 알림은 홈과 같은 훅(타이머 오프라인 — 캐시 + 기기 원장),
+  // 위젯 · LA는 루트가 같은 값으로 맞춘다(사양 §8-12)
   const [notice, setNotice] = useState<NoticeState>(null);
+  const { dash, now, loadError, load, gate } = useMeasureDashboard({ mode: 'study', onNotice: (message) => setNotice({ message, at: 'bar' }) });
   const [busy, setBusy] = useState(false);
   const [pickedId, setPickedId] = useState<number | null>(null);
   const stacked = useStacked();
@@ -33,21 +35,22 @@ export default function Study() {
   const s = dash?.study;
   const measuring = !!s?.hasActiveSession && !!s.activeStartedAt;
 
-  // Option+P가 그대로 부르는 처리기 둘(사양 §5.1 — 아래 useMeasureShortcut)
-  async function start(bookId: number | null) {
-    if (busy) return;
+  // Option+P가 그대로 부르는 처리기 둘(사양 §5.1 — 아래 useMeasureShortcut). 기기 원장에 먼저 적는다(REQ-357) · 700ms 안의 두 번째 누름은 버린다(REQ-372)
+  const deps = { store: measureStore, load };
+  async function start(bookId: number | null, bookTitle: string | null) {
+    if (busy || !gate()) return;
     setBusy(true);
     setNotice(null);
-    const r = await startMeasure({ start: study.start, reload: load }, bookId);
+    const r = await startMeasure(deps, { mode: 'study', bookId, bookTitle, blocked: !!dash?.hasActiveSession });
     if (r.error) setNotice({ message: r.error, tone: 'error', at: 'bar' });
     setBusy(false);
   }
 
   async function stop() {
-    if (busy) return;
+    if (busy || !gate()) return;
     setBusy(true);
     setNotice(null);
-    const r = await stopMeasure({ stop: study.stop, reload: load });
+    const r = await stopMeasure({ ...deps, serverStop: study.stop }, 'study');
     if (r.error) setNotice({ message: r.error, tone: 'error', at: 'bar' });
     else if (r.info) setNotice({ message: r.info, at: 'bar' });
     setBusy(false);
@@ -74,9 +77,9 @@ export default function Study() {
   // 지금 책 — 이른 반환보다 위(아래 단축키 훅이 쓴다)
   const book = s ? defaultStudyBook(s.books, s.recentBookId, pickedId) : null;
   // Option+P = 지금 보이는 측정 버튼(REQ-105): 측정 중 「측정 종료」 · 측정 전 「공부 시작」 · 빈 서재 「책 없이 시간만 재기」
-  useMeasureShortcut({ button: !dash || !s ? null : measuring ? stop : book ? () => start(book.id) : () => start(null), busy, covered: false });
-  // 위젯 「공부 중」 [측정 종료](위젯 확장 REQ-183) — 시작 처리기는 넘기지 않는다(위젯엔 공부 시작 주소가 없다)
-  useWidgetIntent({ mode: 'study', fresh, measuring, button: measuring ? stop : null, onAlreadyStopped: () => setNotice({ message: ALREADY_STOPPED, at: 'bar' }) });
+  useMeasureShortcut({ button: !dash || !s ? null : measuring ? stop : book ? () => start(book.id, book.title) : () => start(null, null), busy, covered: false });
+  // 위젯 「공부 중」 [측정 종료](위젯 확장 REQ-183 · 타이머 오프라인 REQ-370 — 보이는 대시보드로 판정) — 시작 처리기는 넘기지 않는다(위젯엔 공부 시작 주소가 없다)
+  useWidgetIntent({ mode: 'study', ready: dash !== null, measuring, button: measuring ? stop : null, onAlreadyStopped: () => setNotice({ message: ALREADY_STOPPED, at: 'bar' }) });
 
   if (!dash || !s) {
     return (
@@ -156,7 +159,7 @@ export default function Study() {
             <Button kind="outline" label="바코드로 담기" onPress={toScan} />
           </View>
           <View style={{ height: layout.sectionGap }} />
-          <Button kind="text" label="책 없이 시간만 재기" busy={busy} onPress={() => void start(null)} />
+          <Button kind="text" label="책 없이 시간만 재기" busy={busy} onPress={() => void start(null, null)} />
         </View>
       </Screen>
     );
@@ -181,7 +184,7 @@ export default function Study() {
       </View>
       {todayLine}
       {band('bar')}
-      <Button kind="ink" label="공부 시작" busy={busy} onPress={() => void start(book.id)} />
+      <Button kind="ink" label="공부 시작" busy={busy} onPress={() => void start(book.id, book.title)} />
       <View style={{ marginTop: space[4], gap: space[3] }}>
         <View
           accessible

@@ -30,11 +30,20 @@ export function parseWidgetUrl(url: string): (typeof KINDS)[keyof typeof KINDS] 
 }
 
 let pending: WidgetIntent | null = null;
+let version = 0;
+const listeners = new Set<() => void>();
 export const widgetIntent = {
   put(i: WidgetIntent) {
     pending = i; // 한 칸 — 뒤 요청이 앞 요청을 덮는다
+    version++; // 화면이 요청이 걸리는 순간 판정한다(타이머 오프라인 REQ-370 — 대시보드 객체가 바뀌기를 기다리지 않는다)
+    listeners.forEach((l) => l());
   },
-  /** 그 모드 화면이 새로 읽은 대시보드 뒤에 한 번. 다른 모드면 남긴다 · 오래됐으면 버린다. */
+  subscribe(l: () => void): () => void {
+    listeners.add(l);
+    return () => void listeners.delete(l);
+  },
+  version: () => version,
+  /** 그 모드 화면이 보이는 대시보드로 한 번. 다른 모드면 남긴다 · 오래됐으면 버린다. */
   take(mode: WidgetMode, now: number): WidgetIntent | null {
     if (pending === null || pending.mode !== mode) return null;
     const i = pending;
@@ -43,7 +52,7 @@ export const widgetIntent = {
   },
 };
 
-/** 새로 읽은 상태로 정한다 — 낡은 위젯의 「측정 종료」가 새 측정을 시작하지 않게(REQ-183). */
+/** 보이는 상태(캐시 + 원장 — 위젯이 그린 것과 같은 값)로 정한다 — 낡은 위젯의 「측정 종료」가 새 측정을 시작하지 않게(REQ-183 · 370). */
 export function widgetDecision(action: WidgetAction, measuring: boolean): 'press' | 'already-stopped' | 'none' {
   if (action === 'start') return measuring ? 'none' : 'press';
   return measuring ? 'press' : 'already-stopped';

@@ -210,18 +210,13 @@ test('실패 문구 · 서버 평문과 연결 문구는 그대로, 문구 없�
   expect(failText(new Error('boom'), fb)).toBe(fb);
 });
 
-test('REQ-98 · 공부 시작은 {bookId}, 정지는 {}를 싣는다', async () => {
+// 타이머 오프라인 T2 — 공부 시작은 서버에 보내지 않는다(기기 원장 · 금지 표 REQ-377). 정지는 웹에서 시작한 측정에 남는다(REQ-376)
+test('REQ-98 · 공부 정지는 {}를 싣는다', async () => {
   fetchMock.mockResolvedValue(reply(200, '{}'));
-  await study.start(3);
-  await study.start(null);
   await study.stop();
-  expect(fetchMock.mock.calls[0][0]).toBe('https://booktimer.app/api/study/start');
+  expect(fetchMock.mock.calls[0][0]).toBe('https://booktimer.app/api/study/stop');
   expect(fetchMock.mock.calls[0][1].method).toBe('POST');
-  expect(JSON.parse(fetchMock.mock.calls[0][1].body)).toEqual({ bookId: 3 });
-  expect(JSON.parse(fetchMock.mock.calls[1][1].body)).toEqual({ bookId: null });
-  expect(fetchMock.mock.calls[2][0]).toBe('https://booktimer.app/api/study/stop');
-  expect(fetchMock.mock.calls[2][1].method).toBe('POST');
-  expect(JSON.parse(fetchMock.mock.calls[2][1].body)).toEqual({});
+  expect(JSON.parse(fetchMock.mock.calls[0][1].body)).toEqual({});
 });
 
 test('REQ-99 · 공부 서재 빼기는 POST /api/study/books/{id}/delete다', async () => {
@@ -325,16 +320,26 @@ describe('REQ-356 · 요청 상한', () => {
     expect(fetchMock.mock.calls[0][1].signal).toBeUndefined();
   });
 
-  test('REQ-356 · 정지는 10초 · 대시보드는 30초 상한을 싣고 서버 시작에는 싣지 않는다', async () => {
+  // T2에서 서버 시작 문이 없어져(REQ-377) 「시작에는 상한을 싣지 않는다」 단언은 뺐다 — 정지 · 대시보드 상한 단언은 그대로
+  test('REQ-356 · 정지는 10초 · 대시보드는 30초 상한을 싣는다', async () => {
     hang();
     await cutAt(() => reading.stop(), 10_000);
     await cutAt(() => study.stop(), 10_000);
     await cutAt(reading.dashboard, 30_000); // 함수로 넘긴다 — 직접 호출은 금지 표 REQ-348이 막는다
-    // 시작은 비멱등 — 늦게라도 닿은 시작을 실패로 보이면 서버에 유령 측정이 남는다
-    fetchMock.mockReset();
-    fetchMock.mockResolvedValue(reply(200, ''));
-    await reading.start(1);
-    await study.start(1);
-    expect(fetchMock.mock.calls.map((c) => c[1].signal)).toEqual([undefined, undefined]);
+  });
+
+  // 타이머 오프라인 T2 — 기기에서 끝난 측정을 기기 시각 그대로 마감 문으로 올린다(설계 §6.2 · §6.5)
+  test('REQ-359 · 마감 요청은 모드별 문에 {startedAt, endedAt, bookId}를 10초 상한으로 싣는다', async () => {
+    const b = { startedAt: '2026-11-03T01:00:00.000Z', endedAt: '2026-11-03T01:10:00.000Z', bookId: 3 };
+    fetchMock.mockResolvedValueOnce(reply(200, '{"trimmedSeconds":120}')).mockResolvedValueOnce(reply(200, '{"trimmedSeconds":0}'));
+    expect(await reading.finish(b)).toEqual({ trimmedSeconds: 120 });
+    expect(await study.finish({ ...b, bookId: null })).toEqual({ trimmedSeconds: 0 });
+    expect(fetchMock.mock.calls.map((c) => [c[0], c[1].method, JSON.parse(c[1].body)])).toEqual([
+      ['https://booktimer.app/api/sessions/finish', 'POST', b],
+      ['https://booktimer.app/api/study/finish', 'POST', { ...b, bookId: null }],
+    ]);
+    hang();
+    await cutAt(() => reading.finish(b), 10_000);
+    await cutAt(() => study.finish(b), 10_000);
   });
 });

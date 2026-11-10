@@ -77,6 +77,8 @@ const ROWS: Row[] = [
     planted: "const LAST_ROUND = '이 글에서 받을 수 있는 질문을 모두 받았어요';",
     strip: true,
   },
+  // 앱 측정의 시작은 서버에 보내지 않는다(타이머 오프라인 Q1) — 기기 원장에 적고, 끝나면 마감 문으로만 올린다. 서버 시작은 비멱등이라 지하에서 유령 측정을 남긴다.
+  { id: 'REQ-377', pattern: /\/api\/(?:sessions|study)\/start\b/, skip: [], planted: "request('/api/sessions/start', { body: { bookId } })", strip: true },
 ];
 
 // 블록 주석 · 줄 주석을 걷는다. URL의 //(앞이 :)는 주석이 아니다.
@@ -118,6 +120,14 @@ test('REQ-107 · 화면 코드에 밤 토큰 사용이 없다(위젯·테마 제
 
 test('REQ-109 · 앱 소스에 /api/miniapp/·/api/toss/ 호출이 없다(심은 픽스처는 잡힌다)', () => {
   expect(hits(ROWS[1])).toEqual([]);
+});
+
+test('REQ-377 · 앱 소스에 서버 시작 문 호출이 없다(심은 픽스처는 잡힌다)', () => {
+  const row = ROWS.find((r) => r.id === 'REQ-377')!;
+  expect(hits(row)).toEqual([]);
+  // 양성 대조 — 공부 문 · 템플릿 문자열도 잡힌다. 음성 대조 — 주석의 낱말 · 마감 문 · 정지 문은 걸리지 않는다
+  expect(hits(row, [{ rel: join('lib', 'planted.ts'), text: "request<unknown>(`/api/study/start`, { body: { bookId } })" }])).toHaveLength(1);
+  expect(hits(row, [{ rel: join('lib', 'planted.ts'), text: "// 옛 /api/sessions/start는 부르지 않는다\nrequest('/api/sessions/finish'); request('/api/study/stop');" }])).toEqual([]);
 });
 
 test('REQ-91 · 앱 소스에 부채 필드 읽기와 지우개 호출이 없다(심은 픽스처는 잡힌다)', () => {
@@ -404,13 +414,32 @@ test('A1 리뷰 6 · createFirst는 adopt 전에 localId를 비우고 noteId를 
 
 // J5 · J100 — 앱 시작 동기화는 로그인 게이트 안에서 startSlotSync 한 호출이다(호출을 빼거나 게이트를 늘 return으로 만들면 잡힌다 — A1 리뷰 14).
 // 타이머 오프라인 T0(REQ-362 · 363) — 같은 게이트 안에서 그 앞에 측정 가게를 열고 표면 맞추기를 켠다(가게를 안 열면 홈이 「불러오는 중」에 멈춘다).
-const START = /useEffect\(\(\) => \{\s*if \(!signedIn\) return;\s*void session\.userId\(\)\.then\(\s*async \(userId\) => \{\s*if \(userId === null\) return;\s*await measureStore\.open\(AsyncStorage, userId\);\s*startSurfaceSync\(\);\s*return startSlotSync\(AsyncStorage, userId\);\s*\},\s*\(\) => undefined,?\s*\);\s*\}, \[signedIn\]\);/;
+// 타이머 오프라인 T2(REQ-359) — 같은 게이트 안에서 앱이 꺼져 남은 끝난 측정을 보낸다(기다리지 않는다 — 앞 줄 둘이 화면을 막지 않게).
+const START = /useEffect\(\(\) => \{\s*if \(!signedIn\) return;\s*void session\.userId\(\)\.then\(\s*async \(userId\) => \{\s*if \(userId === null\) return;\s*await measureStore\.open\(AsyncStorage, userId\);\s*startSurfaceSync\(\);\s*void flushMeasures\(\)\.catch\(\(\) => undefined\);\s*return startSlotSync\(AsyncStorage, userId\);\s*\},\s*\(\) => undefined,?\s*\);\s*\}, \[signedIn\]\);/;
 test('A1 리뷰 14 · _layout이 signedIn 게이트 안에서 startSlotSync를 부른다(빼면 잡힌다)', () => {
   const s = srcOf(join('app', '_layout.tsx'));
   expect(START.test(s)).toBe(true);
   expect(START.test(s.replace('return startSlotSync(AsyncStorage, userId);', ''))).toBe(false);
   expect(START.test(s.replace('if (!signedIn) return;', 'if (!signedIn || true) return;'))).toBe(false);
   expect(START.test(s.replace('await measureStore.open(AsyncStorage, userId);', ''))).toBe(false);
+  expect(START.test(cut(s, /void flushMeasures\(\)\.catch\(\(\) => undefined\);\s*return startSlotSync/, 'return startSlotSync'))).toBe(false);
+});
+
+/** 음성 대조용 돌연변이 — 심기가 실제로 들어갔는지 먼저 본다(줄 끝이 CRLF라 안 들어가면 늘 초록) */
+function cut(s: string, from: string | RegExp, to: string): string {
+  const m = s.replace(from, to);
+  expect(m).not.toBe(s);
+  return m;
+}
+
+// 타이머 오프라인 T2(REQ-359) — 보낼 측정이 있고 앱이 앞에 있으면 루트가 20초마다 보낸다(로그인 동안 · 화면과 무관)
+const RETRY = /useEffect\(\(\) => \{\s*if \(!signedIn\) return;\s*const id = setInterval\(\(\) => \{\s*const s = measureStore\.get\(\);\s*if \(AppState\.currentState === 'active' && s && pending\(s\.ledger\)\.length > 0\) void flushMeasures\(\)\.catch\(\(\) => undefined\);\s*\}, RETRY_MS\);\s*return \(\) => clearInterval\(id\);\s*\}, \[signedIn\]\);/;
+test('REQ-359 · 루트가 로그인 동안 보낼 측정이 있으면 앞에 있을 때 20초마다 보낸다(빼면 잡힌다)', () => {
+  const s = srcOf(join('app', '_layout.tsx'));
+  expect(RETRY.test(s)).toBe(true);
+  expect(RETRY.test(cut(s, "AppState.currentState === 'active' && ", ''))).toBe(false);
+  expect(RETRY.test(cut(s, '}, RETRY_MS);', '}, 600_000);'))).toBe(false);
+  expect(RETRY.test(cut(s, 'pending(s.ledger).length > 0', 'true'))).toBe(false);
 });
 
 // 타이머 오프라인 T0 리뷰 — 로그아웃 · 탈퇴는 측정 가게를 닫고(줄에 선 쓰기를 기다리고) 나서 칸을 지운다 · 로그인 화면이 되면 표면 맞추기를 끄고 가게를 닫는다(REQ-364).
@@ -431,13 +460,19 @@ test('REQ-364 · 로그아웃 · 탈퇴는 가게를 닫은 뒤 칸을 지우고
 
 // 타이머 오프라인 T0 기기 확인(2026-11-03) — [측정 종료]는 누를 때 이전 안내를 지운다. 안 지우면 오프라인 실패 띠가 다음 정지 성공 뒤에도 남는다.
 // 화면은 하니스가 렌더하지 않아 처리기 모양을 잠근다 — 위젯 [측정 종료] · Option+P도 같은 처리기를 부른다.
-const STOP_CLEARS = /async function stop\(\) \{\s*if \(busy\) return;\s*setBusy\(true\);\s*setNotice\(null\);\s*const r = await stopMeasure\(/;
+// 타이머 오프라인 T2 — 첫 줄에 시간 문(gate — REQ-372)이 붙었다. 문은 아래 WIRES가 따로 잠그고, 여기는 「지운다」만 본다(정규식은 그 한 군데만 넓혔다).
+const STOP_CLEARS = /async function stop\(\) \{\s*if \(busy(?: \|\| !gate\(\))?\) return;\s*setBusy\(true\);\s*setNotice\(null\);\s*const r = await stopMeasure\(/;
 test('기기 확인 2026-11-03 · 홈 · 공부의 [측정 종료]는 이전 안내를 지우고 시작한다(옛 홈 꼴을 심으면 잡힌다)', () => {
   for (const rel of [join('app', '(tabs)', 'index.tsx'), join('app', '(tabs)', 'study.tsx')]) {
     expect(STOP_CLEARS.test(srcOf(rel))).toBe(true);
   }
   const old = 'async function stop() {\n    if (busy) return;\n    setBusy(true);\n    const r = await stopMeasure({ stop: reading.stop, reload: load });';
   expect(STOP_CLEARS.test(old)).toBe(false);
+  // T2 꼴에서 지우기를 빼도 잡힌다
+  const t2 = srcOf(join('app', '(tabs)', 'index.tsx'));
+  const t2Mutant = t2.replace(/(async function stop\(\) \{\s*if \(busy \|\| !gate\(\)\) return;\s*setBusy\(true\);)\s*setNotice\(null\);/, '$1');
+  expect(t2Mutant).not.toBe(t2);
+  expect(STOP_CLEARS.test(t2Mutant)).toBe(false);
 });
 
 // A1 리뷰 2 · 8 — 쪽지 지우기(확인 창 · 서버 지우기 · 기기 칸 지우기)는 한 곳(NoteRow.confirmRemoveNote)을 책 화면 · 서재가 같이 쓴다.
@@ -538,6 +573,29 @@ const WIRES: { id: string; rel: string; needle: string; n: number; mutant: strin
   { id: 'M7b 내보내기 책 줄 = bookSourceLine(재료 · 새 쪽지 둘)', rel: NOTE, needle: 'bookSourceLine(m.book)', n: 2, mutant: 'null' },
   { id: 'M9b AI 배지 = noteRow().ai', rel: join('components', 'NoteRow.tsx'), needle: 'r.ai ?', n: 1, mutant: 'true ?' },
   { id: 'M10b 책 없는 여백 = bookless 결과', rel: LIBRARY, needle: '.then(setBookless', n: 1, mutant: '.then(() => setBookless([])' },
+  // 타이머 오프라인 T2 — 시작 · 정지의 시간 문(REQ-372) · 다른 모드 재는 중 판정(REQ-357 — 보이는 대시보드) · 위젯 판정 계기(REQ-370)
+  { id: 'REQ-372 홈 시작 · 정지 = gate()', rel: join('app', '(tabs)', 'index.tsx'), needle: 'if (busy || !gate()) return;', n: 2, mutant: 'if (busy) return;' },
+  { id: 'REQ-372 공부 시작 · 정지 = gate()', rel: join('app', '(tabs)', 'study.tsx'), needle: 'if (busy || !gate()) return;', n: 2, mutant: 'if (busy) return;' },
+  { id: 'REQ-357 홈 시작 막힘 = 보이는 공부 측정', rel: join('app', '(tabs)', 'index.tsx'), needle: 'blocked: !!dash?.study.hasActiveSession', n: 1, mutant: 'blocked: false' },
+  { id: 'REQ-357 공부 시작 막힘 = 보이는 독서 측정', rel: join('app', '(tabs)', 'study.tsx'), needle: 'blocked: !!dash?.hasActiveSession', n: 1, mutant: 'blocked: false' },
+  { id: 'REQ-370 홈 위젯 판정 = 보이는 대시보드', rel: join('app', '(tabs)', 'index.tsx'), needle: 'ready: dash !== null', n: 1, mutant: 'ready: true' },
+  { id: 'REQ-370 공부 위젯 판정 = 보이는 대시보드', rel: join('app', '(tabs)', 'study.tsx'), needle: 'ready: dash !== null', n: 1, mutant: 'ready: true' },
+  // 로그아웃 확인은 기기 원장(진행 중 · 보낼 측정)도 센다 — 서버가 모르는 측정이 확인 없이 지워지지 않게(REQ-364 · D6 문구)
+  { id: 'REQ-364 로그아웃 확인 = 원장 isDirty', rel: join('app', '(tabs)', 'settings.tsx'), needle: '(isDirty(measureStore.get()?.ledger) ? 1 : 0)', n: 1, mutant: '0' },
+  { id: 'REQ-364 로그아웃 확인 문구(D6)', rel: join('app', '(tabs)', 'settings.tsx'), needle: "'이 기기에만 있는 저장 안 된 글이나 측정 기록이 있어요 — 로그아웃하면 지워져요'", n: 1, mutant: "'이 기기에만 있는 저장 안 된 글이 있어요 — 로그아웃하면 지워져요'" },
+  // T2 리뷰 반영 — 기기 확인만이 가르던 연결(돌연변이 M2 · M9 · M11 · M8b · M24가 살던 자리)
+  {
+    id: 'REQ-364 로그아웃 확인은 보내기를 기다리지 않는다(세기만)',
+    rel: join('app', '(tabs)', 'settings.tsx'),
+    needle: 'pending: async () => (userId === null ? 0 : await pendingAll(AsyncStorage, userId)) + (isDirty(measureStore.get()?.ledger) ? 1 : 0),',
+    n: 1,
+    mutant: 'pending: async () => (await flushMeasures().catch(() => undefined), userId === null ? 0 : await pendingAll(AsyncStorage, userId)) + (isDirty(measureStore.get()?.ledger) ? 1 : 0),',
+  },
+  { id: 'REQ-370 위젯 요청이 걸리는 순간 판정 = version 구독', rel: join('lib', 'useWidgetIntent.ts'), needle: 'useSyncExternalStore(widgetIntent.subscribe, widgetIntent.version)', n: 1, mutant: '0' },
+  { id: 'REQ-370 위젯 판정 효과 계기에 version', rel: join('lib', 'useWidgetIntent.ts'), needle: '}, [version, p.ready, focused]);', n: 1, mutant: '}, [p.ready, focused]);' },
+  { id: 'REQ-366 포커스된 측정 탭만 알림을 가져간다', rel: join('lib', 'useMeasureDashboard.ts'), needle: 'if (!focused) return;', n: 1, mutant: '' },
+  { id: 'REQ-372 훅의 시간 문 = TOGGLE_GAP_MS', rel: join('lib', 'useMeasureDashboard.ts'), needle: 'repeatGate(TOGGLE_GAP_MS)', n: 1, mutant: 'repeatGate(0)' },
+  { id: 'REQ-378 화면 보이는 값 = confirmedOf(가게)', rel: join('lib', 'useMeasureDashboard.ts'), needle: 'confirmedOf(snap)', n: 1, mutant: 'true' },
 ];
 test.each(WIRES)('A1 리뷰 15 · $id — 화면이 lib 판정을 쓴다(돌연변이를 심으면 잡힌다)', ({ rel, needle, n, mutant }) => {
   const s = srcOf(rel);
@@ -545,4 +603,25 @@ test.each(WIRES)('A1 리뷰 15 · $id — 화면이 lib 판정을 쓴다(돌연�
   const mutated = s.replace(needle, mutant); // 첫 자리 하나만 — 둘인 줄은 하나만 바뀌어도 잡혀야 한다
   expect(mutated).not.toBe(s); // 심기가 실제로 들어갔다
   expect(count(mutated, needle)).not.toBe(n);
+});
+
+// T2 재확인 남은 지적 — 위 WIRES는 한 줄만 본다. 로그아웃 확인 앞 어느 줄에서도 보내기 · 읽기를 기다리지 않고(REQ-364 — 지하에서 무반응 10초),
+// 알림은 포커스 확인을 지난 뒤에만 가져간다(REQ-366 — take()를 그 위로 옮기면 숨은 탭이 가져간다).
+const LOGOUT_WAITS = /flushMeasures|loadDashboard|\.finish\(/;
+const FOCUSED_TAKE = /if \(!focused\) return;\s*const m = measureNotice\.take\(\);/;
+test('T2 재확인 · 로그아웃 확인 전엔 보내기를 기다리지 않고, 알림은 포커스된 탭만 가져간다(옮기거나 끼우면 잡힌다)', () => {
+  const settings = srcOf(join('app', '(tabs)', 'settings.tsx'));
+  const beforeConfirm = (s: string) => bodyOf(s, 'async function onLogout()').split('confirm:')[0];
+  expect(beforeConfirm(settings)).toContain('pending:'); // 빈 조각이면 늘 초록
+  expect(LOGOUT_WAITS.test(beforeConfirm(settings))).toBe(false);
+  const planted = settings.replace('const [userId, a] = await Promise.all(', 'await flushMeasures(); const [userId, a] = await Promise.all(');
+  expect(planted).not.toBe(settings);
+  expect(LOGOUT_WAITS.test(beforeConfirm(planted))).toBe(true);
+
+  const hook = srcOf(join('lib', 'useMeasureDashboard.ts'));
+  expect(count(hook, 'measureNotice.take()')).toBe(1);
+  expect(FOCUSED_TAKE.test(hook)).toBe(true);
+  const moved = hook.replace(/if \(!focused\) return;(\s*)const m = measureNotice\.take\(\);/, 'const m = measureNotice.take();$1if (!focused) return;'); // 소스가 CRLF라 줄바꿈은 정규식으로
+  expect(moved).not.toBe(hook);
+  expect(FOCUSED_TAKE.test(moved)).toBe(false);
 });

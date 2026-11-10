@@ -1,4 +1,14 @@
-import { measureShortcut, repeatGate, shortcutHolders } from './measureShortcut';
+import { measureShortcut, repeatGate, shortcutHolders, TOGGLE_GAP_MS } from './measureShortcut';
+
+// 타이머 오프라인 T2 — 기기 쪽 시작 · 정지는 몇 ms라 busy가 두 번째 탭을 막지 못한다(빠른 두 번 누르기가 측정을 바로 끝내지 않게)
+test('REQ-372 · 시작 · 정지 뒤 700ms 안의 두 번째 누름은 버린다', () => {
+  expect(TOGGLE_GAP_MS).toBe(700);
+  const gate = repeatGate(TOGGLE_GAP_MS);
+  expect(gate(10_000)).toBe(true); // 시작
+  expect(gate(10_699)).toBe(false); // 같은 손가락의 두 번째 탭 — 정지가 아니다
+  expect(gate(11_398)).toBe(false); // 버린 누름도 간격을 다시 잰다(누르고 있는 반복)
+  expect(gate(12_098)).toBe(true); // 마지막 누름에서 700ms
+});
 
 // Option+P = 그 화면 측정 버튼의 처리기(REQ-105).
 
