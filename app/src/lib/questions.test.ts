@@ -55,3 +55,10 @@ test('REQ-221 · 질문 고르기 패치의 키는 focus 하나뿐이다', () =>
   expect(Object.keys(pickPatch(q))).toEqual(['focus']);
   expect(pickPatch(q)).toEqual({ focus: q.text });
 });
+
+test('REQ-393 · 서버 판 없이 연 쪽지의 빈 띠 문구 「질문은 인터넷에 연결되면 받을 수 있어요」 — 읽을 것 유무와 무관', () => {
+  const OFFLINE = '질문은 인터넷에 연결되면 받을 수 있어요';
+  expect(bandHint({ rounds: 0, quote: null, thought: '', boxes: 0, offline: true })).toBe(OFFLINE);
+  expect(bandHint({ rounds: 0, quote: '옮긴 문장', thought: '남은 생각', boxes: 0, offline: true })).toBe(OFFLINE);
+  expect(bandHint({ rounds: 0, quote: '옮긴 문장', thought: '남은 생각', boxes: 0, offline: false })).toBe('질문을 고르거나, 그냥 써도 돼요');
+});

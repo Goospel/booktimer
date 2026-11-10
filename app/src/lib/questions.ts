@@ -4,6 +4,7 @@ import { hasMaterial, type NoteAiInput } from './aiStep';
 
 /** 빈 띠 문구 — 라운드 0에 지금 쪽지에 읽을 것이 없을 때만 알린다(J98 · F1 §4.5 — 꼬리 질문은 내 생각을 읽는다). */
 export function bandHint(p: NoteAiInput): string {
+  if (p.offline) return '질문은 인터넷에 연결되면 받을 수 있어요'; // 서버 판 없이 연 쪽지(REQ-393)
   if (p.rounds === 0 && !hasMaterial(p)) return '문장이나 생각을 적으면 질문을 받을 수 있어요';
   return '질문을 고르거나, 그냥 써도 돼요';
 }

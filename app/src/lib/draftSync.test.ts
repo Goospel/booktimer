@@ -163,6 +163,27 @@ test('REQ-221 · 질문 고르기는 띠만 바꾼다 — 생각 · 옮긴 문�
   expect(calls).toEqual([]);
 });
 
+// 여백 오프라인 열기 — 서버 판 없이 그 쪽지 칸을 그대로 읽는다(설계 §5.2)
+test('REQ-392 · local은 서버 글 없이 그 쪽지 칸을 그대로 돌려준다 — 옮긴 문장 · 생각 · 띠 질문 · 판 · dirty 그대로 · 없으면 null · 칸을 바꾸지 않는다', async () => {
+  const kv = memoryKV();
+  const slot = { title: '옮긴 문장', body: '끊긴 동안 쓴 생각', focus: '띠 질문인가요?', base: 5, dirty: true };
+  kv.map.set(slotKey(1, 7, 'margin'), JSON.stringify(slot));
+  const before = [...kv.map.entries()];
+  const put = jest.fn();
+  const sync = draftSync({ kv, userId: 1, prefix: 'margin', put });
+  expect(await sync.local(7)).toEqual(slot);
+  expect(await sync.local(8)).toBeNull();
+  expect([...kv.map.entries()]).toEqual(before);
+  expect(put).not.toHaveBeenCalled();
+});
+
+test('REQ-392 · local은 앞서 부른 edit 뒤에 읽는다(한 줄 — 기다리지 않고 부른 편집도 보인다)', async () => {
+  const { sync } = setup(1, echo, memoryKV());
+  await sync.open(server({ title: '옮긴 문장', body: '처음' }));
+  void sync.edit(7, { body: '기다리지 않은 편집' });
+  expect(await sync.local(7)).toMatchObject({ body: '기다리지 않은 편집', dirty: true });
+});
+
 describe('REQ-229 · 기기 칸 접두어 셋(J80)', () => {
   const dirty = JSON.stringify({ dirty: true });
   const clean = JSON.stringify({ dirty: false });

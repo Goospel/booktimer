@@ -1,7 +1,8 @@
 // 여백 쪽지 판정(책생글 「여백 + 블로그」 A1 — 설계 §5.1 · F1 사양 §4.3 · §4.4). 화면은 이 함수들의 결과를 그대로 그린다.
 // 「공개 책이에요」 확인 단계는 없다 — 여백은 나만 본다(D1 · REQ-223). 저장은 자동이라 [남기기]도 없다(F1 §8-3).
-import type { EditMargin, MarginSummary } from '../api/types';
+import type { BookOption, CreateMargin, Dashboard, EditMargin, MarginSummary, MarginView } from '../api/types';
 import { isGone } from './draftSync';
+import { bookSourceLine, buildNoteExport } from './exportText';
 import { dateLabel } from './format';
 
 const has = (s: string | null | undefined) => (s ?? '').trim() !== '';
@@ -58,6 +59,37 @@ export function noteHead(p: { bookTitle: string | null; field: boolean }): { tit
   };
 }
 
+/** 마지막 대시보드(측정 가게 캐시)의 독서 서재 책 하나 — 읽는 중 · 다 읽음 · 읽고 싶어요를 다 본다(REQ-391). 없으면 null. */
+export function cachedBook(
+  d: Pick<Dashboard, 'readingBooks' | 'wantToReadBooks' | 'finishedBooks'> | null | undefined,
+  bookId: number,
+): BookOption | null {
+  if (!d) return null;
+  return [...d.readingBooks, ...(d.finishedBooks ?? []), ...d.wantToReadBooks].find((b) => b.id === bookId) ?? null;
+}
+
+/**
+ * 서버 판 없이 그리는 머리(REQ-391 · 392) — 새 책 쪽지(재료를 기다리지 않는다)와 기기 칸으로 연 쪽지.
+ * 책 쪽지인데 캐시에 책이 없으면 빈 제목 — 「책 없는 여백」이라 하지 않는다(noteHead는 null만 바꾼다).
+ * 옮긴 문장 칸 = 책 쪽지 ∨ 칸에 옮긴 문장(hasQuoteField의 기기판 — quoteSource를 모른다).
+ */
+export function cachedHead(p: { bookId: number | null; book: { title: string; author: string | null } | null; quote: string }): {
+  bookTitle: string | null;
+  bookLine: string | null;
+  field: boolean;
+} {
+  if (p.bookId === null) return { bookTitle: null, bookLine: null, field: p.quote !== '' };
+  return { bookTitle: p.book?.title ?? '', bookLine: p.book ? bookSourceLine(p.book) : null, field: true };
+}
+
+/** (Q1 가) 「둘 다 남기기」의 새 쪽지 몸 — 그쪽(서버) 판(REQ-394). 책 없는 쪽지는 옮긴 문장 · 출처를 생각 앞에(만들기 400). 남길 글이 없으면 null. */
+export function copyOfNote(v: Pick<MarginView, 'bookId' | 'quote' | 'quoteSource' | 'text'>): CreateMargin | null {
+  const quote = has(v.quote) ? v.quote : null;
+  if (quote === null && v.text.trim() === '') return null;
+  if (v.bookId !== null) return { bookId: v.bookId, quote, text: v.text };
+  return { bookId: null, quote: null, text: buildNoteExport({ quote, quoteSource: v.quoteSource, text: v.text }) };
+}
+
 /** 쪽지 화면 주소 — 책 없는 쪽지는 `none`, 기존 쪽지는 `?note=`(J75). */
 export function noteHref(bookId: number | null, noteId?: number): string {
   return `/margin/${bookId ?? 'none'}${noteId === undefined ? '' : `?note=${noteId}`}`;
@@ -104,11 +136,12 @@ export type LeaveAction = 'none' | 'drop-slot' | 'create' | 'delete-after-create
  * (편집기가 빈 채라 「빈 쪽지」로 보인다 — A1 리뷰 1). empty = 두 칸이 비고 받은 질문 0 · waiting = 질문을 보내는 중(서버가 몫을 깎았다).
  * 새 쪽지 첫 POST가 나가는 중에 다 지우고 떠나면 만든 뒤 지운다(A1 리뷰 7).
  */
-export function leaveAction(p: { loaded: boolean; empty: boolean; waiting: boolean; noteId: number | null; creating: boolean }): LeaveAction {
+export function leaveAction(p: { loaded: boolean; empty: boolean; waiting: boolean; noteId: number | null; creating: boolean; device?: boolean }): LeaveAction {
   const discard = p.empty && !p.waiting;
   // 만드는 중이면 noteId가 섰어도(adopt 창) 새 쪽지 갈래 — 아직 없는 id 칸을 flush하지 않고 같은 약속을 기다린다(3차 5)
   if (p.noteId === null || p.creating) return discard ? (p.creating ? 'delete-after-create' : 'drop-slot') : 'create';
   if (!p.loaded) return 'none';
+  if (p.device) return p.empty ? 'none' : 'flush'; // 기기 칸으로 연 쪽지 — 받은 질문 수를 몰라 빈 쪽지도 지우지 않는다(REQ-395 · REQ-142)
   return discard ? 'delete' : 'flush';
 }
 

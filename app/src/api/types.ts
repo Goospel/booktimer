@@ -58,6 +58,8 @@ export interface Dashboard {
   activeBook: BookOption | null;
   readingBooks: BookOption[];
   wantToReadBooks: BookOption[];
+  /** 쪽지 화면 오프라인 머리만 읽는다(REQ-391 — 측정 가게 캐시의 다 읽음 책). 서버는 늘 싣지만 옛 픽스처엔 없다 */
+  finishedBooks?: BookOption[];
   recentBookId: number | null;
   /** 목표를 채운 날의 연속(REQ-89 — 서버 PR-F). 옛 서버엔 없다. weeks = 잔디 53주(큰 위젯 달력 — REQ-189) */
   graph: { goalStreak?: number; weeks?: ContributionDay[][] };

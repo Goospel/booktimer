@@ -2,7 +2,7 @@
 import { ApiError, NetworkError } from '../api/client';
 import type { MarginSummary } from '../api/types';
 import * as marginSave from './marginSave';
-import { booklessSection, canSaveMargin, hasQuoteField, javaStrip, keptBody, LEAVE_WAIT_MS, type LeaveAction, leaveAction, noteEditBody, runLeave, noteHead, noteHref, noteMaxLength, noteRoute, noteRow, pendingLeave, savedNotice, showsThought } from './marginSave';
+import { booklessSection, cachedBook, cachedHead, canSaveMargin, copyOfNote, hasQuoteField, javaStrip, keptBody, LEAVE_WAIT_MS, type LeaveAction, leaveAction, noteEditBody, runLeave, noteHead, noteHref, noteMaxLength, noteRoute, noteRow, pendingLeave, savedNotice, showsThought } from './marginSave';
 
 test('REQ-210 · 입력칸 상한 = max(10,000, 불러온 글 길이)', () => {
   expect(noteMaxLength('')).toBe(10_000);
@@ -107,6 +107,13 @@ describe('leaveAction · 쪽지 화면을 떠날 때', () => {
 
   test('A1 리뷰 7 · 첫 POST가 나가는 중에 글을 다 지우고 떠나면 만든 뒤 지운다(지운 글로 쪽지가 남지 않게)', () => {
     expect(at({ noteId: null, empty: true, creating: true })).toBe('delete-after-create');
+  });
+
+  test('REQ-395 · 기기 칸으로 연 쪽지 — 비었으면 아무것도 하지 않고(지우지 않는다) · 글이 있으면 남은 저장을 보낸다 · device가 아니면 빈 쪽지는 지금처럼 지운다', () => {
+    expect(at({ device: true, empty: true })).toBe('none'); // 받은 질문 수를 몰라 원가 든 빈 쪽지를 지울 수 있다(REQ-142)
+    expect(at({ device: true, empty: false })).toBe('flush');
+    expect(at({ device: false, empty: true })).toBe('delete');
+    expect(at({ device: true, empty: true, loaded: false })).toBe('none');
   });
 });
 
@@ -317,4 +324,60 @@ test('3차 4 · runLeave delete — 404면 칸을 지우고 · 그 밖의 실패
   expect(await run(new ApiError(404, '글을 찾을 수 없습니다'))).toEqual(['drop 9']);
   expect(await run(new ApiError(500, '요청에 실패했어요 (500)'))).toEqual([]);
   expect(await run(new NetworkError())).toEqual([]);
+});
+
+// 여백 오프라인 열기 — 서버 판 없이 그리는 머리(설계 §5.1 · §5.2). 세 목록에 서로 다른 제목을 둬 「어느 목록을 읽었는가」를 가른다
+describe('REQ-391 · 캐시 대시보드의 책 · 머리', () => {
+  const book = (id: number, title: string, author: string | null = null) => ({ id, title, author, coverUrl: null });
+  const d = {
+    readingBooks: [book(1, '읽는 중 책', '헤세')],
+    finishedBooks: [book(2, '다 읽은 책')],
+    wantToReadBooks: [book(3, '읽고 싶은 책', '한강')],
+  };
+
+  test('REQ-391 · 캐시 책 — 읽는 중 · 다 읽음 · 읽고 싶어요에서 id로 찾는다 · 없거나 캐시가 없으면 null', () => {
+    expect(cachedBook(d, 1)?.title).toBe('읽는 중 책');
+    expect(cachedBook(d, 2)?.title).toBe('다 읽은 책');
+    expect(cachedBook(d, 3)?.title).toBe('읽고 싶은 책');
+    expect(cachedBook(d, 4)).toBeNull();
+    expect(cachedBook(null, 1)).toBeNull();
+    expect(cachedBook(undefined, 1)).toBeNull();
+  });
+
+  test('REQ-391 · 캐시 책 — 다 읽음 목록이 없는 옛 꼴도 읽는 중 · 읽고 싶어요에서 찾는다', () => {
+    const old = { readingBooks: d.readingBooks, wantToReadBooks: d.wantToReadBooks };
+    expect(cachedBook(old, 1)?.title).toBe('읽는 중 책');
+    expect(cachedBook(old, 3)?.title).toBe('읽고 싶은 책');
+    expect(cachedBook(old, 2)).toBeNull();
+  });
+
+  test('REQ-391 · 캐시 머리 — 책 쪽지는 캐시 제목 · 「『제목』 · 저자」 책 줄 · 옮긴 문장 칸 · 캐시에 없으면 빈 제목(「책 없는 여백」 아님)', () => {
+    expect(cachedHead({ bookId: 1, book: { title: '데미안', author: '헤세' }, quote: '' })).toEqual({ bookTitle: '데미안', bookLine: '『데미안』 · 헤세', field: true });
+    expect(cachedHead({ bookId: 1, book: { title: '데미안', author: null }, quote: '' })).toEqual({ bookTitle: '데미안', bookLine: '『데미안』', field: true });
+    expect(cachedHead({ bookId: 1, book: null, quote: '' })).toEqual({ bookTitle: '', bookLine: null, field: true });
+  });
+
+  test('REQ-392 · 캐시 머리 — 책 없는 쪽지는 제목 null(「책 없는 여백」) · 옮긴 문장 칸은 칸에 옮긴 문장이 있을 때만', () => {
+    expect(cachedHead({ bookId: null, book: null, quote: '' })).toEqual({ bookTitle: null, bookLine: null, field: false });
+    expect(cachedHead({ bookId: null, book: null, quote: '책을 지운 쪽지의 옮긴 문장' })).toEqual({ bookTitle: null, bookLine: null, field: true });
+    expect(noteHead({ bookTitle: null, field: false }).title).toBe('책 없는 여백');
+  });
+
+  test('REQ-391 · 빈 제목이면 머리 제목도 빈 글자다 — noteHead는 null만 「책 없는 여백」으로 바꾼다', () => {
+    expect(noteHead({ bookTitle: cachedHead({ bookId: 9, book: null, quote: '' }).bookTitle, field: true }).title).toBe('');
+  });
+});
+
+// (Q1 가) 「둘 다 남기기」 — 그쪽(서버) 판을 새 쪽지로(설계 §5.4)
+test('REQ-394 · 둘 다 남기기의 새 쪽지 몸 — 책 쪽지는 옮긴 문장째 · 책 없는 쪽지는 「옮긴 문장」 · 출처를 생각 앞에 · 공백뿐인 옮긴 문장은 null · 남길 글이 없으면 null', () => {
+  expect(copyOfNote({ bookId: 4, quote: '그쪽 문장', quoteSource: '『데미안』 · 헤세', text: '그쪽 생각' })).toEqual({ bookId: 4, quote: '그쪽 문장', text: '그쪽 생각' });
+  expect(copyOfNote({ bookId: 4, quote: '   ', quoteSource: null, text: '생각만' })).toEqual({ bookId: 4, quote: null, text: '생각만' });
+  expect(copyOfNote({ bookId: null, quote: '지운 책의 문장', quoteSource: '『데미안』 · 헤세', text: '그쪽 생각' })).toEqual({
+    bookId: null,
+    quote: null,
+    text: '「지운 책의 문장」\n『데미안』 · 헤세\n\n그쪽 생각',
+  });
+  expect(copyOfNote({ bookId: null, quote: null, quoteSource: null, text: '책 없는 생각' })).toEqual({ bookId: null, quote: null, text: '책 없는 생각' });
+  expect(copyOfNote({ bookId: 4, quote: ' ', quoteSource: null, text: ' \n' })).toBeNull();
+  expect(copyOfNote({ bookId: null, quote: null, quoteSource: '『데미안』', text: '' })).toBeNull();
 });
