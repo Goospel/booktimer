@@ -23,13 +23,13 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { ApiError, failText, library, margins, NetworkError, session, writing } from '../../api/client';
-import type { MarginView, Question, Step } from '../../api/types';
+import type { MarginView, MaterialsView, Question, Step } from '../../api/types';
 import { ConsentSheet } from '../../components/ConsentSheet';
 import { QuestionBand } from '../../components/QuestionBand';
 import { QuestionSheet } from '../../components/QuestionSheet';
 import { QuoteOnlyBand } from '../../components/QuoteOnlyBand';
 import { Button, Notice, readColumn, Screen, Txt, useStacked } from '../../components/ui';
-import { aiButton, ROUNDS_MAX, sendAiStep, singleFlight } from '../../lib/aiStep';
+import { AI_OFFLINE, aiButton, ROUNDS_MAX, sendAiStep, singleFlight } from '../../lib/aiStep';
 import {
   adoptNewNote,
   AUTOSAVE_MS,
@@ -43,7 +43,8 @@ import {
   type SyncDoc,
 } from '../../lib/draftSync';
 import { bookSourceLine, buildNoteExport, shouldMarkExported } from '../../lib/exportText';
-import { canSaveMargin, hasQuoteField, keptBody, leaveAction, noteEditBody, noteHead, noteMaxLength, noteRoute, pendingLeave, runLeave, savedNotice } from '../../lib/marginSave';
+import { cachedBook, cachedHead, canSaveMargin, copyOfNote, hasQuoteField, keptBody, leaveAction, noteEditBody, noteHead, noteMaxLength, noteRoute, pendingLeave, runLeave, savedNotice } from '../../lib/marginSave';
+import { measureStore } from '../../lib/measureSync';
 import { againArgs, bandHint, pickPatch, waitingText } from '../../lib/questions';
 import { quoteOnlyBand } from '../../lib/quoteOnlyBand';
 import { color, layout, line, space, type } from '../../theme/tokens';
@@ -56,6 +57,9 @@ type Head = { bookTitle: string | null; bookLine: string | null; quoteSource: st
 const OFFLINE_SAVE = '인터넷에 연결되지 않았어요 — 쓴 쪽지는 이 기기에 남아 있고, 연결되면 저장해요';
 const MISMATCH = '서버에 저장된 쪽지가 이 기기 것과 달라요 — 이 기기 것은 지우지 않았어요';
 const SAVE_FAIL = '쪽지를 저장하지 못했어요 — 잠시 뒤 다시 해 주세요';
+const OFFLINE_OPEN = '인터넷에 연결되지 않아 이 기기에 남은 쪽지를 열었어요 — 다른 기기에서 고친 내용은 연결된 뒤에 보여요';
+const CONFLICT_BODY = '둘 다 남기면 그쪽 것은 새 쪽지로 남아요 — 한쪽만 고르면 다른 쪽 내용은 사라져요';
+const BOTH_KEPT = '다른 기기에서 고친 것은 새 쪽지로 남겼어요';
 const nextTick = () => new Promise<void>((r) => setTimeout(r, 0));
 /** 칸(draftSync)은 제목 · 본문 꼴이다 — 쪽지는 title = 옮긴 문장 · body = 생각으로 넣는다. */
 const toDoc = (v: MarginView): SyncDoc => ({ id: v.id, title: v.quote ?? '', body: v.text, revision: v.revision });
@@ -104,6 +108,7 @@ export default function MarginNote() {
   const localId = useRef<string | null>(null); // 새 쪽지 칸(첫 저장 전)
   const newSlotChain = useRef<Promise<unknown>>(Promise.resolve());
   const creating = useRef<Promise<SaveOutcome> | null>(null);
+  const fromDevice = useRef(false); // 기존 쪽지를 서버 판 없이 이 기기 칸으로 열었다(REQ-392)
   const aiOnce = useRef(singleFlight()).current; // AI 보내기는 한 번에 하나 — 새 쪽지 첫 POST 중 두 번 눌러도 요청 하나(A1 리뷰 13)
 
   function applyText(t: { quote: string; text: string }) {
@@ -122,6 +127,12 @@ export default function MarginNote() {
     setHead((h) => (h ? { ...h, quoteSource: v.quoteSource } : h));
   }
 
+  /** 재료 줄(「재료 N개 중 M개」) · 내보내기 책 줄 · 캐시에 없던 제목 — 못 읽어도 쪽지는 쓴다 */
+  function takeMaterials(m: MaterialsView) {
+    setMaterials({ included: m.aiIncluded, excluded: m.aiExcluded });
+    setHead((h) => (h ? { ...h, bookTitle: m.book.title, bookLine: bookSourceLine(m.book) } : h));
+  }
+
   const load = useCallback(async () => {
     setLoadError(null);
     try {
@@ -136,44 +147,55 @@ export default function MarginNote() {
             id,
             noteEditBody({ field: fieldRef.current, quote: b.title, text: b.body, revision: b.revision, loadedQuote: loadedQuote.current, exported: b.exported }),
           );
-          serverRef.current = v;
-          loadedQuote.current = v.quote;
+          if (serverRef.current === null) {
+            takeServer(v); // 기기 칸으로 연 쪽지가 처음 서버에 닿았다 — 질문 기록 · 동의 · 남은 몫을 켠다(REQ-393)
+            setNotice((n) => (n?.message === OFFLINE_OPEN ? null : n));
+          } else {
+            serverRef.current = v;
+            loadedQuote.current = v.quote;
+          }
           // 서버는 생각 앞뒤 공백을 Java strip으로 걷는다(Story.edit) — 그 차이만이면 보낸 글을 그대로 둬 「서버와 달라요」를 띄우지 않는다
           return { ...toDoc(v), body: keptBody(b.body, v.text) };
         },
       });
+      const book = route.bookId === null ? null : cachedBook(measureStore.get()?.base?.d, route.bookId); // 오프라인에도 머리(REQ-391)
       if (route.noteId !== null) {
         const id = route.noteId;
         const v = await margins.get(id).catch(async (e) => {
           if (e instanceof ApiError && e.status === 404) await s.drop(id); // 지워진 쪽지 — 기기 칸도 버린다
+          if (e instanceof NetworkError) return null; // 연결 없음 · 10초 응답 없음 — 이 기기 칸으로 연다(REQ-392)
           throw e;
         });
-        fieldRef.current = hasQuoteField(v);
-        const slot = await s.open(toDoc(v));
-        takeServer(v);
-        setHead({ bookTitle: v.bookTitle, bookLine: null, quoteSource: v.quoteSource, field: fieldRef.current });
+        const slot = v ? await s.open(toDoc(v)) : await s.local(id);
+        if (slot === null) throw new NetworkError(); // 이 기기에서 연 적 없는 쪽지 — 지금처럼 「다시 불러오기」
+        const h = v
+          ? { bookTitle: v.bookTitle, bookLine: null, quoteSource: v.quoteSource, field: hasQuoteField(v) }
+          : { ...cachedHead({ bookId: route.bookId, book, quote: slot.title }), quoteSource: null };
+        fieldRef.current = h.field;
+        if (v) takeServer(v);
+        setHead(h);
         setFocus(slot.focus);
         focusRef.current = slot.focus;
-        setMaxText(noteMaxLength(v.text));
+        setMaxText(noteMaxLength(v?.text ?? slot.body));
         applyText({ quote: slot.title, text: slot.body });
         sync.current = s; // 불러온 뒤에야 잡는다 — 불러오는 중 · 오류 뒤에 떠나면 정리가 일찍 빠진다(v1 순서 · A1 리뷰 1)
-        if (v.bookId !== null) {
-          // 재료 줄(「재료 N개 중 M개」)과 내보내기 책 줄 — 못 읽어도 쪽지는 쓴다
-          void library.materials(v.bookId).then(
-            (m) => {
-              setMaterials({ included: m.aiIncluded, excluded: m.aiExcluded });
-              setHead((h) => (h ? { ...h, bookLine: bookSourceLine(m.book) } : h));
-            },
-            () => undefined,
-          );
+        if (!v) {
+          fromDevice.current = true;
+          setNotice({ message: OFFLINE_OPEN }); // 흐름 안 한 번(REQ-392)
         }
-        if (slot.dirty) void save(); // 저장 안 된 기기 글이 서버보다 앞이다 — 바로 한 번 보낸다
+        const bookId = v ? v.bookId : route.bookId;
+        if (bookId !== null) void library.materials(bookId).then(takeMaterials, () => undefined); // 못 읽어도 쪽지는 쓴다
+        if (v && slot.dirty) void save(); // 저장 안 된 기기 글이 서버보다 앞이다 — 바로 한 번. 오프라인으로 열었으면 보내지 않는다(실패할 저장이 알림을 덮는다)
       } else if (route.bookId !== null) {
         sync.current = s; // 새 쪽지 — createFirst가 쓴다
-        const m = await library.materials(route.bookId);
         fieldRef.current = true;
-        setMaterials({ included: m.aiIncluded, excluded: m.aiExcluded });
-        setHead({ bookTitle: m.book.title, bookLine: bookSourceLine(m.book), quoteSource: null, field: true });
+        setHead({ ...cachedHead({ bookId: route.bookId, book, quote: '' }), quoteSource: null }); // 재료를 기다리지 않는다(REQ-391)
+        void library.materials(route.bookId).then(takeMaterials, (e) => {
+          if (e instanceof ApiError && e.status === 404) {
+            setHead(null); // 지운 책 — 지금처럼 「돌아가기」
+            setLoadError({ message: e.message, notFound: true });
+          }
+        });
       } else {
         sync.current = s;
         fieldRef.current = false; // 책 없는 새 쪽지 — 옮긴 문장 칸이 없다(J84)
@@ -210,7 +232,14 @@ export default function MarginNote() {
       // 판정 → 효과 → 돌아간 목록이 기다릴 약속(create가 실패하면 새 쪽지 칸이 남아 다음 실행에 보낸다 — J100)
       pendingLeave.set(
         runLeave(
-          leaveAction({ loaded: route.noteId === null || serverRef.current !== null, empty, waiting: waitingRef.current, noteId: noteId.current, creating: creating.current !== null }),
+          leaveAction({
+            loaded: route.noteId === null || serverRef.current !== null || fromDevice.current, // 기기 칸으로 연 쪽지는 편집기에 칸의 진짜 글이 있다
+            empty,
+            waiting: waitingRef.current,
+            noteId: noteId.current,
+            creating: creating.current !== null,
+            device: fromDevice.current && serverRef.current === null, // 그 방문에서 서버 판을 못 받았다 — 빈 쪽지도 지우지 않는다(REQ-395)
+          }),
           { dropNewSlot, createFirst, del: margins.delete, drop: s.drop, flush: (n) => s.flush(n), noteId: () => noteId.current },
         ),
       );
@@ -288,8 +317,10 @@ export default function MarginNote() {
   }
 
   function onOutcome(r: SaveOutcome) {
-    if (r.kind === 'saved') offlineShown.current = false;
-    else if (r.kind === 'mismatch') setNotice({ message: MISMATCH });
+    if (r.kind === 'saved') {
+      offlineShown.current = false;
+      setNotice((n) => (n?.message === OFFLINE_SAVE ? null : n)); // 실패 띠는 다음 성공에 걷는다(REQ-397)
+    } else if (r.kind === 'mismatch') setNotice({ message: MISMATCH });
     else if (r.kind === 'offline' && !offlineShown.current) {
       offlineShown.current = true;
       setNotice({ message: OFFLINE_SAVE });
@@ -338,13 +369,14 @@ export default function MarginNote() {
     if (conflictOpen.current) return;
     conflictOpen.current = true;
     Keyboard.dismiss();
-    Alert.alert('다른 기기에서 이 쪽지가 바뀌었어요', '한쪽만 남길 수 있어요 — 남기지 않은 쪽 내용은 사라져요', [
+    Alert.alert('다른 기기에서 이 쪽지가 바뀌었어요', CONFLICT_BODY, [
+      { text: '둘 다 남기기', isPreferred: true, onPress: () => void resolveConflict('both') },
+      { text: '이 기기 것 유지', onPress: () => void resolveConflict('mine') },
       { text: '그쪽 불러오기', onPress: () => void resolveConflict('theirs') },
-      { text: '이 기기 것 유지', isPreferred: true, onPress: () => void resolveConflict('mine') },
     ]);
   }
 
-  async function resolveConflict(which: 'theirs' | 'mine') {
+  async function resolveConflict(which: 'theirs' | 'mine' | 'both') {
     conflictOpen.current = false;
     const s = sync.current;
     const id = noteId.current;
@@ -352,8 +384,12 @@ export default function MarginNote() {
     try {
       const v = await margins.get(id);
       takeServer(v);
-      if (which === 'mine') {
-        onOutcome(await s.keepMine(id, toDoc(v)));
+      if (which !== 'theirs') {
+        const copy = which === 'both' ? copyOfNote(v) : null;
+        if (copy) await margins.add(copy); // 그쪽 판을 새 쪽지로 먼저 — 못 만들면 아래 catch(덮지 않는다 · 칸은 dirty 그대로 · 다음 저장이 다시 묻는다)
+        const r = await s.keepMine(id, toDoc(v));
+        onOutcome(r);
+        if (copy && (r.kind === 'saved' || r.kind === 'mismatch')) setNotice({ message: BOTH_KEPT });
         return;
       }
       const slot = await s.takeTheirs(id, toDoc(v));
@@ -371,9 +407,12 @@ export default function MarginNote() {
       let v = serverRef.current;
       if (!v) {
         // 새 쪽지 — 먼저 만들어야 동의 · 남은 몫을 안다(저장 실패는 save가 알린다)
-        await save();
+        const r = await save();
         v = serverRef.current;
-        if (!v) return;
+        if (!v) {
+          if (r?.kind === 'offline') setNotice({ message: AI_OFFLINE, tone: 'error' }); // 첫 저장 알림이 이미 떴어도 누른 데 답한다(REQ-396)
+          return;
+        }
       }
       if (!v.aiConsent && !consented) {
         pending.current = { step, focus: f };
@@ -515,7 +554,8 @@ export default function MarginNote() {
   }
 
   const rounds = note?.questions.rounds.length ?? 0;
-  const aiInput = { rounds, quote: quoteText, thought: thoughtText, boxes: 0 }; // 건 블로그 문장 박스는 B1부터
+  // 건 블로그 문장 박스는 B1부터. offline = 기기 칸으로 연 기존 쪽지(서버 판이 오면 note가 선다 — REQ-393)
+  const aiInput = { rounds, quote: quoteText, thought: thoughtText, boxes: 0, offline: route.noteId !== null && note === null };
   const ai = aiButton(aiInput);
   const again = note ? againArgs(note.questions) : null;
   const { title, placeholder } = noteHead({ bookTitle: head.bookTitle, field: head.field });
@@ -636,7 +676,9 @@ export default function MarginNote() {
                 label={ai.label}
                 disabled={ai.disabled}
                 busy={waiting !== null}
-                accessibilityHint={ai.step === 'FOLLOW' && ai.disabled && rounds < ROUNDS_MAX ? '내 생각을 한두 문장 쓰면 켜져요' : undefined}
+                accessibilityHint={
+                  aiInput.offline ? '인터넷에 연결된 뒤 쪽지를 다시 열면 켜져요' : ai.step === 'FOLLOW' && ai.disabled && rounds < ROUNDS_MAX ? '내 생각을 한두 문장 쓰면 켜져요' : undefined
+                }
                 onPress={() => void runAi(ai.step, focus)}
               />
             </View>

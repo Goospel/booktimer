@@ -570,7 +570,8 @@ test('재리뷰 G2 · confirmRemoveNote는 deleteNote에 userId를 넘긴다(nul
 const WIRES: { id: string; rel: string; needle: string; n: number; mutant: string }[] = [
   { id: 'M2b 옮긴 문장 칸 = hasQuoteField', rel: NOTE, needle: 'hasQuoteField(v)', n: 1, mutant: 'v.bookId !== null' },
   { id: 'M3d C2 띠 = quoteOnlyBand', rel: NOTE, needle: 'quoteOnlyBand(aiInput) ?', n: 1, mutant: 'true ?' },
-  { id: 'M7b 내보내기 책 줄 = bookSourceLine(재료 · 새 쪽지 둘)', rel: NOTE, needle: 'bookSourceLine(m.book)', n: 2, mutant: 'null' },
+  // 여백 오프라인 열기에서 재료 처리를 takeMaterials 한 곳으로 모았다(n 2 → 1 — 새 쪽지 머리는 캐시 머리 cachedHead가 먼저 그린다)
+  { id: 'M7b 내보내기 책 줄 = bookSourceLine(재료 — takeMaterials 한 곳)', rel: NOTE, needle: 'bookSourceLine(m.book)', n: 1, mutant: 'null' },
   { id: 'M9b AI 배지 = noteRow().ai', rel: join('components', 'NoteRow.tsx'), needle: 'r.ai ?', n: 1, mutant: 'true ?' },
   { id: 'M10b 책 없는 여백 = bookless 결과', rel: LIBRARY, needle: '.then(setBookless', n: 1, mutant: '.then(() => setBookless([])' },
   // 타이머 오프라인 T2 — 시작 · 정지의 시간 문(REQ-372) · 다른 모드 재는 중 판정(REQ-357 — 보이는 대시보드) · 위젯 판정 계기(REQ-370)
@@ -596,6 +597,14 @@ const WIRES: { id: string; rel: string; needle: string; n: number; mutant: strin
   { id: 'REQ-366 포커스된 측정 탭만 알림을 가져간다', rel: join('lib', 'useMeasureDashboard.ts'), needle: 'if (!focused) return;', n: 1, mutant: '' },
   { id: 'REQ-372 훅의 시간 문 = TOGGLE_GAP_MS', rel: join('lib', 'useMeasureDashboard.ts'), needle: 'repeatGate(TOGGLE_GAP_MS)', n: 1, mutant: 'repeatGate(0)' },
   { id: 'REQ-378 화면 보이는 값 = confirmedOf(가게)', rel: join('lib', 'useMeasureDashboard.ts'), needle: 'confirmedOf(snap)', n: 1, mutant: 'true' },
+  // 여백 오프라인 열기(설계 2026-11-10 §8 T7) — 쪽지 화면이 오프라인 갈래를 실제로 쓰는가
+  { id: 'REQ-392 오프라인 열기 알림', rel: NOTE, needle: 'setNotice({ message: OFFLINE_OPEN })', n: 1, mutant: '' },
+  { id: 'REQ-393 질문 끄기 입력', rel: NOTE, needle: 'offline: route.noteId !== null && note === null', n: 1, mutant: 'offline: false' },
+  { id: 'REQ-393 꺼진 단추 힌트', rel: NOTE, needle: "aiInput.offline ? '인터넷에 연결된 뒤 쪽지를 다시 열면 켜져요'", n: 1, mutant: "false ? '인터넷에 연결된 뒤 쪽지를 다시 열면 켜져요'" },
+  { id: 'REQ-395 떠날 때 device', rel: NOTE, needle: 'device: fromDevice.current && serverRef.current === null', n: 1, mutant: 'device: false' },
+  { id: 'REQ-396 오프라인 질문 누름', rel: NOTE, needle: "if (r?.kind === 'offline') setNotice({ message: AI_OFFLINE, tone: 'error' })", n: 1, mutant: '' },
+  { id: 'REQ-397 실패 띠 걷기', rel: NOTE, needle: 'setNotice((n) => (n?.message === OFFLINE_SAVE ? null : n))', n: 1, mutant: '' },
+  { id: 'REQ-394 셋째 단추', rel: NOTE, needle: "{ text: '둘 다 남기기', isPreferred: true, onPress: () => void resolveConflict('both') }", n: 1, mutant: '' },
 ];
 test.each(WIRES)('A1 리뷰 15 · $id — 화면이 lib 판정을 쓴다(돌연변이를 심으면 잡힌다)', ({ rel, needle, n, mutant }) => {
   const s = srcOf(rel);
@@ -603,6 +612,58 @@ test.each(WIRES)('A1 리뷰 15 · $id — 화면이 lib 판정을 쓴다(돌연�
   const mutated = s.replace(needle, mutant); // 첫 자리 하나만 — 둘인 줄은 하나만 바뀌어도 잡혀야 한다
   expect(mutated).not.toBe(s); // 심기가 실제로 들어갔다
   expect(count(mutated, needle)).not.toBe(n);
+});
+
+// 여백 오프라인 열기(설계 2026-11-10 §5.1 · §5.2 · §5.3 · §5.4) — 갈래 본문 · 순서는 한 줄 WIRES로 못 본다
+const newBookOpens = (s: string) => {
+  const branch = bodyOf(s, 'else if (route.bookId !== null)');
+  return (
+    branch.includes("cachedHead({ bookId: route.bookId, book, quote: '' })") &&
+    !/await library\.materials\(/.test(branch) &&
+    branch.includes('setLoadError({ message: e.message, notFound: true })')
+  );
+};
+test('REQ-391 · 새 책 쪽지는 재료를 기다리지 않고 캐시 머리로 연다 · 재료 404면 「돌아가기」 오류(await를 심으면 잡힌다)', () => {
+  const s = srcOf(NOTE);
+  expect(newBookOpens(s)).toBe(true);
+  expect(newBookOpens(cut(s, 'else if (route.bookId !== null) {', 'else if (route.bookId !== null) {\n const m = await library.materials(route.bookId);'))).toBe(false);
+  expect(newBookOpens(cut(s, 'setLoadError({ message: e.message, notFound: true })', 'undefined'))).toBe(false);
+  expect(newBookOpens(cut(s, "cachedHead({ bookId: route.bookId, book, quote: '' })", "{ bookTitle: null, bookLine: null, field: true }"))).toBe(false);
+});
+
+const OPEN_FROM_DEVICE = [
+  'if (e instanceof NetworkError) return null;',
+  'v ? await s.open(toDoc(v)) : await s.local(id)',
+  'if (slot === null) throw new NetworkError();',
+  'if (v && slot.dirty) void save();',
+];
+test('REQ-392 · 기존 쪽지 읽기가 연결 실패면 기기 칸으로 · 칸이 없으면 지금 오류 · 오프라인으로 열면 열 때 보내지 않는다(빼면 잡힌다)', () => {
+  const s = srcOf(NOTE);
+  const branch = (x: string) => bodyOf(x, 'if (route.noteId !== null)');
+  for (const needle of OPEN_FROM_DEVICE) {
+    expect([needle, count(branch(s), needle)]).toEqual([needle, 1]);
+    expect([needle, count(branch(cut(s, needle, '')), needle)]).toEqual([needle, 0]);
+  }
+});
+
+test('REQ-393 · 기기 칸으로 연 쪽지가 처음 서버에 닿으면 put 어댑터가 서버 판을 받는다(빼면 잡힌다)', () => {
+  const firstServer = (s: string) => {
+    const put = bodyOf(s, 'put: async');
+    return count(put, 'if (serverRef.current === null) {') === 1 && /if \(serverRef\.current === null\) \{\s*takeServer\(v\);/.test(put);
+  };
+  const s = srcOf(NOTE);
+  expect(firstServer(s)).toBe(true);
+  expect(firstServer(cut(s, 'if (serverRef.current === null) {', 'if (false) {'))).toBe(false);
+});
+
+const makesCopyFirst = (s: string) => {
+  const body = bodyOf(s, 'async function resolveConflict(');
+  const add = body.indexOf('await margins.add(copy)');
+  return add > 0 && body.indexOf('s.keepMine(') > add;
+};
+test('REQ-394 · 둘 다 남기기는 새 쪽지를 먼저 만들고 이 기기 것을 덮는다(순서를 바꾸면 잡힌다)', () => {
+  expect(makesCopyFirst(srcOf(NOTE))).toBe(true);
+  expect(makesCopyFirst('async function resolveConflict(which) {\n const r = await s.keepMine(id, toDoc(v));\n if (copy) await margins.add(copy);\n }')).toBe(false);
 });
 
 // T2 재확인 남은 지적 — 위 WIRES는 한 줄만 본다. 로그아웃 확인 앞 어느 줄에서도 보내기 · 읽기를 기다리지 않고(REQ-364 — 지하에서 무반응 10초),
