@@ -43,7 +43,24 @@ import {
   type SyncDoc,
 } from '../../lib/draftSync';
 import { bookSourceLine, buildNoteExport, shouldMarkExported } from '../../lib/exportText';
-import { cachedBook, cachedHead, canSaveMargin, copyOfNote, hasQuoteField, keptBody, leaveAction, noteEditBody, noteHead, noteMaxLength, noteRoute, pendingLeave, runLeave, savedNotice } from '../../lib/marginSave';
+import {
+  cachedBook,
+  cachedHead,
+  canSaveMargin,
+  hasQuoteField,
+  keepConflict,
+  keptBody,
+  leaveAction,
+  noteEditBody,
+  noteHead,
+  noteMaxLength,
+  noteRoute,
+  pendingLeave,
+  readNote,
+  runLeave,
+  savedNotice,
+  staleEmpty,
+} from '../../lib/marginSave';
 import { measureStore } from '../../lib/measureSync';
 import { againArgs, bandHint, pickPatch, waitingText } from '../../lib/questions';
 import { quoteOnlyBand } from '../../lib/quoteOnlyBand';
@@ -60,6 +77,7 @@ const SAVE_FAIL = '쪽지를 저장하지 못했어요 — 잠시 뒤 다시 해
 const OFFLINE_OPEN = '인터넷에 연결되지 않아 이 기기에 남은 쪽지를 열었어요 — 다른 기기에서 고친 내용은 연결된 뒤에 보여요';
 const CONFLICT_BODY = '둘 다 남기면 그쪽 것은 새 쪽지로 남아요 — 한쪽만 고르면 다른 쪽 내용은 사라져요';
 const BOTH_KEPT = '다른 기기에서 고친 것은 새 쪽지로 남겼어요';
+const GONE: NonNullable<NoticeState> = { message: '쪽지를 찾을 수 없어요', tone: 'error', action: { label: '돌아가기', onPress: () => router.back() } };
 const nextTick = () => new Promise<void>((r) => setTimeout(r, 0));
 /** 칸(draftSync)은 제목 · 본문 꼴이다 — 쪽지는 title = 옮긴 문장 · body = 생각으로 넣는다. */
 const toDoc = (v: MarginView): SyncDoc => ({ id: v.id, title: v.quote ?? '', body: v.text, revision: v.revision });
@@ -109,6 +127,7 @@ export default function MarginNote() {
   const newSlotChain = useRef<Promise<unknown>>(Promise.resolve());
   const creating = useRef<Promise<SaveOutcome> | null>(null);
   const fromDevice = useRef(false); // 기존 쪽지를 서버 판 없이 이 기기 칸으로 열었다(REQ-392)
+  const gone = useRef(false); // 다른 곳에서 지운 쪽지 — 칸을 버렸다(J97 · P7). 그 뒤 저장은 칸이 없어 늘 실패다
   const aiOnce = useRef(singleFlight()).current; // AI 보내기는 한 번에 하나 — 새 쪽지 첫 POST 중 두 번 눌러도 요청 하나(A1 리뷰 13)
 
   function applyText(t: { quote: string; text: string }) {
@@ -125,6 +144,7 @@ export default function MarginNote() {
     roundsRef.current = v.questions.rounds.length;
     setNote(v);
     setHead((h) => (h ? { ...h, quoteSource: v.quoteSource } : h));
+    setNotice((n) => (n?.message === OFFLINE_OPEN ? null : n)); // 서버 판이 섰다 = 연결됐다 — 자동저장 첫 PUT · 충돌 GET 어느 길이든 오프라인 열기 알림을 걷는다(REQ-393)
   }
 
   /** 재료 줄(「재료 N개 중 M개」) · 내보내기 책 줄 · 캐시에 없던 제목 — 못 읽어도 쪽지는 쓴다 */
@@ -148,10 +168,9 @@ export default function MarginNote() {
             noteEditBody({ field: fieldRef.current, quote: b.title, text: b.body, revision: b.revision, loadedQuote: loadedQuote.current, exported: b.exported }),
           );
           if (serverRef.current === null) {
-            takeServer(v); // 기기 칸으로 연 쪽지가 처음 서버에 닿았다 — 질문 기록 · 동의 · 남은 몫을 켠다(REQ-393)
-            setNotice((n) => (n?.message === OFFLINE_OPEN ? null : n));
+            takeServer(v); // 기기 칸으로 연 쪽지가 처음 서버에 닿았다 — 질문 기록 · 동의 · 남은 몫을 켜고 오프라인 열기 알림을 걷는다(REQ-393)
           } else {
-            serverRef.current = v;
+            serverRef.current = v; // 그 뒤 PUT은 판 · 옮긴 문장만 — 질문 응답과 엇갈려 기록이 줄지 않게(설계 §5.3)
             loadedQuote.current = v.quote;
           }
           // 서버는 생각 앞뒤 공백을 Java strip으로 걷는다(Story.edit) — 그 차이만이면 보낸 글을 그대로 둬 「서버와 달라요」를 띄우지 않는다
@@ -161,13 +180,10 @@ export default function MarginNote() {
       const book = route.bookId === null ? null : cachedBook(measureStore.get()?.base?.d, route.bookId); // 오프라인에도 머리(REQ-391)
       if (route.noteId !== null) {
         const id = route.noteId;
-        const v = await margins.get(id).catch(async (e) => {
-          if (e instanceof ApiError && e.status === 404) await s.drop(id); // 지워진 쪽지 — 기기 칸도 버린다
-          if (e instanceof NetworkError) return null; // 연결 없음 · 10초 응답 없음 — 이 기기 칸으로 연다(REQ-392)
-          throw e;
-        });
-        const slot = v ? await s.open(toDoc(v)) : await s.local(id);
+        const v = await readNote(() => margins.get(id), () => s.drop(id)); // 연결 실패만 null — 이 기기 칸으로 연다(REQ-392) · 404는 칸을 버리고 던진다(J97)
+        let slot = v ? await s.open(toDoc(v)) : await s.local(id);
         if (slot === null) throw new NetworkError(); // 이 기기에서 연 적 없는 쪽지 — 지금처럼 「다시 불러오기」
+        if (v && staleEmpty(slot, v.revision, v.questions.rounds.length)) slot = await s.takeTheirs(id, toDoc(v)); // 다른 기기가 고친 뒤의 빈 칸 — 그리기 전에 서버 글로(REQ-398)
         const h = v
           ? { bookTitle: v.bookTitle, bookLine: null, quoteSource: v.quoteSource, field: hasQuoteField(v) }
           : { ...cachedHead({ bookId: route.bookId, book, quote: slot.title }), quoteSource: null };
@@ -243,7 +259,7 @@ export default function MarginNote() {
           { dropNewSlot, createFirst, del: margins.delete, drop: s.drop, flush: (n) => s.flush(n), noteId: () => noteId.current },
         ),
       );
-      if (!(empty && !waitingRef.current) && edited.current) savedNotice.mark();
+      if (!(empty && !waitingRef.current) && edited.current && !gone.current) savedNotice.mark(); // 버린 글을 남겼다고 하지 않는다(REQ-399)
     };
   }, []);
 
@@ -317,6 +333,11 @@ export default function MarginNote() {
   }
 
   function onOutcome(r: SaveOutcome) {
+    if (gone.current || r.kind === 'gone') {
+      gone.current = true;
+      setNotice(GONE); // 다음 실패 문구로 덮지 않는다 — 입력칸을 눌러 걷혀도 다음 저장이 다시 띄운다(REQ-399)
+      return;
+    }
     if (r.kind === 'saved') {
       offlineShown.current = false;
       setNotice((n) => (n?.message === OFFLINE_SAVE ? null : n)); // 실패 띠는 다음 성공에 걷는다(REQ-397)
@@ -325,7 +346,6 @@ export default function MarginNote() {
       offlineShown.current = true;
       setNotice({ message: OFFLINE_SAVE });
     } else if (r.kind === 'conflict') askConflict();
-    else if (r.kind === 'gone') setNotice({ message: '쪽지를 찾을 수 없어요', tone: 'error', action: { label: '돌아가기', onPress: () => router.back() } });
     else if (r.kind === 'error') setNotice({ message: r.message, tone: 'error' });
   }
 
@@ -377,26 +397,32 @@ export default function MarginNote() {
   }
 
   async function resolveConflict(which: 'theirs' | 'mine' | 'both') {
-    conflictOpen.current = false;
     const s = sync.current;
     const id = noteId.current;
-    if (!s || id === null) return;
+    if (!s || id === null) {
+      conflictOpen.current = false;
+      return;
+    }
     try {
       const v = await margins.get(id);
       takeServer(v);
       if (which !== 'theirs') {
-        const copy = which === 'both' ? copyOfNote(v) : null;
-        if (copy) await margins.add(copy); // 그쪽 판을 새 쪽지로 먼저 — 못 만들면 아래 catch(덮지 않는다 · 칸은 dirty 그대로 · 다음 저장이 다시 묻는다)
-        const r = await s.keepMine(id, toDoc(v));
-        onOutcome(r);
-        if (copy && (r.kind === 'saved' || r.kind === 'mismatch')) setNotice({ message: BOTH_KEPT });
+        const res = await keepConflict(which, v, { mine: () => s.local(id), add: margins.add, keepMine: () => s.keepMine(id, toDoc(v)) });
+        conflictOpen.current = false; // 처리 중 이 기기 옛 판 자동저장의 409는 삼켰다(칸은 dirty — 덮기가 함께 올린다) · 덮기가 받은 409는 아래 onOutcome이 다시 연다(REQ-394)
+        if (!res.ok) setNotice({ message: res.cause instanceof NetworkError ? res.cause.message : SAVE_FAIL, tone: 'error' }); // 아무것도 덮지 않았다 — 서버 문구(합친 글의 400 등)는 내보내지 않는다
+        else {
+          onOutcome(res.r);
+          if (res.both) setNotice({ message: BOTH_KEPT });
+        }
         return;
       }
       const slot = await s.takeTheirs(id, toDoc(v));
+      conflictOpen.current = false;
       applyText({ quote: slot.title, text: slot.body });
       restoreCaret.current = Math.min(caret.current, slot.body.length);
       setEditorKey((k) => k + 1);
     } catch (e) {
+      conflictOpen.current = false;
       setNotice({ message: failText(e, '쪽지를 불러오지 못했어요 — 잠시 뒤 다시 해 주세요'), tone: 'error' });
     }
   }
@@ -425,24 +451,19 @@ export default function MarginNote() {
       setSheet(null);
       setWaiting(step);
       waitingRef.current = true;
-      let gone = false;
       const r = await sendAiStep({
         blur: () => {
           quoteInput.current?.blur();
           textInput.current?.blur();
         },
-        flush: async () => {
-          const o = await save();
-          if (o?.kind === 'gone') gone = true;
-          return revisionOrThrow(o);
-        },
+        flush: async () => revisionOrThrow(await save()),
         post: (revision) => margins.ai(id, { step, revision, focus: step === 'ASK' ? null : f }),
         reload: () => margins.get(id),
         roundsBefore: roundsRef.current,
       });
       setWaiting(null);
       waitingRef.current = false;
-      if (gone) return; // save()가 띄운 「쪽지를 찾을 수 없어요 + 돌아가기」를 남긴다
+      if (gone.current) return; // save()가 띄운 「쪽지를 찾을 수 없어요 + 돌아가기」를 남긴다(그 방문의 앞 저장이 지웠어도 — REQ-399)
       if (r.kind === 'done') {
         roundsRef.current = r.questions.rounds.length;
         const cur = serverRef.current;

@@ -601,10 +601,22 @@ const WIRES: { id: string; rel: string; needle: string; n: number; mutant: strin
   { id: 'REQ-392 오프라인 열기 알림', rel: NOTE, needle: 'setNotice({ message: OFFLINE_OPEN })', n: 1, mutant: '' },
   { id: 'REQ-393 질문 끄기 입력', rel: NOTE, needle: 'offline: route.noteId !== null && note === null', n: 1, mutant: 'offline: false' },
   { id: 'REQ-393 꺼진 단추 힌트', rel: NOTE, needle: "aiInput.offline ? '인터넷에 연결된 뒤 쪽지를 다시 열면 켜져요'", n: 1, mutant: "false ? '인터넷에 연결된 뒤 쪽지를 다시 열면 켜져요'" },
+  { id: 'REQ-395 떠날 때 loaded(기기 칸으로 연 쪽지도 판정한다)', rel: NOTE, needle: 'loaded: route.noteId === null || serverRef.current !== null || fromDevice.current', n: 1, mutant: 'loaded: route.noteId === null || serverRef.current !== null' },
   { id: 'REQ-395 떠날 때 device', rel: NOTE, needle: 'device: fromDevice.current && serverRef.current === null', n: 1, mutant: 'device: false' },
   { id: 'REQ-396 오프라인 질문 누름', rel: NOTE, needle: "if (r?.kind === 'offline') setNotice({ message: AI_OFFLINE, tone: 'error' })", n: 1, mutant: '' },
   { id: 'REQ-397 실패 띠 걷기', rel: NOTE, needle: 'setNotice((n) => (n?.message === OFFLINE_SAVE ? null : n))', n: 1, mutant: '' },
   { id: 'REQ-394 셋째 단추', rel: NOTE, needle: "{ text: '둘 다 남기기', isPreferred: true, onPress: () => void resolveConflict('both') }", n: 1, mutant: '' },
+  // 여백 오프라인 열기 리뷰 반영(addendum 2026-11-10 §7 T4c · T4e)
+  { id: 'REQ-394 둘 다 남기기 갈래(그쪽 불러오기로 떨어지지 않는다)', rel: NOTE, needle: "if (which !== 'theirs') {", n: 1, mutant: "if (which === 'mine') {" },
+  { id: 'REQ-394 둘 다 남긴 뒤 알림 = 둘 다 섰을 때만', rel: NOTE, needle: 'if (res.both) setNotice({ message: BOTH_KEPT })', n: 1, mutant: 'setNotice({ message: BOTH_KEPT })' },
+  {
+    id: 'REQ-394 새 쪽지 만들기 실패 = 덮지 않았다는 저장 실패 문구(서버 문구를 내보내지 않는다)',
+    rel: NOTE,
+    needle: "if (!res.ok) setNotice({ message: res.cause instanceof NetworkError ? res.cause.message : SAVE_FAIL, tone: 'error' })",
+    n: 1,
+    mutant: "if (!res.ok) setNotice({ message: failText(res.cause, SAVE_FAIL), tone: 'error' })",
+  },
+  { id: 'REQ-399 지운 쪽지에 「여백을 남겼어요」 없음', rel: NOTE, needle: 'edited.current && !gone.current) savedNotice.mark()', n: 1, mutant: 'edited.current) savedNotice.mark()' },
 ];
 test.each(WIRES)('A1 리뷰 15 · $id — 화면이 lib 판정을 쓴다(돌연변이를 심으면 잡힌다)', ({ rel, needle, n, mutant }) => {
   const s = srcOf(rel);
@@ -617,22 +629,29 @@ test.each(WIRES)('A1 리뷰 15 · $id — 화면이 lib 판정을 쓴다(돌연�
 // 여백 오프라인 열기(설계 2026-11-10 §5.1 · §5.2 · §5.3 · §5.4) — 갈래 본문 · 순서는 한 줄 WIRES로 못 본다
 const newBookOpens = (s: string) => {
   const branch = bodyOf(s, 'else if (route.bookId !== null)');
+  const head = branch.indexOf("setHead({ ...cachedHead({ bookId: route.bookId, book, quote: '' })");
   return (
-    branch.includes("cachedHead({ bookId: route.bookId, book, quote: '' })") &&
+    head >= 0 && branch.indexOf('library.materials(route.bookId)') > head && // 머리를 재료 요청보다 먼저 — .then 안으로 옮기면 오프라인에서 「불러오는 중」에 멈춘다
     !/await library\.materials\(/.test(branch) &&
-    branch.includes('setLoadError({ message: e.message, notFound: true })')
+    // 404면 머리를 걷어야 오류 화면이 그려진다(오류는 !head 안에서만) — [^\n]*는 줄 끝 주석 · \r을 먹는다
+    /if \(e instanceof ApiError && e\.status === 404\) \{\s*setHead\(null\);[^\n]*\s*setLoadError\(\{ message: e\.message, notFound: true \}\);/.test(branch)
   );
 };
-test('REQ-391 · 새 책 쪽지는 재료를 기다리지 않고 캐시 머리로 연다 · 재료 404면 「돌아가기」 오류(await를 심으면 잡힌다)', () => {
+test('REQ-391 · 새 책 쪽지는 재료를 기다리지 않고 캐시 머리를 먼저 그린다 · 재료 404면 머리를 걷고 「돌아가기」 오류(await · .then 안으로 옮기기 · 404 조건을 바꾸면 잡힌다)', () => {
   const s = srcOf(NOTE);
   expect(newBookOpens(s)).toBe(true);
   expect(newBookOpens(cut(s, 'else if (route.bookId !== null) {', 'else if (route.bookId !== null) {\n const m = await library.materials(route.bookId);'))).toBe(false);
   expect(newBookOpens(cut(s, 'setLoadError({ message: e.message, notFound: true })', 'undefined'))).toBe(false);
   expect(newBookOpens(cut(s, "cachedHead({ bookId: route.bookId, book, quote: '' })", "{ bookTitle: null, bookLine: null, field: true }"))).toBe(false);
+  const HEAD = "setHead({ ...cachedHead({ bookId: route.bookId, book, quote: '' }), quoteSource: null });";
+  expect(newBookOpens(cut(cut(s, HEAD, ''), 'void library.materials(route.bookId).then(takeMaterials, (e) => {', `void library.materials(route.bookId).then((m) => { ${HEAD} takeMaterials(m); }, (e) => {`))).toBe(false); // 머리를 재료 성공 안으로
+  expect(newBookOpens(cut(s, /(e\.status === 404\) \{\s*)setHead\(null\);/, '$1'))).toBe(false); // 머리를 안 걷으면 오류 화면이 안 그려진다
+  expect(newBookOpens(cut(s, /e\.status === 404\) \{(\s*setHead\(null\))/, 'e.status === 999) {$1'))).toBe(false);
+  expect(newBookOpens(cut(s, /if \(e instanceof ApiError && e\.status === 404\) \{(\s*setHead\(null\))/, 'if (true) {$1'))).toBe(false); // 연결 실패에도 머리를 걷는다(오프라인 열기가 깨진다)
 });
 
 const OPEN_FROM_DEVICE = [
-  'if (e instanceof NetworkError) return null;',
+  'const v = await readNote(() => margins.get(id), () => s.drop(id));', // 문장 전체 · 세미콜론까지 — .catch 꼬리로 lib 정책(readNote)을 우회하면 잡힌다
   'v ? await s.open(toDoc(v)) : await s.local(id)',
   'if (slot === null) throw new NetworkError();',
   'if (v && slot.dirty) void save();',
@@ -646,24 +665,120 @@ test('REQ-392 · 기존 쪽지 읽기가 연결 실패면 기기 칸으로 · �
   }
 });
 
-test('REQ-393 · 기기 칸으로 연 쪽지가 처음 서버에 닿으면 put 어댑터가 서버 판을 받는다(빼면 잡힌다)', () => {
+test('REQ-392 · 395 · 서버 판 없이 열 때만 기기 칸 표시를 세우고 알림을 띄운다(빼거나 조건을 뒤집으면 잡힌다)', () => {
+  const s = srcOf(NOTE);
+  const FLAG = /if \(!v\) \{\s*fromDevice\.current = true;\s*setNotice\(\{ message: OFFLINE_OPEN \}\);/;
+  const branch = (x: string) => bodyOf(x, 'if (route.noteId !== null)');
+  expect(FLAG.test(branch(s))).toBe(true);
+  expect(FLAG.test(branch(cut(s, 'fromDevice.current = true;', '')))).toBe(false);
+  expect(FLAG.test(branch(cut(s, /if \(!v\) \{(\s*)fromDevice/, 'if (v) {$1fromDevice')))).toBe(false);
+});
+
+test('REQ-393 · 기기 칸으로 연 쪽지가 처음 서버에 닿으면 put 어댑터가 서버 판을 받는다 · 그 뒤 PUT은 판 · 옮긴 문장만 바꾼다(빼거나 다 받게 하면 잡힌다)', () => {
   const firstServer = (s: string) => {
     const put = bodyOf(s, 'put: async');
-    return count(put, 'if (serverRef.current === null) {') === 1 && /if \(serverRef\.current === null\) \{\s*takeServer\(v\);/.test(put);
+    return count(put, 'if (serverRef.current === null) {') === 1 && /if \(serverRef\.current === null\) \{\s*takeServer\(v\);/.test(put) &&
+      count(put, 'takeServer(') === 1 && !put.includes('setNote(') && !put.includes('roundsRef.current ='); // 그 뒤 PUT은 질문 기록을 다시 세우지 않는다(설계 §5.3)
   };
   const s = srcOf(NOTE);
   expect(firstServer(s)).toBe(true);
   expect(firstServer(cut(s, 'if (serverRef.current === null) {', 'if (false) {'))).toBe(false);
+  const ELSE = /\} else \{\s*serverRef\.current = v;\s*loadedQuote\.current = v\.quote;\s*\}/;
+  expect(firstServer(cut(s, ELSE, '} else {\n takeServer(v);\n }'))).toBe(false);
+  expect(firstServer(cut(s, ELSE, '} else {\n serverRef.current = v;\n loadedQuote.current = v.quote;\n setNote(v);\n }'))).toBe(false);
 });
 
-const makesCopyFirst = (s: string) => {
-  const body = bodyOf(s, 'async function resolveConflict(');
-  const add = body.indexOf('await margins.add(copy)');
-  return add > 0 && body.indexOf('s.keepMine(') > add;
-};
-test('REQ-394 · 둘 다 남기기는 새 쪽지를 먼저 만들고 이 기기 것을 덮는다(순서를 바꾸면 잡힌다)', () => {
-  expect(makesCopyFirst(srcOf(NOTE))).toBe(true);
-  expect(makesCopyFirst('async function resolveConflict(which) {\n const r = await s.keepMine(id, toDoc(v));\n if (copy) await margins.add(copy);\n }')).toBe(false);
+test('REQ-397 · 실패 띠 걷기는 onOutcome의 saved 갈래 안에 있다(갈래 밖으로 옮기면 잡힌다)', () => {
+  const s = srcOf(NOTE);
+  const W = 'setNotice((n) => (n?.message === OFFLINE_SAVE ? null : n))';
+  const inSaved = (x: string) => count(bodyOf(x, "if (r.kind === 'saved')"), W) === 1; // 파일 전체 1회는 WIRES 「REQ-397 실패 띠 걷기」가 본다 — 둘이 함께면 나머지 자리는 0
+  const ERR = "else if (r.kind === 'error') setNotice({ message: r.message, tone: 'error' });";
+  const OFF = 'setNotice({ message: OFFLINE_SAVE });';
+  expect(inSaved(s)).toBe(true);
+  expect(inSaved(cut(cut(s, W + ';', ''), ERR, ERR + '\n' + W + ';'))).toBe(false); // onOutcome 끝으로
+  expect(inSaved(cut(cut(s, W + ';', ''), OFF, OFF + '\n' + W + ';'))).toBe(false); // offline 갈래로
+});
+
+// 여백 오프라인 열기 리뷰 반영(addendum 2026-11-10 §7 T4) — 순서 · 자리 · 묶음은 한 줄 WIRES로 못 본다.
+// 옛 「둘 다 남기기는 새 쪽지를 먼저 만들고…」 문자열 순서 가드는 지웠다 — 순서는 lib keepConflict로 옮겨 marginSave.test가 호출 순서를 행동으로 본다.
+test('REQ-398 · 다른 기기가 고친 뒤의 빈 칸은 그리기 전에 서버 글로 바꾼다(빼거나 그린 뒤로 옮기면 잡힌다)', () => {
+  const s = srcOf(NOTE);
+  const L = 'if (v && staleEmpty(slot, v.revision, v.questions.rounds.length)) slot = await s.takeTheirs(id, toDoc(v));';
+  const before = (x: string) => {
+    const b = bodyOf(x, 'if (route.noteId !== null)');
+    const at = b.indexOf(L);
+    return count(b, L) === 1 && at > b.indexOf('if (slot === null) throw new NetworkError();') && at < b.indexOf('applyText(');
+  };
+  expect(before(s)).toBe(true);
+  expect(before(cut(s, L, ''))).toBe(false);
+  expect(before(cut(cut(s, L, ''), 'sync.current = s;', `${L}\n sync.current = s;`))).toBe(false); // 그린 뒤 — 편집기는 빈 채로 남아 떠날 때 지운다
+});
+
+test('REQ-394 · 충돌 처리 효과 묶음 — 칸 읽기 · 새 쪽지 만들기 · 덮기를 그대로 넘긴다(만들지 않는 add · 빈 칸 읽기를 심으면 잡힌다)', () => {
+  const s = srcOf(NOTE);
+  const DEPS = 'keepConflict(which, v, { mine: () => s.local(id), add: margins.add, keepMine: () => s.keepMine(id, toDoc(v)) })';
+  const inResolve = (x: string) => count(bodyOf(x, 'async function resolveConflict('), DEPS);
+  expect(inResolve(s)).toBe(1);
+  for (const [from, to] of [
+    ['add: margins.add', 'add: async () => undefined'],
+    ['mine: () => s.local(id)', 'mine: async () => null'],
+  ]) {
+    const m = s.replace(from, to);
+    expect([from, m !== s, inResolve(m)]).toEqual([from, true, 0]);
+  }
+});
+
+test('REQ-394 · 충돌 처리가 끝나기 전엔 창을 다시 열지 않는다 · 끝나면 어느 길로든 되돌린다 — 처리 중 옛 판 자동저장의 409로 창이 겹치지 않고, 만들기 · GET이 실패한 뒤에도 409를 삼키지 않는다(옛 자리로 되돌리거나 한 자리라도 빼면 잡힌다)', () => {
+  const s = srcOf(NOTE);
+  const late = (x: string) => {
+    const b = bodyOf(x, 'async function resolveConflict(');
+    const keep = b.indexOf('await keepConflict(');
+    const reset = b.indexOf('conflictOpen.current = false', keep);
+    return (
+      !/^\{\s*conflictOpen\.current = false;/.test(b) &&
+      keep > b.indexOf('await margins.get(') &&
+      reset > keep &&
+      reset < b.indexOf('if (!res.ok)') && // 만들기 실패 갈래도 되돌린다
+      reset < b.indexOf('onOutcome(res.r)') && // 덮기가 받은 진짜 409(onOutcome)보다 먼저
+      count(b, 'conflictOpen.current = false') === 4 // 일찍 끝남 · 효과 뒤 · 그쪽 불러오기 뒤 · catch — 하나라도 빠지면 그 길 뒤 그 방문 내내 창이 안 뜬다
+    );
+  };
+  expect(late(s)).toBe(true);
+  expect(late(cut(s, /(async function resolveConflict\([^)]*\) \{)/, '$1\n    conflictOpen.current = false;'))).toBe(false); // 리뷰 때 꼴(함수 첫 줄)
+  const noReset = cut(s, /(const res = await keepConflict\([^\n]*\n)\s*conflictOpen\.current = false;/, '$1');
+  expect(late(cut(noReset, 'onOutcome(res.r);', 'conflictOpen.current = false;\n onOutcome(res.r);'))).toBe(false); // else 안으로 — 만들기 실패 갈래에서 빠진다
+  expect(late(cut(s, /(\} catch \(e\) \{)\s*conflictOpen\.current = false;/, '$1'))).toBe(false); // catch 되돌리기 지움 — GET 실패 뒤
+});
+
+test('REQ-393 · 서버 판이 처음 서는 모든 길(자동저장 첫 PUT · 충돌 GET)에서 오프라인 열기 알림을 걷는다 — takeServer 한 곳(지우거나 put 어댑터로 되돌리면 잡힌다)', () => {
+  const s = srcOf(NOTE);
+  const W = 'setNotice((n) => (n?.message === OFFLINE_OPEN ? null : n));';
+  const once = (x: string) => count(bodyOf(x, 'function takeServer('), W) === 1 && count(x, W) === 1;
+  expect(once(s)).toBe(true);
+  const gone = cut(s, W, '');
+  expect(once(gone)).toBe(false);
+  expect(once(cut(gone, /(if \(serverRef\.current === null\) \{\s*takeServer\(v\);)/, `$1\n${W}`))).toBe(false); // put 어댑터로 되돌림
+});
+
+test('REQ-399 · 다른 곳에서 지운 쪽지는 그 뒤 저장 결과가 「찾을 수 없어요」를 덮지 않는다(빼면 잡힌다)', () => {
+  const s = srcOf(NOTE);
+  const STICKY = /function onOutcome\(r: SaveOutcome\) \{\s*if \(gone\.current \|\| r\.kind === 'gone'\) \{\s*gone\.current = true;\s*setNotice\(GONE\);\s*return;\s*\}/;
+  expect(STICKY.test(s)).toBe(true);
+  expect(STICKY.test(cut(s, "if (gone.current || r.kind === 'gone') {", "if (r.kind === 'gone') {"))).toBe(false);
+  expect(STICKY.test(cut(s, 'gone.current = true;', ''))).toBe(false);
+});
+
+test('REQ-399 · 질문 실패가 「찾을 수 없어요」를 덮지 않는다 — 막는 줄은 runAi에서 기다림을 푼 뒤 · 결과 갈래 앞(빼거나 보내기 앞으로 옮기면 잡힌다)', () => {
+  const s = srcOf(NOTE);
+  const STOP = 'if (gone.current) return;';
+  const guarded = (x: string) => {
+    const b = bodyOf(x, 'function runAi(');
+    const at = b.indexOf(STOP);
+    return count(x, STOP) === 1 && at > b.indexOf('setWaiting(null)') && at < b.indexOf("if (r.kind === 'done')");
+  };
+  expect(guarded(s)).toBe(true);
+  expect(guarded(cut(s, STOP, 'if (false) return;'))).toBe(false);
+  expect(guarded(cut(cut(s, STOP, ''), 'const r = await sendAiStep(', `${STOP}\n const r = await sendAiStep(`))).toBe(false); // 보내기 앞 — 보내기 중 첫 404의 오류 문구가 덮고, 이미 지운 쪽지면 기다림이 안 풀린다
 });
 
 // T2 재확인 남은 지적 — 위 WIRES는 한 줄만 본다. 로그아웃 확인 앞 어느 줄에서도 보내기 · 읽기를 기다리지 않고(REQ-364 — 지하에서 무반응 10초),
