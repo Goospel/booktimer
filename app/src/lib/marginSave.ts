@@ -1,7 +1,8 @@
 // 여백 쪽지 판정(책생글 「여백 + 블로그」 A1 — 설계 §5.1 · F1 사양 §4.3 · §4.4). 화면은 이 함수들의 결과를 그대로 그린다.
 // 「공개 책이에요」 확인 단계는 없다 — 여백은 나만 본다(D1 · REQ-223). 저장은 자동이라 [남기기]도 없다(F1 §8-3).
+import { NetworkError } from '../api/client';
 import type { BookOption, CreateMargin, Dashboard, EditMargin, MarginSummary, MarginView } from '../api/types';
-import { isGone } from './draftSync';
+import { isGone, type SaveOutcome, type Slot, shouldDiscard } from './draftSync';
 import { bookSourceLine, buildNoteExport } from './exportText';
 import { dateLabel } from './format';
 
@@ -82,13 +83,61 @@ export function cachedHead(p: { bookId: number | null; book: { title: string; au
   return { bookTitle: p.book?.title ?? '', bookLine: p.book ? bookSourceLine(p.book) : null, field: true };
 }
 
-/** (Q1 가) 「둘 다 남기기」의 새 쪽지 몸 — 그쪽(서버) 판(REQ-394). 책 없는 쪽지는 옮긴 문장 · 출처를 생각 앞에(만들기 400). 남길 글이 없으면 null. */
-export function copyOfNote(v: Pick<MarginView, 'bookId' | 'quote' | 'quoteSource' | 'text'>): CreateMargin | null {
+/**
+ * (Q1 가) 「둘 다 남기기」의 새 쪽지 몸 — 그쪽(서버) 판(REQ-394). 책 없는 쪽지는 옮긴 문장 · 출처를 생각 앞에(만들기 400). 남길 글이 없으면 null.
+ * mine = 이 기기 칸 — 그쪽 판이 그와 같으면(응답을 잃은 저장의 재전송이 낸 거짓 409) 남길 다른 판이 없다 → null. 서버가 걷는 앞뒤 공백은 javaStrip으로 맞춘다(Story.normalizeQuote · normalizeText).
+ */
+export function copyOfNote(v: Pick<MarginView, 'bookId' | 'quote' | 'quoteSource' | 'text'>, mine?: { title: string; body: string } | null): CreateMargin | null {
+  if (mine && (v.quote ?? '') === javaStrip(mine.title) && v.text === javaStrip(mine.body)) return null;
   const quote = has(v.quote) ? v.quote : null;
   if (quote === null && v.text.trim() === '') return null;
   if (v.bookId !== null) return { bookId: v.bookId, quote, text: v.text };
   return { bookId: null, quote: null, text: buildNoteExport({ quote, quoteSource: v.quoteSource, text: v.text }) };
 }
+
+/**
+ * (Q1 가) 충돌 창 「이 기기 것 유지」 · 「둘 다 남기기」의 효과(REQ-394 — runLeave와 같은 꼴: 판정은 여기, 화면은 묶음만 넘긴다).
+ * 둘 다면 그쪽 판을 새 쪽지로 **먼저** 만들고, 못 만들면 덮지 않는다 — keepMine을 부르지 않는다(칸은 dirty · 옛 판이라 다음 저장이 다시 묻는다).
+ * both = 새 쪽지를 만들었고 덮기도 섰다(saved · mismatch) — 「새 쪽지로 남겼어요」를 띄울 때(설계 §5.4 ④).
+ */
+export async function keepConflict(
+  which: 'mine' | 'both',
+  v: Pick<MarginView, 'bookId' | 'quote' | 'quoteSource' | 'text'>,
+  d: { mine: () => Promise<{ title: string; body: string } | null>; add: (b: CreateMargin) => Promise<unknown>; keepMine: () => Promise<SaveOutcome> },
+): Promise<{ ok: true; r: SaveOutcome; both: boolean } | { ok: false; cause: unknown }> {
+  const copy = which === 'both' ? copyOfNote(v, await d.mine()) : null;
+  if (copy) {
+    try {
+      await d.add(copy);
+    } catch (cause) {
+      return { ok: false, cause };
+    }
+  }
+  const r = await d.keepMine();
+  return { ok: true, r, both: copy !== null && (r.kind === 'saved' || r.kind === 'mismatch') };
+}
+
+/**
+ * 기존 쪽지 읽기(REQ-392 · P3 · P7) — 연결 실패(10초 상한 포함)만 null(이 기기 칸으로 연다).
+ * 404(다른 곳에서 지움)면 칸을 버리고 던진다(J97 — 「돌아가기」). 그 밖(5xx · 401)은 칸을 두고 던진다(지금 그대로 — 「다시 불러오기」).
+ */
+export async function readNote(get: () => Promise<MarginView>, drop: () => Promise<unknown>): Promise<MarginView | null> {
+  try {
+    return await get();
+  } catch (e) {
+    if (isGone(e)) await drop();
+    if (e instanceof NetworkError) return null;
+    throw e;
+  }
+}
+
+/**
+ * 다른 기기가 고친 뒤의 빈 dirty 칸(REQ-398) — 오프라인에서 비우고 떠났거나(REQ-395 'none') 지우기가 연결 실패로 남은 칸.
+ * 잃을 글이 없다. 그대로 그리면 빈 쪽지는 PUT하지 않으므로(판 대조 409가 서지 않는다) 떠날 때 판 대조 없는 DELETE가 그쪽 글을 지운다.
+ * 받은 질문이 있으면 거짓 — 빈 PUT도 서버가 받아(원가 든 글 · Story.edit) 판 대조 409 → 충돌 창이 지금처럼 묻는다.
+ */
+export const staleEmpty = (slot: Pick<Slot, 'title' | 'body' | 'base' | 'dirty'>, revision: number, rounds: number): boolean =>
+  slot.dirty && slot.base !== revision && shouldDiscard({ title: slot.title, body: slot.body, rounds });
 
 /** 쪽지 화면 주소 — 책 없는 쪽지는 `none`, 기존 쪽지는 `?note=`(J75). */
 export function noteHref(bookId: number | null, noteId?: number): string {

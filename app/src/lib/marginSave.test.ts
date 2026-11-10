@@ -1,8 +1,9 @@
 // 여백 쪽지 판정(책생글 「여백 + 블로그」 A1 — 설계 §5.1 · F1 사양 §4.3 · §4.4). 화면은 이 함수들을 그대로 그린다.
-import { ApiError, NetworkError } from '../api/client';
-import type { MarginSummary } from '../api/types';
+import { ApiError, NetworkError, UnauthorizedError } from '../api/client';
+import type { MarginSummary, MarginView } from '../api/types';
+import type { SaveOutcome } from './draftSync';
 import * as marginSave from './marginSave';
-import { booklessSection, cachedBook, cachedHead, canSaveMargin, copyOfNote, hasQuoteField, javaStrip, keptBody, LEAVE_WAIT_MS, type LeaveAction, leaveAction, noteEditBody, runLeave, noteHead, noteHref, noteMaxLength, noteRoute, noteRow, pendingLeave, savedNotice, showsThought } from './marginSave';
+import { booklessSection, cachedBook, cachedHead, canSaveMargin, copyOfNote, hasQuoteField, javaStrip, keptBody, LEAVE_WAIT_MS, type LeaveAction, leaveAction, keepConflict, noteEditBody, readNote, runLeave, staleEmpty, noteHead, noteHref, noteMaxLength, noteRoute, noteRow, pendingLeave, savedNotice, showsThought } from './marginSave';
 
 test('REQ-210 · 입력칸 상한 = max(10,000, 불러온 글 길이)', () => {
   expect(noteMaxLength('')).toBe(10_000);
@@ -380,4 +381,102 @@ test('REQ-394 · 둘 다 남기기의 새 쪽지 몸 — 책 쪽지는 옮긴 �
   expect(copyOfNote({ bookId: null, quote: null, quoteSource: null, text: '책 없는 생각' })).toEqual({ bookId: null, quote: null, text: '책 없는 생각' });
   expect(copyOfNote({ bookId: 4, quote: ' ', quoteSource: null, text: ' \n' })).toBeNull();
   expect(copyOfNote({ bookId: null, quote: null, quoteSource: '『데미안』', text: '' })).toBeNull();
+});
+
+// 여백 오프라인 열기 리뷰 반영(addendum §5.E) — 쪽지 읽기 정책. 화면은 이 함수 한 줄만 부른다
+test('REQ-392 · 기존 쪽지 읽기 — 연결 실패만 null(이 기기 칸으로) · 404는 칸을 버리고 던진다(J97) · 5xx · 401은 칸을 두고 던진다(P3) · 읽히면 서버 판', async () => {
+  const v = { id: 9, revision: 3 } as unknown as MarginView;
+  const run = async (get: () => Promise<MarginView>) => {
+    const drops: string[] = [];
+    const out = await readNote(get, async () => void drops.push('drop')).then(
+      (r) => ({ ok: r }),
+      (e: unknown) => ({ err: e }),
+    );
+    return { out, drops };
+  };
+  const fail = (e: unknown) => async (): Promise<MarginView> => {
+    throw e;
+  };
+  expect(await run(async () => v)).toEqual({ out: { ok: v }, drops: [] });
+  expect(await run(fail(new NetworkError()))).toEqual({ out: { ok: null }, drops: [] });
+  const gone = new ApiError(404, '글을 찾을 수 없어요');
+  expect(await run(fail(gone))).toEqual({ out: { err: gone }, drops: ['drop'] });
+  const e500 = new ApiError(500, '요청에 실패했어요 (500)');
+  expect(await run(fail(e500))).toEqual({ out: { err: e500 }, drops: [] });
+  const e401 = new UnauthorizedError();
+  expect(await run(fail(e401))).toEqual({ out: { err: e401 }, drops: [] });
+});
+// 리뷰 반영 R3-1(addendum §5.D) — 오프라인에서 비운 칸을 그사이 다른 기기가 고쳤으면, 그리기 전에 서버 글로(빈 칸 + 판 대조 없는 DELETE가 그쪽 글을 지운다)
+test('REQ-398 · 다른 기기가 고친 뒤의 빈 dirty 칸만 참 — 같은 판 · dirty 아님 · 글 있음 · 받은 질문 있음은 거짓', () => {
+  const blank = { title: ' ', body: '\n', base: 1, dirty: true };
+  expect(staleEmpty(blank, 2, 0)).toBe(true);
+  expect(staleEmpty(blank, 1, 0)).toBe(false); // 같은 판 — 지금 규칙(빈 쪽지가 보이고 떠나면 지운다 · 원 설계 §7-9)
+  expect(staleEmpty({ ...blank, dirty: false }, 2, 0)).toBe(false);
+  expect(staleEmpty({ ...blank, body: '이 기기 글' }, 2, 0)).toBe(false);
+  expect(staleEmpty({ ...blank, title: '옮긴 문장' }, 2, 0)).toBe(false);
+  expect(staleEmpty(blank, 2, 1)).toBe(false); // 받은 질문 — 빈 PUT도 서버가 받아 409 창이 묻는다
+});
+
+// 리뷰 반영 kb F3(addendum §5.H) — 응답을 잃은 저장의 재전송이 낸 거짓 409: 그쪽 판 = 이 기기 칸이면 남길 다른 판이 없다
+const theirs = { bookId: 4, quote: '그쪽 문장', quoteSource: null, text: '그쪽 생각' };
+test('REQ-394 · 그쪽 판이 이 기기 칸과 같으면(서버가 걷는 앞뒤 공백 차이 포함) 새 쪽지 몸은 null — 응답을 잃은 저장의 거짓 409 · 한 글자라도 다르면 지금 몸', () => {
+  const body = { bookId: 4, quote: '그쪽 문장', text: '그쪽 생각' };
+  expect(copyOfNote(theirs, { title: '그쪽 문장', body: '그쪽 생각' })).toBeNull();
+  expect(copyOfNote(theirs, { title: ' 그쪽 문장\n', body: '그쪽 생각  ' })).toBeNull();
+  expect(copyOfNote(theirs, { title: '그쪽 문장', body: '이 기기 생각' })).toEqual(body);
+  expect(copyOfNote(theirs, null)).toEqual(body);
+});
+
+describe('REQ-394 · keepConflict — 충돌 창의 이 기기 것 유지 · 둘 다 남기기', () => {
+  const other = { title: '이 기기 문장', body: '이 기기 생각' };
+  const same = { title: '그쪽 문장', body: '그쪽 생각' };
+  const run = async (
+    which: 'mine' | 'both',
+    p: { v?: typeof theirs; mine?: { title: string; body: string } | null; add?: () => Promise<unknown>; keep?: SaveOutcome } = {},
+  ) => {
+    const calls: string[] = [];
+    const res = await keepConflict(which, p.v ?? theirs, {
+      mine: async () => {
+        calls.push('mine');
+        return p.mine === undefined ? other : p.mine;
+      },
+      add: async (b) => {
+        calls.push(`add ${b.text}`);
+        if (p.add) await p.add();
+      },
+      keepMine: async () => {
+        calls.push('keepMine');
+        return p.keep ?? { kind: 'saved', revision: 8 };
+      },
+    });
+    return { calls, res };
+  };
+
+  test('REQ-394 · 둘 다 남기기 — 그쪽 판을 새 쪽지로 먼저 만들고 이 기기 것을 덮는다 · 덮기가 서면(saved · mismatch)만 「새 쪽지로 남겼어요」', async () => {
+    expect(await run('both')).toEqual({ calls: ['mine', 'add 그쪽 생각', 'keepMine'], res: { ok: true, r: { kind: 'saved', revision: 8 }, both: true } });
+    expect((await run('both', { keep: { kind: 'mismatch', revision: 8 } })).res).toEqual({ ok: true, r: { kind: 'mismatch', revision: 8 }, both: true });
+    for (const keep of [{ kind: 'conflict' }, { kind: 'offline' }, { kind: 'error', message: '쪽지를 저장하지 못했어요' }, { kind: 'gone' }] as SaveOutcome[]) {
+      expect([keep.kind, (await run('both', { keep })).res]).toEqual([keep.kind, { ok: true, r: keep, both: false }]);
+    }
+  });
+
+  test('REQ-394 · 새 쪽지를 못 만들면 덮지 않는다 — 연결 실패 · 5xx · 400이면 덮기 0회 · 그 오류를 돌려준다', async () => {
+    for (const cause of [new NetworkError(), new ApiError(500, '요청에 실패했어요 (500)'), new ApiError(400, '생각은 10,200자까지 쓸 수 있어요')]) {
+      const { calls, res } = await run('both', {
+        add: async () => {
+          throw cause;
+        },
+      });
+      expect([cause.message, calls, res]).toEqual([cause.message, ['mine', 'add 그쪽 생각'], { ok: false, cause }]);
+    }
+  });
+
+  test('REQ-394 · 이 기기 것 유지는 새 쪽지를 만들지 않는다 · 그쪽 판이 비었거나 이 기기 칸과 같으면 둘 다 남기기도 덮기만', async () => {
+    expect(await run('mine')).toEqual({ calls: ['keepMine'], res: { ok: true, r: { kind: 'saved', revision: 8 }, both: false } });
+    expect(await run('both', { mine: same })).toEqual({ calls: ['mine', 'keepMine'], res: { ok: true, r: { kind: 'saved', revision: 8 }, both: false } });
+    expect(await run('both', { v: { ...theirs, quote: null, text: ' ' } as unknown as typeof theirs, mine: other })).toEqual({
+      calls: ['mine', 'keepMine'],
+      res: { ok: true, r: { kind: 'saved', revision: 8 }, both: false },
+    });
+  });
 });
