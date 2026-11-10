@@ -4,7 +4,7 @@
 //           취소 케이스가 그 배치를 못 박는 계측기다(뒤에 두면 isPublic 이 이미 true 라 깨진다).
 import { describe, test, expect, vi, beforeEach, afterEach } from 'vitest';
 import { nextTick } from 'vue';
-import { mount, type VueWrapper } from '@vue/test-utils';
+import { mount, flushPromises, type VueWrapper } from '@vue/test-utils';
 import BooksApp from './BooksApp.vue';
 import MarginPanel from '../shared/story/MarginPanel.vue';
 
@@ -103,6 +103,64 @@ describe('BooksApp 검색 결과 — 이미 책장에 있는 책', () => {
         expect(rows[0].find('.book-add-form').exists()).toBe(false);
         expect(rows[1].find('.shelf-owned-badge').exists()).toBe(false);
         expect(rows[1].find('.book-add-form').exists()).toBe(true);
+    });
+});
+
+/** 서버가 검색 제공자 장애에 주는 503 평문(REQ-384) — `json()`은 던진다(평문이라 파싱 불가). */
+function searchDown503() {
+    return {
+        ok: false, status: 503,
+        text: async () => '책 검색이 지금 안 돼요 — 잠시 뒤 다시 찾아 주세요',
+        json: async () => { throw new SyntaxError('x'); },
+    } as unknown as Response;
+}
+
+describe('BooksApp 검색 — 제공자 장애(503)', () => {
+    test('REQ-388 · 책장 검색이 503이면 오류 줄을 보이고 「검색 결과가 없습니다」를 보이지 않는다', async () => {
+        vi.mocked(fetch).mockResolvedValueOnce(okJson({ books: [], searchEnabled: true }));
+        const wrapper = mount(BooksApp, { attachTo: document.body });
+        await vi.waitFor(() => expect(wrapper.find('.book-search-form').exists()).toBe(true));
+
+        vi.mocked(fetch).mockResolvedValueOnce(searchDown503());
+        await wrapper.find('.book-search-form input').setValue('데미안');
+        await wrapper.find('.book-search-form').trigger('submit');
+
+        await vi.waitFor(() => expect(wrapper.find('.alert-error').exists()).toBe(true));
+        expect(wrapper.find('.alert-error').text()).toBe('책 검색이 지금 안 돼요 — 잠시 뒤 다시 찾아 주세요');
+        expect(wrapper.text()).not.toContain('검색 결과가 없습니다');
+    });
+
+    const okSearch = () => okJson({
+        results: [{ title: '데미안', author: '헤세', isbn13: 'x', coverUrl: null,
+            publisher: null, purchaseLink: null, category: null, pubDate: null, owned: false }],
+    });
+
+    async function mountAndSubmit(...responses: Response[]): Promise<VueWrapper> {
+        vi.mocked(fetch).mockResolvedValueOnce(okJson({ books: [], searchEnabled: true }));
+        const wrapper = mount(BooksApp, { attachTo: document.body });
+        await vi.waitFor(() => expect(wrapper.find('.book-search-form').exists()).toBe(true));
+        await wrapper.find('.book-search-form input').setValue('데미안');
+        for (const res of responses) {
+            vi.mocked(fetch).mockResolvedValueOnce(res);
+            await wrapper.find('.book-search-form').trigger('submit');
+            await flushPromises(); // fetch · json 두 단계가 끝나 화면이 그 응답을 그린 뒤 다음 응답으로
+        }
+        return wrapper;
+    }
+
+    test('REQ-388 · 결과가 있던 뒤 503이면 이전 결과 행을 지우고 오류 줄만 보인다', async () => {
+        const wrapper = await mountAndSubmit(okSearch(), searchDown503());
+
+        expect(wrapper.find('.alert-error').text()).toBe('책 검색이 지금 안 돼요 — 잠시 뒤 다시 찾아 주세요');
+        expect(wrapper.findAll('.book-row')).toHaveLength(0);
+        expect(wrapper.text()).not.toContain('검색 결과가 없습니다');
+    });
+
+    test('REQ-388 · 503 뒤 다시 검색해 결과가 나오면 오류 줄이 사라진다', async () => {
+        const wrapper = await mountAndSubmit(searchDown503(), okSearch());
+
+        expect(wrapper.findAll('.book-row')).toHaveLength(1);
+        expect(wrapper.find('.alert-error').exists()).toBe(false);
     });
 });
 
