@@ -626,7 +626,9 @@ class WritingAiServiceTest {
         String sent = material.getValue();
         assertThat(sent).contains("건 블로그 문장: 먼저 붙인 박스 글\n건 블로그 문장: 나중에 붙인 박스 글\n메모: 지금 쪽지의 생각")
                 .contains("같은 책 다른 쪽지") // 다른 쪽지의 생각은 배경 재료로 실린다(J34) — 박스 글만 빠진다
-                .doesNotContain("다른 쪽지의 박스 글"); // REQ-289 「두 박스 글(붙인 순서)」도 이 줄이 잰다 — label = 붙인 순서
+                .doesNotContain("다른 쪽지의 박스 글");
+        // 지금 쪽지의 박스는 지금 쪽지 블록에만 — 다른 쪽지 블록에 되풀이되지 않는다(처리방침 6-3 :306 · 돌연변이 M25)
+        assertThat(sent.split("건 블로그 문장: ", -1)).as("「건 블로그 문장:」 줄 = 지금 쪽지의 박스 둘").hasSize(3);
     }
 
     /** 올린 글 하나 — 한 문단 한 줄의 문장들(sid는 이 시험 안에서 유일). */
