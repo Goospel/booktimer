@@ -1,6 +1,9 @@
 package com.booktimer.user;
 
 import com.booktimer.auth.ApiTokenRepository;
+import com.booktimer.blog.BlogPostRepository;
+import com.booktimer.blog.BlogSentenceRepository;
+import com.booktimer.blog.BlogSentenceRevRepository;
 import com.booktimer.block.BlockRepository;
 import com.booktimer.chat.ChatMessageRepository;
 import com.booktimer.chat.ChatRoomRepository;
@@ -72,6 +75,9 @@ public class AccountService {
     private final ChatMessageRepository chatMessageRepository;
     private final ChatRoomRepository chatRoomRepository;
     private final WritingDraftRepository writingDraftRepository;
+    private final BlogPostRepository blogPostRepository;
+    private final BlogSentenceRepository blogSentenceRepository;
+    private final BlogSentenceRevRepository blogSentenceRevRepository;
     private final SessionInvalidator sessionInvalidator;
     private final PasswordEncoder passwordEncoder;
     private final GoogleAccountResolver googleAccountResolver;
@@ -103,6 +109,9 @@ public class AccountService {
                           ChatMessageRepository chatMessageRepository,
                           ChatRoomRepository chatRoomRepository,
                           WritingDraftRepository writingDraftRepository,
+                          BlogPostRepository blogPostRepository,
+                          BlogSentenceRepository blogSentenceRepository,
+                          BlogSentenceRevRepository blogSentenceRevRepository,
                           SessionInvalidator sessionInvalidator,
                           PasswordEncoder passwordEncoder,
                           GoogleAccountResolver googleAccountResolver) {
@@ -133,6 +142,9 @@ public class AccountService {
         this.chatMessageRepository = chatMessageRepository;
         this.chatRoomRepository = chatRoomRepository;
         this.writingDraftRepository = writingDraftRepository;
+        this.blogPostRepository = blogPostRepository;
+        this.blogSentenceRepository = blogSentenceRepository;
+        this.blogSentenceRevRepository = blogSentenceRevRepository;
         this.sessionInvalidator = sessionInvalidator;
         this.passwordEncoder = passwordEncoder;
         this.googleAccountResolver = googleAccountResolver;
@@ -419,6 +431,9 @@ public class AccountService {
         chatRoomRepository.deleteByMember(user);
         storyLikeRepository.deleteByUser(user);         // 내가 남에게 누른 좋아요 (story_like.user_id FK)
         storyLikeRepository.deleteByStoryUser(user);    // 내 글에 달린 남의 좋아요 — 내 글보다 앞
+        blogSentenceRevRepository.deleteBySentencePostUser(user); // blog_post.user_id FK — 유저보다 앞 · 문장 · 판이 글보다 앞
+        blogSentenceRepository.deleteByPostUser(user);
+        blogPostRepository.deleteByUser(user);
         storyRepository.deleteByUser(user);            // 내가 여백에 남긴 글 — story.book_id 때문에 책보다 앞
         writingDraftRepository.deleteByUser(user);     // 앱 글 원장 — writing_draft.book_id·user_id FK 때문에 책·유저보다 앞
         bookRepository.deleteByUser(user);
