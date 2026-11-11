@@ -590,6 +590,9 @@ class AppBlogQuoteApiTest {
         refresh(c, 987_654_321L).andExpect(status().isNotFound());
         refresh(c, goneBox).andExpect(status().isNotFound()).andExpect(content().string("인용을 찾을 수 없어요"));
         refresh(b, goneBox).andExpect(status().isConflict()).andExpect(content().string("원문이 지워졌어요"));
+        // 원 글쓴이와 차단 관계인 남 — 소유 404가 차단 403보다 먼저(돌연변이 M41: 차단 검사를 소유 판정 앞으로 옮기면 403)
+        blockRepository.saveAndFlush(Block.of(user("q239i"), user("q239ic")));
+        refresh(c, postBox).andExpect(status().isNotFound());
         assertThat(boxRow(postBox).getText()).isEqualTo("봄에는 꽃이 핀다.");
         assertThat(boxRow(noteBox).getText()).isEqualTo("봄에는 꽃이 핀다.");
         refresh(b, postBox).andExpect(status().isOk()).andExpect(jsonPath("$.text").value("봄에는 꽃이 활짝 핀다."));
@@ -800,6 +803,31 @@ class AppBlogQuoteApiTest {
 
         call(delete("/api/app/blog/posts/" + src), a).andExpect(status().isNoContent());
         assertThat(draftQuote(b, mine, 0).get("attribution")).isEqualTo("닉_q209t · 「처음 제목」");
+    }
+
+    @Test
+    @DisplayName("REQ-209 · 원 글쓴이와 차단 관계인 독자 · 가린 원 글엔 출처 제목이 인용 때 것 · 이름은 지금 것(양성 대조: 그 밖의 독자는 지금 제목)")
+    void blockedReaderAndHiddenSourceGetSnapshotTitle() throws Exception {
+        String a = ready("q209h");
+        String b = ready("q209hb");
+        String c = ready("q209hc");
+        String d = ready("q209hd");
+        long src = published(a, "처음 제목", "봄에는 꽃이 핀다.");
+        List<String> s = sidsOf(a, src);
+        long mine = create(b, "내 글", "내 문장.");
+        box(b, mine, blog(src, s.get(0), s.get(0)));
+        place(b, mine, "내 문장.\n⟦인용 1⟧");
+        republish(a, src, "바뀐 제목", "봄에는 꽃이 핀다.");
+        blockRepository.saveAndFlush(Block.of(user("q209h"), user("q209hc")));
+        call(get("/api/app/blog/posts/" + mine), d)
+                .andExpect(jsonPath("$.blocks[1].quote.attribution").value("닉_q209h · 「바뀐 제목」")); // 양성 대조
+        call(get("/api/app/blog/posts/" + mine), c)
+                .andExpect(jsonPath("$.blocks[1].quote.attribution").value("닉_q209h · 「처음 제목」")); // 차단 → 인용 때 제목 · 이름은 지금 것
+
+        hide(src);
+        republish(a, src, "가린 뒤 바꾼 제목", "봄에는 꽃이 핀다."); // 가린 글도 글쓴이는 다시 올릴 수 있다
+        call(get("/api/app/blog/posts/" + mine), d)
+                .andExpect(jsonPath("$.blocks[1].quote.attribution").value("닉_q209h · 「처음 제목」")); // deploy-F6
     }
 
     // ── REQ-247 구간 만들기 ─────────────────────────────────────────────────

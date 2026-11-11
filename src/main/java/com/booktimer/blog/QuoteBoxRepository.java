@@ -39,18 +39,22 @@ public interface QuoteBoxRepository extends JpaRepository<QuoteBox, Long> {
     @Query("delete from QuoteBox q where q.ownerType = :t and q.ownerId = :id")
     void deleteByOwner(@Param("t") Owner ownerType, @Param("id") Long ownerId);
 
-    /** 탈퇴 정리 — 내 글 · 내 쪽지가 가진 박스. 글 · 쪽지보다 앞이어야 하위 질의가 주인을 찾는다(AccountService.purge). */
+    /**
+     * 탈퇴 정리 — 내 글 · 내 쪽지가 가진 박스. 글 · 쪽지보다 앞이어야 하위 질의가 주인을 찾는다(AccountService.purge).
+     * 하위 질의 하나씩 두 문장 — OR로 묶으면 MySQL이 semijoin을 못 해 quote_box 전체를 훑고 잠근다(B1a deleteByPostUser 꼴 · §16 AUTH-5).
+     */
     default void deleteOwnedBy(User user) {
-        deleteOwnedBy(user, Owner.POST, Owner.NOTE);
+        deleteOwnedByPostsOf(user, Owner.POST);
+        deleteOwnedByNotesOf(user, Owner.NOTE);
     }
 
     @Modifying(flushAutomatically = true, clearAutomatically = true)
-    @Query("""
-            delete from QuoteBox q
-            where (q.ownerType = :post and q.ownerId in (select p.id from BlogPost p where p.user = :user))
-               or (q.ownerType = :note and q.ownerId in (select s.id from com.booktimer.story.Story s where s.user = :user))
-            """)
-    void deleteOwnedBy(@Param("user") User user, @Param("post") Owner post, @Param("note") Owner note);
+    @Query("delete from QuoteBox q where q.ownerType = :t and q.ownerId in (select p.id from BlogPost p where p.user = :user)")
+    void deleteOwnedByPostsOf(@Param("user") User user, @Param("t") Owner post);
+
+    @Modifying(flushAutomatically = true, clearAutomatically = true)
+    @Query("delete from QuoteBox q where q.ownerType = :t and q.ownerId in (select s.id from com.booktimer.story.Story s where s.user = :user)")
+    void deleteOwnedByNotesOf(@Param("user") User user, @Param("t") Owner note);
 
     /**
      * 탈퇴 정리 — 남의 박스에 남은 원 글쓴이 참조를 비운다(설계 B2 줄 「원문 참조 null(C4)」 · 비평 L6). 보기는 「원문 지워짐」과 같고

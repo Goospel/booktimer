@@ -26,3 +26,6 @@ create table quote_box (
     primary key (id),
     constraint uq_quote_box_owner_label unique (owner_type, owner_id, label)
 );
+
+-- 탈퇴 정리(detachSourceUser — where source_user_id = ?)가 표 전체를 훑지 않게(MySQL REPEATABLE READ는 훑은 행을 다 잠근다 — 계획 §16 AUTH-5).
+create index idx_quote_box_source_user on quote_box (source_user_id);

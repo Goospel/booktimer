@@ -320,14 +320,15 @@ public class QuoteBoxService {
         return out;
     }
 
-    /** §6.7 BLOG 행 — 차단 관계면 판정 셋 null · 가린 원 글이면 null · false · 원 글 없음 · 전부 지움이면 null · true. */
+    /** §6.7 BLOG 행 — 차단 관계면 판정 셋 null · 가린 원 글이면 null · false · 원 글 없음 · 전부 지움이면 null · true. 차단 · 가림 · 원 글 없음이면 제목은 인용 때 것(§16 AUTH-2 · deploy-F6). */
     private QuoteBoxView blogView(QuoteBox q, User viewer, BlogPost post, User author, Map<Long, PostSentences> sentences,
                                   Map<Long, Boolean> blocked) {
-        // 제목: 원 글이 있고 인용할 수 있으면 지금 올린 제목, 아니면 인용(반영) 때 제목 — 가린 글의 바뀐 제목을 내보내지 않는다
-        String title = post != null && post.quotable() ? post.getTitle() : q.getAttribution();
-        String attribution = (author == null ? GONE_USER : author.getNickname()) + " · 「" + title + "」";
         boolean cut = author != null && !author.getId().equals(viewer.getId())
                 && blocked.computeIfAbsent(author.getId(), k -> blockService.isBlockedBetween(viewer, author));
+        // 제목: 원 글이 이 독자에게 열려 있으면(있음 ∧ 인용 가능 ∧ 차단 관계 아님) 지금 올린 제목, 아니면 인용(반영) 때 제목 —
+        // 가린 글 · 차단 관계인 독자에게 바뀐 제목을 내보내지 않는다(§16). 이름은 늘 지금 이름(결정 2)
+        String title = post != null && post.quotable() && !cut ? post.getTitle() : q.getAttribution();
+        String attribution = (author == null ? GONE_USER : author.getNickname()) + " · 「" + title + "」";
         if (cut) {
             return view(q, attribution, null, null, null, null);
         }

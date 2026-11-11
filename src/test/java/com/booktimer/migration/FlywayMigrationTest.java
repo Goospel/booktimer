@@ -333,6 +333,22 @@ class FlywayMigrationTest {
                 .isPositive();
     }
 
+    /**
+     * V107 — 탈퇴 정리({@code detachSourceUser — where source_user_id = ?})가 quote_box 전체를 훑지 않게. 엔티티엔 색인
+     * 선언이 없어 메인 스위트로는 안 보이고, 운영에 V107이 들어간 뒤엔 V107 안에서 못 고친다 — V91과 같은 까닭.
+     */
+    @Test
+    @DisplayName("B1b · V107: source_user_id가 선두 컬럼인 색인이 있다(탈퇴 정리가 quote_box 전체를 훑지 않게)")
+    void v107_indexes_quote_box_source_user() {
+        assertThat(jdbcTemplate.queryForObject("""
+                SELECT COUNT(*) FROM INFORMATION_SCHEMA.INDEX_COLUMNS
+                WHERE UPPER(TABLE_NAME) = 'QUOTE_BOX' AND UPPER(COLUMN_NAME) = 'SOURCE_USER_ID'
+                  AND ORDINAL_POSITION = 1
+                """, Integer.class))
+                .as("source_user_id가 선두 컬럼인 색인이 있어야 탈퇴 정리가 표 전체를 훑고 잠그지 않는다(MySQL REPEATABLE READ)")
+                .isPositive();
+    }
+
     // ── 토스 미니앱(V61) — users.toss_user_key 유니크 + api_token·toss_link_code 스키마↔엔티티 일치 ──
 
     @Test
