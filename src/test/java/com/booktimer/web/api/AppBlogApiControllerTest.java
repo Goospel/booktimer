@@ -593,21 +593,26 @@ class AppBlogApiControllerTest {
     private static final Set<String> BLOCKED = Set.of(
             "POST /api/app/blog/posts", "PUT /api/app/blog/posts/{id}", "POST /api/app/blog/posts/{id}/publish",
             "PUT /api/app/blog/me");
-    private static final Set<String> OPEN = Set.of();
+    /** 내 데이터를 지우는 길은 목록과 무관하게 늘 연다(§4.8 — readsAndDeletesStayOpen이 200을 잰다). */
+    private static final Set<String> OPEN = Set.of("DELETE /api/app/blog/posts/{id}");
 
     @Test
-    @DisplayName("REQ-244 · /api/app/blog의 POST · PUT 경로 = 막는 목록 ∪ 열어 둔 목록")
+    @DisplayName("REQ-244 · /api/app/blog의 쓰기 경로(GET · HEAD · OPTIONS 밖 전부) = 막는 목록 ∪ 열어 둔 목록")
     void writeRoutesAreAllAccountedFor() {
         Set<String> routes = new HashSet<>();
-        handlerMapping.getHandlerMethods().keySet().forEach(info -> info.getPatternValues().forEach(p ->
-                info.getMethodsCondition().getMethods().forEach(m -> {
-                    String method = m.name();
-                    boolean blog = p.startsWith("/api/app/blog/") && (method.equals("POST") || method.equals("PUT"));
-                    boolean marginQuote = p.startsWith("/api/app/margins/") && p.contains("/quotes") && method.equals("POST");
-                    if (blog || marginQuote) {
-                        routes.add(method + " " + p);
-                    }
-                })));
+        handlerMapping.getHandlerMethods().keySet().forEach(info -> info.getPatternValues().forEach(p -> {
+            Set<String> methods = new HashSet<>();
+            info.getMethodsCondition().getMethods().forEach(m -> methods.add(m.name()));
+            if (methods.isEmpty()) methods.add("ANY"); // 메서드를 정하지 않은 매핑은 쓰기도 받는다
+            methods.forEach(method -> {
+                boolean blog = (p.equals("/api/app/blog") || p.startsWith("/api/app/blog/"))
+                        && !Set.of("GET", "HEAD", "OPTIONS").contains(method);
+                boolean marginQuote = p.startsWith("/api/app/margins/") && p.contains("/quotes") && method.equals("POST");
+                if (blog || marginQuote) {
+                    routes.add(method + " " + p);
+                }
+            });
+        }));
         Set<String> expected = new HashSet<>(BLOCKED);
         expected.addAll(OPEN);
         assertThat(routes).isEqualTo(expected);

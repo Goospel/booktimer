@@ -4,6 +4,9 @@ import com.booktimer.user.AccountService;
 import com.booktimer.user.Role;
 import com.booktimer.user.User;
 import com.booktimer.user.UserRepository;
+import jakarta.persistence.EntityManager;
+import org.hibernate.SessionFactory;
+import org.hibernate.stat.Statistics;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -31,6 +34,7 @@ class BlogFkIntegrationTest {
     @Autowired BlogSentenceRepository sentenceRepository;
     @Autowired BlogSentenceRevRepository revRepository;
     @Autowired BlogPostService postService;
+    @Autowired EntityManager em;
 
     private User user(String loginId) {
         User u = User.of(loginId + "@booktimer.com", passwordEncoder.encode("rawpw1234"), "글쓴이", "Asia/Seoul", Role.USER);
@@ -84,6 +88,35 @@ class BlogFkIntegrationTest {
         assertThat(revRepository.findAll()).as("남은 판 행은 다른 글의 것뿐").singleElement()
                 .satisfies(r -> assertThat(r.getText()).isEqualTo("남는 글"));
         assertThat(sentenceRepository.findByPostId(keeper.getId())).hasSize(1);
+    }
+
+    @Test
+    @DisplayName("문장 · 판 행 지우기는 일괄 DELETE — 행을 엔티티로 읽어 한 줄씩 지우지 않는다(계획 §5.1 · 리뷰 auth-F3)")
+    void sentenceAndRevDeletesAreBulk() {
+        User author = user("blogbulk");
+        BlogPost one = publishedPost(author);
+        BlogPost two = publishedPostWithSid(author, "KKKKKKKK");
+        em.clear(); // 영속성 문맥에 남은 엔티티로 세지 않게
+        Statistics stats = em.getEntityManagerFactory().unwrap(SessionFactory.class).getStatistics();
+        boolean was = stats.isStatisticsEnabled();
+        stats.setStatisticsEnabled(true);
+        try {
+            stats.clear();
+            BlogPost post = postRepository.findById(one.getId()).orElseThrow();
+            revRepository.deleteBySentencePost(post);
+            sentenceRepository.deleteByPost(post);
+            User u = userRepository.findById(author.getId()).orElseThrow();
+            revRepository.deleteBySentencePostUser(u);
+            sentenceRepository.deleteByPostUser(u);
+            em.flush(); // 파생 지우기는 flush 때 엔티티 DELETE를 센다
+            assertThat(stats.getEntityDeleteCount()).as("엔티티 단위 지우기 수(일괄이면 0)").isZero();
+        } finally {
+            stats.setStatisticsEnabled(was);
+        }
+        em.clear();
+        assertThat(sentenceRepository.findByPostId(one.getId())).isEmpty();
+        assertThat(sentenceRepository.findByPostId(two.getId())).isEmpty();
+        assertThat(revRepository.count()).isZero();
     }
 
     private BlogPost publishedPostWithSid(User author, String sid) {
