@@ -35,6 +35,13 @@ public enum RateLimitAction {
     STUDY_NOTE_CREATE(30, Duration.ofHours(1)),
 
     /**
+     * 블로그 초안 <b>만들기</b>({@code POST /api/app/blog/posts} — 책생글 B1a). 저장 · 올리기에는 걸지 않는다(올리기 상한은 B2).
+     * 까닭은 {@link #STUDY_NOTE_CREATE}와 같다: 「첫 저장 때 행」은 순수 클라 상태기계라 id 배선이 어긋나면 디바운스마다 새
+     * 1만 자 행이 생긴다(A4). E2 뒤엔 허용 목록이 {@code *}라 아무나 부를 수 있다(비평 SEC-7).
+     */
+    BLOG_DRAFT_CREATE(30, Duration.ofHours(1)),
+
+    /**
      * 공부 필기 <b>사진 올리기</b>({@code POST /api/study/notes/images}). 공부 한 시간에 스크린샷 수십 장이 정상 —
      * 겨누는 것은 스크립트 폭주와 힙이다. 조회 GET에는 안 건다 — 장을 열면 여러 장이 한꺼번에 오고, 조회의 힙 위험은
      * 횟수가 아니라 동시성이라 이 상한으로는 못 묶는다({@code StudyNoteApiController#image}의 {@code ponytail:}).

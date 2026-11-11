@@ -10,6 +10,8 @@ import com.booktimer.blog.BlogViews.PostView;
 import com.booktimer.blog.BlogViews.RevView;
 import com.booktimer.blog.BlogViews.SentenceView;
 import com.booktimer.block.BlockService;
+import com.booktimer.security.RateLimitAction;
+import com.booktimer.security.RateLimitService;
 import com.booktimer.user.User;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.http.HttpStatus;
@@ -43,21 +45,27 @@ public class BlogPostService {
     private final BlogSentenceRevRepository revRepository;
     private final BlogAccess access;
     private final BlockService blockService;
+    private final RateLimitService rateLimitService;
 
     public BlogPostService(BlogPostRepository postRepository, BlogSentenceRepository sentenceRepository,
-                           BlogSentenceRevRepository revRepository, BlogAccess access, BlockService blockService) {
+                           BlogSentenceRevRepository revRepository, BlogAccess access, BlockService blockService,
+                           RateLimitService rateLimitService) {
         this.postRepository = postRepository;
         this.sentenceRepository = sentenceRepository;
         this.revRepository = revRepository;
         this.access = access;
         this.blockService = blockService;
+        this.rateLimitService = rateLimitService;
     }
 
     // ── 쓰기 ─────────────────────────────────────────────────────────────────
 
-    /** 첫 저장 때 행(J6 · §4.10). @throws IllegalArgumentException 빈 글 · 길이(→ 400) */
+    /** 첫 저장 때 행(J6 · §4.10). 허용 목록 → 상한(429) → 빈 글 · 길이(400). */
     public BlogPost create(User user, String title, String body) {
         access.check(user);
+        if (!rateLimitService.allow(RateLimitAction.BLOG_DRAFT_CREATE, user.getId())) {
+            throw new ResponseStatusException(HttpStatus.TOO_MANY_REQUESTS, "글을 너무 자주 만들었어요 — 잠시 뒤 다시 해 주세요");
+        }
         return postRepository.save(BlogPost.draft(user, title, body));
     }
 
