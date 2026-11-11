@@ -52,6 +52,7 @@ class QuoteRangeTest {
         return new Layout(List.of(new Layout.Item(List.of(List.of(sids)), null)));
     }
 
+    @SafeVarargs
     private static Layout.Item para(List<String>... lines) {
         return new Layout.Item(List.of(lines), null);
     }
@@ -320,6 +321,18 @@ class QuoteRangeTest {
         QuoteRange.Current c = QuoteRange.current(List.of("s1", "s3"), post(base(), one("s0", "s1", "s2", "s3", "s4")), null);
         assertThat(c.viaMerge()).isFalse();
         assertThat(c.sids()).containsExactly("s1", "s2", "s3");
+    }
+
+    @Test
+    // 구현 뒤에 더한 줄(Red 없음) — hit를 산 행으로 거르는 줄의 돌연변이가 표 전부에서 살아남아 박았다
+    @DisplayName("REQ-248 · V3 합침 끝이 묘비면 viaMerge 아님 — 산 구성원만 남음")
+    void REQ_248_V3_합침_끝이_묘비() {
+        Map<String, BlogSentence> p = base();
+        p.get("s2").mergeInto("s3", NOW);
+        p.get("s3").tombstone(NOW);
+        QuoteRange.Current c = QuoteRange.current(List.of("s1", "s2"), post(p, one("s0", "s1", "s4")), null);
+        assertThat(c.sids()).containsExactly("s1");
+        assertThat(c.viaMerge()).isFalse();
     }
 
     // ── between(만들기) ──
