@@ -59,6 +59,21 @@ class SidTest {
     }
 
     @Test
+    @org.junit.jupiter.api.DisplayName("REQ-232 · 한 번 올리기 안에서 이번에 뽑은 sid도 겹침으로 본다(같은 값을 두 번 내는 공급자 → 둘째는 다시 뽑는다)")
+    void REQ_232_합집합_세_인자() {
+        Set<String> drawn = new HashSet<>();
+        Set<String> inDb = Set.of("dbRow001");
+        Deque<String> supply = new ArrayDeque<>(List.of("same0001", "same0001", "dbRow001", "other002"));
+
+        String first = Sid.fresh(drawn, inDb::contains, supply::pop);
+        String second = Sid.fresh(drawn, inDb::contains, supply::pop);
+
+        assertThat(first).isEqualTo("same0001");
+        assertThat(second).isEqualTo("other002");
+        assertThat(drawn).containsExactlyInAnyOrder("same0001", "other002");
+    }
+
+    @Test
     void 열번_다_겹치면_예외() {
         AtomicInteger calls = new AtomicInteger();
         assertThatThrownBy(() -> Sid.fresh(s -> true, () -> {

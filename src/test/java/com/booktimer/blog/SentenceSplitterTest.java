@@ -11,7 +11,7 @@ import java.util.stream.Stream;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
- * REQ-231 — 블로그 글을 문단 → 줄 → 문장으로 나누는 규칙(계획 2026-11-11-b1-blog-core §6.1 사례 표 25건).
+ * REQ-231 — 블로그 글을 문단 → 줄 → 문장으로 나누는 규칙(계획 2026-11-11-b1-blog-core §6.1 사례 표 31건).
  *
  * <p>기대값 표기: 「|」 = 문장 경계 · 「↵」 = 그 문장 뒤 줄바꿈(같은 문단의 다음 줄) · 「][」 = 문단 경계.
  * C01 · C04 · C05 · C06은 <b>알려진 천장</b>이다 — 규칙이 하나로 예측되게 둔 오결합 · 잘게 나뉨을 그대로 박는다
@@ -51,13 +51,29 @@ class SentenceSplitterTest {
                         "첫 문단이다.][둘째 문단이다."),
                 Arguments.of("T21 영문 약어 14개 전부", "Mr. Mrs. Ms. Prof. St. Jr. Sr. Dr. vs. etc. e.g. i.e. U.S. U.K. 끝이다. 다음.",
                         "Mr. Mrs. Ms. Prof. St. Jr. Sr. Dr. vs. etc. e.g. i.e. U.S. U.K. 끝이다.|다음."),
+                // B1b — 예외 ②③ · 문단 경계의 공백도 0번 술어와 같은 집합이다(§15.3 ②)
+                Arguments.of("T22 NBSP로 띄운 날짜", "회의는 2026." + (char) 0xA0 + "10." + (char) 0xA0 + "29." + (char) 0xA0 + "오후에 열렸다.",
+                        "회의는 2026." + (char) 0xA0 + "10." + (char) 0xA0 + "29." + (char) 0xA0 + "오후에 열렸다."),
+                Arguments.of("T23 NBSP 뒤 줄 머리 번호", "1." + (char) 0xA0 + "첫 번째 이유는 시간이다. 두 번째는 돈이다.",
+                        "1." + (char) 0xA0 + "첫 번째 이유는 시간이다.|두 번째는 돈이다."),
+                Arguments.of("T24 U+2003뿐인 줄 = 문단 경계", "첫 문단이다.\n" + (char) 0x2003 + "\n둘째 문단이다.", "첫 문단이다.][둘째 문단이다."),
                 Arguments.of("C01 천장 — 마침표 뒤 붙여 씀", "했다.그리고 갔다.", "했다.그리고 갔다."),
                 Arguments.of("C02 말줄임표 문자 가운데", "그건… 아니었다.", "그건…|아니었다."),
                 Arguments.of("C03 CRLF", "첫째.\r\n둘째.", "첫째.↵|둘째."),
                 Arguments.of("C04 천장 — 숫자 마침표 뒤 숫자", "점수는 100. 2등은 90점이다.", "점수는 100. 2등은 90점이다."),
                 Arguments.of("C05 천장 — 줄 가운데 번호", "이유는 1. 시간 2. 돈이다.", "이유는 1.|시간 2.|돈이다."),
-                Arguments.of("C06 천장 — 약어 아닌 No.", "No. 5를 골랐다.", "No.|5를 골랐다.")
+                Arguments.of("C06 천장 — 약어 아닌 No.", "No. 5를 골랐다.", "No.|5를 골랐다."),
+                // 예외 ①도 ASCII 숫자만 — 전각 숫자(U+FF10~FF19)는 C04 천장 밖
+                Arguments.of("C07 전각 숫자는 숫자 예외 밖", "점수는 " + fw("100") + ". " + fw("2") + "등이다.",
+                        "점수는 " + fw("100") + ".|" + fw("2") + "등이다.")
         );
+    }
+
+    /** ASCII 숫자 → 전각 숫자(글자 코드로 만든다 — 소스에 맨 글자로 두지 않는다). */
+    static String fw(String digits) {
+        StringBuilder b = new StringBuilder();
+        for (char c : digits.toCharArray()) b.append((char) (0xFF10 + c - '0'));
+        return b.toString();
     }
 
     @ParameterizedTest(name = "REQ-231 · {0}")

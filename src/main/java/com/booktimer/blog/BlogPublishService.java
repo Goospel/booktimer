@@ -107,8 +107,7 @@ public class BlogPublishService {
             String text = texts.get(i);
             String sid = a.sidOfNew().get(i);
             if (sid == null) {
-                sid = Sid.fresh(s -> drawn.contains(s) || sentenceRepository.existsBySid(s), Sid::random);
-                drawn.add(sid);
+                sid = Sid.fresh(drawn, sentenceRepository::existsBySid, Sid::random);
                 BlogSentence created = sentenceRepository.save(BlogSentence.create(post, sid, text, a.splitFrom().get(i)));
                 revRepository.save(BlogSentenceRev.of(created, 1, text));
                 changed = true;

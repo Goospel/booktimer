@@ -28,9 +28,11 @@ public final class SentenceSplitter {
     private static final String CLOSERS = "\"'”’」』)]》〉";
     // `no`는 넣지 않는다 — 「I said no. Then I left.」가 붙는다(§4.3 · C06 천장)
     private static final Set<String> ABBR = Set.of("dr", "mr", "mrs", "ms", "prof", "st", "jr", "sr", "vs", "etc", "e.g", "i.e", "u.s", "u.k");
-    private static final Pattern PARAGRAPH_BREAK = Pattern.compile("\\n[\\s\\u00A0\\u3000]*\\n");
-    private static final Pattern DATE_END = Pattern.compile("\\d{4}\\.\\s*\\d{1,2}\\.\\s*\\d{1,2}\\.$");
-    private static final Pattern LIST_HEAD = Pattern.compile("^\\d{1,3}\\.\\s");
+    /** 공백 한 글자 — {@link #space}와 같은 집합(Java 정규식의 {@code \s}는 ASCII 공백뿐이다 · §15.3 ②). */
+    private static final String WS = "[\\p{javaWhitespace}" + (char) 0xA0 + "]";
+    private static final Pattern PARAGRAPH_BREAK = Pattern.compile("\\n" + WS + "*\\n");
+    private static final Pattern DATE_END = Pattern.compile("\\d{4}\\." + WS + "*\\d{1,2}\\." + WS + "*\\d{1,2}\\.$");
+    private static final Pattern LIST_HEAD = Pattern.compile("^\\d{1,3}\\." + WS);
 
     private SentenceSplitter() {
     }
@@ -103,7 +105,7 @@ public final class SentenceSplitter {
         // ① 띄어 쓴 숫자 마침표 — 앞이 숫자이고 공백 뒤 첫 글자가 숫자
         int m = k;
         while (m < line.length() && space(line.charAt(m))) m++;
-        if (i > 0 && Character.isDigit(line.charAt(i - 1)) && m < line.length() && Character.isDigit(line.charAt(m))) return true;
+        if (i > 0 && digit(line.charAt(i - 1)) && m < line.length() && digit(line.charAt(m))) return true;
         // ② 띄어 쓴 날짜(YYYY. M. D.)의 끝 마침표
         if (DATE_END.matcher(line.substring(0, j)).find()) return true;
         // ③ 줄 머리 목록 번호의 점
@@ -113,5 +115,10 @@ public final class SentenceSplitter {
         int t = i - 1;
         while (t >= 0 && (line.charAt(t) < 128 && Character.isLetter(line.charAt(t)) || line.charAt(t) == '.')) t--;
         return ABBR.contains(line.substring(t + 1, i).toLowerCase(Locale.ROOT));
+    }
+
+    /** ASCII 숫자만 — 정규식 {@code \d}와 같은 판정({@code Character.isDigit}은 전각 숫자도 참이다 · C07). */
+    private static boolean digit(char c) {
+        return c >= '0' && c <= '9';
     }
 }
