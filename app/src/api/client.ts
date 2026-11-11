@@ -120,6 +120,8 @@ export interface RequestOptions {
 /** 요청 상한(REQ-356 — 조절 상수). 정지는 실패해도 늘 다시 읽으므로 늦게 닿은 정지가 화면을 속이지 않는다. 마감은 겹침 빼기로 멱등이라 다시 보내도 한 번이다 */
 export const MEASURE_TIMEOUT_MS = 10_000;
 export const DASHBOARD_TIMEOUT_MS = 30_000;
+/** 쪽지 한 장 읽기 — 멱등 GET · 지하철 응답 없음에서 10초 뒤 기기 칸으로 연다(REQ-392). 만들기 · 저장에는 걸지 않는다(비멱등 · 판 대조) */
+export const NOTE_TIMEOUT_MS = 10_000;
 
 export async function request<T>(path: string, options: RequestOptions = {}): Promise<T> {
   const { body, anonymous, timeoutMs } = options;
@@ -247,7 +249,7 @@ export const margins = {
   ofBook: (bookId: number) => request<MarginSummary[]>(`/api/app/books/${bookId}/margins`),
   /** 책 없는 쪽지(C9) */
   bookless: () => request<MarginSummary[]>('/api/app/margins?book=none'),
-  get: (id: number) => request<MarginView>(`/api/app/margins/${id}`),
+  get: (id: number) => request<MarginView>(`/api/app/margins/${id}`, { timeoutMs: NOTE_TIMEOUT_MS }),
   /** 첫 저장 때 행을 만든다(J6) — 201 */
   add: (body: CreateMargin) => request<MarginView>('/api/app/margins', { body }),
   edit: (id: number, body: EditMargin) => request<MarginView>(`/api/app/margins/${id}`, { method: 'PUT', body }),

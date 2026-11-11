@@ -1,8 +1,9 @@
 // 여백 쪽지 판정(책생글 「여백 + 블로그」 A1 — 설계 §5.1 · F1 사양 §4.3 · §4.4). 화면은 이 함수들을 그대로 그린다.
-import { ApiError, NetworkError } from '../api/client';
-import type { MarginSummary } from '../api/types';
+import { ApiError, NetworkError, UnauthorizedError } from '../api/client';
+import type { MarginSummary, MarginView } from '../api/types';
+import type { SaveOutcome } from './draftSync';
 import * as marginSave from './marginSave';
-import { booklessSection, canSaveMargin, hasQuoteField, javaStrip, keptBody, LEAVE_WAIT_MS, type LeaveAction, leaveAction, noteEditBody, runLeave, noteHead, noteHref, noteMaxLength, noteRoute, noteRow, pendingLeave, savedNotice, showsThought } from './marginSave';
+import { booklessSection, cachedBook, cachedHead, canSaveMargin, copyOfNote, hasQuoteField, javaStrip, keptBody, LEAVE_WAIT_MS, type LeaveAction, leaveAction, keepConflict, noteEditBody, readNote, runLeave, staleEmpty, noteHead, noteHref, noteMaxLength, noteRoute, noteRow, pendingLeave, savedNotice, showsThought } from './marginSave';
 
 test('REQ-210 · 입력칸 상한 = max(10,000, 불러온 글 길이)', () => {
   expect(noteMaxLength('')).toBe(10_000);
@@ -108,6 +109,13 @@ describe('leaveAction · 쪽지 화면을 떠날 때', () => {
   test('A1 리뷰 7 · 첫 POST가 나가는 중에 글을 다 지우고 떠나면 만든 뒤 지운다(지운 글로 쪽지가 남지 않게)', () => {
     expect(at({ noteId: null, empty: true, creating: true })).toBe('delete-after-create');
   });
+
+  test('REQ-395 · 기기 칸으로 연 쪽지 — 비었으면 아무것도 하지 않고(지우지 않는다) · 글이 있으면 남은 저장을 보낸다 · device가 아니면 빈 쪽지는 지금처럼 지운다', () => {
+    expect(at({ device: true, empty: true })).toBe('none'); // 받은 질문 수를 몰라 원가 든 빈 쪽지를 지울 수 있다(REQ-142)
+    expect(at({ device: true, empty: false })).toBe('flush');
+    expect(at({ device: false, empty: true })).toBe('delete');
+    expect(at({ device: true, empty: true, loaded: false })).toBe('none');
+  });
 });
 
 describe('A1 리뷰 12 · pendingLeave — 돌아간 목록은 떠날 때 저장을 상한까지만 기다린다(떠나는 화면은 막지 않는다)', () => {
@@ -159,7 +167,7 @@ test('A1 리뷰 11 · 서버가 걷은 생각과 비교는 Java strip 집합으�
 // 재리뷰 A · H — 떠날 때 판정 → 효과(디스패치). 여기선 갈래마다 무엇을 어떤 순서로 부르는지 본다.
 // 「돌려준 약속 = 마지막 효과의 끝」은 아래 한 건(flush)과 「3차 2」 갈래 표(create · delete · delete-after-create · drop-slot)가 본다.
 describe('runLeave · 떠날 때 할 일을 실제로 부른다', () => {
-  function fakes(p: { created?: 'saved' | 'offline'; delFails?: boolean; id?: number | null } = {}) {
+  function fakes(p: { created?: 'saved' | 'offline'; delFails?: boolean; id?: number | null; base?: number | null; seen?: number | null } = {}) {
     const calls: string[] = [];
     let id: number | null = p.id === undefined ? 9 : p.id;
     const d = {
@@ -176,6 +184,8 @@ describe('runLeave · 떠날 때 할 일을 실제로 부른다', () => {
       drop: async (n: number) => void calls.push(`drop ${n}`),
       flush: async (n: number) => void calls.push(`flush ${n}`),
       noteId: () => id,
+      local: async () => (p.base === undefined || p.base === null ? null : { base: p.base }),
+      seen: p.seen ?? null,
     };
     return { calls, d };
   }
@@ -219,6 +229,25 @@ describe('runLeave · 떠날 때 할 일을 실제로 부른다', () => {
     expect(bad.calls).toEqual(['del 9']);
   });
 
+  test('REQ-400 · 떠날 때 지우기는 칸의 판이 이 기기가 받은 서버 판일 때만 — 칸이 낡았으면(충돌을 풀지 못해 다른 기기의 새 판이 칸에 없다) 지우지 않고 칸을 남긴다 · 칸이 없거나 · 만든 뒤 지우기 · 보내기는 지금처럼', async () => {
+    const at = async (act: LeaveAction, p: Parameters<typeof fakes>[0]) => {
+      const f = fakes(p);
+      await runLeave(act, f.d);
+      return f.calls;
+    };
+    expect(await at('delete', { base: 2, seen: 2 })).toEqual(['del 9', 'drop 9']); // 같은 판 — 지금 그대로
+    expect(await at('delete', { base: 1, seen: 2 })).toEqual([]); // 「둘 다 남기기」 만들기 실패 뒤 비움 — 다른 기기 판 2는 서버에만 있다
+    expect(await at('delete', { base: null, seen: 2 })).toEqual(['del 9', 'drop 9']); // 칸이 없다(이미 버림) — 지금 그대로
+    expect(await at('delete-after-create', { id: null, created: 'saved', base: 5, seen: null })).toEqual(['dropNewSlot', 'createFirst', 'del 70', 'drop 70']); // 만든 뒤 지우기엔 대조가 없다(떠날 때 서버 판이 없었다)
+    expect(await at('flush', { base: 1, seen: 2 })).toEqual(['flush 9']);
+  });
+
+  test('REQ-401 · 409를 받고 그쪽 판을 아직 못 읽었으면(seen = null) 떠날 때 지우지 않는다 — 충돌 처리 읽기가 실패했거나 도는 중', async () => {
+    const f = fakes({ base: 1, seen: null });
+    await runLeave('delete', f.d);
+    expect(f.calls).toEqual([]);
+  });
+
   test('flush 갈래 — 돌려준 약속은 flush가 끝난 뒤에 풀린다(pendingLeave가 기다릴 그것)', async () => {
     let release!: () => void;
     const calls: string[] = [];
@@ -229,6 +258,8 @@ describe('runLeave · 떠날 때 할 일을 실제로 부른다', () => {
       drop: async () => undefined,
       flush: () => new Promise<void>((r) => (release = () => (calls.push('flushed'), r()))),
       noteId: () => 9,
+      local: async () => null,
+      seen: null,
     });
     let done = false;
     void p.then(() => (done = true));
@@ -285,6 +316,8 @@ describe('3차 2 · runLeave 약속은 그 갈래의 마지막 효과까지 기�
       drop: dep('drop'),
       flush: dep('flush'),
       noteId: () => id,
+      local: async () => null,
+      seen: null,
     });
     let done = false;
     void p.then(() => (done = true));
@@ -310,6 +343,8 @@ test('3차 4 · runLeave delete — 404면 칸을 지우고 · 그 밖의 실패
         drop: async (n) => void calls.push(`drop ${n}`),
         flush: async () => undefined,
         noteId: () => 9,
+        local: async () => null,
+        seen: null,
       }),
     ).resolves.toBeUndefined();
     return calls;
@@ -317,4 +352,193 @@ test('3차 4 · runLeave delete — 404면 칸을 지우고 · 그 밖의 실패
   expect(await run(new ApiError(404, '글을 찾을 수 없습니다'))).toEqual(['drop 9']);
   expect(await run(new ApiError(500, '요청에 실패했어요 (500)'))).toEqual([]);
   expect(await run(new NetworkError())).toEqual([]);
+});
+
+test('REQ-400 · 떠날 때 칸을 못 읽으면 지우지 않는다 — 판 대조를 못 했으니 안전 쪽(거부는 pendingLeave가 삼킨다)', async () => {
+  const calls: string[] = [];
+  await runLeave('delete', {
+    dropNewSlot: async () => undefined,
+    createFirst: async () => ({ kind: 'saved' }),
+    del: async (n) => void calls.push(`del ${n}`),
+    drop: async (n) => void calls.push(`drop ${n}`),
+    flush: async () => undefined,
+    noteId: () => 9,
+    local: async () => {
+      throw new Error('칸 읽기 실패');
+    },
+    seen: 3,
+  }).catch(() => undefined);
+  expect(calls).toEqual([]);
+});
+
+// 여백 오프라인 열기 — 서버 판 없이 그리는 머리(설계 §5.1 · §5.2). 세 목록에 서로 다른 제목을 둬 「어느 목록을 읽었는가」를 가른다
+describe('REQ-391 · 캐시 대시보드의 책 · 머리', () => {
+  const book = (id: number, title: string, author: string | null = null) => ({ id, title, author, coverUrl: null });
+  const d = {
+    readingBooks: [book(1, '읽는 중 책', '헤세')],
+    finishedBooks: [book(2, '다 읽은 책')],
+    wantToReadBooks: [book(3, '읽고 싶은 책', '한강')],
+  };
+
+  test('REQ-391 · 캐시 책 — 읽는 중 · 다 읽음 · 읽고 싶어요에서 id로 찾는다 · 없거나 캐시가 없으면 null', () => {
+    expect(cachedBook(d, 1)?.title).toBe('읽는 중 책');
+    expect(cachedBook(d, 2)?.title).toBe('다 읽은 책');
+    expect(cachedBook(d, 3)?.title).toBe('읽고 싶은 책');
+    expect(cachedBook(d, 4)).toBeNull();
+    expect(cachedBook(null, 1)).toBeNull();
+    expect(cachedBook(undefined, 1)).toBeNull();
+  });
+
+  test('REQ-391 · 캐시 책 — 다 읽음 목록이 없는 옛 꼴도 읽는 중 · 읽고 싶어요에서 찾는다', () => {
+    const old = { readingBooks: d.readingBooks, wantToReadBooks: d.wantToReadBooks };
+    expect(cachedBook(old, 1)?.title).toBe('읽는 중 책');
+    expect(cachedBook(old, 3)?.title).toBe('읽고 싶은 책');
+    expect(cachedBook(old, 2)).toBeNull();
+  });
+
+  test('REQ-391 · 캐시 머리 — 책 쪽지는 캐시 제목 · 「『제목』 · 저자」 책 줄 · 옮긴 문장 칸 · 캐시에 없으면 빈 제목(「책 없는 여백」 아님)', () => {
+    expect(cachedHead({ bookId: 1, book: { title: '데미안', author: '헤세' }, quote: '' })).toEqual({ bookTitle: '데미안', bookLine: '『데미안』 · 헤세', field: true });
+    expect(cachedHead({ bookId: 1, book: { title: '데미안', author: null }, quote: '' })).toEqual({ bookTitle: '데미안', bookLine: '『데미안』', field: true });
+    expect(cachedHead({ bookId: 1, book: null, quote: '' })).toEqual({ bookTitle: '', bookLine: null, field: true });
+  });
+
+  test('REQ-392 · 캐시 머리 — 책 없는 쪽지는 제목 null(「책 없는 여백」) · 옮긴 문장 칸은 칸에 옮긴 문장이 있을 때만', () => {
+    expect(cachedHead({ bookId: null, book: null, quote: '' })).toEqual({ bookTitle: null, bookLine: null, field: false });
+    expect(cachedHead({ bookId: null, book: null, quote: '책을 지운 쪽지의 옮긴 문장' })).toEqual({ bookTitle: null, bookLine: null, field: true });
+    expect(noteHead({ bookTitle: null, field: false }).title).toBe('책 없는 여백');
+  });
+
+  test('REQ-391 · 빈 제목이면 머리 제목도 빈 글자다 — noteHead는 null만 「책 없는 여백」으로 바꾼다', () => {
+    expect(noteHead({ bookTitle: cachedHead({ bookId: 9, book: null, quote: '' }).bookTitle, field: true }).title).toBe('');
+  });
+});
+
+// (Q1 가) 「둘 다 남기기」 — 그쪽(서버) 판을 새 쪽지로(설계 §5.4)
+test('REQ-394 · 둘 다 남기기의 새 쪽지 몸 — 책 쪽지는 옮긴 문장째 · 책 없는 쪽지는 「옮긴 문장」 · 출처를 생각 앞에 · 공백뿐인 옮긴 문장은 null · 남길 글이 없으면 null', () => {
+  expect(copyOfNote({ bookId: 4, quote: '그쪽 문장', quoteSource: '『데미안』 · 헤세', text: '그쪽 생각' })).toEqual({ bookId: 4, quote: '그쪽 문장', text: '그쪽 생각' });
+  expect(copyOfNote({ bookId: 4, quote: '   ', quoteSource: null, text: '생각만' })).toEqual({ bookId: 4, quote: null, text: '생각만' });
+  expect(copyOfNote({ bookId: null, quote: '지운 책의 문장', quoteSource: '『데미안』 · 헤세', text: '그쪽 생각' })).toEqual({
+    bookId: null,
+    quote: null,
+    text: '「지운 책의 문장」\n『데미안』 · 헤세\n\n그쪽 생각',
+  });
+  expect(copyOfNote({ bookId: null, quote: null, quoteSource: null, text: '책 없는 생각' })).toEqual({ bookId: null, quote: null, text: '책 없는 생각' });
+  expect(copyOfNote({ bookId: 4, quote: ' ', quoteSource: null, text: ' \n' })).toBeNull();
+  expect(copyOfNote({ bookId: null, quote: null, quoteSource: '『데미안』', text: '' })).toBeNull();
+});
+
+// 여백 오프라인 열기 리뷰 반영(addendum §5.E) — 쪽지 읽기 정책. 화면은 이 함수 한 줄만 부른다
+test('REQ-392 · 기존 쪽지 읽기 — 연결 실패만 null(이 기기 칸으로) · 404는 칸을 버리고 던진다(J97) · 5xx · 401은 칸을 두고 던진다(P3) · 읽히면 서버 판', async () => {
+  const v = { id: 9, revision: 3 } as unknown as MarginView;
+  const run = async (get: () => Promise<MarginView>) => {
+    const drops: string[] = [];
+    const out = await readNote(get, async () => void drops.push('drop')).then(
+      (r) => ({ ok: r }),
+      (e: unknown) => ({ err: e }),
+    );
+    return { out, drops };
+  };
+  const fail = (e: unknown) => async (): Promise<MarginView> => {
+    throw e;
+  };
+  expect(await run(async () => v)).toEqual({ out: { ok: v }, drops: [] });
+  expect(await run(fail(new NetworkError()))).toEqual({ out: { ok: null }, drops: [] });
+  const gone = new ApiError(404, '글을 찾을 수 없어요');
+  expect(await run(fail(gone))).toEqual({ out: { err: gone }, drops: ['drop'] });
+  const e500 = new ApiError(500, '요청에 실패했어요 (500)');
+  expect(await run(fail(e500))).toEqual({ out: { err: e500 }, drops: [] });
+  const e401 = new UnauthorizedError();
+  expect(await run(fail(e401))).toEqual({ out: { err: e401 }, drops: [] });
+  // 404면 칸 버리기가 끝난 뒤에 던진다(R08 · 2차 리뷰 F6-7 · N1)
+  const order: string[] = [];
+  await readNote(fail(gone), () => new Promise<void>((r) => setTimeout(() => (order.push('dropped'), r()), 0))).catch(() => order.push('threw'));
+  expect(order).toEqual(['dropped', 'threw']);
+});
+// 리뷰 반영 R3-1(addendum §5.D) — 오프라인에서 비운 칸을 그사이 다른 기기가 고쳤으면, 그리기 전에 서버 글로(빈 칸 + 판 대조 없는 DELETE가 그쪽 글을 지운다)
+test('REQ-398 · 다른 기기가 고친 뒤의 빈 dirty 칸만 참 — 같은 판 · dirty 아님 · 글 있음 · 받은 질문 있음은 거짓', () => {
+  const blank = { title: ' ', body: '\n', base: 1, dirty: true };
+  expect(staleEmpty(blank, 2, 0)).toBe(true);
+  expect(staleEmpty(blank, 1, 0)).toBe(false); // 같은 판 — 지금 규칙(빈 쪽지가 보이고 떠나면 지운다 · 원 설계 §7-9)
+  expect(staleEmpty({ ...blank, dirty: false }, 2, 0)).toBe(false);
+  expect(staleEmpty({ ...blank, body: '이 기기 글' }, 2, 0)).toBe(false);
+  expect(staleEmpty({ ...blank, title: '옮긴 문장' }, 2, 0)).toBe(false);
+  expect(staleEmpty(blank, 2, 1)).toBe(false); // 받은 질문 — 빈 PUT도 서버가 받아 409 창이 묻는다
+});
+
+// 리뷰 반영 kb F3(addendum §5.H) — 응답을 잃은 저장의 재전송이 낸 거짓 409: 그쪽 판 = 이 기기 칸이면 남길 다른 판이 없다
+const theirs = { bookId: 4, quote: '그쪽 문장', quoteSource: null, text: '그쪽 생각' };
+test('REQ-394 · 그쪽 판이 이 기기 칸과 같으면(서버가 걷는 앞뒤 공백 차이 포함) 새 쪽지 몸은 null — 응답을 잃은 저장의 거짓 409 · 한 글자라도 다르면 지금 몸', () => {
+  const body = { bookId: 4, quote: '그쪽 문장', text: '그쪽 생각' };
+  expect(copyOfNote(theirs, { title: '그쪽 문장', body: '그쪽 생각' })).toBeNull();
+  expect(copyOfNote(theirs, { title: ' 그쪽 문장\n', body: '그쪽 생각  ' })).toBeNull();
+  expect(copyOfNote(theirs, { title: '그쪽 문장', body: '이 기기 생각' })).toEqual(body);
+  expect(copyOfNote(theirs, { title: '이 기기 문장', body: '그쪽 생각' })).toEqual(body); // 옮긴 문장만 달라도 지금 몸 — 그쪽 문장을 덮지 않는다(2차 리뷰 F3-1)
+  expect(copyOfNote({ ...theirs, quote: null }, { title: '', body: '그쪽 생각' })).toBeNull(); // 그쪽 옮긴 문장 null = 빈 칸(서버 normalizeQuote — R17)
+  expect(copyOfNote(theirs, null)).toEqual(body);
+});
+
+describe('REQ-394 · keepConflict — 충돌 창의 이 기기 것 유지 · 둘 다 남기기', () => {
+  const other = { title: '이 기기 문장', body: '이 기기 생각' };
+  const same = { title: '그쪽 문장', body: '그쪽 생각' };
+  const run = async (
+    which: 'mine' | 'both',
+    p: { v?: typeof theirs; mine?: { title: string; body: string } | null; add?: () => Promise<unknown>; keep?: SaveOutcome } = {},
+  ) => {
+    const calls: string[] = [];
+    const res = await keepConflict(which, p.v ?? theirs, {
+      mine: async () => {
+        calls.push('mine');
+        return p.mine === undefined ? other : p.mine;
+      },
+      add: async (b) => {
+        calls.push(`add ${b.text}`);
+        if (p.add) await p.add();
+      },
+      keepMine: async () => {
+        calls.push('keepMine');
+        return p.keep ?? { kind: 'saved', revision: 8 };
+      },
+    });
+    return { calls, res };
+  };
+
+  test('REQ-394 · 둘 다 남기기 — 그쪽 판을 새 쪽지로 먼저 만들고 이 기기 것을 덮는다 · 덮기가 서면(saved · mismatch)만 「새 쪽지로 남겼어요」', async () => {
+    expect(await run('both')).toEqual({ calls: ['mine', 'add 그쪽 생각', 'keepMine'], res: { ok: true, r: { kind: 'saved', revision: 8 }, both: true } });
+    expect((await run('both', { keep: { kind: 'mismatch', revision: 8 } })).res).toEqual({ ok: true, r: { kind: 'mismatch', revision: 8 }, both: true });
+    for (const keep of [{ kind: 'conflict' }, { kind: 'offline' }, { kind: 'error', message: '쪽지를 저장하지 못했어요' }, { kind: 'gone' }] as SaveOutcome[]) {
+      expect([keep.kind, (await run('both', { keep })).res]).toEqual([keep.kind, { ok: true, r: keep, both: false }]);
+    }
+  });
+
+  test('REQ-394 · 새 쪽지를 못 만들면 덮지 않는다 — 연결 실패 · 5xx · 400이면 덮기 0회 · 그 오류를 돌려준다', async () => {
+    for (const cause of [new NetworkError(), new ApiError(500, '요청에 실패했어요 (500)'), new ApiError(400, '생각은 10,200자까지 쓸 수 있어요')]) {
+      const { calls, res } = await run('both', {
+        add: async () => {
+          throw cause;
+        },
+      });
+      expect([cause.message, calls, res]).toEqual([cause.message, ['mine', 'add 그쪽 생각'], { ok: false, cause }]);
+    }
+  });
+
+  test('REQ-394 · 둘 다 남기기는 copyOfNote가 만든 몸을 그대로 보낸다 — 책 없는 쪽지의 옮긴 문장 · 출처가 새 쪽지 생각 앞에 남는다(그쪽 생각만 보내면 잡힌다)', async () => {
+    const v = { bookId: null, quote: '지운 책의 문장', quoteSource: '『데미안』 · 헤세', text: '그쪽 생각' } as unknown as typeof theirs;
+    expect((await run('both', { v })).calls).toEqual(['mine', 'add 「지운 책의 문장」\n『데미안』 · 헤세\n\n그쪽 생각', 'keepMine']);
+  });
+
+  test('REQ-394 · 책 쪽지의 둘 다 남기기도 copyOfNote 몸 전체(책 · 옮긴 문장 · 출처)를 그대로 보낸다 — 그쪽 문장을 빼면 잡힌다', async () => {
+    let sent: unknown;
+    await keepConflict('both', theirs, { mine: async () => other, add: async (b) => void (sent = b), keepMine: async () => ({ kind: 'saved', revision: 8 }) });
+    expect(sent).toEqual(copyOfNote(theirs, other));
+    expect(sent).toMatchObject({ quote: '그쪽 문장' });
+  });
+
+  test('REQ-394 · 이 기기 것 유지는 새 쪽지를 만들지 않는다 · 그쪽 판이 비었거나 이 기기 칸과 같으면 둘 다 남기기도 덮기만', async () => {
+    expect(await run('mine')).toEqual({ calls: ['keepMine'], res: { ok: true, r: { kind: 'saved', revision: 8 }, both: false } });
+    expect(await run('both', { mine: same })).toEqual({ calls: ['mine', 'keepMine'], res: { ok: true, r: { kind: 'saved', revision: 8 }, both: false } });
+    expect(await run('both', { v: { ...theirs, quote: null, text: ' ' } as unknown as typeof theirs, mine: other })).toEqual({
+      calls: ['mine', 'keepMine'],
+      res: { ok: true, r: { kind: 'saved', revision: 8 }, both: false },
+    });
+  });
 });

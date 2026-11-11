@@ -7,7 +7,7 @@ jest.mock('expo-secure-store', () => ({
 
 import { ApiError, NetworkError } from '../api/client';
 import type { AiView, DraftView, QuestionLog } from '../api/types';
-import { aiButton, messageFor, sendAiStep, singleFlight } from './aiStep';
+import { AI_OFFLINE, aiButton, messageFor, sendAiStep, singleFlight } from './aiStep';
 import { revisionOrThrow } from './draftSync';
 
 const log = (text: string): QuestionLog => ({
@@ -243,4 +243,17 @@ describe('singleFlight · AI 보내기는 한 번에 하나', () => {
     await once(async () => void (ran = true));
     expect(ran).toBe(true);
   });
+});
+
+// 여백 오프라인 열기 — 서버 판 없이 연 쪽지는 질문을 끈다 · 새 쪽지는 누를 때 연결 문구(설계 §5.3)
+test('REQ-393 · 서버 판 없이 연 쪽지는 질문 받기가 꺼진다 — 읽을 것이 있어도(같은 입력에 offline만 빼면 켜진다)', () => {
+  const input = { rounds: 0, quote: '옮긴 문장', thought: '남은 생각', boxes: 0 };
+  expect(aiButton(input)).toEqual({ step: 'ASK', label: '질문 받기', disabled: false });
+  expect(aiButton({ ...input, offline: true })).toEqual({ step: 'ASK', label: '질문 받기', disabled: true });
+  expect(aiButton({ ...input, offline: false }).disabled).toBe(false);
+});
+
+test('REQ-396 · 오프라인 질문 문구는 연결 실패 문구와 같은 글자다 — AI_OFFLINE = messageFor(new NetworkError(), \'save\')', () => {
+  expect(AI_OFFLINE).toBe('인터넷에 연결되지 않았어요 — 쓴 쪽지는 이 기기에 남아 있어요. 연결되면 다시 눌러 주세요');
+  expect(messageFor(new NetworkError(), 'save')).toBe(AI_OFFLINE);
 });

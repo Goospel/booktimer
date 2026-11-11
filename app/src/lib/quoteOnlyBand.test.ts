@@ -34,3 +34,8 @@ test('REQ-225 · 띠 조건 = 질문 받기 조건(같은 함수) — 질문 받
   expect(quoteOnlyBand({ ...base, rounds: 1 })).toBe(false); // 양성 대조 — 위 대조가 늘 같은 값이면 공허하다
   expect(quoteOnlyBand(base)).toBe(true);
 });
+
+test('REQ-393 · 서버 판 없이 연 쪽지엔 인용만 있는 쪽지의 띠가 없다(같은 쪽지가 offline이 아니면 띠)', () => {
+  expect(quoteOnlyBand(base)).toBe(true);
+  expect(quoteOnlyBand({ ...base, offline: true })).toBe(false);
+});

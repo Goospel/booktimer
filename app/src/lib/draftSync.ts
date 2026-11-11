@@ -197,6 +197,8 @@ export function draftSync(p: { kv: KV; userId: number; put: (id: number, b: Save
         await write(server.id, next);
         return next;
       }),
+    /** 서버 글 없이 칸을 그대로 읽는다(바꾸지 않는다) — 오프라인으로 여는 쪽지(REQ-392). 없으면 null. */
+    local: (id: number): Promise<Slot | null> => serial(() => read(id)),
     /** 칸에 즉시 — 제목 · 본문이 바뀌면 dirty, 띠 질문만이면 dirty가 아니다. */
     edit: (id: number, patch: Partial<Pick<Slot, 'title' | 'body' | 'focus'>>): Promise<void> =>
       serial(async () => {

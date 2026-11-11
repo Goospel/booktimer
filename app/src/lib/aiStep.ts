@@ -19,7 +19,8 @@ export const SAFETY_NET_MS = [5_000, 15_000, 30_000] as const;
 export const ROUNDS_MAX = 8;
 export const FOLLOW_MIN_BODY = 30;
 
-const NET = '인터넷에 연결되지 않았어요 — 쓴 쪽지는 이 기기에 남아 있어요. 연결되면 다시 눌러 주세요';
+/** 연결 실패 문구 — 오프라인 새 쪽지에서 질문을 누를 때도 이 글자(REQ-396) */
+export const AI_OFFLINE = '인터넷에 연결되지 않았어요 — 쓴 쪽지는 이 기기에 남아 있어요. 연결되면 다시 눌러 주세요';
 const NOT_YET = '질문을 아직 받지 못했어요';
 const SAVE_FAIL = '쪽지가 아직 저장되지 않아 질문을 보내지 못했어요 — 잠시 뒤 다시 눌러 주세요';
 const GENERIC = '질문을 보내지 못했어요 — 잠시 뒤 다시 눌러 주세요';
@@ -44,7 +45,7 @@ const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
 /** 서버 평문 > 연결 문구 > (저장 중이었으면) 저장 실패 > 일반 — 「요청에 실패했어요 (N)」은 서버 문구로 치지 않는다. */
 export function messageFor(e: unknown, ctx: 'save' | 'send'): string {
   if (e instanceof ApiError && !/^요청에 실패했어요 \(\d+\)$/.test(e.message)) return e.message;
-  if (e instanceof NetworkError) return NET;
+  if (e instanceof NetworkError) return AI_OFFLINE;
   return ctx === 'save' ? SAVE_FAIL : GENERIC;
 }
 
@@ -104,7 +105,7 @@ export async function sendAiStep(p: {
       // 다시 읽기도 못 했다 — 다음 차례에 한 번 더
     }
   }
-  return reached ? { kind: 'retry', message: NOT_YET } : { kind: 'error', message: NET };
+  return reached ? { kind: 'retry', message: NOT_YET } : { kind: 'error', message: AI_OFFLINE };
 }
 
 /** 쪽지 AI 단추 입력 — 지금 쪽지만(J98). boxes = 재료로 가는 건 블로그 문장 박스 수(B1부터 · 가린 박스 제외 — A1은 0). */
@@ -113,6 +114,8 @@ export interface NoteAiInput {
   quote: string | null;
   thought: string;
   boxes: number;
+  /** 서버 판 없이 연 쪽지(기기 칸 — REQ-393) — 질문 기록을 몰라 질문을 끈다 */
+  offline?: boolean;
 }
 
 /** 지금 쪽지에 읽을 것이 있다(J98) — 옮긴 문장 ∨ 생각(showsThought — 서버 NO_THOUGHT) ∨ 건 문장 박스. 책 유무 · 다른 쪽지 수는 보지 않는다. */
@@ -125,6 +128,6 @@ export function aiButton(p: NoteAiInput): {
   disabled: boolean;
 } {
   const full = p.rounds >= ROUNDS_MAX;
-  if (p.rounds === 0) return { step: 'ASK', label: '질문 받기', disabled: full || !hasMaterial(p) };
+  if (p.rounds === 0) return { step: 'ASK', label: '질문 받기', disabled: full || !!p.offline || !hasMaterial(p) };
   return { step: 'FOLLOW', label: '꼬리 질문', disabled: full || p.thought.trim().length < FOLLOW_MIN_BODY };
 }

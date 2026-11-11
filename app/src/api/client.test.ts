@@ -342,4 +342,18 @@ describe('REQ-356 · 요청 상한', () => {
     await cutAt(() => reading.finish(b), 10_000);
     await cutAt(() => study.finish(b), 10_000);
   });
+
+  // 여백 오프라인 열기 — 쪽지 한 장 읽기만 상한(설계 §6 · P3)
+  test('REQ-392 · 쪽지 한 장 읽기는 10초 상한을 싣는다(지하철 응답 없음에서 기기 칸으로 연다)', async () => {
+    hang();
+    await cutAt(() => margins.get(7), 10_000);
+  });
+
+  // 음성 판정 전용 — 양성은 위 줄(같은 하니스가 상한을 잡는다)
+  test('REQ-392 · 쪽지 만들기 · 저장에는 상한이 없다(비멱등 · 판 대조)', async () => {
+    fetchMock.mockResolvedValue(reply(200, '{}'));
+    await margins.add({ bookId: 1, quote: null, text: 'a' });
+    await margins.edit(7, { quote: null, text: 'a', revision: 0 });
+    expect(fetchMock.mock.calls.map((c) => c[1].signal)).toEqual([undefined, undefined]);
+  });
 });
