@@ -1,7 +1,13 @@
 package com.booktimer.writing;
 
+import com.booktimer.blog.BlogPost;
+import com.booktimer.blog.BlogPostRepository;
+import com.booktimer.blog.BlogSentence;
+import com.booktimer.blog.BlogSentenceRepository;
+import com.booktimer.blog.Layout;
 import com.booktimer.blog.QuoteBox;
 import com.booktimer.blog.QuoteBoxRepository;
+import com.booktimer.blog.QuoteBoxService;
 import com.booktimer.book.Book;
 import com.booktimer.book.BookRepository;
 import com.booktimer.book.BookStatus;
@@ -77,6 +83,9 @@ class WritingAiServiceTest {
     @Autowired AiBudgetService budgetService;
     @Autowired AccountService accountService;
     @Autowired QuoteBoxRepository quoteBoxRepository;
+    @Autowired QuoteBoxService quoteBoxService;
+    @Autowired BlogPostRepository blogPostRepository;
+    @Autowired BlogSentenceRepository blogSentenceRepository;
     @Autowired Clock clock;
 
     private static final AtomicInteger SEQ = new AtomicInteger();
@@ -620,17 +629,51 @@ class WritingAiServiceTest {
                 .doesNotContain("다른 쪽지의 박스 글"); // REQ-289 「두 박스 글(붙인 순서)」도 이 줄이 잰다 — label = 붙인 순서
     }
 
+    /** 올린 글 하나 — 한 문단 한 줄의 문장들(sid는 이 시험 안에서 유일). */
+    private List<String> publishedSource(User author, BlogPost[] out, String... texts) {
+        List<String> sids = java.util.Arrays.stream(texts).map(t -> String.format("S%07d", SEQ.incrementAndGet())).toList();
+        BlogPost post = BlogPost.draft(author, "원 글", String.join(" ", texts));
+        post.publish("원 글", new Layout(List.of(new Layout.Item(List.of(sids), null))).toJson(), true, CONSENT_AT);
+        blogPostRepository.saveAndFlush(post);
+        for (int i = 0; i < texts.length; i++) {
+            blogSentenceRepository.saveAndFlush(BlogSentence.create(post, sids.get(i), texts[i], null));
+        }
+        out[0] = post;
+        return sids;
+    }
+
     @Test
-    @DisplayName("REQ-214 · 건 문장만 있는 쪽지도 재료 1개라 ASK가 400이 아니다 · 재료에 건 문장 글")
+    @DisplayName("REQ-214 · 건 문장만 있는 쪽지 201 · 그 쪽지 ASK 재료에 건 문장 글")
     void linkedOnlyNoteIsMaterial() {
         User u = user(true);
-        Story d = storyRepository.saveAndFlush(Story.of(u, "", null, null, null, true));
-        linkBox(d, 1, "건 문장뿐인 쪽지의 박스 글");
+        BlogPost[] src = new BlogPost[1];
+        List<String> sids = publishedSource(user(false), src, "봄에는 꽃이 핀다.", "여름에는 비가 온다.");
+        Story d = quoteBoxService.hang(u, null, null, null, new QuoteBoxService.LinkRequest(src[0].getId(), sids.get(0), sids.get(1)));
+        ArgumentCaptor<String> material = ArgumentCaptor.forClass(String.class);
+        given(assistant.ask(material.capture())).willReturn(answer("무엇이 남았나요?"));
+
+        aiService.run(u, d.getId(), Step.ASK, d.getRevision(), null); // 재료 0개면 400 — 박스만 있는 쪽지도 재료 1개
+
+        assertThat(material.getValue()).contains("건 블로그 문장: 봄에는 꽃이 핀다. 여름에는 비가 온다.\n").doesNotContain("메모:");
+    }
+
+    @Test
+    @DisplayName("REQ-289 · 기존 쪽지에 박스 더하기 201 · 둘째 박스 label 2 · 쪽지 ASK 재료에 두 박스 글(붙인 순서)")
+    void attachedBoxesInOrder() {
+        User u = user(true);
+        BlogPost[] src = new BlogPost[1];
+        List<String> sids = publishedSource(user(false), src, "봄에는 꽃이 핀다.", "여름에는 비가 온다.");
+        Story d = storyRepository.saveAndFlush(Story.of(u, "내 생각이다", null, null));
+        quoteBoxService.addToNote(u, d.getId(), new QuoteBoxService.LinkRequest(src[0].getId(), sids.get(1), sids.get(1)));
+        quoteBoxService.addToNote(u, d.getId(), new QuoteBoxService.LinkRequest(src[0].getId(), sids.get(0), sids.get(0)));
+        assertThat(quoteBoxRepository.findByOwnerTypeAndOwnerIdOrderByLabel(QuoteBox.Owner.NOTE, d.getId()))
+                .extracting(QuoteBox::getLabel).containsExactly(1, 2);
         ArgumentCaptor<String> material = ArgumentCaptor.forClass(String.class);
         given(assistant.ask(material.capture())).willReturn(answer("무엇이 남았나요?"));
 
         aiService.run(u, d.getId(), Step.ASK, d.getRevision(), null);
 
-        assertThat(material.getValue()).contains("건 블로그 문장: 건 문장뿐인 쪽지의 박스 글").doesNotContain("메모:");
+        assertThat(material.getValue())
+                .contains("건 블로그 문장: 여름에는 비가 온다.\n건 블로그 문장: 봄에는 꽃이 핀다.\n메모: 내 생각이다");
     }
 }
