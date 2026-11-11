@@ -187,6 +187,14 @@ public class User extends BaseTimeEntity {
     @Column(name = "google_sub", length = 255)
     private String googleSub;
 
+    /** 블로그에 보일 이름을 확인한 시각(J23 · 책생글 B1a) — null이면 첫 올리기가 409. 가입 경로와 무관하다(REQ-246). */
+    @Column(name = "blog_name_confirmed_at")
+    private java.time.Instant blogNameConfirmedAt;
+
+    /** 커뮤니티 규칙에 동의한 시각(J23 · REQ-259) — null이면 첫 올리기가 409. */
+    @Column(name = "ugc_terms_at")
+    private java.time.Instant ugcTermsAt;
+
     /**
      * 영리목적 광고성 정보(재참여 넛지 등 마케팅 메일) 수신에 동의했는지(이메일 인프라 2단계).
      * 정보통신망법 §50의 <b>사전 동의(opt-in)</b> 불변식 — 기본 {@code false}(미동의)이고, 가입 폼·설정의
@@ -965,5 +973,19 @@ public class User extends BaseTimeEntity {
 
     public AuthProvider getAuthProvider() {
         return authProvider;
+    }
+
+    /** 블로그 첫 설정(이름 확인 + 커뮤니티 규칙 동의)을 한 번에 — 시트가 둘을 함께 받는다(B1a). */
+    public void confirmBlogIdentity(java.time.Instant now) {
+        this.blogNameConfirmedAt = now;
+        this.ugcTermsAt = now;
+    }
+
+    public java.time.Instant getBlogNameConfirmedAt() {
+        return blogNameConfirmedAt;
+    }
+
+    public java.time.Instant getUgcTermsAt() {
+        return ugcTermsAt;
     }
 }
