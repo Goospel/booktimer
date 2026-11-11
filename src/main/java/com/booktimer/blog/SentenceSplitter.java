@@ -37,7 +37,7 @@ public final class SentenceSplitter {
 
     /** 공백 술어 하나(§6.1 0) — {@code Character.isWhitespace}는 U+00A0을 거짓으로 본다. 경계 · 걷기 · 판 비교가 함께 쓴다. */
     static boolean space(int c) {
-        return Character.isWhitespace(c) || c == ' ';
+        return Character.isWhitespace(c) || c == 0xA0;
     }
 
     /** 앞뒤 공백 떼기 — {@link String#strip()}은 U+00A0을 걷지 않아 쓰지 않는다(T19). */

@@ -44,7 +44,7 @@ class SentenceSplitterTest {
                 Arguments.of("T17 공백 없는 1,000자 · 서로게이트", "가".repeat(999) + "😊" + "나".repeat(10),
                         "가".repeat(999) + "|😊" + "나".repeat(10)),
                 Arguments.of("T18 빈 글", "  \n\n \n", ""),
-                Arguments.of("T19 NBSP 뒤 문장", "그는 웃었다. 그리고 갔다.", "그는 웃었다.|그리고 갔다."),
+                Arguments.of("T19 NBSP 뒤 문장", "그는 웃었다." + (char) 0xA0 + "그리고 갔다.", "그는 웃었다.|그리고 갔다."),
                 Arguments.of("C01 천장 — 마침표 뒤 붙여 씀", "했다.그리고 갔다.", "했다.그리고 갔다."),
                 Arguments.of("C02 말줄임표 문자 가운데", "그건… 아니었다.", "그건…|아니었다."),
                 Arguments.of("C03 CRLF", "첫째.\r\n둘째.", "첫째.↵|둘째."),
