@@ -373,7 +373,8 @@ test('A1 리뷰 1 · 12 · 쪽지 화면 정리는 leaveAction대로 · 떠날 �
   expect(LEAVE.test(cleanup)).toBe(true);
   expect(LEAVE.test('const act = leaveAction(p);\n if (act === "flush") void s.flush(id);\n pendingLeave.set(Promise.resolve());')).toBe(false);
   // 3차 3 — runLeave에 넘기는 효과 묶음(이른 noteId 읽기 · no-op del · flush→drop을 심으면 잡힌다)
-  const DEPS = '{ dropNewSlot, createFirst, del: margins.delete, drop: s.drop, flush: (n) => s.flush(n), noteId: () => noteId.current }';
+  // 2차 리뷰 반영 — 떠날 때 지우기 전 칸 읽기(local) · 이 기기가 아는 서버 판(seen — 409 뒤 못 읽었으면 null)도 넘긴다(REQ-400 · 401)
+  const DEPS = '{ dropNewSlot, createFirst, del: margins.delete, drop: s.drop, flush: (n) => s.flush(n), noteId: () => noteId.current, local: s.local, seen: unreadTheirs.current ? null : (serverRef.current?.revision ?? null) }';
   expect(count(cleanup, DEPS)).toBe(1);
   // 3차 5 — 판정에 「만드는 중」을 넘긴다(adopt 창에 떠나도 새 쪽지 갈래). 빼면 잡힌다
   expect(count(cleanup, 'creating: creating.current !== null')).toBe(1);
@@ -383,6 +384,8 @@ test('A1 리뷰 1 · 12 · 쪽지 화면 정리는 leaveAction대로 · 떠날 �
     ['del: margins.delete', 'del: async () => undefined'],
     ['flush: (n) => s.flush(n)', 'flush: s.drop'],
     ['drop: s.drop', 'drop: async () => undefined'],
+    ['local: s.local', 'local: async () => null'], // 칸을 읽지 않으면 늘 지운다(REQ-400 길이 다시 열린다)
+    ['seen: unreadTheirs.current ? null : (serverRef.current?.revision ?? null)', 'seen: serverRef.current?.revision ?? null'], // 409 뒤 못 읽음을 모른다(REQ-401)
   ]) {
     const mutated = cleanup.replace(from, to);
     expect([from, mutated !== cleanup, count(mutated, DEPS)]).toEqual([from, true, 0]);
@@ -758,6 +761,29 @@ test('REQ-393 · 서버 판이 처음 서는 모든 길(자동저장 첫 PUT · 
   const gone = cut(s, W, '');
   expect(once(gone)).toBe(false);
   expect(once(cut(gone, /(if \(serverRef\.current === null\) \{\s*takeServer\(v\);)/, `$1\n${W}`))).toBe(false); // put 어댑터로 되돌림
+});
+
+// 여백 오프라인 열기 2차 리뷰 반영(addendum-2 §7 T3) — 409 표시를 세우는 곳 · 걷는 곳
+test('REQ-401 · 402 · 409를 받고 그쪽 판을 읽기 전엔 떠날 때 지우지 않는다 — 창이 뜰 때 · 질문 보내기 · 내보낸 표시 저장이 409를 받을 때 세우고, 서버 판을 받을 때(takeServer) · 충돌 처리 읽기가 404일 때만 걷는다(빼거나 옮기면 잡힌다)', () => {
+  const s = srcOf(NOTE);
+  const SET = 'unreadTheirs.current = true;';
+  const CLR = 'unreadTheirs.current = false;';
+  const GONE_CLR = /\} catch \(e\) \{\s*conflictOpen\.current = false;\s*if \(isGone\(e\)\) unreadTheirs\.current = false;/;
+  // REQ-402 — 질문 보내기는 다시 던지기까지 본다(빼면 다시 보내기 · 동의 시트 · 오류 문구가 뭉개진다). \s*가 줄바꿈 · \r을 먹어 한 줄로 이어 써도 초록이다
+  const AI409 = /margins\.ai\(id, \{ step, revision, focus: step === 'ASK' \? null : f \}\)\.catch\(\(e\) => \{\s*if \(e instanceof ApiError && e\.status === 409\) unreadTheirs\.current = true;\s*throw e;\s*\}\)/;
+  const EXPORT409 = /void sync\.current\?\.flush\(id, \{ exported: true \}\)\.then\(\(o\) => \{\s*if \(o\.kind === 'conflict'\) unreadTheirs\.current = true;\s*\}\);/;
+  const marked = (x: string) =>
+    /if \(conflictOpen\.current\) return;\s*conflictOpen\.current = true;\s*unreadTheirs\.current = true;/.test(bodyOf(x, 'function askConflict(')) &&
+    AI409.test(bodyOf(x, 'function runAi(')) && EXPORT409.test(bodyOf(x, 'async function exportNote(')) &&
+    count(x, SET) === 3 && // 세우는 곳은 창이 뜰 때 · 질문 보내기 409 · 내보낸 표시 저장 409 셋뿐(이 방문에서 409를 받는 곳 전부 — 설계 §2 전수 행)
+    count(bodyOf(x, 'function takeServer('), CLR) === 1 && GONE_CLR.test(bodyOf(x, 'async function resolveConflict(')) && count(x, CLR) === 2;
+  expect(marked(s)).toBe(true);
+  expect(marked(cut(s, /\s*unreadTheirs\.current = true;/, ''))).toBe(false); // 창이 뜰 때 세우지 않으면(첫 자리 = askConflict — 파일 순서) GET이 실패한 뒤 비우고 떠날 때 지운다
+  expect(marked(cut(cut(s, /\s*unreadTheirs\.current = true;/, ''), 'if (conflictOpen.current) return;', `${SET}\n if (conflictOpen.current) return;`))).toBe(false); // 일찍 끝남 앞 — 처리 중 삼킨 409가 푼 충돌 뒤에도 표시를 되살린다
+  expect(marked(cut(s, /(OFFLINE_OPEN \? null : n\)\);)\s*unreadTheirs\.current = false;/, '$1'))).toBe(false); // 서버 판을 받아도 안 걷으면 푼 충돌 뒤 빈 쪽지를 안 지운다
+  expect(marked(cut(s, 'if (isGone(e)) unreadTheirs.current = false;', CLR))).toBe(false); // 404가 아닌 실패에도 걷으면 GET 실패 뒤 지운다
+  expect(marked(cut(s, 'if (e instanceof ApiError && e.status === 409) unreadTheirs.current = true;', ''))).toBe(false); // 질문 보내기 409에 세우지 않으면 질문이 안 나간 뒤 비우고 떠날 때 지운다(REQ-402)
+  expect(marked(cut(s, "if (o.kind === 'conflict') unreadTheirs.current = true;", ''))).toBe(false); // 내보낸 표시 저장 409에 세우지 않으면 공유한 뒤 비우고 떠날 때 지운다(REQ-402)
 });
 
 test('REQ-399 · 다른 곳에서 지운 쪽지는 그 뒤 저장 결과가 「찾을 수 없어요」를 덮지 않는다(빼면 잡힌다)', () => {

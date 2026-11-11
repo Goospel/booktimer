@@ -34,6 +34,7 @@ import {
   adoptNewNote,
   AUTOSAVE_MS,
   draftSync,
+  isGone,
   newNoteKey,
   type NewNoteSlot,
   revisionOrThrow,
@@ -120,6 +121,7 @@ export default function MarginNote() {
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const offlineShown = useRef(false);
   const conflictOpen = useRef(false);
+  const unreadTheirs = useRef(false); // 409를 받고 그쪽 판을 아직 못 읽었다 — 칸보다 새 판이 있는데 판 번호를 모른다(떠날 때 지우지 않는다 · REQ-401 · 402)
   const pending = useRef<{ step: Step; focus: string | null } | null>(null);
   const waitingRef = useRef(false); // 보내는 중에 떠나면 빈 쪽지여도 지우지 않는다 — 서버가 이미 몫을 깎았다
   const edited = useRef(false); // 이 방문에서 무엇을 썼는가 — 돌아간 화면의 「여백을 남겼어요」
@@ -145,6 +147,7 @@ export default function MarginNote() {
     setNote(v);
     setHead((h) => (h ? { ...h, quoteSource: v.quoteSource } : h));
     setNotice((n) => (n?.message === OFFLINE_OPEN ? null : n)); // 서버 판이 섰다 = 연결됐다 — 자동저장 첫 PUT · 충돌 GET 어느 길이든 오프라인 열기 알림을 걷는다(REQ-393)
+    unreadTheirs.current = false; // 서버 판을 읽었다 — 떠날 때는 칸의 판을 이 판과 대조한다(REQ-400 · 401)
   }
 
   /** 재료 줄(「재료 N개 중 M개」) · 내보내기 책 줄 · 캐시에 없던 제목 — 못 읽어도 쪽지는 쓴다 */
@@ -256,7 +259,8 @@ export default function MarginNote() {
             creating: creating.current !== null,
             device: fromDevice.current && serverRef.current === null, // 그 방문에서 서버 판을 못 받았다 — 빈 쪽지도 지우지 않는다(REQ-395)
           }),
-          { dropNewSlot, createFirst, del: margins.delete, drop: s.drop, flush: (n) => s.flush(n), noteId: () => noteId.current },
+          // 지우기 전 칸 읽기 · 이 기기가 아는 서버 판(정리 때 동기로 잡는다 — 409 뒤 못 읽었으면 null · REQ-400 · 401)
+          { dropNewSlot, createFirst, del: margins.delete, drop: s.drop, flush: (n) => s.flush(n), noteId: () => noteId.current, local: s.local, seen: unreadTheirs.current ? null : (serverRef.current?.revision ?? null) },
         ),
       );
       if (!(empty && !waitingRef.current) && edited.current && !gone.current) savedNotice.mark(); // 버린 글을 남겼다고 하지 않는다(REQ-399)
@@ -388,6 +392,7 @@ export default function MarginNote() {
   function askConflict() {
     if (conflictOpen.current) return;
     conflictOpen.current = true;
+    unreadTheirs.current = true; // 창이 뜬다 = 서버에 칸보다 새 판이 있다 — 그 판을 읽기 전에 떠나면 지우지 않는다(REQ-401)
     Keyboard.dismiss();
     Alert.alert('다른 기기에서 이 쪽지가 바뀌었어요', CONFLICT_BODY, [
       { text: '둘 다 남기기', isPreferred: true, onPress: () => void resolveConflict('both') },
@@ -423,6 +428,7 @@ export default function MarginNote() {
       setEditorKey((k) => k + 1);
     } catch (e) {
       conflictOpen.current = false;
+      if (isGone(e)) unreadTheirs.current = false; // 이미 지워졌다 — 지킬 그쪽 판이 없다(떠날 때 DELETE 404가 칸을 지운다)
       setNotice({ message: failText(e, '쪽지를 불러오지 못했어요 — 잠시 뒤 다시 해 주세요'), tone: 'error' });
     }
   }
@@ -457,7 +463,11 @@ export default function MarginNote() {
           textInput.current?.blur();
         },
         flush: async () => revisionOrThrow(await save()),
-        post: (revision) => margins.ai(id, { step, revision, focus: step === 'ASK' ? null : f }),
+        post: (revision) =>
+          margins.ai(id, { step, revision, focus: step === 'ASK' ? null : f }).catch((e) => {
+            if (e instanceof ApiError && e.status === 409) unreadTheirs.current = true; // 질문 보내기가 받은 판 대조 409 — 충돌 창 없이도 칸보다 새 판이 있다(떠날 때 지우지 않는다 · REQ-402)
+            throw e;
+          }),
         reload: () => margins.get(id),
         roundsBefore: roundsRef.current,
       });
@@ -533,7 +543,10 @@ export default function MarginNote() {
     const r = await Share.share({ message: buildNoteExport({ quote: quoteRef.current, quoteSource: source, text: textRef.current }) });
     // ponytail: 내보낸 표시는 지표뿐이라 실패해도 조용히 넘긴다 — onOutcome을 거치지 않는다
     const id = noteId.current;
-    if (shouldMarkExported(r) && id !== null && (saved?.kind === 'saved' || saved?.kind === 'mismatch')) void sync.current?.flush(id, { exported: true });
+    if (shouldMarkExported(r) && id !== null && (saved?.kind === 'saved' || saved?.kind === 'mismatch'))
+      void sync.current?.flush(id, { exported: true }).then((o) => {
+        if (o.kind === 'conflict') unreadTheirs.current = true; // 내보낸 표시 저장이 받은 409 — 알리지 않지만 칸보다 새 판이 있다(떠날 때 지우지 않는다 · REQ-402)
+      });
   }
 
   const canExport = canSaveMargin({ quote: quoteText, thought: thoughtText });
