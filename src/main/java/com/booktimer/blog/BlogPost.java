@@ -11,6 +11,7 @@ import jakarta.persistence.Id;
 import jakarta.persistence.JoinColumn;
 import jakarta.persistence.ManyToOne;
 import jakarta.persistence.Table;
+import org.hibernate.annotations.DynamicUpdate;
 
 import java.time.Instant;
 
@@ -19,8 +20,13 @@ import java.time.Instant;
  * {@code layout_json} — 올릴 때만 바뀐다 · J11 · J89)이 한 행에 산다. 문장은 {@link BlogSentence}, 순서는 배치({@link Layout}).
  *
  * <p>{@code hidden_at}은 운영자 가리기(B2가 쓴다) — B1은 읽기에서 뺀다(§6.4).
+ *
+ * <p><b>{@code @DynamicUpdate}</b>(§4.11): 잠그지 않는 초안 저장이 올리기와 겹치면 전 열 UPDATE가 올리기가 쓴 제목 · 배치 · 올린
+ * 시각을 옛 스냅샷으로 오류 없이 덮는다 — 바뀐 열만 쓰게 해 저장({@code draft_*})과 올리기가 서로 덮지 않는다
+ * ({@code ChatRoom} · {@code Story} · {@code WritingDraft} · {@code User}와 같은 까닭 · REQ-230 BlogPostRaceTest).
  */
 @Entity
+@DynamicUpdate
 @Table(name = "blog_post")
 public class BlogPost extends BaseTimeEntity {
 
