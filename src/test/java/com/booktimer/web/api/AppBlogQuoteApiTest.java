@@ -350,6 +350,36 @@ class AppBlogQuoteApiTest {
     }
 
     @Test
+    @DisplayName("REQ-237 · 초안의 표시 번호가 9,999면 다음 박스 400(박스 행 0) · 9,998이면 label 9,999로 201")
+    void labelCeiling() throws Exception {
+        String me = ready("qlabmax");
+        long full = create(me, "내 글", "내 문장. ⟦인용 9999⟧");
+        long last = create(me, "내 글", "내 문장. ⟦인용 9998⟧");
+        Story n = note("qlabmax", bookOf("qlabmax", "데미안", "헤르만 헤세", null), "옮긴 문장", "생각");
+
+        quote(me, full, book(n.getId())).andExpect(status().isBadRequest())
+                .andExpect(content().string("인용은 더 만들 수 없어요"));
+        assertThat(quoteBoxRepository.existsByOwnerTypeAndOwnerId(QuoteBox.Owner.POST, full)).isFalse();
+        quote(me, last, book(n.getId())).andExpect(status().isCreated()).andExpect(jsonPath("$.label").value(9999));
+    }
+
+    @Test
+    @DisplayName("REQ-237 · MARGIN — 고른 생각이 1,001자 넘으면 400(박스 행 0) · 다시 고르기도 400(박스 글 그대로)")
+    void marginOverThousand() throws Exception {
+        String me = ready("qmlong");
+        long mine = create(me, "내 글", "내 문장.");
+        String first = "가".repeat(600) + ".";
+        Story n = note("qmlong", null, null, first + " " + "나".repeat(600) + ".");
+
+        quote(me, mine, margin(n.getId(), 0, 0, 1)).andExpect(status().isBadRequest())
+                .andExpect(content().string("인용은 1,000자까지예요"));
+        assertThat(quoteBoxRepository.existsByOwnerTypeAndOwnerId(QuoteBox.Owner.POST, mine)).isFalse();
+        long q = box(me, mine, margin(n.getId(), 0, 0, 0)); // 양성 대조 — 한 문장(601자)은 201
+        repick(me, q, 0, 0, 1).andExpect(status().isBadRequest()).andExpect(content().string("인용은 1,000자까지예요"));
+        assertThat(boxRow(q).getText()).isEqualTo(first);
+    }
+
+    @Test
     @DisplayName("엣지 · 남의 글에 박스 만들기 404(박스 행 0) — 내 글은 201")
     void othersPostBox404() throws Exception {
         String me = ready("qpidor1");
@@ -550,11 +580,16 @@ class AppBlogQuoteApiTest {
         Story bNote = note("q239ib", null, null, "생각.");
         long noteBox = quoteBoxRepository.saveAndFlush(QuoteBox.blog(QuoteBox.Owner.NOTE, bNote.getId(), 1, src,
                 user("q239i").getId(), List.of(s.get(0)), 0, "봄에는 꽃이 핀다.", "원 글", Instant.now())).getId();
+        // 원 글이 없는 박스 — 소유 404가 원문 지움 409보다 먼저인지 잰다(주인에겐 409 — 이 픽스처가 그 검사에 닿는다는 양성 대조)
+        long goneBox = quoteBoxRepository.saveAndFlush(QuoteBox.blog(QuoteBox.Owner.POST, mine, 2, 987_654_321L,
+                user("q239i").getId(), List.of(s.get(0)), 0, "봄에는 꽃이 핀다.", "지운 글", Instant.now())).getId();
         republish(a, src, "원 글", "봄에는 꽃이 활짝 핀다.");
 
         refresh(c, postBox).andExpect(status().isNotFound());
         refresh(c, noteBox).andExpect(status().isNotFound());
         refresh(c, 987_654_321L).andExpect(status().isNotFound());
+        refresh(c, goneBox).andExpect(status().isNotFound()).andExpect(content().string("인용을 찾을 수 없어요"));
+        refresh(b, goneBox).andExpect(status().isConflict()).andExpect(content().string("원문이 지워졌어요"));
         assertThat(boxRow(postBox).getText()).isEqualTo("봄에는 꽃이 핀다.");
         assertThat(boxRow(noteBox).getText()).isEqualTo("봄에는 꽃이 핀다.");
         refresh(b, postBox).andExpect(status().isOk()).andExpect(jsonPath("$.text").value("봄에는 꽃이 활짝 핀다."));
@@ -927,7 +962,11 @@ class AppBlogQuoteApiTest {
         repick(b, q, 0, 0, 2).andExpect(status().isBadRequest()).andExpect(content().string("고른 범위가 쪽지의 생각 밖이에요"));
         repick(b, q, 0, -1, 0).andExpect(status().isBadRequest());
         repick(c, q, 0, 0, 1).andExpect(status().isNotFound());
+        // 소유 404가 종류 400보다 먼저 — 남은 박스 id로 종류를 알아낼 수 없다(§6.6 머리)
+        repick(c, bookBox, 0, 0, 0).andExpect(status().isNotFound()).andExpect(content().string("인용을 찾을 수 없어요"));
+        refresh(c, q).andExpect(status().isNotFound()).andExpect(content().string("인용을 찾을 수 없어요"));
         repick(b, bookBox, 0, 0, 0).andExpect(status().isBadRequest()).andExpect(content().string("여백 인용만 다시 고를 수 있어요"));
+        refresh(b, q).andExpect(status().isBadRequest()).andExpect(content().string("최신으로 반영은 블로그 문장 인용만 돼요"));
         repick(b, q, 0, 0, 1).andExpect(status().isOk()); // 양성 대조
 
         storyRepository.delete(storyRepository.findById(n.getId()).orElseThrow());

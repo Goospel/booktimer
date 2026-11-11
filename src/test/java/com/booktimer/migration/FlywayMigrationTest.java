@@ -92,6 +92,28 @@ class FlywayMigrationTest {
     @Autowired
     com.booktimer.session.StudyDailyCheckRepository studyDailyCheckRepository;
 
+    @Autowired
+    com.booktimer.blog.QuoteBoxRepository quoteBoxRepository;
+
+    // ── 책생글 B1b(V107) — 메인 스위트는 엔티티로 표를 만들어 마이그레이션의 길이 · 유일 제약을 못 본다 ──
+
+    @Test
+    @DisplayName("B1b · V107: attribution 505자 · text 1,000자 박스가 담기고, 같은 (owner_type, owner_id, label)은 둘째가 막힌다")
+    void quote_box_lengths_and_owner_label_unique() {
+        long owner = 770_001L;
+        String attribution = "가".repeat(505);
+        String text = "나".repeat(1_000);
+        var first = quoteBoxRepository.saveAndFlush(com.booktimer.blog.QuoteBox.book(owner, 1, 1L, text, attribution, null, Instant.now()));
+        assertThat(jdbcTemplate.queryForObject("SELECT attribution FROM quote_box WHERE id = ?", String.class, first.getId()))
+                .isEqualTo(attribution);
+        // 양성 대조 — 같은 주인의 다른 label은 담긴다(아래 실패가 유일 제약 때문임을 가른다)
+        quoteBoxRepository.saveAndFlush(com.booktimer.blog.QuoteBox.book(owner, 2, 1L, "옮긴 문장", null, null, Instant.now()));
+
+        assertThatThrownBy(() -> quoteBoxRepository.saveAndFlush(
+                com.booktimer.blog.QuoteBox.book(owner, 1, 1L, "옮긴 문장", null, null, Instant.now())))
+                .isInstanceOf(DataIntegrityViolationException.class);
+    }
+
     @Test
     void v1_baseline_migration_is_applied() {
         boolean v1Applied = Arrays.stream(flyway.info().applied())
