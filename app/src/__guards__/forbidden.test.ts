@@ -620,6 +620,9 @@ const WIRES: { id: string; rel: string; needle: string; n: number; mutant: strin
     mutant: "if (!res.ok) setNotice({ message: failText(res.cause, SAVE_FAIL), tone: 'error' })",
   },
   { id: 'REQ-399 지운 쪽지에 「여백을 남겼어요」 없음', rel: NOTE, needle: 'edited.current && !gone.current) savedNotice.mark()', n: 1, mutant: 'edited.current) savedNotice.mark()' },
+  // 2차 리뷰 반영(addendum-2 §6.F — R24 · R25). 문구 글자는 잠그지 않는다
+  { id: 'REQ-399 지운 쪽지 표시의 처음 값(거짓)', rel: NOTE, needle: 'const gone = useRef(false);', n: 1, mutant: 'const gone = useRef(true);' },
+  { id: 'REQ-399 지운 쪽지 알림의 돌아가기 단추', rel: NOTE, needle: 'onPress: () => router.back() } };', n: 1, mutant: '};' },
 ];
 test.each(WIRES)('A1 리뷰 15 · $id — 화면이 lib 판정을 쓴다(돌연변이를 심으면 잡힌다)', ({ rel, needle, n, mutant }) => {
   const s = srcOf(rel);
@@ -636,8 +639,8 @@ const newBookOpens = (s: string) => {
   return (
     head >= 0 && branch.indexOf('library.materials(route.bookId)') > head && // 머리를 재료 요청보다 먼저 — .then 안으로 옮기면 오프라인에서 「불러오는 중」에 멈춘다
     !/await library\.materials\(/.test(branch) &&
-    // 404면 머리를 걷어야 오류 화면이 그려진다(오류는 !head 안에서만) — [^\n]*는 줄 끝 주석 · \r을 먹는다
-    /if \(e instanceof ApiError && e\.status === 404\) \{\s*setHead\(null\);[^\n]*\s*setLoadError\(\{ message: e\.message, notFound: true \}\);/.test(branch)
+    // 404면 머리를 걷어야 오류 화면이 그려진다(오류는 !head 안에서만) — 줄 끝 주석은 srcOf가 이미 걷었고 \r은 \s*가 먹는다(같은 줄에 다른 코드를 붙이면 잡힌다)
+    /if \(e instanceof ApiError && e\.status === 404\) \{\s*setHead\(null\);\s*setLoadError\(\{ message: e\.message, notFound: true \}\);/.test(branch)
   );
 };
 test('REQ-391 · 새 책 쪽지는 재료를 기다리지 않고 캐시 머리를 먼저 그린다 · 재료 404면 머리를 걷고 「돌아가기」 오류(await · .then 안으로 옮기기 · 404 조건을 바꾸면 잡힌다)', () => {
@@ -651,6 +654,7 @@ test('REQ-391 · 새 책 쪽지는 재료를 기다리지 않고 캐시 머리�
   expect(newBookOpens(cut(s, /(e\.status === 404\) \{\s*)setHead\(null\);/, '$1'))).toBe(false); // 머리를 안 걷으면 오류 화면이 안 그려진다
   expect(newBookOpens(cut(s, /e\.status === 404\) \{(\s*setHead\(null\))/, 'e.status === 999) {$1'))).toBe(false);
   expect(newBookOpens(cut(s, /if \(e instanceof ApiError && e\.status === 404\) \{(\s*setHead\(null\))/, 'if (true) {$1'))).toBe(false); // 연결 실패에도 머리를 걷는다(오프라인 열기가 깨진다)
+  expect(newBookOpens(cut(s, 'setHead(null);', 'setHead(null); return;'))).toBe(false); // C1 — 같은 줄에 붙인 코드(2차 리뷰 F6-5)
 });
 
 const OPEN_FROM_DEVICE = [
@@ -731,19 +735,26 @@ test('REQ-394 · 충돌 처리 효과 묶음 — 칸 읽기 · 새 쪽지 만들
   }
 });
 
-test('REQ-394 · 충돌 처리가 끝나기 전엔 창을 다시 열지 않는다 · 끝나면 어느 길로든 되돌린다 — 처리 중 옛 판 자동저장의 409로 창이 겹치지 않고, 만들기 · GET이 실패한 뒤에도 409를 삼키지 않는다(옛 자리로 되돌리거나 한 자리라도 빼면 잡힌다)', () => {
+test('REQ-394 · 충돌 처리가 끝나기 전엔 창을 다시 열지 않는다 · 끝나면 어느 길로든 되돌린다 — 처리 중 옛 판 자동저장의 409로 창이 겹치지 않고, 만들기 · GET이 실패한 뒤에도 409를 삼키지 않는다(옛 자리로 되돌리거나 · 한 자리라도 빼거나 · 다른 길로 옮기면 잡힌다)', () => {
   const s = srcOf(NOTE);
+  const R = 'conflictOpen.current = false';
   const late = (x: string) => {
     const b = bodyOf(x, 'async function resolveConflict(');
     const keep = b.indexOf('await keepConflict(');
-    const reset = b.indexOf('conflictOpen.current = false', keep);
+    const reset = b.indexOf(R, keep);
+    const pre = b.slice(0, keep);
+    const then = bodyOf(b, "if (which !== 'theirs')");
+    const after = b.indexOf(then) + then.length;
     return (
       !/^\{\s*conflictOpen\.current = false;/.test(b) &&
       keep > b.indexOf('await margins.get(') &&
       reset > keep &&
       reset < b.indexOf('if (!res.ok)') && // 만들기 실패 갈래도 되돌린다
       reset < b.indexOf('onOutcome(res.r)') && // 덮기가 받은 진짜 409(onOutcome)보다 먼저
-      count(b, 'conflictOpen.current = false') === 4 // 일찍 끝남 · 효과 뒤 · 그쪽 불러오기 뒤 · catch — 하나라도 빠지면 그 길 뒤 그 방문 내내 창이 안 뜬다
+      count(b, R) === 4 && // 일찍 끝남 · 효과 뒤 · 그쪽 불러오기 뒤 · catch — 하나라도 빠지면 그 길 뒤 그 방문 내내 창이 안 뜬다
+      count(pre, R) === 1 && /if \(!s \|\| id === null\) \{\s*conflictOpen\.current = false;\s*return;/.test(pre) && // ① 효과 앞에는 일찍 끝남 하나뿐 — 처리 중엔 창을 다시 열지 않는다
+      /\} catch \(e\) \{\s*conflictOpen\.current = false;/.test(b) && // ② catch 첫 문장 — GET이 실패해도 되돌린다
+      then !== '' && count(b.slice(after, b.indexOf('} catch (e) {')), R) === 1 // ③ 그쪽 불러오기 길에 하나(takeTheirs 앞뒤는 허용 — R21)
     );
   };
   expect(late(s)).toBe(true);
@@ -751,16 +762,40 @@ test('REQ-394 · 충돌 처리가 끝나기 전엔 창을 다시 열지 않는�
   const noReset = cut(s, /(const res = await keepConflict\([^\n]*\n)\s*conflictOpen\.current = false;/, '$1');
   expect(late(cut(noReset, 'onOutcome(res.r);', 'conflictOpen.current = false;\n onOutcome(res.r);'))).toBe(false); // else 안으로 — 만들기 실패 갈래에서 빠진다
   expect(late(cut(s, /(\} catch \(e\) \{)\s*conflictOpen\.current = false;/, '$1'))).toBe(false); // catch 되돌리기 지움 — GET 실패 뒤
+  // 2차 리뷰 F6-1 — 자리별(옮기기)
+  // 그쪽 불러오기 되돌리기를 takeTheirs 앞뒤 어느 쪽에 두든 걷는다 — 허용 이동(R21)을 소스에 심어도 아래 cut이 깨지지 않는다
+  const THEIRS = /(?:conflictOpen\.current = false;\s*)?(const slot = await s\.takeTheirs\(id, toDoc\(v\)\);)(?:\s*conflictOpen\.current = false;)?/;
+  const GET = /(const v = await margins\.get\(id\);\s*takeServer\(v\);)/;
+  expect(late(cut(cut(s, THEIRS, '$1'), GET, '$1\n conflictOpen.current = false;'))).toBe(false); // A1 — 그쪽 쪽을 GET 뒤로: 이 기기 것 유지 · 둘 다 남기기 처리 중 창이 풀린다
+  expect(late(cut(cut(s, /(\} catch \(e\) \{)\s*conflictOpen\.current = false;/, '$1'), GET, '$1\n conflictOpen.current = false;'))).toBe(false); // A2 — catch 것을 GET 뒤로: GET이 실패하면 그 방문 내내 409를 삼킨다
+  expect(late(cut(cut(s, THEIRS, '$1'), 'const res = await keepConflict(', 'conflictOpen.current = false;\n const res = await keepConflict('))).toBe(false); // R22
+  expect(late(cut(cut(s, THEIRS, '$1'), 'const slot = await s.takeTheirs(id, toDoc(v));', 'conflictOpen.current = false;\n const slot = await s.takeTheirs(id, toDoc(v));'))).toBe(true); // R21 허용 — 넓어지는 틈은 칸 쓰기 ms · 그 창의 단추는 그쪽 판과 같은 칸만 보낸다
+});
+
+test('REQ-394 · 둘 다 남긴 뒤 알림은 덮기 결과 알림 뒤에 — 덮기가 mismatch여도 「새 쪽지로 남겼어요」가 남는다(앞으로 옮기면 잡힌다)', () => {
+  const s = srcOf(NOTE);
+  const BOTH = 'if (res.both) setNotice({ message: BOTH_KEPT })';
+  const after = (x: string) => {
+    const t = bodyOf(bodyOf(x, 'async function resolveConflict('), "if (which !== 'theirs')");
+    const o = t.indexOf('onOutcome(res.r)');
+    return o >= 0 && o < t.indexOf(BOTH);
+  };
+  expect(after(s)).toBe(true);
+  expect(after(cut(cut(s, /\s*if \(res\.both\) setNotice\(\{ message: BOTH_KEPT \}\);/, ''), 'onOutcome(res.r);', `${BOTH};\n onOutcome(res.r);`))).toBe(false);
 });
 
 test('REQ-393 · 서버 판이 처음 서는 모든 길(자동저장 첫 PUT · 충돌 GET)에서 오프라인 열기 알림을 걷는다 — takeServer 한 곳(지우거나 put 어댑터로 되돌리면 잡힌다)', () => {
   const s = srcOf(NOTE);
   const W = 'setNotice((n) => (n?.message === OFFLINE_OPEN ? null : n));';
-  const once = (x: string) => count(bodyOf(x, 'function takeServer('), W) === 1 && count(x, W) === 1;
+  const once = (x: string) =>
+    count(bodyOf(x, 'function takeServer('), W) === 1 && count(x, W) === 1 &&
+    /const v = await margins\.get\(id\);\s*takeServer\(v\);/.test(bodyOf(x, 'async function resolveConflict(')); // 충돌 GET도 takeServer를 지난다(2차 리뷰 F6-3)
   expect(once(s)).toBe(true);
   const gone = cut(s, W, '');
   expect(once(gone)).toBe(false);
   expect(once(cut(gone, /(if \(serverRef\.current === null\) \{\s*takeServer\(v\);)/, `$1\n${W}`))).toBe(false); // put 어댑터로 되돌림
+  expect(once(cut(s, /(const v = await margins\.get\(id\);)\s*takeServer\(v\);/, '$1'))).toBe(false); // B1 — 걷기 · 질문 기록 · 409 표시 걷기가 그 길에서 빠진다
+  expect(once(cut(s, /(const v = await margins\.get\(id\);\s*)takeServer\(v\);/, '$1serverRef.current = v;'))).toBe(false); // R23
 });
 
 // 여백 오프라인 열기 2차 리뷰 반영(addendum-2 §7 T3) — 409 표시를 세우는 곳 · 걷는 곳
@@ -800,9 +835,10 @@ test('REQ-399 · 질문 실패가 「찾을 수 없어요」를 덮지 않는다
   const guarded = (x: string) => {
     const b = bodyOf(x, 'function runAi(');
     const at = b.indexOf(STOP);
-    return count(x, STOP) === 1 && at > b.indexOf('setWaiting(null)') && at < b.indexOf("if (r.kind === 'done')");
+    return count(b, STOP) === 1 && at > b.indexOf('setWaiting(null)') && at < b.indexOf("if (r.kind === 'done')"); // 수는 runAi 안에서만(2차 리뷰 F6-6)
   };
   expect(guarded(s)).toBe(true);
+  expect(guarded(cut(s, /(\} catch \(e\) \{\s*setSheet\(null\);)/, '$1\n if (gone.current) return;'))).toBe(true); // 동의 저장 실패에 같은 줄 — 설계 §5.I가 내다본 개선은 막지 않는다
   expect(guarded(cut(s, STOP, 'if (false) return;'))).toBe(false);
   expect(guarded(cut(cut(s, STOP, ''), 'const r = await sendAiStep(', `${STOP}\n const r = await sendAiStep(`))).toBe(false); // 보내기 앞 — 보내기 중 첫 404의 오류 문구가 덮고, 이미 지운 쪽지면 기다림이 안 풀린다
 });
