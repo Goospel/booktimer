@@ -97,7 +97,7 @@ export function copyOfNote(v: Pick<MarginView, 'bookId' | 'quote' | 'quoteSource
 
 /**
  * (Q1 가) 충돌 창 「이 기기 것 유지」 · 「둘 다 남기기」의 효과(REQ-394 — runLeave와 같은 꼴: 판정은 여기, 화면은 묶음만 넘긴다).
- * 둘 다면 그쪽 판을 새 쪽지로 **먼저** 만들고, 못 만들면 덮지 않는다 — keepMine을 부르지 않는다(칸은 dirty · 옛 판이라 다음 저장이 다시 묻는다).
+ * 둘 다면 그쪽 판을 새 쪽지로 **먼저** 만들고, 못 만들면 덮지 않는다 — keepMine을 부르지 않는다(칸은 dirty · 옛 판이라 다음 저장이 다시 묻는다 · 두 칸을 비우고 떠나도 지우지 않는다 — REQ-400).
  * both = 새 쪽지를 만들었고 덮기도 섰다(saved · mismatch) — 「새 쪽지로 남겼어요」를 띄울 때(설계 §5.4 ④).
  */
 export async function keepConflict(
@@ -198,6 +198,8 @@ export function leaveAction(p: { loaded: boolean; empty: boolean; waiting: boole
  * 떠날 때 할 일을 실제로 부른다(재리뷰 A). 돌려준 약속 = 그 갈래의 마지막 효과의 끝 — 화면은 이것을 pendingLeave에 넣는다.
  * create는 만든 뒤 만드는 동안 더 쓴 것을 곧바로 보낸다(언마운트 뒤 1.5초 타이머에 맡기면 돌아간 목록이 옛 미리보기다 — 재리뷰 H).
  * delete는 서버가 지웠거나 404(이미 없음 — isGone)면 칸을 지운다. 그 밖의 실패는 삼키고 칸을 남긴다(다음에 다시 열 수 있다 — 3차 4).
+ * delete는 지우기 전에 칸을 읽는다 — 칸의 판이 seen(이 기기가 아는 서버 판 · 409를 받고 아직 못 읽었으면 null)과 다르면 지우지 않고 칸을 남긴다.
+ * 충돌을 풀지 못한 채 비우고 떠나면 판 대조 없는 DELETE가 다른 기기의 새 판을 지운다 — 남긴 칸은 다음 열기의 staleEmpty가 그 글로 바꾼다(REQ-400 · 401).
  */
 export function runLeave(
   act: LeaveAction,
@@ -208,6 +210,8 @@ export function runLeave(
     drop: (id: number) => Promise<unknown>;
     flush: (id: number) => Promise<unknown>;
     noteId: () => number | null;
+    local: (id: number) => Promise<{ base: number } | null>;
+    seen: number | null;
   },
 ): Promise<unknown> {
   const remove = (id: number) => d.del(id).then(() => d.drop(id), (e) => (isGone(e) ? d.drop(id) : undefined));
@@ -220,7 +224,7 @@ export function runLeave(
   if (act === 'drop-slot') return d.dropNewSlot();
   if (act === 'create') return afterCreate(d.flush);
   if (act === 'delete-after-create') return Promise.all([d.dropNewSlot(), afterCreate(remove)]);
-  if (act === 'delete' && id !== null) return remove(id);
+  if (act === 'delete' && id !== null) return d.local(id).then((slot) => (slot && slot.base !== d.seen ? undefined : remove(id))); // 칸이 이 기기가 아는 서버 판 위에 없다 — 지우지 않는다(REQ-400 · 401)
   if (act === 'flush' && id !== null) return d.flush(id);
   return Promise.resolve();
 }
