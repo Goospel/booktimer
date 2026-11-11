@@ -738,4 +738,77 @@ class AppBlogApiControllerTest {
         sql("update users set ugc_terms_at = ? where login_id = ?", Timestamp.from(Instant.now()), "bterms");
         publish(token, id, 0); // 양성 대조 — 동의가 있으면 올라간다
     }
+
+    // ── 엣지(계획 §8.1 11) ──────────────────────────────────────────────────
+
+    @Test
+    @DisplayName("엣지 · 빈 줄만 있는 본문은 문장 0 → 400")
+    void blankLinesOnly() throws Exception {
+        String me = ready("bblank");
+        long id = create(me, "제목", "\n\n   \n" + (char) 0xA0 + "\n");
+        json(post("/api/app/blog/posts/" + id + "/publish"), me, "{\"revision\":0}").andExpect(status().isBadRequest())
+                .andExpect(content().string("본문을 한 문장 이상 적어 주세요"));
+        assertThat(postRepository.findById(id).orElseThrow().getPublishedAt()).isNull();
+    }
+
+    @Test
+    @DisplayName("엣지 · 같은 문장 둘은 주소가 저마다 · 하나 더 쓰면 새 주소 하나")
+    void duplicateSentences() throws Exception {
+        String me = ready("bdup");
+        long id = published(me, "제목", "같은 문장이다. 같은 문장이다.");
+        List<String> two = sids(read(me, id, null));
+        assertThat(two).hasSize(2).doesNotHaveDuplicates();
+        edit(me, id, "제목", "같은 문장이다. 같은 문장이다. 같은 문장이다.", 0);
+        List<String> three = sids(publish(me, id, 1));
+        assertThat(three).hasSize(3).doesNotHaveDuplicates().containsAll(two);
+    }
+
+    @Test
+    @DisplayName("엣지 · 이모지 · URL만 있는 줄은 글자 그대로 한 문장 · 줄 끝 br")
+    void emojiAndUrlLine() throws Exception {
+        String me = ready("burl");
+        String view = publish(me, create(me, "제목", "https://example.com/a.b?c=1\n좋았다 😊. 🎉"), 0);
+        List<Map<String, Object>> s = JsonPath.read(view, "$.blocks[0].sentences[*]");
+        assertThat(s).extracting(x -> x.get("text")).containsExactly("https://example.com/a.b?c=1", "좋았다 😊.", "🎉");
+        assertThat(s).extracting(x -> x.get("br")).containsExactly(true, false, false);
+    }
+
+    @Test
+    @DisplayName("엣지 · 글쓴이가 차단한 독자도 글 GET 404(차단은 양방향)")
+    void authorBlocksReader() throws Exception {
+        String me = ready("bblk");
+        String reader = ready("bblkr");
+        long id = published(me, "제목", "문장이다.");
+        call(get("/api/app/blog/posts/" + id), reader).andExpect(status().isOk()); // 양성 대조
+        blockRepository.saveAndFlush(Block.of(userRepository.findByLoginId("bblk").orElseThrow(),
+                userRepository.findByLoginId("bblkr").orElseThrow()));
+        call(get("/api/app/blog/posts/" + id), reader).andExpect(status().isNotFound());
+        call(get("/api/app/blog/posts"), reader).andExpect(jsonPath("$.posts", hasSize(0)));
+    }
+
+    @Test
+    @DisplayName("엣지 · 남의 글 PUT · DELETE · publish 404(글 그대로) — 내 글은 2xx")
+    void othersPostIdor() throws Exception {
+        String me = ready("bidor");
+        String other = ready("bidoro");
+        long id = published(me, "제목", "문장이다.");
+
+        json(put("/api/app/blog/posts/" + id), other, save("남", "남의 글.", 0)).andExpect(status().isNotFound());
+        call(delete("/api/app/blog/posts/" + id), other).andExpect(status().isNotFound());
+        json(post("/api/app/blog/posts/" + id + "/publish"), other, "{\"revision\":0}").andExpect(status().isNotFound());
+        call(get("/api/app/blog/posts/" + id), me).andExpect(jsonPath("$.draft.revision").value(0))
+                .andExpect(jsonPath("$.title").value("제목"));
+
+        edit(me, id, "제목", "문장이다.", 0);
+        publish(me, id, 1);
+        call(delete("/api/app/blog/posts/" + id), me).andExpect(status().isNoContent());
+        call(get("/api/app/blog/posts/" + id), me).andExpect(status().isNotFound());
+    }
+
+    @ParameterizedTest(name = "엣지 · limit {0} → {1}")
+    @CsvSource({"0, 400", "51, 400", "-1, 400", "1, 200", "50, 200"})
+    void limitBounds(int limit, int expected) throws Exception {
+        String me = ready("blimit");
+        call(get("/api/app/blog/posts?limit=" + limit), me).andExpect(status().is(expected));
+    }
 }

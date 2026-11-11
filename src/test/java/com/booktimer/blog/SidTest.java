@@ -43,6 +43,7 @@ class SidTest {
     }
 
     @Test
+    @org.junit.jupiter.api.DisplayName("REQ-232 · sid 충돌이면 다시 뽑는다(이번에 뽑은 것 포함 — Sid.fresh)")
     void REQ_232_이번에_뽑은_것도_겹침으로_본다() {
         Set<String> thisPublish = new HashSet<>();
         Set<String> inDb = Set.of("dbRow001");
