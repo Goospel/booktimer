@@ -428,7 +428,7 @@ export default function MarginNote() {
       setEditorKey((k) => k + 1);
     } catch (e) {
       conflictOpen.current = false;
-      if (isGone(e)) unreadTheirs.current = false; // 이미 지워졌다 — 지킬 그쪽 판이 없다(떠날 때 DELETE 404가 칸을 지운다)
+      if (isGone(e)) unreadTheirs.current = false; // 이미 지워졌다 — 지킬 그쪽 판이 없다(칸 판이 serverRef 판과 같으면 떠날 때 DELETE 404가 칸을 지운다 · 다르면 칸이 남는다 — PR 「한계」)
       setNotice({ message: failText(e, '쪽지를 불러오지 못했어요 — 잠시 뒤 다시 해 주세요'), tone: 'error' });
     }
   }

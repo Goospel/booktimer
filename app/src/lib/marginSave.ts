@@ -198,7 +198,7 @@ export function leaveAction(p: { loaded: boolean; empty: boolean; waiting: boole
  * 떠날 때 할 일을 실제로 부른다(재리뷰 A). 돌려준 약속 = 그 갈래의 마지막 효과의 끝 — 화면은 이것을 pendingLeave에 넣는다.
  * create는 만든 뒤 만드는 동안 더 쓴 것을 곧바로 보낸다(언마운트 뒤 1.5초 타이머에 맡기면 돌아간 목록이 옛 미리보기다 — 재리뷰 H).
  * delete는 서버가 지웠거나 404(이미 없음 — isGone)면 칸을 지운다. 그 밖의 실패는 삼키고 칸을 남긴다(다음에 다시 열 수 있다 — 3차 4).
- * delete는 지우기 전에 칸을 읽는다 — 칸의 판이 seen(이 기기가 아는 서버 판 · 409를 받고 아직 못 읽었으면 null)과 다르면 지우지 않고 칸을 남긴다.
+ * delete는 지우기 전에 칸을 읽는다 — 칸의 판이 seen(이 기기가 아는 서버 판 · 409를 받고 아직 못 읽었으면 null)과 다르면 지우지 않고 칸을 남긴다. 칸 읽기가 거부되면 지우지 않고 거부로 끝난다(pendingLeave가 삼킨다).
  * 충돌을 풀지 못한 채 비우고 떠나면 판 대조 없는 DELETE가 다른 기기의 새 판을 지운다 — 남긴 칸은 다음 열기의 staleEmpty가 그 글로 바꾼다(REQ-400 · 401).
  */
 export function runLeave(

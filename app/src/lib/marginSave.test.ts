@@ -354,6 +354,23 @@ test('3차 4 · runLeave delete — 404면 칸을 지우고 · 그 밖의 실패
   expect(await run(new NetworkError())).toEqual([]);
 });
 
+test('REQ-400 · 떠날 때 칸을 못 읽으면 지우지 않는다 — 판 대조를 못 했으니 안전 쪽(거부는 pendingLeave가 삼킨다)', async () => {
+  const calls: string[] = [];
+  await runLeave('delete', {
+    dropNewSlot: async () => undefined,
+    createFirst: async () => ({ kind: 'saved' }),
+    del: async (n) => void calls.push(`del ${n}`),
+    drop: async (n) => void calls.push(`drop ${n}`),
+    flush: async () => undefined,
+    noteId: () => 9,
+    local: async () => {
+      throw new Error('칸 읽기 실패');
+    },
+    seen: 3,
+  }).catch(() => undefined);
+  expect(calls).toEqual([]);
+});
+
 // 여백 오프라인 열기 — 서버 판 없이 그리는 머리(설계 §5.1 · §5.2). 세 목록에 서로 다른 제목을 둬 「어느 목록을 읽었는가」를 가른다
 describe('REQ-391 · 캐시 대시보드의 책 · 머리', () => {
   const book = (id: number, title: string, author: string | null = null) => ({ id, title, author, coverUrl: null });
@@ -507,6 +524,13 @@ describe('REQ-394 · keepConflict — 충돌 창의 이 기기 것 유지 · 둘
   test('REQ-394 · 둘 다 남기기는 copyOfNote가 만든 몸을 그대로 보낸다 — 책 없는 쪽지의 옮긴 문장 · 출처가 새 쪽지 생각 앞에 남는다(그쪽 생각만 보내면 잡힌다)', async () => {
     const v = { bookId: null, quote: '지운 책의 문장', quoteSource: '『데미안』 · 헤세', text: '그쪽 생각' } as unknown as typeof theirs;
     expect((await run('both', { v })).calls).toEqual(['mine', 'add 「지운 책의 문장」\n『데미안』 · 헤세\n\n그쪽 생각', 'keepMine']);
+  });
+
+  test('REQ-394 · 책 쪽지의 둘 다 남기기도 copyOfNote 몸 전체(책 · 옮긴 문장 · 출처)를 그대로 보낸다 — 그쪽 문장을 빼면 잡힌다', async () => {
+    let sent: unknown;
+    await keepConflict('both', theirs, { mine: async () => other, add: async (b) => void (sent = b), keepMine: async () => ({ kind: 'saved', revision: 8 }) });
+    expect(sent).toEqual(copyOfNote(theirs, other));
+    expect(sent).toMatchObject({ quote: '그쪽 문장' });
   });
 
   test('REQ-394 · 이 기기 것 유지는 새 쪽지를 만들지 않는다 · 그쪽 판이 비었거나 이 기기 칸과 같으면 둘 다 남기기도 덮기만', async () => {
