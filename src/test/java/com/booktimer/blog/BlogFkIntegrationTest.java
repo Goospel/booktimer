@@ -1,5 +1,7 @@
 package com.booktimer.blog;
 
+import com.booktimer.story.Story;
+import com.booktimer.story.StoryRepository;
 import com.booktimer.user.AccountService;
 import com.booktimer.user.Role;
 import com.booktimer.user.User;
@@ -34,6 +36,9 @@ class BlogFkIntegrationTest {
     @Autowired BlogSentenceRepository sentenceRepository;
     @Autowired BlogSentenceRevRepository revRepository;
     @Autowired BlogPostService postService;
+    @Autowired QuoteBoxRepository quoteBoxRepository;
+    @Autowired QuoteBoxService quoteBoxService;
+    @Autowired StoryRepository storyRepository;
     @Autowired EntityManager em;
 
     private User user(String loginId) {
@@ -117,6 +122,68 @@ class BlogFkIntegrationTest {
         assertThat(sentenceRepository.findByPostId(one.getId())).isEmpty();
         assertThat(sentenceRepository.findByPostId(two.getId())).isEmpty();
         assertThat(revRepository.count()).isZero();
+    }
+
+    // ── B1b 인용 박스(FK가 없어 「행 0」으로 잰다 — 고아가 조용히 남는 실패를 잡는다) ─────────────────
+
+    private static final Instant AT = Instant.parse("2026-11-11T00:00:00Z");
+
+    /** 그 글의 문장 AAAAAAAA를 인용한 박스(주인 = owner · 원 글쓴이 = 글 주인). */
+    private QuoteBox quoting(QuoteBox.Owner owner, long ownerId, BlogPost source) {
+        return quoteBoxRepository.saveAndFlush(QuoteBox.blog(owner, ownerId, 1, source.getId(), source.getUser().getId(),
+                java.util.List.of("AAAAAAAA"), 1, "첫 문장이다.", "제목", AT));
+    }
+
+    @Test
+    @DisplayName("REQ-204 · 내 글 · 내 쪽지의 박스 행 0 · 남의 글이 내 문장을 인용한 박스는 남는다")
+    void purgeClearsOwnBoxesKeepsOthers() {
+        User author = user("boxpurge");
+        User reader = user("boxkeep");
+        BlogPost mine = publishedPost(author);
+        Story myNote = storyRepository.saveAndFlush(Story.of(author, "내 생각.", null, null));
+        quoting(QuoteBox.Owner.POST, mine.getId(), mine);
+        quoting(QuoteBox.Owner.NOTE, myNote.getId(), mine);
+        BlogPost theirs = publishedPostWithSid(reader, "KKKKKKKK");
+        QuoteBox kept = quoting(QuoteBox.Owner.POST, theirs.getId(), mine);
+        Long postId = mine.getId();
+        Long noteId = myNote.getId();
+
+        assertThatCode(() -> accountService.deleteAccount("boxpurge@booktimer.com", "rawpw1234")).doesNotThrowAnyException();
+        em.flush();
+        em.clear();
+        assertThat(quoteBoxRepository.countByOwnerTypeAndOwnerId(QuoteBox.Owner.POST, postId)).isZero();
+        assertThat(quoteBoxRepository.countByOwnerTypeAndOwnerId(QuoteBox.Owner.NOTE, noteId)).isZero();
+        assertThat(quoteBoxRepository.findById(kept.getId())).isPresent();
+    }
+
+    @Test
+    @DisplayName("REQ-209 · 원 글쓴이 탈퇴 → 「탈퇴한 사용자」 · source_user_id · source_post_id · members · seen_sentence_id null · 박스 글 · 제목 스냅샷 그대로")
+    void purgeDetachesSourceUser() {
+        User author = user("boxgone");
+        User reader = user("boxreader");
+        BlogPost source = publishedPost(author);
+        BlogPost theirs = publishedPostWithSid(reader, "KKKKKKKK");
+        QuoteBox box = quoting(QuoteBox.Owner.POST, theirs.getId(), source);
+        QuoteBox untouched = quoting(QuoteBox.Owner.NOTE, 987_654L, theirs); // 다른 원 글쓴이 — 양성 대조
+
+        accountService.deleteAccount("boxgone@booktimer.com", "rawpw1234");
+        em.flush();
+        em.clear();
+        QuoteBox row = quoteBoxRepository.findById(box.getId()).orElseThrow();
+        assertThat(row.getSourceUserId()).isNull();
+        assertThat(row.getSourcePostId()).isNull();
+        assertThat(row.members()).isEmpty();
+        assertThat(row.getSeenSentenceId()).isNull();
+        assertThat(row.getText()).isEqualTo("첫 문장이다.");
+        assertThat(row.getAttribution()).isEqualTo("제목");
+        assertThat(quoteBoxRepository.findById(untouched.getId()).orElseThrow().getSourceUserId()).isEqualTo(reader.getId());
+
+        BlogViews.QuoteBoxView view = quoteBoxService.views(QuoteBox.Owner.POST, theirs.getId(),
+                userRepository.findById(reader.getId()).orElseThrow()).get(0);
+        assertThat(view.attribution()).isEqualTo("탈퇴한 사용자 · 「제목」");
+        assertThat(view.sourceDeleted()).isTrue();
+        assertThat(view.sourceLink()).isNull();
+        assertThat(view.text()).isEqualTo("첫 문장이다.");
     }
 
     private BlogPost publishedPostWithSid(User author, String sid) {

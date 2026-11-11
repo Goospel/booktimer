@@ -4,6 +4,7 @@ import com.booktimer.auth.ApiTokenRepository;
 import com.booktimer.blog.BlogPostRepository;
 import com.booktimer.blog.BlogSentenceRepository;
 import com.booktimer.blog.BlogSentenceRevRepository;
+import com.booktimer.blog.QuoteBoxRepository;
 import com.booktimer.block.BlockRepository;
 import com.booktimer.chat.ChatMessageRepository;
 import com.booktimer.chat.ChatRoomRepository;
@@ -78,6 +79,7 @@ public class AccountService {
     private final BlogPostRepository blogPostRepository;
     private final BlogSentenceRepository blogSentenceRepository;
     private final BlogSentenceRevRepository blogSentenceRevRepository;
+    private final QuoteBoxRepository quoteBoxRepository;
     private final SessionInvalidator sessionInvalidator;
     private final PasswordEncoder passwordEncoder;
     private final GoogleAccountResolver googleAccountResolver;
@@ -112,6 +114,7 @@ public class AccountService {
                           BlogPostRepository blogPostRepository,
                           BlogSentenceRepository blogSentenceRepository,
                           BlogSentenceRevRepository blogSentenceRevRepository,
+                          QuoteBoxRepository quoteBoxRepository,
                           SessionInvalidator sessionInvalidator,
                           PasswordEncoder passwordEncoder,
                           GoogleAccountResolver googleAccountResolver) {
@@ -145,6 +148,7 @@ public class AccountService {
         this.blogPostRepository = blogPostRepository;
         this.blogSentenceRepository = blogSentenceRepository;
         this.blogSentenceRevRepository = blogSentenceRevRepository;
+        this.quoteBoxRepository = quoteBoxRepository;
         this.sessionInvalidator = sessionInvalidator;
         this.passwordEncoder = passwordEncoder;
         this.googleAccountResolver = googleAccountResolver;
@@ -431,6 +435,9 @@ public class AccountService {
         chatRoomRepository.deleteByMember(user);
         storyLikeRepository.deleteByUser(user);         // 내가 남에게 누른 좋아요 (story_like.user_id FK)
         storyLikeRepository.deleteByStoryUser(user);    // 내 글에 달린 남의 좋아요 — 내 글보다 앞
+        // 인용 박스(FK 없음 — 안 지우면 고아): 내 글 · 내 쪽지가 가진 것. 하위 질의가 주인을 찾게 글 · 쪽지보다 앞이다(REQ-204)
+        quoteBoxRepository.deleteOwnedBy(user);
+        quoteBoxRepository.detachSourceUser(user.getId()); // 남의 박스의 원 글쓴이 참조 → 「탈퇴한 사용자」(REQ-209)
         blogSentenceRevRepository.deleteBySentencePostUser(user); // blog_post.user_id FK — 유저보다 앞 · 문장 · 판이 글보다 앞
         blogSentenceRepository.deleteByPostUser(user);
         blogPostRepository.deleteByUser(user);
