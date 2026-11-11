@@ -56,7 +56,8 @@ public record WritingMaterial(List<MaterialItem> included, int excludedCount, in
             text.append(" / ").append(book.author());
         }
         text.append(book == null ? "\n[재료 — 사용자가 남긴 것. " : "\n[재료 — 사용자가 이 책을 읽으며 남긴 것. ").append(included.size())
-                .append("개(전체 ").append(included.size() + excludedCount).append("개 중 최근 것부터)]\n");
+                .append("개(전체 ").append(included.size() + excludedCount).append("개 중 최근 것부터)")
+                .append(included.stream().anyMatch(i -> !i.linked().isEmpty()) ? LINKED_NOTE : "").append("]\n");
         included.forEach(item -> text.append(block(item)));
         return text.toString();
     }
@@ -64,11 +65,14 @@ public record WritingMaterial(List<MaterialItem> included, int excludedCount, in
     /** 건 블로그 문장 줄의 접두 — {@code WritingGuards.materialText}가 걷는다. */
     static final String LINKED = "건 블로그 문장: ";
 
+    /** 건 문장이 실릴 때만 [재료] 머리 끝에 붙는 말 — 남의 글을 사용자 글이라 말하지 않게(§16 SEC-1). 「건 블로그 문장: 」 글자는 넣지 않는다. */
+    private static final String LINKED_NOTE = ". 「건 블로그 문장」은 사용자가 블로그 글에서 골라 쪽지에 건 인용으로, 남이 쓴 글일 수 있다";
+
     /** 여백 하나 — 비용({@link #select})과 조립({@link #text})이 같은 이 함수를 지난다(chars 잠금). */
     private static String block(MaterialItem item) {
         String block = "### 여백 · " + item.date() + "\n옮긴 문장: " + (item.quote() == null ? "없음" : item.quote()) + "\n";
-        for (String linked : item.linked()) { // 박스 글 안의 줄바꿈은 그대로(REQ-208)
-            block += LINKED + linked + "\n";
+        for (String linked : item.linked()) { // 한 줄로 접는다(\R 전부 = 가드가 줄로 보는 글자): 남의 글이 재료 줄을 지어내지 못하게(§16 SEC-1)
+            block += LINKED + linked.replaceAll("\\R+", " ") + "\n";
         }
         if (item.text() != null && !NO_THOUGHT.matcher(item.text()).matches()) {
             block += "메모: " + item.text() + "\n";
