@@ -66,7 +66,7 @@ class QuoteRangeTest {
     }
 
     private static boolean updatable(QuoteRange.Current c) {
-        return !c.allDeleted() && !SentenceAligner.norm(c.text()).equals(SentenceAligner.norm(SNAP));
+        return QuoteRange.updatable(c, SNAP);
     }
 
     private static QuoteRange.Current range(Map<String, BlogSentence> rows, Layout layout) {
@@ -333,6 +333,47 @@ class QuoteRangeTest {
         QuoteRange.Current c = QuoteRange.current(List.of("s1", "s2"), post(p, one("s0", "s1", "s4")), null);
         assertThat(c.sids()).containsExactly("s1");
         assertThat(c.viaMerge()).isFalse();
+    }
+
+    // ── 리뷰 반영(구현 뒤에 더한 줄 — 지금 코드에서 Red 없음 · 돌연변이로 판별력을 잰다) ──
+
+    @Test
+    @DisplayName("REQ-248 · R19 합침이 두 번 이어짐(s3 → s4 → s5 · 가운데 s4는 구성원 아님) → s1 s2 s5")
+    void REQ_248_R19_합침이_두_번() {
+        Map<String, BlogSentence> p = base();
+        add(p, row(15, "s5", "다섯째 문장이다.", null));
+        p.get("s3").mergeInto("s4", NOW);
+        p.get("s4").mergeInto("s5", NOW);
+        p.get("s5").edit("셋째 문장이고 넷째 문장이고 다섯째 문장이다.");
+        QuoteRange.Current c = range(p, one("s0", "s1", "s2", "s5"));
+        assertThat(c.sids()).containsExactly("s1", "s2", "s5");
+        assertThat(updatable(c)).isTrue();
+    }
+
+    @Test
+    @DisplayName("REQ-248 · R20 인용 뒤 나뉜 원 문장이 지워짐(s3 + x → s3 지움) → s1 s2 x")
+    void REQ_248_R20_나뉜_원_문장이_지워짐() {
+        Map<String, BlogSentence> p = base();
+        p.get("s3").edit("셋째다.");
+        add(p, row(21, "x", "문장이었다.", "s3"));
+        p.get("s3").tombstone(NOW);
+        QuoteRange.Current c = range(p, one("s0", "s1", "s2", "x", "s4"));
+        assertThat(c.sids()).containsExactly("s1", "s2", "x");
+    }
+
+    @Test
+    @DisplayName("REQ-248 · 이 글의 행이 아닌 구성원은 건너뛴다(zz s1 s2 → s1 s2)")
+    void REQ_248_남의_구성원_건너뜀() {
+        QuoteRange.Current c = QuoteRange.current(List.of("zz", "s1", "s2"), post(base(), one("s0", "s1", "s2", "s3", "s4")), SEEN);
+        assertThat(c.sids()).containsExactly("s1", "s2");
+    }
+
+    @Test
+    @DisplayName("REQ-248 · 문단만 합침(줄바꿈 → 공백) → 불가(norm 비교 — 공백 차이는 잡음이 아니다)")
+    void REQ_248_문단만_합침() {
+        QuoteRange.Current c = range(base(), one("s0", "s1", "s2", "s3", "s4"));
+        assertThat(QuoteRange.updatable(c, "첫째 문장이다.\n둘째 문장이다. 셋째 문장이다.")).isFalse();
+        assertThat(QuoteRange.updatable(c, "첫째 문장이다. 둘째 문장을 고쳤다. 셋째 문장이다.")).isTrue();
     }
 
     // ── between(만들기) ──

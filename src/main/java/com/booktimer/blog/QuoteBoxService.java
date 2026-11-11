@@ -341,7 +341,7 @@ public class QuoteBoxService {
         }
         List<String> sids = cur.sids();
         String link = "/p/" + post.getId() + "/s/" + sids.get(0) + (sids.size() == 1 ? "" : "-" + sids.get(sids.size() - 1));
-        return view(q, attribution, link, false, !SentenceAligner.norm(cur.text()).equals(SentenceAligner.norm(q.getText())), null);
+        return view(q, attribution, link, false, QuoteRange.updatable(cur, q.getText()), null);
     }
 
     private static QuoteBoxView view(QuoteBox q, String attribution, String link, Boolean deleted, Boolean updatable,
@@ -366,7 +366,7 @@ public class QuoteBoxService {
         PostSentences sentences = sentencesOf(post);
         Set<String> laid = new HashSet<>(sentences.layout().sidsInOrder());
         if (!liveIn(sentences, laid, fromSid) || !liveIn(sentences, laid, toSid)) {
-            throw new IllegalArgumentException(BAD_SIDS); // 이 판정이 QuoteRange.between의 IAE(배치에 없음)를 막는다
+            throw new IllegalArgumentException(BAD_SIDS); // 이 판정이 먼저 막아 QuoteRange.between의 「배치에 없음」(500)에 닿지 않는다
         }
         List<String> sids = QuoteRange.between(sentences, fromSid, toSid)
                 .orElseThrow(() -> new IllegalArgumentException("인용 박스를 사이에 둔 문장은 한 박스로 고를 수 없어요"));

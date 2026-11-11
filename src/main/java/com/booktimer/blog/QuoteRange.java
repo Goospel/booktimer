@@ -14,7 +14,7 @@ import java.util.stream.Collectors;
 
 /**
  * 인용 박스 구간 — 구성원 sid가 원 글의 지금 배치에서 어디까지인지(계획 2026-11-11-b1-blog-core §6.5 · §15.3 ⑦ · J70~J72).
- * 순수 규칙: 저장소 · 시계 없음. 「가능」 판정({@code norm} 비교) · 반영 조건(1,000자 · 차단)은 부르는 쪽 몫이다.
+ * 순수 규칙: 저장소 · 시계 없음. 「가능」 판정은 {@link #updatable}, 반영 조건(1,000자 · 차단)은 부르는 쪽 몫이다.
  */
 public final class QuoteRange {
 
@@ -101,9 +101,15 @@ public final class QuoteRange {
         return new Current(List.copyOf(sids), join(lines), false, box, viaMerge);
     }
 
+    /** 「업데이트 있음」(§6.5 판정) — 산 문장에 닿고 이은 글이 스냅샷과 {@code norm}으로 다르다(공백 차이는 잡음이 아니다 · §4.10). */
+    public static boolean updatable(Current c, String snapshot) {
+        return !c.allDeleted() && !SentenceAligner.norm(c.text()).equals(SentenceAligner.norm(snapshot));
+    }
+
     /**
-     * 만들기의 구간 — {@code fromSid} · {@code toSid}가 지금 배치의 산 문장인지는 부르는 쪽이 먼저 잰다. 순서가 뒤집혀 와도
-     * 처음 ~ 끝. 사이에 박스가 있으면 empty.
+     * 만들기의 구간 — {@code fromSid} · {@code toSid}가 지금 배치의 산 문장인지는 부르는 쪽이 먼저 잰다(400 검사는 부르는 쪽 몫 ·
+     * 배치에 없는 sid는 불변식 위반이라 500). 순서가 뒤집혀 와도 처음 ~ 끝. 사이에 박스가 있으면 empty.
+     * 이은 글은 {@code current(이 목록, post, null).text()}로 얻는다(이음 규칙은 한 벌).
      */
     public static Optional<List<String>> between(PostSentences post, String fromSid, String toSid) {
         List<Slot> slots = slots(post.layout());
@@ -113,7 +119,7 @@ public final class QuoteRange {
             if (fromSid.equals(slots.get(i).sid())) a = i;
             if (toSid.equals(slots.get(i).sid())) b = i;
         }
-        if (a < 0 || b < 0) throw new IllegalArgumentException("배치에 없는 문장: " + fromSid + "-" + toSid);
+        if (a < 0 || b < 0) throw new IllegalStateException("배치에 없는 문장: " + fromSid + "-" + toSid);
         List<String> out = new ArrayList<>();
         for (int i = Math.min(a, b); i <= Math.max(a, b); i++) {
             if (slots.get(i).box()) return Optional.empty();
