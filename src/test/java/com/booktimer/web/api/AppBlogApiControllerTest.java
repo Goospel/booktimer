@@ -592,7 +592,8 @@ class AppBlogApiControllerTest {
     /** 쓰기 문이 새로 생기면 어느 목록에 넣을지 정하기 전엔 빨갛다(§4.8 · 비평 SEC-6). B2가 열어 둔 목록에 차단 · 확인 시각을 넣는다. */
     private static final Set<String> BLOCKED = Set.of(
             "POST /api/app/blog/posts", "PUT /api/app/blog/posts/{id}", "POST /api/app/blog/posts/{id}/publish",
-            "PUT /api/app/blog/me");
+            "PUT /api/app/blog/me",
+            "POST /api/app/blog/posts/{id}/quotes", "POST /api/app/blog/quotes/{id}/refresh", "PUT /api/app/blog/quotes/{id}/source");
     /** 내 데이터를 지우는 길은 목록과 무관하게 늘 연다(§4.8 — readsAndDeletesStayOpen이 200을 잰다). */
     private static final Set<String> OPEN = Set.of("DELETE /api/app/blog/posts/{id}");
 

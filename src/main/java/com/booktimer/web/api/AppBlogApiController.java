@@ -8,7 +8,10 @@ import com.booktimer.blog.BlogViews.MeView;
 import com.booktimer.blog.BlogViews.MyPostRow;
 import com.booktimer.blog.BlogViews.Page;
 import com.booktimer.blog.BlogViews.PostView;
+import com.booktimer.blog.BlogViews.QuoteBoxView;
 import com.booktimer.blog.BlogViews.RevView;
+import com.booktimer.blog.QuoteBoxService;
+import com.booktimer.blog.QuoteBoxService.QuoteRequest;
 import com.booktimer.security.CurrentUserService;
 import com.booktimer.user.User;
 import org.springframework.http.HttpStatus;
@@ -44,13 +47,16 @@ public class AppBlogApiController {
     private final BlogIdentityService identityService;
     private final BlogPostService postService;
     private final BlogPublishService publishService;
+    private final QuoteBoxService quoteBoxService;
 
     public AppBlogApiController(CurrentUserService currentUserService, BlogIdentityService identityService,
-                                BlogPostService postService, BlogPublishService publishService) {
+                                BlogPostService postService, BlogPublishService publishService,
+                                QuoteBoxService quoteBoxService) {
         this.currentUserService = currentUserService;
         this.identityService = identityService;
         this.postService = postService;
         this.publishService = publishService;
+        this.quoteBoxService = quoteBoxService;
     }
 
     @GetMapping("/api/app/blog/me")
@@ -111,6 +117,26 @@ public class AppBlogApiController {
         return publishService.publish(currentUserService.resolve(principal), id, request.revision());
     }
 
+    /** 글에 인용 박스(BLOG · MARGIN · BOOK — §6.6). @return 201 / 403 허용 목록 · 차단 / 404 / 400 / 409 쪽지 판 */
+    @PostMapping("/api/app/blog/posts/{id}/quotes")
+    public ResponseEntity<QuoteBoxView> createQuote(@PathVariable long id, @RequestBody QuoteRequest request,
+                                                    Principal principal) {
+        return ResponseEntity.status(HttpStatus.CREATED)
+                .body(quoteBoxService.createForPost(currentUserService.resolve(principal), id, request));
+    }
+
+    /** 최신으로 반영. @return 200 / 403 허용 목록 · 차단 / 404 남의 박스 / 400 종류 / 409 원문 지움 · 가림 · 걸침 · 1,000자 */
+    @PostMapping("/api/app/blog/quotes/{id}/refresh")
+    public QuoteBoxView refreshQuote(@PathVariable long id, Principal principal) {
+        return quoteBoxService.refresh(currentUserService.resolve(principal), id);
+    }
+
+    /** 여백 박스 다시 고르기. @return 200 / 403 / 404 / 400 종류 · 범위 / 409 원 쪽지 지움 · 판 */
+    @PutMapping("/api/app/blog/quotes/{id}/source")
+    public QuoteBoxView repickQuote(@PathVariable long id, @RequestBody SourceRequest request, Principal principal) {
+        return quoteBoxService.repick(currentUserService.resolve(principal), id, request.revision(), request.from(), request.to());
+    }
+
     /** @return 200 / 404 없음 · 지움 · 합침 · 보이지 않는 글(J38) */
     @GetMapping("/api/app/blog/sentences/{sid}/revs")
     public List<RevView> revs(@PathVariable String sid, Principal principal) {
@@ -141,6 +167,9 @@ public class AppBlogApiController {
     public record SaveRequest(String draftTitle, String draftBody, int revision) {}
 
     public record PublishRequest(int revision) {}
+
+    /** @param revision 원래 쪽지의 판 — 다르면 409 */
+    public record SourceRequest(int revision, int from, int to) {}
 
     public record Saved(int revision, Instant updatedAt) {}
 }
