@@ -53,7 +53,7 @@ case "\$*" in
                  TOSS_UNLINK_BASIC_AUTH \\
                  APPLE_BUNDLE_ID APPLE_TEAM_ID APPLE_SIGNIN_KEY_ID APPLE_SIGNIN_P8 \\
                  GOOGLE_IOS_CLIENT_ID KAKAO_NATIVE_APP_KEY KAKAO_REST_API_KEY \\
-                 APP_LINK_CARD_USERS; do
+                 APP_LINK_CARD_USERS BLOG_ALLOWED_USERS; do
             printf '/booktimer/%s\tvalue-of-%s\n' "\$n" "\$n"
         done
         # 여러 줄 SecureString(PEM)도 같은 /booktimer 경로에 살아 이 목록에 함께 나온다.
@@ -163,6 +163,8 @@ assert_has "  .env 에 카카오 REST 키(REQ-387)" "$env_out" "BOOKTIMER_KAKAO_
 assert_eq "  .env 에 알라딘 키가 없다(REQ-387)" "$(printf '%s' "$env_out" | grep -cF 'BOOKTIMER_ALADIN_TTB_KEY')" "0"
 # 웹 「앱 연결」 카드 허용 목록(v1 REQ-73) — 빠지면 기본값 none이라 본인(17)에게도 카드가 안 보인다.
 assert_has "  .env 에 앱 연결 카드 허용 목록" "$env_out" "BOOKTIMER_APP_LINK_CARD_USERS=value-of-APP_LINK_CARD_USERS"
+# 블로그 쓰기 허용 목록(책생글 B1a — REQ-205) — 매핑이 없으면 앱이 기본값 none으로 떠 허용 목록 계정도 403이 된다.
+assert_has "  .env 에 블로그 허용 목록" "$env_out" "BOOKTIMER_BLOG_ALLOWED_USERS=value-of-BLOG_ALLOWED_USERS"
 
 # ── Case 2: 인증서 누락 → 배포 실패, 파일도 안 남는다 ──
 r="$(run TOSS_MTLS_CERT)"; rc="${r%%$'\n'*}"; out="${r#*$'\n'}"

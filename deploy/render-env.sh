@@ -78,6 +78,8 @@ declare -A SECRET_MAP=(
   [KAKAO_NATIVE_APP_KEY]=BOOKTIMER_KAKAO_NATIVE_APP_KEY
   # 웹 설정 「아이폰 앱 연결」 카드 허용 목록 — 출시 전 17(본인), 출시 때 *(모두). 바꾸면 재배포(workflow_dispatch).
   [APP_LINK_CARD_USERS]=BOOKTIMER_APP_LINK_CARD_USERS
+  # 블로그 쓰기 허용 목록(책생글 B1a) — E2(2026-12-01) 전 17(본인), E2 당일 *(모두). 바꾸면 재배포(workflow_dispatch).
+  [BLOG_ALLOWED_USERS]=BOOKTIMER_BLOG_ALLOWED_USERS
 )
 
 # ── 평문 설정 (구 task-definition의 environment 블록) ──
