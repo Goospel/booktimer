@@ -1,5 +1,7 @@
 package com.booktimer.writing;
 
+import com.booktimer.blog.QuoteBox;
+import com.booktimer.blog.QuoteBoxRepository;
 import com.booktimer.book.Book;
 import com.booktimer.book.BookRepository;
 import com.booktimer.book.BookStatus;
@@ -74,6 +76,7 @@ class WritingAiServiceTest {
     @Autowired AiSpendMonthRepository spendRepository;
     @Autowired AiBudgetService budgetService;
     @Autowired AccountService accountService;
+    @Autowired QuoteBoxRepository quoteBoxRepository;
     @Autowired Clock clock;
 
     private static final AtomicInteger SEQ = new AtomicInteger();
@@ -587,5 +590,47 @@ class WritingAiServiceTest {
         assertThat(sent).contains("[책] 데미안").doesNotContain("다른 책 쪽지");
         assertThat(sent.indexOf("먼저 쓴 지금 쪽지")).isNotNegative()
                 .isLessThan(sent.indexOf("나중에 쓴 같은 책 쪽지"));
+    }
+
+    // ── REQ-208 · 214 건 블로그 문장(책생글 B1b) ──────────────────────────────────
+
+    private void linkBox(Story note, int label, String text) {
+        quoteBoxRepository.saveAndFlush(QuoteBox.blog(QuoteBox.Owner.NOTE, note.getId(), label, 1L, 1L, List.of("AAAAAAAA"), 0,
+                text, "원 글", CONSENT_AT));
+    }
+
+    @Test
+    @DisplayName("REQ-208 · 지금 쪽지의 건 문장이 재료에 「건 블로그 문장:」 줄로 · 같은 책 다른 쪽지의 박스 글은 없다")
+    void linkedSentencesOfCurrentNoteOnly() {
+        User u = user(true);
+        Book book = bookRepository.saveAndFlush(Book.register(u, "데미안", "헤르만 헤세", null, null, null, null, BookStatus.READING));
+        Story d = storyRepository.saveAndFlush(Story.of(u, "지금 쪽지의 생각", book, null));
+        Story other = storyRepository.saveAndFlush(Story.of(u, "같은 책 다른 쪽지", book, null));
+        linkBox(d, 2, "나중에 붙인 박스 글");
+        linkBox(d, 1, "먼저 붙인 박스 글");
+        linkBox(other, 1, "다른 쪽지의 박스 글");
+        ArgumentCaptor<String> material = ArgumentCaptor.forClass(String.class);
+        given(assistant.ask(material.capture())).willReturn(answer("무엇이 남았나요?"));
+
+        aiService.run(u, d.getId(), Step.ASK, d.getRevision(), null);
+
+        String sent = material.getValue();
+        assertThat(sent).contains("건 블로그 문장: 먼저 붙인 박스 글\n건 블로그 문장: 나중에 붙인 박스 글\n메모: 지금 쪽지의 생각")
+                .contains("같은 책 다른 쪽지") // 다른 쪽지의 생각은 배경 재료로 실린다(J34) — 박스 글만 빠진다
+                .doesNotContain("다른 쪽지의 박스 글"); // REQ-289 「두 박스 글(붙인 순서)」도 이 줄이 잰다 — label = 붙인 순서
+    }
+
+    @Test
+    @DisplayName("REQ-214 · 건 문장만 있는 쪽지도 재료 1개라 ASK가 400이 아니다 · 재료에 건 문장 글")
+    void linkedOnlyNoteIsMaterial() {
+        User u = user(true);
+        Story d = storyRepository.saveAndFlush(Story.of(u, "", null, null, null, true));
+        linkBox(d, 1, "건 문장뿐인 쪽지의 박스 글");
+        ArgumentCaptor<String> material = ArgumentCaptor.forClass(String.class);
+        given(assistant.ask(material.capture())).willReturn(answer("무엇이 남았나요?"));
+
+        aiService.run(u, d.getId(), Step.ASK, d.getRevision(), null);
+
+        assertThat(material.getValue()).contains("건 블로그 문장: 건 문장뿐인 쪽지의 박스 글").doesNotContain("메모:");
     }
 }

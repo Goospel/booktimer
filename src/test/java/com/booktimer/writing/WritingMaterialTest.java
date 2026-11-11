@@ -139,6 +139,22 @@ class WritingMaterialTest {
     }
 
     @Test
+    @DisplayName("REQ-208 · 건 문장 접두는 anchor 대조에서 걷힌다")
+    void linkedPrefixIsStripped() {
+        MaterialItem withLinks = new MaterialItem(LocalDate.parse("2026-11-11"), "옮긴 그 문장", "내 생각.",
+                List.of("봄에는 꽃이 핀다.\n여름에는 비가 온다.", "가을에는 낙엽이 진다."));
+        WritingMaterial material = WritingMaterial.select(List.of(withLinks), WritingMaterial.MAX_CHARS);
+        String text = material.text(BOOK);
+
+        // 줄 순서 = 옮긴 문장 → 건 블로그 문장(label 순) → 메모 · 박스 글 안의 줄바꿈은 그대로
+        assertThat(text).contains("옮긴 문장: 옮긴 그 문장\n건 블로그 문장: 봄에는 꽃이 핀다.\n여름에는 비가 온다.\n"
+                + "건 블로그 문장: 가을에는 낙엽이 진다.\n메모: 내 생각.\n");
+        assertThat(material.chars()).as("비용과 조립이 같은 블록을 센다").isEqualTo(blocks(text).length());
+        String anchors = WritingGuards.materialText(text);
+        assertThat(anchors).contains("봄에는 꽃이 핀다.\n", "가을에는 낙엽이 진다.\n").doesNotContain("건 블로그 문장");
+    }
+
+    @Test
     @DisplayName("책이 풀린 글의 재료 블록은 한 줄이다")
     void noBookIsOneLine() {
         assertThat(WritingMaterial.select(List.of(), WritingMaterial.MAX_CHARS).text(null))

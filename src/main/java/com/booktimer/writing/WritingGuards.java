@@ -58,7 +58,7 @@ final class WritingGuards {
     }
 
     /**
-     * 재료 블록에서 머리줄([책] · [재료 …] · ### 여백 …)과 「옮긴 문장: 」「메모: 」 접두를 걷은 원문 — 머리줄 낱말이 anchor로
+     * 재료 블록에서 머리줄([책] · [재료 …] · ### 여백 …)과 「옮긴 문장: 」「건 블로그 문장: 」「메모: 」 접두를 걷은 원문 — 머리줄 낱말이 anchor로
      * 통과하지 않게 한다. 「옮긴 문장: 없음」은 자리표시라 뺀다.
      */
     static String materialText(String materialBlock) {
@@ -69,6 +69,7 @@ final class WritingGuards {
                 continue;
             }
             String text = line.startsWith("옮긴 문장: ") ? line.substring("옮긴 문장: ".length())
+                    : line.startsWith(WritingMaterial.LINKED) ? line.substring(WritingMaterial.LINKED.length())
                     : line.startsWith("메모: ") ? line.substring("메모: ".length()) : line;
             out.append(text).append('\n');
         }

@@ -240,7 +240,8 @@ public class ClaudeWritingAssistant {
         MARGIN("여백(옮긴 문장·메모·작성일)"),
         BODY("지금 쓰는 글"),
         FOCUS("지금 답하는 질문"),
-        PRIOR("이 글에서 앞서 받은 질문");
+        PRIOR("이 글에서 앞서 받은 질문"),
+        LINKED("지금 쪽지(옮긴 문장·생각)와 그 쪽지에 건 블로그 문장");
 
         public final String privacyLabel;
 

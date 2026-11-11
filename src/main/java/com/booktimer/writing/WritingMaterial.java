@@ -61,9 +61,15 @@ public record WritingMaterial(List<MaterialItem> included, int excludedCount, in
         return text.toString();
     }
 
+    /** 건 블로그 문장 줄의 접두 — {@code WritingGuards.materialText}가 걷는다. */
+    static final String LINKED = "건 블로그 문장: ";
+
     /** 여백 하나 — 비용({@link #select})과 조립({@link #text})이 같은 이 함수를 지난다(chars 잠금). */
     private static String block(MaterialItem item) {
         String block = "### 여백 · " + item.date() + "\n옮긴 문장: " + (item.quote() == null ? "없음" : item.quote()) + "\n";
+        for (String linked : item.linked()) { // 박스 글 안의 줄바꿈은 그대로(REQ-208)
+            block += LINKED + linked + "\n";
+        }
         if (item.text() != null && !NO_THOUGHT.matcher(item.text()).matches()) {
             block += "메모: " + item.text() + "\n";
         }
