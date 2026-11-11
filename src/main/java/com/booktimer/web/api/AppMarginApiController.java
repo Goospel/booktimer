@@ -1,5 +1,10 @@
 package com.booktimer.web.api;
 
+import com.booktimer.blog.BlogViews.NoteSentences;
+import com.booktimer.blog.BlogViews.QuoteBoxView;
+import com.booktimer.blog.QuoteBox;
+import com.booktimer.blog.QuoteBoxService;
+import com.booktimer.blog.QuoteBoxService.LinkRequest;
 import com.booktimer.book.Book;
 import com.booktimer.security.CurrentUserService;
 import com.booktimer.story.Story;
@@ -28,6 +33,7 @@ import java.nio.charset.StandardCharsets;
 import java.security.Principal;
 import java.time.Instant;
 import java.util.List;
+import java.util.Map;
 
 /**
  * 앱 「책생글」의 여백 쪽지 API(책생글 「여백 + 블로그」 §5.1 · M1) — {@code /api/app/**}는 Bearer 체인이다(토큰 없으면 401).
@@ -45,13 +51,15 @@ public class AppMarginApiController {
     private final StoryService storyService;
     private final WritingService writingService;
     private final WritingAiService aiService;
+    private final QuoteBoxService quoteBoxService;
 
     public AppMarginApiController(CurrentUserService currentUserService, StoryService storyService,
-                                  WritingService writingService, WritingAiService aiService) {
+                                  WritingService writingService, WritingAiService aiService, QuoteBoxService quoteBoxService) {
         this.currentUserService = currentUserService;
         this.storyService = storyService;
         this.writingService = writingService;
         this.aiService = aiService;
+        this.quoteBoxService = quoteBoxService;
     }
 
     /** 그 책의 쪽지 — 최근순. @return 200 / 404 남의·없는·공부 서재 책 */
@@ -59,7 +67,7 @@ public class AppMarginApiController {
     public List<MarginSummary> ofBook(@PathVariable Long bookId, Principal principal) {
         User user = currentUserService.resolve(principal);
         Book book = writingService.ownedBook(user, bookId);
-        return writingService.margins(user, book).stream().map(MarginSummary::from).toList();
+        return summaries(writingService.margins(user, book));
     }
 
     /** 책 없는 쪽지 — 최근순(C9). {@code book}은 지금 {@code none}만 받는다. @return 200 / 400 */
@@ -68,7 +76,13 @@ public class AppMarginApiController {
         if (!"none".equals(book)) {
             throw new IllegalArgumentException("book=none만 받아요");
         }
-        return storyService.booklessNotes(currentUserService.resolve(principal)).stream().map(MarginSummary::from).toList();
+        return summaries(storyService.booklessNotes(currentUserService.resolve(principal)));
+    }
+
+    /** 목록의 박스 수는 한 번에 센다(비평 D6 · L8). */
+    private List<MarginSummary> summaries(List<Story> notes) {
+        Map<Long, Integer> counts = quoteBoxService.noteCounts(notes.stream().map(Story::getId).toList());
+        return notes.stream().map(s -> MarginSummary.from(s, counts.getOrDefault(s.getId(), 0))).toList();
     }
 
     /** @return 200 / 404 남의·없는 쪽지 */
@@ -78,11 +92,17 @@ public class AppMarginApiController {
         return view(user, storyService.note(user, id));
     }
 
-    /** 첫 저장 때 행을 만든다(J6). @return 201 / 400 길이·빈 쪽지·책 없는 옮긴 문장 / 404 남의·없는·공부 서재 책 / 429 시간당 30 */
+    /**
+     * 첫 저장 때 행을 만든다(J6). 몸에 {@code link}가 있으면 문장 걸기(새 쪽지 + 박스 — 허용 목록이 첫 줄 · §6.6), 없으면 지금 그대로.
+     *
+     * @return 201 / 400 길이·빈 쪽지·책 없는 옮긴 문장 · 구간 / 403 허용 목록 · 차단(걸기) / 404 남의·없는·공부 서재 책 · 원 글 / 429 시간당 30
+     */
     @PostMapping("/api/app/margins")
     public ResponseEntity<MarginView> create(@RequestBody CreateMargin request, Principal principal) {
         User user = currentUserService.resolve(principal);
-        Story note = storyService.createNote(user, request.bookId(), request.quote(), request.text());
+        Story note = request.link() == null
+                ? storyService.createNote(user, request.bookId(), request.quote(), request.text())
+                : quoteBoxService.hang(user, request.bookId(), request.quote(), request.text(), request.link());
         return ResponseEntity.status(HttpStatus.CREATED).body(view(user, note));
     }
 
@@ -94,11 +114,37 @@ public class AppMarginApiController {
                 request.exported()));
     }
 
-    /** @return 204 / 404 남의·없는 쪽지 */
+    /**
+     * @param withQuotes 건 박스째 지운다 — 없으면 박스가 있는 쪽지는 409(옛 JS 보호 — REQ-206 · §4.7)
+     * @return 204 / 404 남의·없는 쪽지 / 409 건 문장이 있는 쪽지
+     */
     @DeleteMapping("/api/app/margins/{id}")
-    public ResponseEntity<Void> delete(@PathVariable Long id, Principal principal) {
-        storyService.delete(currentUserService.resolve(principal), id);
+    public ResponseEntity<Void> delete(@PathVariable Long id, @RequestParam(required = false) Boolean withQuotes,
+                                       Principal principal) {
+        storyService.delete(currentUserService.resolve(principal), id, Boolean.TRUE.equals(withQuotes));
         return ResponseEntity.noContent().build();
+    }
+
+    /** 쓰고 있는 쪽지에 블로그 문장 붙이기. @return 201 / 403 허용 목록 · 차단 / 404 / 400 10개 · 구간 */
+    @PostMapping("/api/app/margins/{id}/quotes")
+    public ResponseEntity<MarginView> addQuote(@PathVariable Long id, @RequestBody LinkRequest request, Principal principal) {
+        User user = currentUserService.resolve(principal);
+        quoteBoxService.addToNote(user, id, request);
+        return ResponseEntity.status(HttpStatus.CREATED).body(view(user, storyService.note(user, id)));
+    }
+
+    /** 쪽지에서 박스 빼기 — 허용 목록과 무관(내 데이터를 지우는 길). @return 200 / 404 그 쪽지의 박스 아님 / 400 쪽지가 빈다 */
+    @DeleteMapping("/api/app/margins/{id}/quotes/{quoteId}")
+    public MarginView removeQuote(@PathVariable Long id, @PathVariable Long quoteId, Principal principal) {
+        User user = currentUserService.resolve(principal);
+        quoteBoxService.removeFromNote(user, id, quoteId);
+        return view(user, storyService.note(user, id));
+    }
+
+    /** 쪽지 생각의 문장 나누기(내 여백 가져오기). @return 200 / 404 남의 쪽지 */
+    @GetMapping("/api/app/margins/{id}/sentences")
+    public NoteSentences sentences(@PathVariable Long id, Principal principal) {
+        return quoteBoxService.noteSentences(currentUserService.resolve(principal), id);
     }
 
     /**
@@ -120,7 +166,8 @@ public class AppMarginApiController {
         return new MarginView(s.getId(), book == null ? null : book.getId(), book == null ? null : book.getTitle(),
                 s.getQuote(), s.getQuoteSource(), s.getText(), s.getRevision(), QuestionLog.parse(s.getAiLog()),
                 s.getAiUpdatedAt(), aiService.remainingToday(user), writingService.aiConsent(user),
-                s.getExportedAt() != null, s.getCreatedAt(), s.getUpdatedAt());
+                s.getExportedAt() != null, s.getCreatedAt(), s.getUpdatedAt(),
+                quoteBoxService.views(QuoteBox.Owner.NOTE, s.getId(), user));
     }
 
     /** IAE 문구가 그대로 400 본문(text/plain — 반사 XSS 방지, charset 명시는 한글 깨짐 방지). */
@@ -138,8 +185,11 @@ public class AppMarginApiController {
 
     // ── DTO (엔티티 직렬화 금지 — 평탄 record 화이트리스트 · 필드 이름이 앱 types.ts의 단일 출처) ──────────
 
-    /** @param bookId 독서 서재 책 id — 없으면 책 없는 쪽지(C9) · 공부 서재 id는 404 */
-    public record CreateMargin(Long bookId, String quote, String text) {}
+    /**
+     * @param bookId 독서 서재 책 id — 없으면 책 없는 쪽지(C9) · 공부 서재 id는 404
+     * @param link   블로그 문장 걸기(B1b) — 옛 JS는 보내지 않는다(없으면 지금과 같은 쪽지)
+     */
+    public record CreateMargin(Long bookId, String quote, String text, LinkRequest link) {}
 
     /**
      * @param revision 클라가 마지막으로 받은 판 — 서버 값과 다르면 409
@@ -154,12 +204,12 @@ public class AppMarginApiController {
      * @param preview     생각의 공백 · 줄바꿈 덩어리를 공백 하나로 접은 앞 80자(옮긴 글의 「옛 제목 + 빈 줄 + 본문」이 첫 줄에서 끊기지 않게)
      */
     public record MarginSummary(Long id, Long bookId, String quote, String quoteSource, String preview, int chars,
-                                boolean hasAi, boolean exported, Instant createdAt, Instant updatedAt) {
-        static MarginSummary from(Story s) {
+                                boolean hasAi, boolean exported, Instant createdAt, Instant updatedAt, int quoteCount) {
+        static MarginSummary from(Story s, int quoteCount) {
             String folded = s.getText().strip().replaceAll("\\s+", " ");
             return new MarginSummary(s.getId(), s.getBook() == null ? null : s.getBook().getId(), s.getQuote(),
                     s.getQuoteSource(), StoryService.cut(folded, 80), s.getText().length(), s.getAiLog() != null,
-                    s.getExportedAt() != null, s.getCreatedAt(), s.getUpdatedAt());
+                    s.getExportedAt() != null, s.getCreatedAt(), s.getUpdatedAt(), quoteCount);
         }
     }
 
@@ -170,8 +220,10 @@ public class AppMarginApiController {
      * @param questions        받은 질문 기록 — 없으면 rounds = []
      * @param aiRemainingToday 오늘 남은 글쓰기 AI 몫({@code Kind.WRITE})
      * @param exported         한 번이라도 내보냈나(C8)
+     * @param quotes           이 쪽지에 건 블로그 문장 박스 — label 순(B1b · REQ-207)
      */
     public record MarginView(Long id, Long bookId, String bookTitle, String quote, String quoteSource, String text,
                              int revision, QuestionLog questions, Instant aiUpdatedAt, int aiRemainingToday,
-                             boolean aiConsent, boolean exported, Instant createdAt, Instant updatedAt) {}
+                             boolean aiConsent, boolean exported, Instant createdAt, Instant updatedAt,
+                             List<QuoteBoxView> quotes) {}
 }

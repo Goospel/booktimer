@@ -1,6 +1,8 @@
 package com.booktimer.blog;
 
 import com.booktimer.blog.BlogViews.HangBook;
+import com.booktimer.blog.BlogViews.NoteSentence;
+import com.booktimer.blog.BlogViews.NoteSentences;
 import com.booktimer.blog.BlogViews.QuoteBoxView;
 import com.booktimer.blog.BlogViews.SourceNote;
 import com.booktimer.blog.QuoteBox.Kind;
@@ -48,6 +50,7 @@ public class QuoteBoxService {
     /** 표시 줄 {@code ⟦인용 N⟧} — 올리기는 줄 통째({@code matches}), 다음 label은 줄 어디서든({@code find}) 본다(§6.3 · §6.6). */
     static final Pattern MARKER = Pattern.compile("⟦인용 ([1-9][0-9]{0,3})⟧");
     static final int POST_MAX = 100;
+    static final int NOTE_MAX = 10;
     static final int TEXT_MAX = 1_000;
     private static final int LABEL_MAX = 9_999;
 
@@ -182,6 +185,74 @@ public class QuoteBoxService {
         }
         box.repick(thought(source.getText(), from, to), now());
         return single(box, user);
+    }
+
+    // ── 쪽지의 박스 ──────────────────────────────────────────────────────────
+
+    /**
+     * 문장 걸기 = 새 쪽지 + 박스 label 1({@code POST /api/app/margins}에 {@code link}가 있을 때) — 허용 목록 → BLOG 검사 →
+     * 쪽지 만들기(429 · 책 404 · 길이 400). 쪽지 행은 잠그지 않는다(§1 비목표).
+     */
+    public Story hang(User user, Long bookId, String quote, String text, LinkRequest link) {
+        access.check(user);
+        Source src = blogSource(user, link.postId(), link.fromSid(), link.toSid());
+        Story note = storyService.createLinkedNote(user, bookId, quote, text);
+        repository.save(src.box(Owner.NOTE, note.getId(), 1, now()));
+        return note;
+    }
+
+    /** 쓰고 있는 쪽지에 붙이기 — 허용 목록 → 내 쪽지(404) → 10개 → BLOG 검사 → 다음 label. */
+    public void addToNote(User user, long storyId, LinkRequest link) {
+        access.check(user);
+        Story note = storyService.note(user, storyId);
+        List<QuoteBox> boxes = repository.findByOwnerTypeAndOwnerIdOrderByLabel(Owner.NOTE, note.getId());
+        if (boxes.size() >= NOTE_MAX) {
+            throw new IllegalArgumentException("한 쪽지에 인용은 10개까지예요");
+        }
+        Source src = blogSource(user, link.postId(), link.fromSid(), link.toSid());
+        repository.save(src.box(Owner.NOTE, note.getId(), nextLabel(boxes, null), now()));
+    }
+
+    /**
+     * 쪽지에서 빼기(허용 목록 없음 — 내 데이터를 지우는 길) — 내 쪽지(404) → 그 쪽지의 박스(404 — 남의 글 · 남의 쪽지 · 내 다른 쪽지의
+     * 박스 id로는 지우지 못한다) → 빼고 나서 쪽지가 비면 400.
+     */
+    public void removeFromNote(User user, long storyId, long quoteId) {
+        Story note = storyService.note(user, storyId);
+        QuoteBox box = repository.findByIdAndOwnerTypeAndOwnerId(quoteId, Owner.NOTE, note.getId())
+                .orElseThrow(() -> notFound(NO_QUOTE));
+        boolean empty = note.getText().isEmpty() && note.getQuote() == null && note.getAiLog() == null
+                && repository.countByOwnerTypeAndOwnerId(Owner.NOTE, note.getId()) <= 1;
+        if (empty) {
+            throw new IllegalArgumentException("쪽지가 비어요 — 쪽지를 지워 주세요");
+        }
+        repository.delete(box);
+    }
+
+    /** 쪽지 생각의 문장 나누기(내 여백 가져오기 — REQ-292). 본인만(404). */
+    @Transactional(readOnly = true)
+    public NoteSentences noteSentences(User user, long storyId) {
+        Story note = storyService.note(user, storyId);
+        List<Piece> pieces = pieces(note.getText());
+        List<NoteSentence> out = new ArrayList<>(pieces.size());
+        for (int n = 0; n < pieces.size(); n++) {
+            Piece p = pieces.get(n);
+            out.add(new NoteSentence(n, p.text(), p.br(), p.paraEnd()));
+        }
+        return new NoteSentences(note.getRevision(), out);
+    }
+
+    /** 쪽지 목록의 박스 수 — 한 번에(줄마다 세지 않는다 · 비평 D6). 목록이 비면 부르지 않는다. */
+    @Transactional(readOnly = true)
+    public Map<Long, Integer> noteCounts(List<Long> storyIds) {
+        if (storyIds.isEmpty()) {
+            return Map.of();
+        }
+        Map<Long, Integer> out = new HashMap<>();
+        for (Object[] row : repository.countByOwners(Owner.NOTE, storyIds)) {
+            out.put((Long) row[0], ((Number) row[1]).intValue());
+        }
+        return out;
     }
 
     // ── 보기 ─────────────────────────────────────────────────────────────────

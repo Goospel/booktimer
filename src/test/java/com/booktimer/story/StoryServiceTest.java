@@ -66,7 +66,8 @@ class StoryServiceTest {
     @BeforeEach
     void setUp() {
         service = new StoryService(storyRepository, bookRepository, rateLimitService,
-                profileService, storyLikeRepository, rowAssembler, writingDraftRepository, java.time.Clock.systemUTC());
+                profileService, storyLikeRepository, rowAssembler, writingDraftRepository,
+                org.mockito.Mockito.mock(com.booktimer.blog.QuoteBoxRepository.class), java.time.Clock.systemUTC());
         me = userWithId(1L, "meuser", "나");
     }
 
