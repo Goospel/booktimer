@@ -43,7 +43,8 @@ class SidTest {
     }
 
     @Test
-    @org.junit.jupiter.api.DisplayName("REQ-232 · sid 충돌이면 다시 뽑는다(이번에 뽑은 것 포함 — Sid.fresh)")
+    // 「이번 올리기 ∪ DB」 합집합은 이 술어를 넘기는 BlogPublishService가 만든다 — 여기선 Sid.fresh가 술어대로 다시 뽑는지만 잰다
+    @org.junit.jupiter.api.DisplayName("REQ-232 · Sid.fresh는 넘긴 술어(이번에 뽑은 것 ∪ DB)가 참이면 다시 뽑는다")
     void REQ_232_이번에_뽑은_것도_겹침으로_본다() {
         Set<String> thisPublish = new HashSet<>();
         Set<String> inDb = Set.of("dbRow001");
