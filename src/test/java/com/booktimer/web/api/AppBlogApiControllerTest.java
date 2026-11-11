@@ -257,6 +257,13 @@ class AppBlogApiControllerTest {
         call(get("/api/app/blog/sentences/" + s1 + "/revs"), me).andExpect(status().isOk())
                 .andExpect(jsonPath("$", hasSize(1))).andExpect(jsonPath("$[0].rev").value(1))
                 .andExpect(jsonPath("$[0].text").value("나는 어제 책을 읽었다.")).andExpect(jsonPath("$[0].at").exists());
+
+        // 한 번 더 고치면 판 2의 글도 예전 판으로 남는다(고칠 때 그 판의 행을 쓴다 — 최근 판 먼저)
+        edit(me, id, "제목", "나는 오늘 소설을 읽었다. 재미있었다.", 1);
+        publish(me, id, 2);
+        call(get("/api/app/blog/sentences/" + s1 + "/revs"), me)
+                .andExpect(jsonPath("$[*].rev").value(org.hamcrest.Matchers.contains(2, 1)))
+                .andExpect(jsonPath("$[0].text").value("나는 어제 소설을 읽었다."));
     }
 
     @Test
