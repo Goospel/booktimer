@@ -330,3 +330,16 @@ export interface ConsentView {
   aiConsent: boolean;
   aiConsentAt: string | null;
 }
+
+/** `BlogViews.PostRow` 중 앱이 읽는 것만(mine은 A4가 더한다). 올린 글만 실린다 — authorName은 블로그 이름 */
+export interface BlogPostRow {
+  id: number;
+  title: string;
+  authorName: string;
+  publishedAt: string;
+}
+
+/** `BlogViews.Page` 중 앱이 읽는 것만(next는 A4가 더한다) */
+export interface BlogPage {
+  posts: BlogPostRow[];
+}

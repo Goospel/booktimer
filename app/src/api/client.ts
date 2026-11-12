@@ -7,6 +7,7 @@ import type {
   AppAuthResponse,
   AiView,
   AppleIntent,
+  BlogPage,
   ConsentView,
   CreateMargin,
   Dashboard,
@@ -256,6 +257,12 @@ export const margins = {
   delete: (id: number) => request<void>(`/api/app/margins/${id}`, { method: 'DELETE' }),
   /** v1 /drafts/{id}/ai와 같은 몸 · 같은 상태 코드 — 응답에 생각 · revision이 없다(REQ-47) */
   ai: (id: number, body: { step: Step; revision: number; focus: string | null }) => request<AiView>(`/api/app/margins/${id}/ai`, { body }),
+};
+
+// ── 블로그 읽기(책생글 A2) — 읽기는 허용 목록과 무관(쓰기만 E2 전 허용 목록 — 서버 BlogAccess) ──
+export const blog = {
+  /** 최신 공개 글(차단 · 가린 글 빠짐 — 서버). 홈은 3편(REQ-273) */
+  posts: (limit: number) => request<BlogPage>(`/api/app/blog/posts?limit=${limit}`),
 };
 
 // ── AI 동의(PR-H) — 시행일 전이면 503(서버 문구가 날짜를 낸다). 옛 글 경로는 부르지 않는다(D9 · REQ-224 — 기기 칸 옮기기만 예외) ──

@@ -6,7 +6,7 @@ jest.mock('expo-secure-store', () => ({
   deleteItemAsync: jest.fn(async (k: string) => void mockStore.delete(k)),
 }));
 
-import { account, ApiError, appleSignIn, failText, idTokenSignIn, library, margins, NetworkError, reading, request, session, study, UnauthorizedError, writing } from './client';
+import { account, ApiError, appleSignIn, blog, failText, idTokenSignIn, library, margins, NetworkError, reading, request, session, study, UnauthorizedError, writing } from './client';
 
 const fetchMock = jest.fn();
 global.fetch = fetchMock as unknown as typeof fetch;
@@ -200,6 +200,13 @@ test('M1 · 쪽지 API 경로 · 메서드는 서버 AppMarginApiController와 �
     ['/api/app/margins/70', 'DELETE', undefined],
     ['/api/app/margins/70/ai', 'POST', { step: 'ASK', revision: 1, focus: null }],
   ]);
+});
+
+test('REQ-273 · 홈 블로그 목록은 GET /api/app/blog/posts?limit=3(서버 AppBlogApiController.list)', async () => {
+  fetchMock.mockResolvedValue(reply(200, '{"posts":[],"next":null}'));
+  await expect(blog.posts(3)).resolves.toEqual({ posts: [], next: null });
+  const sent = fetchMock.mock.calls.map(([url, init]) => [url.replace('https://booktimer.app', ''), init.method, init.body]);
+  expect(sent).toEqual([['/api/app/blog/posts?limit=3', 'GET', undefined]]);
 });
 
 test('실패 문구 · 서버 평문과 연결 문구는 그대로, 문구 없는 실패(HTML 오류 페이지)는 화면 문구로 바꾼다', () => {
