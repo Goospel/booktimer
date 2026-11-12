@@ -1,5 +1,7 @@
 package com.booktimer.writing;
 
+import com.booktimer.blog.QuoteBox;
+import com.booktimer.blog.QuoteBoxRepository;
 import com.booktimer.book.Book;
 import com.booktimer.story.Story;
 import com.booktimer.story.StoryRepository;
@@ -57,16 +59,18 @@ public class WritingAiService {
     private final ClaudeWritingAssistant assistant;
     private final AiBudgetService budget;
     private final StudyAiUsageService usageService;
+    private final QuoteBoxRepository quoteBoxRepository;
     private final Clock clock;
 
     public WritingAiService(StoryRepository storyRepository, WritingService writingService,
                             ClaudeWritingAssistant assistant, AiBudgetService budget,
-                            StudyAiUsageService usageService, Clock clock) {
+                            StudyAiUsageService usageService, QuoteBoxRepository quoteBoxRepository, Clock clock) {
         this.storyRepository = storyRepository;
         this.writingService = writingService;
         this.assistant = assistant;
         this.budget = budget;
         this.usageService = usageService;
+        this.quoteBoxRepository = quoteBoxRepository;
         this.clock = clock;
     }
 
@@ -96,7 +100,10 @@ public class WritingAiService {
         }
         String body = note.getText();
         Book book = note.getBook();
-        WritingMaterial material = writingService.material(user, materialNotes(user, note, book));
+        // 지금 쪽지의 건 블로그 문장(label 순) — 다른 쪽지의 박스는 읽지 않는다(REQ-208 · 처리방침 6-3 :306)
+        List<String> linked = quoteBoxRepository.findByOwnerTypeAndOwnerIdOrderByLabel(QuoteBox.Owner.NOTE, note.getId()).stream()
+                .map(QuoteBox::getText).toList();
+        WritingMaterial material = writingService.material(user, materialNotes(user, note, book, !linked.isEmpty()), linked);
         if (step == Step.ASK && material.included().isEmpty()) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "여백에 문장이나 메모를 하나 이상 남긴 뒤에 질문을 받을 수 있어요");
         }
@@ -155,14 +162,16 @@ public class WritingAiService {
 
     /**
      * 재료가 될 쪽지 — <b>지금 쪽지 먼저</b>, 그다음 같은 책 다른 쪽지 최근순(배경 재료 — J34). 책 없는 쪽지는 그 쪽지만(J76 — 다른
-     * 쪽지 본문 0 · REQ-228). 생각 · 옮긴 문장이 다 빈 쪽지(질문 기록만 남은 옮긴 쪽지)는 재료가 아니다.
+     * 쪽지 본문 0 · REQ-228). 생각 · 옮긴 문장이 다 빈 쪽지(질문 기록만 남은 옮긴 쪽지)는 재료가 아니다 — 다만 지금 쪽지에 건 블로그
+     * 문장이 있으면 남긴다(박스만 있는 쪽지도 재료 1개 — REQ-214).
      */
-    private List<Story> materialNotes(User user, Story note, Book book) {
+    private List<Story> materialNotes(User user, Story note, Book book, boolean currentLinked) {
         List<Story> notes = new ArrayList<>(List.of(note));
         if (book != null) {
             writingService.margins(user, book).stream().filter(s -> !s.getId().equals(note.getId())).forEach(notes::add);
         }
-        return notes.stream().filter(s -> s.getQuote() != null || !s.getText().isBlank()).toList();
+        return notes.stream()
+                .filter(s -> (currentLinked && s == note) || s.getQuote() != null || !s.getText().isBlank()).toList();
     }
 
     /** 오늘 남은 글쓰기 AI 몫 — 화면이 버튼 옆에 그린다(UTC 날짜 키 — 소진·환불과 같은 규칙). */

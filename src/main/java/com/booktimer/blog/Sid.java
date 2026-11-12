@@ -1,6 +1,7 @@
 package com.booktimer.blog;
 
 import java.security.SecureRandom;
+import java.util.Set;
 import java.util.function.Predicate;
 import java.util.function.Supplier;
 import java.util.regex.Pattern;
@@ -35,6 +36,13 @@ public final class Sid {
             if (!taken.test(sid)) return sid;
         }
         throw new IllegalStateException("문장 주소를 " + MAX_TRIES + "번 뽑아도 모두 겹쳤어요");
+    }
+
+    /** 한 번 올리기 안의 sid — 「이번에 뽑은 것({@code drawn}) ∪ DB」를 피하고, 뽑은 것을 {@code drawn}에 더한다. */
+    public static String fresh(Set<String> drawn, Predicate<String> inDb, Supplier<String> random) {
+        String sid = fresh(s -> drawn.contains(s) || inDb.test(s), random);
+        drawn.add(sid);
+        return sid;
     }
 
     public static boolean valid(String sid) {

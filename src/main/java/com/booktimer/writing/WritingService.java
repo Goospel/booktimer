@@ -18,6 +18,7 @@ import java.time.Clock;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneId;
+import java.util.ArrayList;
 import java.util.List;
 
 /**
@@ -125,10 +126,18 @@ public class WritingService {
 
     /** 여백(최근순)으로 AI 재료를 고른다 — 작성일은 사용자 타임존. */
     public WritingMaterial material(User user, List<Story> recentFirst) {
+        return material(user, recentFirst, List.of());
+    }
+
+    /** @param currentLinked 첫 쪽지(= 지금 쪽지)에 건 블로그 문장 글 — 다른 쪽지의 박스는 싣지 않는다(REQ-208 · 처리방침 6-3 :306) */
+    public WritingMaterial material(User user, List<Story> recentFirst, List<String> currentLinked) {
         ZoneId zone = ZoneId.of(user.getTimezone());
-        return WritingMaterial.select(recentFirst.stream()
-                .map(s -> new MaterialItem(LocalDate.ofInstant(s.getCreatedAt(), zone), s.getQuote(), s.getText()))
-                .toList(), WritingMaterial.MAX_CHARS);
+        List<MaterialItem> items = new ArrayList<>();
+        for (Story s : recentFirst) {
+            items.add(new MaterialItem(LocalDate.ofInstant(s.getCreatedAt(), zone), s.getQuote(), s.getText(),
+                    items.isEmpty() ? currentLinked : List.of()));
+        }
+        return WritingMaterial.select(items, WritingMaterial.MAX_CHARS);
     }
 
     /** 화면 머리의 책 한 줄 — 읽은 시간·횟수는 끝난 측정만 센다(재료 블록에는 싣지 않는다). */

@@ -166,6 +166,14 @@ public class Story extends BaseTimeEntity {
      *                                  팔레트 밖 bgCode, 책 없는 옮긴 문장 — 문구는 앱 400 본문으로 그대로 나간다
      */
     public static Story of(User author, String text, Book book, String bgCode, String quote) {
+        return of(author, text, book, bgCode, quote, false);
+    }
+
+    /**
+     * @param linked 블로그 문장을 걸어 만드는 쪽지(B1b — 박스는 부르는 쪽이 바로 붙인다). 참이면 생각 · 옮긴 문장이 다 비어도 된다 —
+     *               쪽지 = 옮긴 문장 · 생각 · 건 블로그 문장 중 하나(REQ-214). 기존 호출은 전부 「건 문장 없음」이라 겹쳐 쓰기로 남겼다.
+     */
+    public static Story of(User author, String text, Book book, String bgCode, String quote, boolean linked) {
         if (author == null) {
             throw new IllegalArgumentException("author must not be null");
         }
@@ -177,7 +185,7 @@ public class Story extends BaseTimeEntity {
         }
         String strippedQuote = normalizeQuote(quote, book != null);
         String stripped = normalizeText(text);
-        if (stripped.isEmpty() && strippedQuote == null) {
+        if (stripped.isEmpty() && strippedQuote == null && !linked) {
             throw new IllegalArgumentException("옮긴 문장이나 생각을 하나는 적어 주세요");
         }
         return new Story(author, stripped, book, bgCode, strippedQuote);
@@ -193,12 +201,17 @@ public class Story extends BaseTimeEntity {
      * @throws IllegalArgumentException 길이 · 빈 쪽지 · 출처 없는 옮긴 문장
      */
     public void edit(String quote, String text, int expectedRevision) {
+        edit(quote, text, expectedRevision, false);
+    }
+
+    /** @param linked 이 쪽지에 건 블로그 문장(박스)이 있다 — 있으면 옮긴 문장 · 생각이 다 비어도 받는다(REQ-207). */
+    public void edit(String quote, String text, int expectedRevision, boolean linked) {
         if (expectedRevision != this.revision) {
             throw new StaleMarginException(expectedRevision, this.revision);
         }
         String nextQuote = normalizeQuote(quote, book != null || quoteSource != null);
         String nextText = normalizeText(text);
-        if (nextText.isEmpty() && nextQuote == null && aiLog == null) {
+        if (nextText.isEmpty() && nextQuote == null && aiLog == null && !linked) {
             throw new IllegalArgumentException("옮긴 문장이나 생각을 하나는 적어 주세요");
         }
         if (nextQuote != null && quoteSource == null) {

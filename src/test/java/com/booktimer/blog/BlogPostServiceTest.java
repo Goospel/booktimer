@@ -39,7 +39,8 @@ class BlogPostServiceTest {
 
     @BeforeEach
     void setUp() {
-        service = new BlogPostService(postRepository, sentenceRepository, revRepository, access, blockService, rateLimitService);
+        service = new BlogPostService(postRepository, sentenceRepository, revRepository, access, blockService, rateLimitService,
+                org.mockito.Mockito.mock(QuoteBoxService.class), org.mockito.Mockito.mock(QuoteBoxRepository.class));
         me = User.of("me@booktimer.com", "$2a$10$abcdefghijklmnopqrstuv", "나", "Asia/Seoul", Role.USER);
         ReflectionTestUtils.setField(me, "id", 1L);
     }

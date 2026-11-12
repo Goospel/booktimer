@@ -592,29 +592,48 @@ class AppBlogApiControllerTest {
     /** 쓰기 문이 새로 생기면 어느 목록에 넣을지 정하기 전엔 빨갛다(§4.8 · 비평 SEC-6). B2가 열어 둔 목록에 차단 · 확인 시각을 넣는다. */
     private static final Set<String> BLOCKED = Set.of(
             "POST /api/app/blog/posts", "PUT /api/app/blog/posts/{id}", "POST /api/app/blog/posts/{id}/publish",
-            "PUT /api/app/blog/me");
-    /** 내 데이터를 지우는 길은 목록과 무관하게 늘 연다(§4.8 — readsAndDeletesStayOpen이 200을 잰다). */
-    private static final Set<String> OPEN = Set.of("DELETE /api/app/blog/posts/{id}");
+            "PUT /api/app/blog/me",
+            "POST /api/app/blog/posts/{id}/quotes", "POST /api/app/blog/quotes/{id}/refresh", "PUT /api/app/blog/quotes/{id}/source",
+            "POST /api/app/margins/{id}/quotes");
+    /** 내 데이터를 지우는 길은 목록과 무관하게 늘 연다(§4.8 — readsAndDeletesStayOpen · AppMarginLinkApiTest가 200을 잰다). */
+    private static final Set<String> OPEN = Set.of("DELETE /api/app/blog/posts/{id}", "DELETE /api/app/margins/{id}",
+            "DELETE /api/app/margins/{id}/quotes/{quoteId}");
+    /** 문 단위로 허용 목록을 걸지 않는 쪽지 쓰기 문 — 줄마다 까닭. 새 쪽지 쓰기 문은 세 목록 가운데 하나에 넣어야 초록이다(§16 AUTH-4). */
+    private static final Set<String> MARGIN_NOT_BLOG = Set.of(
+            "POST /api/app/margins",           // 쪽지 만들기 — 몸에 link가 있을 때만 막는다(걸기 · 매개변수 403 시험이 잰다)
+            "PUT /api/app/margins/{id}",       // 쪽지 고치기(자동저장) — 블로그 문 아님
+            "POST /api/app/margins/{id}/ai");  // 여백 AI 질문 — 동의 · 몫이 막는다(BlogAccess 아님)
 
     @Test
-    @DisplayName("REQ-244 · /api/app/blog의 쓰기 경로(GET · HEAD · OPTIONS 밖 전부) = 막는 목록 ∪ 열어 둔 목록")
+    @DisplayName("REQ-244 · /api/app/blog · /api/app/margins의 쓰기 경로(GET · HEAD · OPTIONS 밖 전부) = 막는 목록 ∪ 열어 둔 목록 ∪ 블로그 아닌 쪽지 문")
     void writeRoutesAreAllAccountedFor() {
         Set<String> routes = new HashSet<>();
-        handlerMapping.getHandlerMethods().keySet().forEach(info -> info.getPatternValues().forEach(p -> {
+        Set<String> outside = new HashSet<>(); // 블로그 박스를 쥔 컨트롤러가 두 접두 밖에 연 쓰기 문 — 접두만 바꾼 새 문도 빨갛다(리뷰 C-1)
+        Set<Class<?>> quoteHolders = new HashSet<>();
+        handlerMapping.getHandlerMethods().forEach((info, handler) -> info.getPatternValues().forEach(p -> {
+            boolean holdsQuotes = java.util.Arrays.stream(handler.getBeanType().getDeclaredFields())
+                    .anyMatch(f -> f.getType() == com.booktimer.blog.QuoteBoxService.class || f.getType() == BlogAccess.class);
+            if (holdsQuotes) quoteHolders.add(handler.getBeanType());
             Set<String> methods = new HashSet<>();
             info.getMethodsCondition().getMethods().forEach(m -> methods.add(m.name()));
             if (methods.isEmpty()) methods.add("ANY"); // 메서드를 정하지 않은 매핑은 쓰기도 받는다
             methods.forEach(method -> {
-                boolean blog = (p.equals("/api/app/blog") || p.startsWith("/api/app/blog/"))
-                        && !Set.of("GET", "HEAD", "OPTIONS").contains(method);
-                boolean marginQuote = p.startsWith("/api/app/margins/") && p.contains("/quotes") && method.equals("POST");
-                if (blog || marginQuote) {
+                boolean write = !Set.of("GET", "HEAD", "OPTIONS").contains(method);
+                boolean blog = p.equals("/api/app/blog") || p.startsWith("/api/app/blog/");
+                boolean margin = p.equals("/api/app/margins") || p.startsWith("/api/app/margins/");
+                if (write && (blog || margin)) {
                     routes.add(method + " " + p);
+                } else if (write && holdsQuotes) {
+                    outside.add(method + " " + p);
                 }
             });
         }));
+        assertThat(quoteHolders).extracting(Class::getSimpleName) // 양성 대조 — 필드 검사가 빈 집합으로 공허해지지 않게
+                .contains("AppBlogApiController", "AppMarginApiController");
+        assertThat(outside).isEmpty();
         Set<String> expected = new HashSet<>(BLOCKED);
         expected.addAll(OPEN);
+        expected.addAll(MARGIN_NOT_BLOG);
         assertThat(routes).isEqualTo(expected);
     }
 

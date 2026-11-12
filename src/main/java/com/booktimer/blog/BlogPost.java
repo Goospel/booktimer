@@ -133,6 +133,11 @@ public class BlogPost extends BaseTimeEntity {
         return changed;
     }
 
+    /** 인용 · 걸기 · 붙이기 · 반영의 원 글 판정(§6.4) — 올림 ∧ 가리지 않음. <b>주인도 예외 없다</b>(J52). */
+    public boolean quotable() {
+        return publishedAt != null && hiddenAt == null;
+    }
+
     public Long getId() {
         return id;
     }

@@ -1,5 +1,7 @@
 package com.booktimer.story;
 
+import com.booktimer.blog.QuoteBox;
+import com.booktimer.blog.QuoteBoxRepository;
 import com.booktimer.book.Book;
 import com.booktimer.book.BookRepository;
 import com.booktimer.book.Isbn;
@@ -54,6 +56,7 @@ public class StoryService {
     private final StoryLikeRepository storyLikeRepository;
     private final UserRowAssembler rowAssembler;
     private final WritingDraftRepository writingDraftRepository;
+    private final QuoteBoxRepository quoteBoxRepository;
     private final Clock clock;
 
     public StoryService(StoryRepository storyRepository,
@@ -63,6 +66,7 @@ public class StoryService {
                         StoryLikeRepository storyLikeRepository,
                         UserRowAssembler rowAssembler,
                         WritingDraftRepository writingDraftRepository,
+                        QuoteBoxRepository quoteBoxRepository,
                         Clock clock) {
         this.storyRepository = storyRepository;
         this.bookRepository = bookRepository;
@@ -71,6 +75,7 @@ public class StoryService {
         this.storyLikeRepository = storyLikeRepository;
         this.rowAssembler = rowAssembler;
         this.writingDraftRepository = writingDraftRepository;
+        this.quoteBoxRepository = quoteBoxRepository;
         this.clock = clock;
     }
 
@@ -100,10 +105,22 @@ public class StoryService {
      * @throws IllegalArgumentException 길이 · 빈 쪽지 · 책 없는 옮긴 문장(→ 400)
      */
     public Story createNote(User author, Long bookId, String quote, String text) {
+        return createNote(author, bookId, quote, text, false);
+    }
+
+    /**
+     * 블로그 문장을 걸어 만드는 쪽지(B1b — {@code QuoteBoxService.hang}이 박스를 바로 붙인다). 상한 · 책 검사는 {@link #createNote}와
+     * 같고, 생각 · 옮긴 문장이 다 비어도 된다(REQ-214 — 건 문장만 있는 쪽지).
+     */
+    public Story createLinkedNote(User author, Long bookId, String quote, String text) {
+        return createNote(author, bookId, quote, text, true);
+    }
+
+    private Story createNote(User author, Long bookId, String quote, String text, boolean linked) {
         checkCreateRate(author);
         Book book = bookId == null ? null : bookRepository.findByIdAndUser(bookId, author)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "책을 찾을 수 없어요"));
-        return storyRepository.save(Story.of(author, text, book, null, quote));
+        return storyRepository.save(Story.of(author, text, book, null, quote, linked));
     }
 
     /** 만들기 상한(시간당 30 — J7). 고치기는 만들기가 아니라 걸리지 않는다. */
@@ -121,7 +138,7 @@ public class StoryService {
     public Story editNote(User actor, Long storyId, String quote, String text, int revision, Boolean exported) {
         Story story = note(actor, storyId);
         try {
-            story.edit(quote, text, revision);
+            story.edit(quote, text, revision, quoteBoxRepository.existsByOwnerTypeAndOwnerId(QuoteBox.Owner.NOTE, storyId));
         } catch (Story.StaleMarginException e) {
             throw new ResponseStatusException(HttpStatus.CONFLICT, "다른 기기에서 이 쪽지가 바뀌었어요 — 그쪽을 불러와 주세요");
         }
@@ -131,11 +148,27 @@ public class StoryService {
         return story;
     }
 
-    /** 본인 글 즉시 삭제(실수 게시 회수 — §13.6). 없거나 타인 것이면 404(IDOR — 존재 비노출). 옮긴 쪽지면 원본 {@code writing_draft} 행도 함께 지운다. */
+    /** 웹 · 미니앱 삭제({@code DELETE /api/stories/{id}}) — 사용자가 지우기를 누른 것이라 건 박스째 지운다(§4.7). */
     public void delete(User actor, Long storyId) {
+        delete(actor, storyId, true);
+    }
+
+    /**
+     * 본인 글 즉시 삭제(실수 게시 회수 — §13.6). 없거나 타인 것이면 404(IDOR — 존재 비노출) — 소유 판정이 가드보다 먼저다.
+     * 옮긴 쪽지면 원본 {@code writing_draft} 행도 함께 지운다.
+     *
+     * @param allowQuotes 거짓이면 건 박스가 있는 쪽지는 409 — 옛 앱 JS가 박스만 있는 쪽지를 「빈 쪽지」로 알고 지우지 못하게(REQ-206 · §4.7)
+     */
+    public void delete(User actor, Long storyId, boolean allowQuotes) {
         Story story = storyRepository.findById(storyId)
                 .filter(s -> isSameUser(s.getUser(), actor))
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "글을 찾을 수 없습니다"));
+        if (quoteBoxRepository.existsByOwnerTypeAndOwnerId(QuoteBox.Owner.NOTE, storyId)) {
+            if (!allowQuotes) {
+                throw new ResponseStatusException(HttpStatus.CONFLICT, "건 문장이 있는 쪽지예요 — 앱을 껐다 다시 켠 뒤 지워 주세요");
+            }
+            quoteBoxRepository.deleteByOwner(QuoteBox.Owner.NOTE, storyId); // 박스는 FK가 없다 — 안 지우면 고아
+        }
         storyLikeRepository.deleteByStory(story); // story_like.story_id FK — 글보다 먼저
         writingDraftRepository.deleteByStoryId(storyId); // 옮긴 쪽지면 원본 글도 파기(U-154 ⑤ · 처리방침 5절) — M2가 지운다
         storyRepository.delete(story);

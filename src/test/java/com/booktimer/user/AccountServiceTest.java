@@ -103,6 +103,8 @@ class AccountServiceTest {
     @Mock
     private com.booktimer.blog.BlogSentenceRevRepository blogSentenceRevRepository;
     @Mock
+    private com.booktimer.blog.QuoteBoxRepository quoteBoxRepository;
+    @Mock
     private com.booktimer.security.SessionInvalidator sessionInvalidator;
     @Mock
     private PasswordEncoder passwordEncoder;
@@ -158,7 +160,7 @@ class AccountServiceTest {
 
         service.deleteAccount(EMAIL, "pw");
 
-        var ordered = inOrder(sessionRepository, studySessionRepository, studyDailyCheckRepository, studyPlanItemRepository, studyRecallRepository, studyNoteRepository, studyNoteImageRepository, studyAiUsageRepository, timerRepository, goalChangeRepository, goalWaiverRepository, followRepository, blockRepository, reportRepository, chatMessageRepository, chatRoomRepository, storyLikeRepository, blogSentenceRevRepository, blogSentenceRepository, blogPostRepository, storyRepository, writingDraftRepository, bookRepository, studyBookRepository, personalityCacheRepository, feedbackRepository, emailTokenRepository, apiTokenRepository, tossLinkCodeRepository, userRepository);
+        var ordered = inOrder(sessionRepository, studySessionRepository, studyDailyCheckRepository, studyPlanItemRepository, studyRecallRepository, studyNoteRepository, studyNoteImageRepository, studyAiUsageRepository, timerRepository, goalChangeRepository, goalWaiverRepository, followRepository, blockRepository, reportRepository, chatMessageRepository, chatRoomRepository, storyLikeRepository, quoteBoxRepository, blogSentenceRevRepository, blogSentenceRepository, blogPostRepository, storyRepository, writingDraftRepository, bookRepository, studyBookRepository, personalityCacheRepository, feedbackRepository, emailTokenRepository, apiTokenRepository, tossLinkCodeRepository, userRepository);
         ordered.verify(sessionRepository).deleteByUser(user); // book FK 참조하는 세션 먼저
         // 공부 원장도 users를 FK 참조한다 — 빠지면 그 기록을 가진 사람의 탈퇴가 통째로 실패한다(T-168 계열).
         ordered.verify(studySessionRepository).deleteByUser(user);
@@ -186,6 +188,8 @@ class AccountServiceTest {
         ordered.verify(chatRoomRepository).deleteByMember(user);
         ordered.verify(storyLikeRepository).deleteByUser(user);        // FK: 내가 남에게 누른 좋아요
         ordered.verify(storyLikeRepository).deleteByStoryUser(user);   // FK: 내 글에 달린 좋아요 — 글보다 앞
+        ordered.verify(quoteBoxRepository).deleteOwnedBy(user);        // 인용 박스(FK 없음): 하위 질의가 내 글 · 쪽지를 찾게 그보다 앞(REQ-204)
+        ordered.verify(quoteBoxRepository).detachSourceUser(user.getId()); // 남의 박스의 원 글쓴이 참조(REQ-209)
         ordered.verify(blogSentenceRevRepository).deleteBySentencePostUser(user); // FK: 블로그 판 → 문장 → 글(REQ-204)
         ordered.verify(blogSentenceRepository).deleteByPostUser(user);
         ordered.verify(blogPostRepository).deleteByUser(user);

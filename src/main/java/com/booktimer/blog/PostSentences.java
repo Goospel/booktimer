@@ -1,6 +1,8 @@
 package com.booktimer.blog;
 
 import java.util.ArrayList;
+import java.util.Collection;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -46,6 +48,11 @@ public final class PostSentences {
             if (s != null && s.live()) out.add(s);
         }
         return out;
+    }
+
+    /** 문장 행 전부(순서 없음) — {@code QuoteRange}가 나뉜 조각(split_from)을 찾는다. */
+    Collection<BlogSentence> rows() {
+        return Collections.unmodifiableCollection(bySid.values());
     }
 
     public long maxRowId() {
