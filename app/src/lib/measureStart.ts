@@ -3,7 +3,8 @@
 // 웹에서 시작해 서버에 열린 측정의 정지만 지금처럼 서버 정지다(온라인 전용 — REQ-376 · REQ-151).
 import { ApiError, failText } from '../api/client';
 import { begin, capActive, end, type Ledger, type MeasureMode } from './measureLedger';
-import { MeasureStoreClosed, type MeasureState, type measureStore } from './measureSync';
+import { confirmedOf, MeasureStoreClosed, type MeasureState, type measureStore } from './measureSync';
+import { effectiveDashboard } from './visibleDashboard';
 
 export const BUSY_ELSEWHERE = '다른 곳에서 재는 측정이 있어요 — 그 측정을 멈추면 시작할 수 있어요';
 export const ALREADY_STOPPED = '이미 끝난 측정이에요';
@@ -42,6 +43,20 @@ export async function startMeasure(deps: MeasureDeps, p: { mode: MeasureMode; bo
   const at = (deps.now ?? Date.now)();
   if (await write(deps, (l) => begin(l, { mode: p.mode, at, bookId: p.bookId, bookTitle: p.bookTitle }))) void deps.load().catch(() => undefined); // 대기 마감을 이 기회에
   return {};
+}
+
+/**
+ * 책 화면 [읽기 시작](REQ-275 · F1 확인 질문 2) — 그 책으로 연다. 보이는 대시보드(이 기기 원장 · 확인된 웹 측정)에 독서 · 공부 어느 쪽이든 재는 중이면
+ * 막는다(BUSY_ELSEWHERE — 홈 박스가 그 측정의 [측정 종료]를 보인다. 그냥 부르면 begin이 조용히 무시한다). started = 원장에 적었다 → 화면은 홈으로 간다
+ */
+export async function startFromBook(deps: MeasureDeps, book: { id: number; title: string }): Promise<{ error?: string; started: boolean }> {
+  const s = deps.store.get();
+  if (!s) return { started: false };
+  const now = (deps.now ?? Date.now)();
+  const d = s.base ? effectiveDashboard(s.base, s.ledger, now, confirmedOf(s)).d : null;
+  const busy = d ? d.hasActiveSession || d.study.hasActiveSession : capActive(s.ledger, now).active !== null;
+  const r = await startMeasure(deps, { mode: 'reading', bookId: book.id, bookTitle: book.title, blocked: busy });
+  return { ...r, started: !r.error };
 }
 
 /** 이 기기 원장(6시간 지난 진행 중은 끝낸 뒤)의 진행 중이 그 모드면 기기에서, 아니면 서버에 열린(웹 시작) 측정 — 서버 정지 */

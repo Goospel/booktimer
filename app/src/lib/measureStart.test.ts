@@ -1,9 +1,10 @@
 jest.mock('expo-secure-store', () => ({ getItemAsync: jest.fn(), setItemAsync: jest.fn(), deleteItemAsync: jest.fn() }));
 
 import { ApiError, NetworkError } from '../api/client';
+import type { Dashboard } from '../api/types';
 import type { KV } from './draftSync';
 import { type Ledger } from './measureLedger';
-import { ALREADY_STOPPED, BUSY_ELSEWHERE, startMeasure, STOP_FAILED, stopMeasure } from './measureStart';
+import { ALREADY_STOPPED, BUSY_ELSEWHERE, startFromBook, startMeasure, STOP_FAILED, stopMeasure } from './measureStart';
 import { measureStore } from './measureSync';
 
 // 타이머 오프라인 T2(설계 2026-11-02 §6.6) — 앱 측정의 시작 · 정지는 기기 원장에 먼저 적고 서버를 기다리지 않는다(REQ-357 · Q1).
@@ -26,9 +27,10 @@ function memoryKV(): KV & { map: Map<string, string> } {
     getAllKeys: async () => [...map.keys()],
   };
 }
-async function openWith(ledger?: Ledger) {
+/** d가 있으면 기준 값(디스크 — 확인된 값)도 둔다 */
+async function openWith(ledger?: Ledger, d?: Dashboard) {
   const kv = memoryKV();
-  if (ledger) kv.map.set('timer:1:state', JSON.stringify({ ledger }));
+  if (ledger || d) kv.map.set('timer:1:state', JSON.stringify({ ledger, base: d && { d, at: T, sentAt: T - 300 } }));
   await measureStore.open(kv, 1);
   return kv;
 }
@@ -187,4 +189,72 @@ test('REQ-369 · 가게가 닫혀 있으면 시작 · 정지가 아무것도 적
   await measureStore.open(kv, 1);
   const store = { get: measureStore.get, update: () => measureStore.close().then(() => measureStore.update((s) => s, 1)) };
   expect(await startMeasure({ store, load }, { mode: 'study', bookId: null, bookTitle: null, blocked: false })).toEqual({});
+});
+
+// ── 책생글 A2 — 책 화면 [읽기 시작](REQ-275) ──
+const book = (id: number, title: string) => ({ id, title, coverUrl: null, author: null });
+const tenMinAgo = new Date(T - 10 * 60_000).toISOString(); // 표시 상한(6시간 10분) 안 — 서버가 아직 열어 둔 측정
+function dash(p: Partial<Dashboard> = {}): Dashboard {
+  return {
+    todayGoalSeconds: 1800,
+    todayReadSeconds: 0,
+    hasActiveSession: false,
+    activeStartedAt: null,
+    activeBookTitle: null,
+    activeBook: null,
+    readingBooks: [book(1, '데미안')],
+    wantToReadBooks: [book(7, '싯다르타')],
+    finishedBooks: [book(3, '수레바퀴 아래서')],
+    recentBookId: 1,
+    graph: { goalStreak: 0, weeks: [] },
+    study: { hasActiveSession: false, activeStartedAt: null, activeBook: null, todaySeconds: 0, recentBookId: null, books: [] },
+    ...p,
+  };
+}
+const sid = { id: 7, title: '싯다르타' };
+
+test('REQ-275 · 책 화면 읽기 시작 = 그 책으로 원장에 진행 중(서버 0) · started', async () => {
+  await openWith(undefined, dash());
+  const load = jest.fn(async () => undefined);
+  expect(await startFromBook({ store: measureStore, load, now: () => T }, sid)).toEqual({ started: true });
+  expect(measureStore.get()!.ledger.active).toEqual({ mode: 'reading', startedAt: new Date(T).toISOString(), bookId: 7, bookTitle: '싯다르타' });
+  expect(fetchMock).not.toHaveBeenCalled();
+  expect(load).toHaveBeenCalledTimes(1);
+});
+
+test('REQ-275 · 이 기기에서 독서(다른 책) · 공부를 재는 중이면 BUSY_ELSEWHERE · 원장 그대로 · started 거짓', async () => {
+  const load = jest.fn(async () => undefined);
+  // 기준 값 없음 — 원장 갈래
+  await openWith(reading(T - 60_000));
+  const before = measureStore.get()!.ledger;
+  expect(await startFromBook({ store: measureStore, load, now: () => T }, sid)).toEqual({ error: BUSY_ELSEWHERE, started: false });
+  expect(measureStore.get()!.ledger).toBe(before);
+  await measureStore.close();
+  // 기준 값 있음 — 보이는 대시보드 갈래(overlay가 공부 진행 중을 세운다)
+  const studying: Ledger = { active: { mode: 'study', startedAt: new Date(T - 60_000).toISOString(), bookId: null, bookTitle: null }, done: [] };
+  await openWith(studying, dash());
+  expect(await startFromBook({ store: measureStore, load, now: () => T }, sid)).toEqual({ error: BUSY_ELSEWHERE, started: false });
+  expect(measureStore.get()!.ledger.active).toMatchObject({ mode: 'study' });
+});
+
+test('REQ-275 · 확인된 서버 측정(웹에서 시작 — 독서 · 공부)도 막는다 · 확인 안 된 기준 값의 서버 측정은 막지 않는다(홈과 같은 판정 — REQ-378)', async () => {
+  const load = jest.fn(async () => undefined);
+  const deps = { store: measureStore, load, now: () => T };
+  await openWith(undefined, dash({ hasActiveSession: true, activeStartedAt: tenMinAgo, activeBookTitle: '데미안', activeBook: book(1, '데미안') }));
+  expect(await startFromBook(deps, sid)).toEqual({ error: BUSY_ELSEWHERE, started: false });
+  await measureStore.close();
+  await openWith(undefined, dash({ study: { hasActiveSession: true, activeStartedAt: tenMinAgo, activeBook: null, todaySeconds: 0, recentBookId: null, books: [] } }));
+  expect(await startFromBook(deps, sid)).toEqual({ error: BUSY_ELSEWHERE, started: false });
+  await measureStore.close();
+  // 같은 독서 기준 값인데 이 실행의 읽기가 실패했다(확인 안 됨) — 서버 측정은 멈춘 것으로 보여 막지 않는다
+  await openWith(undefined, dash({ hasActiveSession: true, activeStartedAt: tenMinAgo, activeBookTitle: '데미안', activeBook: book(1, '데미안') }));
+  await measureStore.update((s) => ({ ...s, failedSeq: 1 }), 1);
+  expect(await startFromBook(deps, sid)).toEqual({ started: true });
+  expect(measureStore.get()!.ledger.active).toMatchObject({ mode: 'reading', bookId: 7 });
+});
+
+test('REQ-275 · 가게가 닫혔으면 아무것도 하지 않는다(started 거짓 · 오류 없음 — 홈으로 가지 않는다)', async () => {
+  const load = jest.fn(async () => undefined);
+  expect(await startFromBook({ store: measureStore, load, now: () => T }, sid)).toEqual({ started: false });
+  expect(load).not.toHaveBeenCalled();
 });
