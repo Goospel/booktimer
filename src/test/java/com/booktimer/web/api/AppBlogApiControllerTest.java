@@ -608,7 +608,12 @@ class AppBlogApiControllerTest {
     @DisplayName("REQ-244 · /api/app/blog · /api/app/margins의 쓰기 경로(GET · HEAD · OPTIONS 밖 전부) = 막는 목록 ∪ 열어 둔 목록 ∪ 블로그 아닌 쪽지 문")
     void writeRoutesAreAllAccountedFor() {
         Set<String> routes = new HashSet<>();
-        handlerMapping.getHandlerMethods().keySet().forEach(info -> info.getPatternValues().forEach(p -> {
+        Set<String> outside = new HashSet<>(); // 블로그 박스를 쥔 컨트롤러가 두 접두 밖에 연 쓰기 문 — 접두만 바꾼 새 문도 빨갛다(리뷰 C-1)
+        Set<Class<?>> quoteHolders = new HashSet<>();
+        handlerMapping.getHandlerMethods().forEach((info, handler) -> info.getPatternValues().forEach(p -> {
+            boolean holdsQuotes = java.util.Arrays.stream(handler.getBeanType().getDeclaredFields())
+                    .anyMatch(f -> f.getType() == com.booktimer.blog.QuoteBoxService.class || f.getType() == BlogAccess.class);
+            if (holdsQuotes) quoteHolders.add(handler.getBeanType());
             Set<String> methods = new HashSet<>();
             info.getMethodsCondition().getMethods().forEach(m -> methods.add(m.name()));
             if (methods.isEmpty()) methods.add("ANY"); // 메서드를 정하지 않은 매핑은 쓰기도 받는다
@@ -618,9 +623,14 @@ class AppBlogApiControllerTest {
                 boolean margin = p.equals("/api/app/margins") || p.startsWith("/api/app/margins/");
                 if (write && (blog || margin)) {
                     routes.add(method + " " + p);
+                } else if (write && holdsQuotes) {
+                    outside.add(method + " " + p);
                 }
             });
         }));
+        assertThat(quoteHolders).extracting(Class::getSimpleName) // 양성 대조 — 필드 검사가 빈 집합으로 공허해지지 않게
+                .contains("AppBlogApiController", "AppMarginApiController");
+        assertThat(outside).isEmpty();
         Set<String> expected = new HashSet<>(BLOCKED);
         expected.addAll(OPEN);
         expected.addAll(MARGIN_NOT_BLOG);

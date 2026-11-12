@@ -823,6 +823,10 @@ class AppBlogQuoteApiTest {
                 .andExpect(jsonPath("$.blocks[1].quote.attribution").value("닉_q209h · 「바뀐 제목」")); // 양성 대조
         call(get("/api/app/blog/posts/" + mine), c)
                 .andExpect(jsonPath("$.blocks[1].quote.attribution").value("닉_q209h · 「처음 제목」")); // 차단 → 인용 때 제목 · 이름은 지금 것
+        String e = ready("q209he");
+        blockRepository.saveAndFlush(Block.of(user("q209he"), user("q209h")));
+        call(get("/api/app/blog/posts/" + mine), e)
+                .andExpect(jsonPath("$.blocks[1].quote.attribution").value("닉_q209h · 「처음 제목」")); // 반대 방향 — 독자가 원 글쓴이를 차단
 
         hide(src);
         republish(a, src, "가린 뒤 바꾼 제목", "봄에는 꽃이 핀다."); // 가린 글도 글쓴이는 다시 올릴 수 있다
