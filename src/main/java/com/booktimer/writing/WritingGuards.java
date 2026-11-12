@@ -25,6 +25,8 @@ final class WritingGuards {
     /** 끝에서 걷는 닫는 따옴표 — 「…?」처럼 물음표 뒤에 따옴표만 남은 질문을 통과시킨다. */
     private static final String CLOSERS = "’”」』'\"";
 
+    private static final Pattern LINE_BREAK = Pattern.compile("\\R");
+
     // ponytail: ASCII ' 는 짝으로만 센다 — 1차 질문이 한국어 인용에 '…'를 썼다. 영어 소유격(Harry's)과 겹쳐 잘못 버리면
     // 2차 F3의 버린 이유에서 보인다 → 그때 짝 규칙을 좁힌다.
     private static final List<Pattern> QUOTES = List.of(
@@ -89,7 +91,9 @@ final class WritingGuards {
                 continue;
             }
             String text = q.text().strip();
-            if (text.isEmpty() || text.length() > QUESTION_MAX || !endsWithQuestionMark(text)) {
+            // 줄바꿈 든 질문은 버린다 — 다음 FOLLOW의 「앞서 받은 질문」 블록에 [사용자 글] 같은 머리를 지어 넣는다(SEC-1 2차 통로)
+            if (text.isEmpty() || text.length() > QUESTION_MAX || LINE_BREAK.matcher(text).find()
+                    || !endsWithQuestionMark(text)) {
                 continue;
             }
             if (checkQuotes && quotedSpans(text).stream()
