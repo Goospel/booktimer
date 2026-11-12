@@ -1,4 +1,4 @@
-import { goalChoices, goalProgress, type GoalProgress, goalStatus, isStaleDay, midnightRereadDelay, nextMidnightOf, REREAD_MS, shouldReread, todayDashboard } from './goalProgress';
+import { boxGoalText, goalChoices, goalProgress, type GoalProgress, goalStatus, isStaleDay, libraryGoalLine, midnightRereadDelay, nextMidnightOf, progressOf, REREAD_MS, shouldReread, todayDashboard } from './goalProgress';
 import type { ContributionDay, Dashboard } from '../api/types';
 
 // 범위 보충 §3.4 · REQ-90 — 오늘 초 = 끝난 몫 + 진행 중 몫(기기 자정부터 · 6시간 상한).
@@ -98,6 +98,43 @@ test('REQ-177 · 목표 없음이면 「하루 목표 없음」 · 「오늘 N�
   expect(goalStatus({ progress: P({ streak: 3 }), goal: 0, measuring: false })).toBe(`하루 ${none}`);
   expect(goalStatus({ progress: P({ todaySeconds: 12 * MIN, filled: true, streak: 4 }), goal: 0, measuring: false })).toBe('오늘 12분 · 목표 없음');
   expect(goalStatus({ progress: P({ todaySeconds: 5 * MIN, filled: true, streak: 4 }), goal: 0, measuring: true })).toBe('오늘 5분 · 목표 없음');
+});
+
+// ── 책생글 A2 — 홈 박스 작은 글 · 서재 목표 줄 · 보이는 대시보드의 진행(F1 §4.1 · §4.2) ──
+test('REQ-270 · 박스 작은 글 — 안 읽은 날 「하루 목표 30분」 · 읽은 날 「오늘 12분 · 목표 30분」(연속 없음) · 목표 없음 「하루 목표 없음」 · 「오늘 12분 · 목표 없음」', () => {
+  expect(boxGoalText({ progress: P({}), goal: 30 * MIN, measuring: false })).toBe('하루 목표 30분');
+  expect(boxGoalText({ progress: P({ todaySeconds: 30 }), goal: 30 * MIN, measuring: false })).toBe('하루 목표 30분'); // 1분 미만 = 안 읽은 날
+  expect(boxGoalText({ progress: P({ todaySeconds: 60 }), goal: 30 * MIN, measuring: false })).toBe('오늘 1분 · 목표 30분'); // 1분부터 읽은 날 · 연속 5가 있어도 없음
+  expect(boxGoalText({ progress: P({ todaySeconds: 12 * MIN }), goal: 30 * MIN, measuring: false })).toBe('오늘 12분 · 목표 30분');
+  expect(boxGoalText({ progress: P({}), goal: 0, measuring: false })).toBe('하루 목표 없음');
+  expect(boxGoalText({ progress: P({ todaySeconds: 12 * MIN, filled: true }), goal: 0, measuring: false })).toBe('오늘 12분 · 목표 없음');
+  expect(boxGoalText({ progress: P({ todaySeconds: 40 * MIN, filled: true, streak: 6 }), goal: 30 * MIN, measuring: false })).not.toContain('일째');
+});
+test('REQ-270 · 측정 중 작은 글 = 「오늘 1시간 12분」(today 조각만 — 목표 1시간 30분 · 목표 없음에서도 목표 조각 없음)', () => {
+  expect(boxGoalText({ progress: P({ todaySeconds: 72 * MIN }), goal: 90 * MIN, measuring: true })).toBe('오늘 1시간 12분');
+  expect(boxGoalText({ progress: P({ todaySeconds: 72 * MIN }), goal: 0, measuring: true })).toBe('오늘 1시간 12분');
+  expect(boxGoalText({ progress: P({ todaySeconds: 20 }), goal: 30 * MIN, measuring: true })).toBe('오늘 0분'); // 측정 첫 1분 — 측정 중 0분은 지금 규칙 그대로
+});
+test('REQ-271 · 서재 목표 줄 — 읽은 날 「하루 목표 30분 · 5일째」 · 안 읽은 날 연속 없음 · 목표 없음 「하루 목표 없음」 · 연속 0이면 연속 없음', () => {
+  const lines = [
+    libraryGoalLine({ progress: P({ todaySeconds: 12 * MIN }), goal: 30 * MIN, measuring: false }),
+    libraryGoalLine({ progress: P({}), goal: 30 * MIN, measuring: false }),
+    libraryGoalLine({ progress: P({ todaySeconds: 12 * MIN, filled: true, streak: 4 }), goal: 0, measuring: false }),
+    libraryGoalLine({ progress: P({ todaySeconds: 12 * MIN, streak: 0 }), goal: 30 * MIN, measuring: false }),
+    libraryGoalLine({ progress: P({ todaySeconds: 20 }), goal: 30 * MIN, measuring: true }),
+    libraryGoalLine({ progress: P({}), goal: 0, measuring: false }),
+  ];
+  expect(lines).toEqual(['하루 목표 30분 · 5일째', '하루 목표 30분', '하루 목표 없음', '하루 목표 30분', '하루 목표 30분 · 5일째', '하루 목표 없음']);
+  for (const l of lines) expect(l).not.toContain('하루 하루');
+});
+test('REQ-90 · progressOf — 진행 중 몫은 독서 측정 중일 때만 얹는다(홈 · 서재 같은 입력)', () => {
+  const d = (o: Partial<Dashboard>) =>
+    ({ todayReadSeconds: 20 * MIN, todayGoalSeconds: 30 * MIN, hasActiveSession: true, activeStartedAt: new Date(at(20)).toISOString(), graph: { goalStreak: 4 }, ...o }) as unknown as Dashboard;
+  const running = progressOf(d({}), at(20, 15));
+  expect(running.todaySeconds).toBe(35 * MIN);
+  expect(running.streak).toBe(5); // 진행 중 몫으로 처음 채움 — 서버 연속 4에서 하나 더
+  expect(progressOf(d({ hasActiveSession: false }), at(20, 15)).todaySeconds).toBe(20 * MIN); // 시작 시각이 남아 있어도 얹지 않는다
+  expect(progressOf(d({ graph: {} }), at(20, 15)).streak).toBe(1); // 옛 서버(연속 없음) = 0에서
 });
 
 // ── 자정을 걸친 늦은 대시보드 응답(REQ-346~349 · 2026-11-02) — 서버가 아직 전날로 센 응답은 쓰지 않고 1초 뒤 한 번 다시 읽는다 · 판정한 순간으로 쓴다 ──
