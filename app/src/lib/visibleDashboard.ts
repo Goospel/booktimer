@@ -3,7 +3,7 @@
 import type { Dashboard } from '../api/types';
 import { dayKey, isFilled, nextMidnightOf } from './goalProgress';
 import { DISPLAY_CAP_MS } from './liveActivity';
-import { type ActiveMeasure, capActive, dayParts, type Ledger, unknownTo } from './measureLedger';
+import { type ActiveMeasure, capActive, dayParts, type DoneMeasure, type Ledger, unknownTo } from './measureLedger';
 import { nextDaySource } from './widgetPayload';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -51,16 +51,26 @@ export function rollToDay(base: Base, now: number, extra?: Extra): { d: Dashboar
  */
 export function effectiveDashboard(base: Base, ledger: Ledger, now: number, confirmed: boolean): { d: Dashboard; rolled: boolean } {
   const l = capActive(ledger, now); // 6시간 넘은 기기 진행 중은 보내기 전에도 끝난 몫
-  const d = overlay(confirmed ? base.d : stopServer(base.d, () => true), l.active);
   const parts = unknownTo(l, base.sentAt);
+  const d = withRecent(overlay(confirmed ? base.d : stopServer(base.d, () => true), l.active), parts);
   return rollToDay(d === base.d ? base : { ...base, d }, now, parts.length > 0 ? (s, e) => dayParts(parts, s, e) : undefined);
+}
+
+/**
+ * 기준 값이 모르는 끝난 독서 칸 중 가장 늦게 시작한 책 = 최근 책(REQ-275 — 서버 recentBookId의 기기판). 끝낸 뒤 보내고 다시 읽기 전에도 홈 박스가 그 책이다.
+ * shortcut: 오프라인 기기 측정 뒤 웹에서 더 늦게 잰 책이 있으면 다시 읽을 때까지 기기 칸이 이긴다 — 둘이 겹칠 때만, 받히면 서버 값으로 돌아간다
+ */
+function withRecent(d: Dashboard, parts: DoneMeasure[]): Dashboard {
+  let last: DoneMeasure | null = null;
+  for (const p of parts) if (p.mode === 'reading' && p.bookId !== null && (!last || p.startedAt > last.startedAt)) last = p;
+  return last === null || last.bookId === d.recentBookId ? d : { ...d, recentBookId: last.bookId };
 }
 
 /** 기기 진행 중이 그 모드를 차지하고 다른 모드는 멈춘 것으로 — 이 기기 화면 · 잠금화면은 「한 번에 하나」다(위젯 · LA는 독서를 먼저 고른다) */
 function overlay(d: Dashboard, a: ActiveMeasure | null): Dashboard {
   if (!a) return d;
   if (a.mode === 'reading') {
-    const activeBook = [...d.readingBooks, ...d.wantToReadBooks].find((b) => b.id === a.bookId) ?? null;
+    const activeBook = [...d.readingBooks, ...d.wantToReadBooks, ...(d.finishedBooks ?? [])].find((b) => b.id === a.bookId) ?? null; // 다 읽은 책도(REQ-275 — 책 화면에서 다시 잰다)
     return { ...d, hasActiveSession: true, activeStartedAt: a.startedAt, activeBookTitle: a.bookTitle, activeBook, study: { ...d.study, hasActiveSession: false, activeStartedAt: null, activeBook: null } };
   }
   const activeBook = a.bookId === null ? null : (d.study.books.find((b) => b.id === a.bookId) ?? { id: a.bookId, title: a.bookTitle ?? '', author: null, coverUrl: null, isbn13: null, totalSeconds: 0 });
