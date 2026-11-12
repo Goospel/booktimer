@@ -296,6 +296,7 @@ test('REQ-275 · 끝낸 뒤 보내기 전에도 최근 책 = 기기 원장에서
   const b = base(oct30); // 서버 recentBookId 1
   const l = ledger({
     done: [
+      part(at(oct30, 20, 30), at(oct30, 20, 40), { bookId: 5 }), // 더 일찍 시작한 안 받은 독서 책 칸 — 「가장 늦게」 비교를 잠근다
       part(at(oct30, 21, 10), at(oct30, 21, 20), { bookId: 2 }), // 안 받은 독서 책 칸 — 이것
       part(at(oct30, 21, 30), at(oct30, 21, 35), { bookId: null }), // 책 없이 잰 칸
       part(at(oct30, 21, 40), at(oct30, 21, 45), { mode: 'study', bookId: 9 }), // 공부 칸
