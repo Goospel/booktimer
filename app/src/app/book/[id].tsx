@@ -1,5 +1,5 @@
 // 책 화면(PR-G 사양 §5.4 · §5.5 — 책생글 「여백 + 블로그」 A1 · F1 사양 §4.3 · 그림 F-MARGIN-BOOK).
-// 머리 → 상태 세 칸 → 검정 알약 「여백에 글쓰기」 하나 → 「여백」 단(쪽지 줄 — 최신 먼저). 옛 [이 책으로 글쓰기] · 「이 책의 글」은 없다(D9).
+// 머리 → 상태 세 칸 → 검정 알약 「여백에 글쓰기」 하나 + 외곽선 [읽기 시작](책생글 A2 — REQ-275) → 「여백」 단(쪽지 줄 — 최신 먼저). 옛 [이 책으로 글쓰기] · 「이 책의 글」은 없다(D9).
 // 쪽지 줄은 길게 누르거나 VoiceOver 동작 「지우기」로 지운다.
 import { router, useFocusEffect, useLocalSearchParams } from 'expo-router';
 import { useCallback, useState } from 'react';
@@ -12,6 +12,8 @@ import { confirmRemoveNote, NoteRow } from '../../components/NoteRow';
 import { Badge, base, Button, Notice, Screen, Txt, useStacked } from '../../components/ui';
 import { durationLabel } from '../../lib/format';
 import { noteHref, pendingLeave, savedNotice } from '../../lib/marginSave';
+import { startFromBook } from '../../lib/measureStart';
+import { loadDashboard, measureStore } from '../../lib/measureSync';
 import { SECTIONS } from '../../lib/shelf';
 import { color, line, space } from '../../theme/tokens';
 
@@ -24,6 +26,7 @@ export default function Book() {
   const [loadError, setLoadError] = useState<{ message: string; notFound: boolean } | null>(null);
   const [notice, setNotice] = useState<NoticeState>(null);
   const [statusBusy, setStatusBusy] = useState(false);
+  const [starting, setStarting] = useState(false);
   const stacked = useStacked();
 
   const load = useCallback(async () => {
@@ -56,6 +59,17 @@ export default function Book() {
       setNotice({ message: failText(e, '상태를 바꾸지 못했어요 — 잠시 뒤 다시 해 주세요'), tone: 'error' });
     }
     setStatusBusy(false);
+  }
+
+  // 시간 문(gate)은 두지 않는다 — 성공하면 화면을 걷어 두 번째 누름이 없고, 그 사이 누름은 starting이 막는다. 재는 중이면 BUSY_ELSEWHERE 띠를 맨 위에 띄우고 머문다(D2)
+  async function startReading() {
+    if (!book || starting) return;
+    setStarting(true);
+    setNotice(null);
+    const r = await startFromBook({ store: measureStore, load: loadDashboard }, book);
+    setStarting(false);
+    if (r.error) setNotice({ message: r.error, tone: 'error' });
+    else if (r.started) router.dismissTo('/');
   }
 
   if (!book) {
@@ -137,8 +151,11 @@ export default function Book() {
         })}
       </View>
 
-      {/* 같은 일(새 쪽지)을 홈과 같은 말로 — 사용자 확정 2026-10-31(확인 질문 1) */}
-      <Button kind="ink" label="여백에 글쓰기" onPress={() => router.push(noteHref(book.id))} />
+      {/* 같은 일(새 쪽지)을 홈과 같은 말로 — 사용자 확정 2026-10-31(확인 질문 1). 그 아래 외곽선 [읽기 시작] = 이 책으로 측정을 열고 홈으로(확인 질문 2 · REQ-275) */}
+      <View style={{ gap: space[3] }}>
+        <Button kind="ink" label="여백에 글쓰기" onPress={() => router.push(noteHref(book.id))} />
+        <Button kind="outline" label="읽기 시작" busy={starting} onPress={() => void startReading()} />
+      </View>
 
       <View style={{ marginTop: space[4], gap: space[3] }}>
         <View
