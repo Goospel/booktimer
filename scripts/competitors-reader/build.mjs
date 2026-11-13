@@ -1,4 +1,4 @@
-// 경쟁사 md(아래 ids — 새 경쟁사를 넣으면 template.html의 DOCS · 탭 · 문서 칸과 함께 늘린다)를 template.html의 <!--MD--> 자리에 <script type="text/markdown">으로 넣어 읽기 화면 HTML 한 장을 만든다.
+// 경쟁사 md(아래 ids — 새 경쟁사를 넣으면 template.html의 DOCS · SHOTS · 탭 · 문서 칸 · 순위표 · 앱 카드 · 비교 표 열 · 단계 그림 줄과 함께 늘린다)를 template.html의 <!--MD--> 자리에 <script type="text/markdown">으로 넣어 읽기 화면 HTML 한 장을 만든다.
 // 사용: node scripts/competitors-reader/build.mjs [출력 경로]   (기본: 임시 폴더의 competitors-reader.html)
 // 만든 파일을 아티팩트로 다시 게시한다 — URL은 claude-docs/competitors/README.md 「갱신 규칙」.
 import { readFileSync, writeFileSync } from 'node:fs';
@@ -10,7 +10,7 @@ const here = dirname(fileURLToPath(import.meta.url));
 const repo = resolve(here, '../..');
 const out = process.argv[2] || join(tmpdir(), 'competitors-reader.html');
 
-const ids = ['serotiny', 'booktrack', 'savequotes', 'textoven', 'pagers', 'checkinout', 'booklogon', 'tamsikine', 'topa'];
+const ids = ['checkinout', 'booktrack', 'booklogon', 'savequotes', 'serotiny', 'tamsikine', 'pagers', 'topa', 'textoven'];
 const blocks = ids.map((id) => {
   const md = readFileSync(join(repo, 'claude-docs/competitors', `${id}.md`), 'utf8')
     .replace(/\r\n/g, '\n')
