@@ -148,10 +148,12 @@ td.v-theirs { color: var(--theirs); font-weight: 700; }
 footer.note { margin-top: 48px; padding-top: 16px; border-top: 1px solid var(--line); color: var(--muted); font-size: 13px; }
 footer.note a { color: var(--muted); }
 
-/* 표 개행: 본문의 overflow-wrap:anywhere는 칸의 최소 폭을 한 글자로 계산해 짧은 칸(날짜 · id · 근거)을 세로로 길게 만든다 — 표 안에서는 낱말 단위로만 꺾는다 */
+/* 표 개행: 긴 칸이 폭을 다 가져가면 짧은 칸(날짜 · id · 근거)이 한 글자 폭으로 눌려 세로로 길어진다 — 칸마다 최소 폭을 주고(효과를 내는 줄), 표 안에서는 낱말 단위로만 꺾는다 */
 table { overflow-wrap: normal; word-break: keep-all; }
 th, td { min-width: 5.5em; }
 td:first-child, th:first-child { min-width: 6.5em; }
+/* 2열 표(항목 · 갱신 이력)는 첫 칸이 짧은 말이라 최소 폭을 풀어 본문 칸에 폭을 돌려준다 */
+article.doc table:not(:has(thead th:nth-child(3))) :is(td, th):first-child { min-width: 0; }
 article.doc .table-wrap { margin-block: 8px 14px; }
 /* 열이 넷 이상이면 휴대폰에서 칸이 좁아 한 줄이 수십 줄로 늘어난다 — 표를 넓게 두고 옆으로 밀어 읽는다 */
 article.doc table:has(thead th:nth-child(4)) { min-width: 720px; }
@@ -172,7 +174,6 @@ h2.sec-h small { font-family: var(--font-sans); font-size: 13px; color: var(--mu
 
 /* 카드 — 순위 · 스크린샷 · 규모 */
 .card .rk { font-family: var(--font-serif); color: var(--muted); margin-right: 8px; }
-.card h3 > .rk + * { margin-left: 0; }
 .shots { display: flex; gap: 6px; overflow-x: auto; scrollbar-width: thin; }
 .shots img { flex: none; width: 31%; min-width: 84px; aspect-ratio: 300 / 650; object-fit: cover; object-position: top; border-radius: 6px; border: 1px solid var(--line); background: var(--paper); }
 .shots.web img { width: 100%; aspect-ratio: 390 / 520; }
