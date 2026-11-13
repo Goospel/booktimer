@@ -642,9 +642,11 @@ const WIRES: { id: string; rel: string; needle: string; n: number; mutant: strin
   // 책생글 A2 — 홈 박스 · 서재 목표 줄 · 블로그 칸 · 책 화면 [읽기 시작](앱 하니스는 화면을 렌더하지 않는다 — 연결은 이 줄들이 잠근다)
   { id: 'REQ-270 홈 박스(측정 전) = homeBox(dash, false)', rel: join('app', '(tabs)', 'index.tsx'), needle: 'homeBox(dash, false)', n: 1, mutant: 'homeBox(dash, true)' },
   { id: 'REQ-270 홈 박스(측정 중 — 재는 책) = homeBox(dash, true)', rel: join('app', '(tabs)', 'index.tsx'), needle: 'homeBox(dash, true)', n: 1, mutant: 'homeBox(dash, false)' },
-  { id: 'REQ-270 박스 작은 글은 「 · 」에서만 접힌다', rel: join('app', '(tabs)', 'index.tsx'), needle: '{textChunks(text).map(', n: 1, mutant: '{[text].map(' },
+  { id: 'REQ-270 박스 작은 글은 「 / 」에서만 접힌다', rel: join('app', '(tabs)', 'index.tsx'), needle: '{textChunks(text).map(', n: 1, mutant: '{[text].map(' },
+  { id: 'REQ-270 박스 VoiceOver 라벨 = boxGoalLabel(「/」를 읽지 않게)', rel: join('app', '(tabs)', 'index.tsx'), needle: 'accessibilityLabel={`${box.title}, ${p.label}`}', n: 1, mutant: 'accessibilityLabel={`${box.title}, ${text}`}' },
   { id: 'REQ-275 박스 [읽기 시작] = 박스 책으로 시작', rel: join('app', '(tabs)', 'index.tsx'), needle: '() => start(rest.bookId, rest.title)', n: 1, mutant: '() => start(null, null)' },
-  { id: 'REQ-270 박스 작은 글 = boxGoalText', rel: join('app', '(tabs)', 'index.tsx'), needle: 'boxGoalText({ progress, goal: dash.todayGoalSeconds, measuring })', n: 1, mutant: 'goalStatus({ progress, goal: dash.todayGoalSeconds, measuring })' },
+  { id: 'REQ-270 박스 작은 글 = boxGoalText', rel: join('app', '(tabs)', 'index.tsx'), needle: 'boxGoalText(goalArgs)', n: 1, mutant: 'goalStatus(goalArgs)' },
+  { id: 'REQ-270 박스 라벨 몫 = boxGoalLabel', rel: join('app', '(tabs)', 'index.tsx'), needle: 'boxGoalLabel(goalArgs)', n: 1, mutant: 'boxGoalText(goalArgs)' },
   { id: 'REQ-272 홈 여백에 글쓰기 = 박스 책(없으면 책 없는 쪽지)', rel: join('app', '(tabs)', 'index.tsx'), needle: 'router.push(noteHref(box?.bookId ?? null))', n: 1, mutant: 'router.push(`/margin/${box?.bookId}`)' },
   { id: 'REQ-274 측정 단추 · ⌥P · 위젯 = measureButton 하나', rel: join('app', '(tabs)', 'index.tsx'), needle: 'button: measureButton', n: 2, mutant: 'button: null' },
   { id: 'REQ-273 홈 블로그 = 최신 3편 · 못 읽으면 null', rel: join('app', '(tabs)', 'index.tsx'), needle: 'blog.posts(3).then((r) => setPosts(r.posts), () => setPosts(null))', n: 1, mutant: 'blog.posts(20).then((r) => setPosts(r.posts), () => setPosts(null))' },

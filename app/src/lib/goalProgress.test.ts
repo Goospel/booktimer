@@ -1,4 +1,4 @@
-import { boxGoalText, goalChoices, goalProgress, type GoalProgress, goalStatus, isStaleDay, libraryGoalLine, midnightRereadDelay, nextMidnightOf, progressOf, REREAD_MS, shouldReread, textChunks, todayDashboard } from './goalProgress';
+import { boxGoalLabel, boxGoalText, goalChoices, goalProgress, type GoalProgress, goalStatus, isStaleDay, libraryGoalLine, midnightRereadDelay, nextMidnightOf, progressOf, REREAD_MS, shouldReread, textChunks, todayDashboard } from './goalProgress';
 import type { ContributionDay, Dashboard } from '../api/types';
 
 // 범위 보충 §3.4 · REQ-90 — 오늘 초 = 끝난 몫 + 진행 중 몫(기기 자정부터 · 6시간 상한).
@@ -101,24 +101,34 @@ test('REQ-177 · 목표 없음이면 「하루 목표 없음」 · 「오늘 N�
 });
 
 // ── 책생글 A2 — 홈 박스 작은 글 · 서재 목표 줄 · 보이는 대시보드의 진행(F1 §4.1 · §4.2) ──
-test('REQ-270 · 박스 작은 글 — 안 읽은 날 「하루 목표 30분」 · 읽은 날 「오늘 12분 · 목표 30분」(연속 없음) · 목표 없음 「하루 목표 없음」 · 「오늘 12분 · 목표 없음」', () => {
+test('REQ-270 · 박스 작은 글(2026-11-13 피그마 187:12225 확정) — 읽은 날 「1시간 12분 / 1시간 30분」 · 채운 날 「40분 / 30분」 · 안 읽은 날 「하루 목표 30분」 · 목표 없음 「오늘 12분」 · 「오늘 0분」', () => {
   expect(boxGoalText({ progress: P({}), goal: 30 * MIN, measuring: false })).toBe('하루 목표 30분');
-  expect(boxGoalText({ progress: P({ todaySeconds: 30 }), goal: 30 * MIN, measuring: false })).toBe('하루 목표 30분'); // 1분 미만 = 안 읽은 날
-  expect(boxGoalText({ progress: P({ todaySeconds: 60 }), goal: 30 * MIN, measuring: false })).toBe('오늘 1분 · 목표 30분'); // 1분부터 읽은 날 · 연속 5가 있어도 없음
-  expect(boxGoalText({ progress: P({ todaySeconds: 12 * MIN }), goal: 30 * MIN, measuring: false })).toBe('오늘 12분 · 목표 30분');
-  expect(boxGoalText({ progress: P({}), goal: 0, measuring: false })).toBe('하루 목표 없음');
-  expect(boxGoalText({ progress: P({ todaySeconds: 12 * MIN, filled: true }), goal: 0, measuring: false })).toBe('오늘 12분 · 목표 없음');
+  expect(boxGoalText({ progress: P({ todaySeconds: 30 }), goal: 30 * MIN, measuring: false })).toBe('하루 목표 30분'); // 1분 미만 = 안 읽은 날 — 0/30 꼴은 쓰지 않는다(10-28)
+  expect(boxGoalText({ progress: P({ todaySeconds: 60 }), goal: 30 * MIN, measuring: false })).toBe('1분 / 30분'); // 1분부터 읽은 날 · 연속 5가 있어도 없음
+  expect(boxGoalText({ progress: P({ todaySeconds: 72 * MIN }), goal: 90 * MIN, measuring: false })).toBe('1시간 12분 / 1시간 30분');
+  expect(boxGoalText({ progress: P({ todaySeconds: 40 * MIN, filled: true }), goal: 30 * MIN, measuring: false })).toBe('40분 / 30분');
+  expect(boxGoalText({ progress: P({}), goal: 0, measuring: false })).toBe('오늘 0분');
+  expect(boxGoalText({ progress: P({ todaySeconds: 30 }), goal: 0, measuring: false })).toBe('오늘 0분');
+  expect(boxGoalText({ progress: P({ todaySeconds: 12 * MIN, filled: true }), goal: 0, measuring: false })).toBe('오늘 12분');
   expect(boxGoalText({ progress: P({ todaySeconds: 40 * MIN, filled: true, streak: 6 }), goal: 30 * MIN, measuring: false })).not.toContain('일째');
+});
+test('REQ-270 · 박스 VoiceOver 라벨은 「오늘 N, 목표 M」 — 「/」 없음 · 목표 없음 「오늘 12분, 목표 없음」 · 안 읽은 날은 화면 글 그대로', () => {
+  expect(boxGoalLabel({ progress: P({ todaySeconds: 72 * MIN }), goal: 90 * MIN, measuring: false })).toBe('오늘 1시간 12분, 목표 1시간 30분');
+  expect(boxGoalLabel({ progress: P({ todaySeconds: 40 * MIN, filled: true }), goal: 30 * MIN, measuring: false })).toBe('오늘 40분, 목표 30분');
+  expect(boxGoalLabel({ progress: P({}), goal: 30 * MIN, measuring: false })).toBe('하루 목표 30분');
+  expect(boxGoalLabel({ progress: P({ todaySeconds: 12 * MIN }), goal: 0, measuring: false })).toBe('오늘 12분, 목표 없음');
+  expect(boxGoalLabel({ progress: P({}), goal: 0, measuring: false })).toBe('오늘 0분, 목표 없음');
+  expect(boxGoalLabel({ progress: P({ todaySeconds: 72 * MIN }), goal: 90 * MIN, measuring: true })).toBe('오늘 1시간 12분'); // 측정 중 A안 — 지금 그대로
 });
 test('REQ-270 · 측정 중 작은 글 = 「오늘 1시간 12분」(today 조각만 — 목표 1시간 30분 · 목표 없음에서도 목표 조각 없음)', () => {
   expect(boxGoalText({ progress: P({ todaySeconds: 72 * MIN }), goal: 90 * MIN, measuring: true })).toBe('오늘 1시간 12분');
   expect(boxGoalText({ progress: P({ todaySeconds: 72 * MIN }), goal: 0, measuring: true })).toBe('오늘 1시간 12분');
   expect(boxGoalText({ progress: P({ todaySeconds: 20 }), goal: 30 * MIN, measuring: true })).toBe('오늘 0분'); // 측정 첫 1분 — 측정 중 0분은 지금 규칙 그대로
 });
-test('REQ-270 · 박스 작은 글은 「 · 」 조각째 접힌다 — 조각마다 따로 그린다(2026-11-13 기기 「목표 1시간 / 30분」 · 「목표 1 / 시간 30분」)', () => {
-  expect(textChunks('오늘 1시간 12분 · 목표 1시간 30분')).toEqual(['오늘 1시간 12분 ·', '목표 1시간 30분']);
+test('REQ-270 · 박스 작은 글은 「 / 」 조각째 접힌다 — 「/」는 앞 조각 끝 · 조각마다 따로 그린다(2026-11-13 기기 「목표 1 / 시간 30분」)', () => {
+  expect(textChunks('1시간 12분 / 1시간 30분')).toEqual(['1시간 12분 /', '1시간 30분']);
   expect(textChunks('하루 목표 30분')).toEqual(['하루 목표 30분']);
-  expect(textChunks('오늘 12분 · 목표 30분 · 5일째')).toEqual(['오늘 12분 ·', '목표 30분 ·', '5일째']);
+  expect(textChunks('오늘 12분')).toEqual(['오늘 12분']);
 });
 test('REQ-271 · 서재 목표 줄 — 읽은 날 「하루 목표 30분 · 5일째」 · 안 읽은 날 연속 없음 · 목표 없음 「하루 목표 없음」 · 연속 0이면 연속 없음', () => {
   const lines = [
