@@ -10,7 +10,7 @@ const here = dirname(fileURLToPath(import.meta.url));
 const repo = resolve(here, '../..');
 const out = process.argv[2] || join(tmpdir(), 'competitors-reader.html');
 
-const ids = ['serotiny', 'booktrack', 'savequotes', 'textoven', 'pagers', 'checkinout', 'booklogon', 'tamsikine', 'topa'];
+const ids = ['checkinout', 'booktrack', 'booklogon', 'savequotes', 'serotiny', 'tamsikine', 'pagers', 'topa', 'textoven'];
 const blocks = ids.map((id) => {
   const md = readFileSync(join(repo, 'claude-docs/competitors', `${id}.md`), 'utf8')
     .replace(/\r\n/g, '\n')

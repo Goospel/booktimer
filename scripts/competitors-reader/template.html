@@ -148,6 +148,43 @@ td.v-theirs { color: var(--theirs); font-weight: 700; }
 footer.note { margin-top: 48px; padding-top: 16px; border-top: 1px solid var(--line); color: var(--muted); font-size: 13px; }
 footer.note a { color: var(--muted); }
 
+/* 표 개행: 본문의 overflow-wrap:anywhere는 칸의 최소 폭을 한 글자로 계산해 짧은 칸(날짜 · id · 근거)을 세로로 길게 만든다 — 표 안에서는 낱말 단위로만 꺾는다 */
+table { overflow-wrap: normal; word-break: keep-all; }
+th, td { min-width: 5.5em; }
+td:first-child, th:first-child { min-width: 6.5em; }
+article.doc .table-wrap { margin-block: 8px 14px; }
+/* 열이 넷 이상이면 휴대폰에서 칸이 좁아 한 줄이 수십 줄로 늘어난다 — 표를 넓게 두고 옆으로 밀어 읽는다 */
+article.doc table:has(thead th:nth-child(4)) { min-width: 720px; }
+
+/* 규모 순위 */
+ol.rank { list-style: none; margin: 0; padding: 0; display: grid; gap: 0; counter-reset: r; border-top: 1px solid var(--line); }
+ol.rank li { counter-increment: r; display: grid; grid-template-columns: 1.6em 40px minmax(0, auto) auto 1fr; align-items: center; gap: 4px 12px; padding: 10px 0; border-bottom: 1px solid var(--line); }
+ol.rank li::before { content: counter(r); font-family: var(--font-serif); font-size: 1.3rem; color: var(--muted); }
+ol.rank .icon { width: 40px; height: 40px; border-radius: 10px; border: 1px solid var(--line); object-fit: cover; }
+ol.rank .icon.ph { display: grid; place-items: center; font-size: 12px; color: var(--muted); background: var(--paper); }
+ol.rank .nm { font-weight: 700; color: var(--fg); text-decoration: none; white-space: nowrap; }
+ol.rank .nm:hover { text-decoration: underline; }
+ol.rank .num { font-weight: 700; white-space: nowrap; }
+ol.rank .det { color: var(--muted); font-size: 13px; }
+@media (max-width: 640px) { ol.rank li { grid-template-columns: 1.6em 40px 1fr auto; } ol.rank .det { grid-column: 3 / -1; } }
+.rank-note { font-size: 13px; color: var(--muted); margin: 10px 0 0; max-width: 72ch; }
+h2.sec-h small { font-family: var(--font-sans); font-size: 13px; color: var(--muted); font-weight: 400; }
+
+/* 카드 — 순위 · 스크린샷 · 규모 */
+.card .rk { font-family: var(--font-serif); color: var(--muted); margin-right: 8px; }
+.card h3 > .rk + * { margin-left: 0; }
+.shots { display: flex; gap: 6px; overflow-x: auto; scrollbar-width: thin; }
+.shots img { flex: none; width: 31%; min-width: 84px; aspect-ratio: 300 / 650; object-fit: cover; object-position: top; border-radius: 6px; border: 1px solid var(--line); background: var(--paper); }
+.shots.web img { width: 100%; aspect-ratio: 390 / 520; }
+.scale { margin: 0; font-size: 13px; color: var(--muted); }
+.scale b { color: var(--fg); }
+
+/* 문서 탭 맨 위 스크린샷 */
+figure.doc-shots { margin: 0 0 20px; display: grid; gap: 8px; }
+figure.doc-shots .shots img { width: 180px; }
+figure.doc-shots .shots.web img { width: 260px; }
+figure.doc-shots figcaption { font-size: 13px; color: var(--muted); }
+
 @media (prefers-reduced-motion: no-preference) { html { scroll-behavior: smooth; } }
 </style>
 
@@ -155,24 +192,39 @@ footer.note a { color: var(--muted); }
   <header class="masthead">
     <div class="eyebrow">북타이머 · 책생글 — 경쟁사 대조</div>
     <h1 class="title">경쟁사 노트</h1>
-    <p class="sub">인스타 광고로 찾은 독서 앱 아홉 곳을 북타이머와 나란히 놓았다. 마지막 확인 2026-11-12(아홉 곳 모두).</p>
+    <p class="sub">인스타 광고로 찾은 독서 앱 아홉 곳을 북타이머와 나란히 놓았다. 앱 순서는 규모(스토어 평가 수) 순이다. 마지막 확인 2026-11-12(아홉 곳 모두).</p>
   </header>
 
   <nav class="tabs" aria-label="문서">
     <a href="#overview" data-tab="overview">한눈에</a>
-    <a href="#serotiny" data-tab="serotiny">serotiny</a>
-    <a href="#booktrack" data-tab="booktrack">북트랙</a>
-    <a href="#savequotes" data-tab="savequotes">SaveQuotes</a>
-    <a href="#textoven" data-tab="textoven">옛글화덕</a>
-    <a href="#pagers" data-tab="pagers">Pagers</a>
     <a href="#checkinout" data-tab="checkinout">책인아웃</a>
+    <a href="#booktrack" data-tab="booktrack">북트랙</a>
     <a href="#booklogon" data-tab="booklogon">북로그온</a>
+    <a href="#savequotes" data-tab="savequotes">SaveQuotes</a>
+    <a href="#serotiny" data-tab="serotiny">serotiny</a>
     <a href="#tamsikine" data-tab="tamsikine">탐식이네</a>
+    <a href="#pagers" data-tab="pagers">Pagers</a>
     <a href="#topa" data-tab="topa">topa</a>
+    <a href="#textoven" data-tab="textoven">옛글화덕</a>
   </nav>
 
   <main>
     <section class="view" id="view-overview" data-view="overview">
+      <div>
+        <h2 class="sec-h">얼마나 쓰이나 — 평가가 많은 곳부터</h2>
+        <ol class="rank">
+          <li><img class="icon" src="shots/checkinout-icon.jpg" alt="" loading="lazy"><a class="nm" href="#checkinout" data-tab="checkinout">책인아웃</a><span class="num">평가 129</span><span class="det">iOS 88 · Play 41 · Android 1,000+ 설치 · 인스타 2,370</span></li>
+          <li><img class="icon" src="shots/booktrack-icon.jpg" alt="" loading="lazy"><a class="nm" href="#booktrack" data-tab="booktrack">북트랙</a><span class="num">평가 25</span><span class="det">iOS 6 · Play 19 · Android 1,000+ 설치</span></li>
+          <li><img class="icon" src="shots/booklogon-icon.jpg" alt="" loading="lazy"><a class="nm" href="#booklogon" data-tab="booklogon">북로그온</a><span class="num">평가 16</span><span class="det">iOS 3 · Play 13 · Android 500+ 설치 · 인스타 46</span></li>
+          <li><img class="icon" src="shots/savequotes-icon.jpg" alt="" loading="lazy"><a class="nm" href="#savequotes" data-tab="savequotes">SaveQuotes</a><span class="num">평가 9</span><span class="det">iOS 9 · iPhone·iPad 전용(Android 없음) · 인스타 24</span></li>
+          <li><img class="icon" src="shots/serotiny-icon.jpg" alt="" loading="lazy"><a class="nm" href="#serotiny" data-tab="serotiny">serotiny</a><span class="num">평가 6</span><span class="det">iOS 6 · Play 평점 미표시 · Android 500+ 설치 · 인스타 62</span></li>
+          <li><img class="icon" src="shots/tamsikine-icon.jpg" alt="" loading="lazy"><a class="nm" href="#tamsikine" data-tab="tamsikine">탐식이네</a><span class="num">평가 4</span><span class="det">iOS 4 · Android 100+ 설치 · 인스타 209</span></li>
+          <li><img class="icon" src="shots/pagers-icon.jpg" alt="" loading="lazy"><a class="nm" href="#pagers" data-tab="pagers">Pagers</a><span class="num">평가 1</span><span class="det">iOS 1 · Android 10+ 설치 · 인스타 40</span></li>
+          <li><span class="icon ph" aria-hidden="true">웹</span><a class="nm" href="#topa" data-tab="topa">topa</a><span class="num">스토어 없음</span><span class="det">웹 전용 · 인스타 340 · 사용자 수 비공개</span></li>
+          <li><span class="icon ph" aria-hidden="true">웹</span><a class="nm" href="#textoven" data-tab="textoven">옛글화덕</a><span class="num">스토어 없음</span><span class="det">웹 전용 · 인스타 46 · 회원 수 비공개</span></li>
+        </ol>
+        <p class="rank-note">순서 = App Store 평가 수 + Google Play 평가 수. 스토어에 없는 두 곳은 인스타 팔로워 순으로 맨 뒤. iOS 평가는 2026-11-13 조회, Play · 인스타는 각 문서의 확인값(인스타 일부는 2026-10-24). 아홉 곳 모두 작다 — 가장 큰 책인아웃도 평가 129개다.</p>
+      </div>
       <div>
         <h2 class="sec-h">먼저 알아야 할 다섯 가지</h2>
         <ol class="findings">
@@ -197,19 +249,19 @@ footer.note a { color: var(--muted); }
                 <line x1="140" y1="56" x2="740" y2="56"/><line x1="140" y1="90" x2="740" y2="90"/><line x1="140" y1="124" x2="740" y2="124"/><line x1="140" y1="158" x2="740" y2="158"/><line x1="140" y1="192" x2="740" y2="192"/><line x1="140" y1="226" x2="740" y2="226"/><line x1="140" y1="260" x2="740" y2="260"/><line x1="140" y1="294" x2="740" y2="294"/><line x1="140" y1="328" x2="740" y2="328"/><line x1="140" y1="362" x2="740" y2="362"/><line x1="140" y1="396" x2="740" y2="396"/>
               </g>
               <g class="cov-label" text-anchor="end" font-size="13">
-                <text class="cov-label-us" x="128" y="60">책생글 v1</text><text x="128" y="94">북타이머 웹</text><text x="128" y="128">북트랙</text><text x="128" y="162">serotiny</text><text x="128" y="196">SaveQuotes</text><text x="128" y="230">옛글화덕</text><text x="128" y="264">Pagers</text><text x="128" y="298">책인아웃</text><text x="128" y="332">북로그온</text><text x="128" y="366">탐식이네</text><text x="128" y="400">topa</text>
+                <text class="cov-label-us" x="128" y="60">책생글 v1</text><text x="128" y="94">북타이머 웹</text><text x="128" y="128">책인아웃</text><text x="128" y="162">북트랙</text><text x="128" y="196">북로그온</text><text x="128" y="230">SaveQuotes</text><text x="128" y="264">serotiny</text><text x="128" y="298">탐식이네</text><text x="128" y="332">Pagers</text><text x="128" y="366">topa</text><text x="128" y="400">옛글화덕</text>
               </g>
               <!-- 칸: x = 단계 시작 + 6, 폭 108. full = 있음, part = 일부·다른 방식 — splice-overview가 표 판정에서 만든다 -->
               <g class="cov-full">
-                <rect x="146" y="49" width="108" height="14" rx="3"/><rect x="266" y="49" width="108" height="14" rx="3"/><rect x="386" y="49" width="108" height="14" rx="3"/><rect x="506" y="49" width="108" height="14" rx="3"/><rect x="626" y="49" width="108" height="14" rx="3"/><rect x="146" y="83" width="108" height="14" rx="3"/><rect x="146" y="117" width="108" height="14" rx="3"/><rect x="266" y="117" width="108" height="14" rx="3"/><rect x="506" y="117" width="108" height="14" rx="3"/><rect x="626" y="117" width="108" height="14" rx="3"/><rect x="146" y="151" width="108" height="14" rx="3"/><rect x="266" y="151" width="108" height="14" rx="3"/><rect x="506" y="151" width="108" height="14" rx="3"/><rect x="146" y="185" width="108" height="14" rx="3"/><rect x="266" y="185" width="108" height="14" rx="3"/><rect x="626" y="219" width="108" height="14" rx="3"/><rect x="626" y="287" width="108" height="14" rx="3"/><rect x="146" y="321" width="108" height="14" rx="3"/><rect x="266" y="321" width="108" height="14" rx="3"/><rect x="626" y="321" width="108" height="14" rx="3"/>
+                <rect x="146" y="49" width="108" height="14" rx="3"/><rect x="266" y="49" width="108" height="14" rx="3"/><rect x="386" y="49" width="108" height="14" rx="3"/><rect x="506" y="49" width="108" height="14" rx="3"/><rect x="626" y="49" width="108" height="14" rx="3"/><rect x="146" y="83" width="108" height="14" rx="3"/><rect x="146" y="151" width="108" height="14" rx="3"/><rect x="266" y="151" width="108" height="14" rx="3"/><rect x="506" y="151" width="108" height="14" rx="3"/><rect x="626" y="151" width="108" height="14" rx="3"/><rect x="146" y="253" width="108" height="14" rx="3"/><rect x="266" y="253" width="108" height="14" rx="3"/><rect x="506" y="253" width="108" height="14" rx="3"/><rect x="146" y="219" width="108" height="14" rx="3"/><rect x="266" y="219" width="108" height="14" rx="3"/><rect x="626" y="389" width="108" height="14" rx="3"/><rect x="626" y="117" width="108" height="14" rx="3"/><rect x="146" y="185" width="108" height="14" rx="3"/><rect x="266" y="185" width="108" height="14" rx="3"/><rect x="626" y="185" width="108" height="14" rx="3"/>
               </g>
               <g class="cov-part">
-                <rect x="266" y="83" width="108" height="14" rx="3"/><rect x="506" y="83" width="108" height="14" rx="3"/><rect x="386" y="151" width="108" height="14" rx="3"/><rect x="506" y="185" width="108" height="14" rx="3"/><rect x="626" y="185" width="108" height="14" rx="3"/><rect x="266" y="219" width="108" height="14" rx="3"/><rect x="386" y="219" width="108" height="14" rx="3"/><rect x="506" y="219" width="108" height="14" rx="3"/><rect x="266" y="253" width="108" height="14" rx="3"/><rect x="386" y="253" width="108" height="14" rx="3"/><rect x="506" y="253" width="108" height="14" rx="3"/><rect x="626" y="253" width="108" height="14" rx="3"/><rect x="146" y="287" width="108" height="14" rx="3"/><rect x="266" y="287" width="108" height="14" rx="3"/><rect x="506" y="287" width="108" height="14" rx="3"/><rect x="506" y="321" width="108" height="14" rx="3"/><rect x="506" y="355" width="108" height="14" rx="3"/>
+                <rect x="266" y="83" width="108" height="14" rx="3"/><rect x="506" y="83" width="108" height="14" rx="3"/><rect x="386" y="253" width="108" height="14" rx="3"/><rect x="506" y="219" width="108" height="14" rx="3"/><rect x="626" y="219" width="108" height="14" rx="3"/><rect x="266" y="389" width="108" height="14" rx="3"/><rect x="386" y="389" width="108" height="14" rx="3"/><rect x="506" y="389" width="108" height="14" rx="3"/><rect x="266" y="321" width="108" height="14" rx="3"/><rect x="386" y="321" width="108" height="14" rx="3"/><rect x="506" y="321" width="108" height="14" rx="3"/><rect x="626" y="321" width="108" height="14" rx="3"/><rect x="146" y="117" width="108" height="14" rx="3"/><rect x="266" y="117" width="108" height="14" rx="3"/><rect x="506" y="117" width="108" height="14" rx="3"/><rect x="506" y="185" width="108" height="14" rx="3"/><rect x="506" y="287" width="108" height="14" rx="3"/>
               </g>
               <g class="cov-unk" text-anchor="middle" font-size="13">
-                <text x="680" y="162">?</text><text x="200" y="230">?</text><text x="200" y="264">?</text><text x="200" y="366">?</text><text x="680" y="366">?</text>
+                <text x="680" y="264">?</text><text x="200" y="400">?</text><text x="200" y="332">?</text><text x="200" y="298">?</text><text x="680" y="298">?</text>
               </g>
-              <text class="cov-note" x="440" y="400" text-anchor="middle" font-size="12">책 고르기 서비스 — 이 흐름 앞 단계</text>
+              <text class="cov-note" x="440" y="366" text-anchor="middle" font-size="12">책 고르기 서비스 — 이 흐름 앞 단계</text>
             </svg>
           </div>
           <figcaption>책생글 흐름 다섯 단계를 누가 채우는가. 진한 칸은 있음, 옅은 칸은 일부·다른 방식, ?는 공개 자료로 확인 못 함. <b>묻기 칸은 책생글만 온전히 채우고</b>, serotiny(고르는 고정 질문 · 공개 글) · 옛글화덕(운영자가 쓴 고정 질문) · Pagers(매일 밤 질문 · 출처 모름)가 반쯤 들어왔다. 북트랙은 묻기 하나만 빼고 다 채웠고, 북로그온도 묻기 빼고 넷이 겹친다(쓰기는 일부).</figcaption>
@@ -218,27 +270,29 @@ footer.note a { color: var(--muted); }
         <div class="table-wrap" style="margin-top:14px">
           <table class="matrix">
             <thead>
-              <tr><th scope="col">단계</th><th scope="col">북타이머<br>웹·미니앱</th><th scope="col" class="us">책생글 v1<br>(개발 중)</th><th scope="col">북트랙</th><th scope="col">serotiny</th><th scope="col">SaveQuotes</th><th scope="col">옛글화덕</th><th scope="col">Pagers</th><th scope="col">책인아웃</th><th scope="col">북로그온</th><th scope="col">탐식이네</th><th scope="col">topa</th></tr>
+              <tr><th scope="col">단계</th><th scope="col">북타이머<br>웹·미니앱</th><th scope="col" class="us">책생글 v1<br>(개발 중)</th><th scope="col">책인아웃</th><th scope="col">북트랙</th><th scope="col">북로그온</th><th scope="col">SaveQuotes</th><th scope="col">serotiny</th><th scope="col">탐식이네</th><th scope="col">Pagers</th><th scope="col">topa</th><th scope="col">옛글화덕</th></tr>
             </thead>
             <tbody>
               <tr><th scope="row">읽기<small>독서 타이머</small></th>
-                <td class="m-yes"><span class="mk">●</span>서버 보관</td><td class="us m-yes"><span class="mk">●</span>잠금화면·위젯</td><td class="m-yes"><span class="mk">●</span>카운트다운까지</td><td class="m-yes"><span class="mk">●</span>스톱워치·쪽수 입력</td><td class="m-yes"><span class="mk">●</span>Live Activity</td><td class="m-unk"><span class="mk">?</span>언급 없음(의무 없음을 내세움)</td><td class="m-unk"><span class="mk">?</span>언급 없음</td><td class="m-part"><span class="mk">◐</span>타이머 없음 · 쪽·% 위젯</td><td class="m-yes"><span class="mk">●</span>타이머·잠금화면·캘린더</td><td class="m-unk"><span class="mk">?</span>언급 없음</td><td class="m-no"><span class="mk">○</span></td></tr>
+                <td class="m-yes"><span class="mk">●</span>서버 보관</td><td class="us m-yes"><span class="mk">●</span>잠금화면·위젯</td><td class="m-part"><span class="mk">◐</span>타이머 없음 · 쪽·% 위젯</td><td class="m-yes"><span class="mk">●</span>카운트다운까지</td><td class="m-yes"><span class="mk">●</span>타이머·잠금화면·캘린더</td><td class="m-yes"><span class="mk">●</span>Live Activity</td><td class="m-yes"><span class="mk">●</span>스톱워치·쪽수 입력</td><td class="m-unk"><span class="mk">?</span>언급 없음</td><td class="m-unk"><span class="mk">?</span>언급 없음</td><td class="m-no"><span class="mk">○</span></td><td class="m-unk"><span class="mk">?</span>언급 없음(의무 없음을 내세움)</td></tr>
               <tr><th scope="row">목표·연속<small>매일 이어 가기</small></th>
-                <td class="m-yes"><span class="mk">●</span>하루 목표·부채</td><td class="us m-yes"><span class="mk">●</span>목표 채운 날 연속</td><td class="m-part"><span class="mk">◐</span>월·연 목표·스트릭(11-07)</td><td class="m-part"><span class="mk">◐</span>월 권수·스트릭</td><td class="m-unk"><span class="mk">?</span>목표 언급 없음</td><td class="m-unk"><span class="mk">?</span>언급 없음 · 권수 경쟁 없음</td><td class="m-unk"><span class="mk">?</span>언급 없음 · 주간 「적은 날」 표시</td><td class="m-part"><span class="mk">◐</span>연간 목표·쪽 기록한 날 연속</td><td class="m-unk"><span class="mk">?</span>언급 없음</td><td class="m-unk"><span class="mk">?</span>언급 없음</td><td class="m-no"><span class="mk">○</span></td></tr>
+                <td class="m-yes"><span class="mk">●</span>하루 목표·부채</td><td class="us m-yes"><span class="mk">●</span>목표 채운 날 연속</td><td class="m-part"><span class="mk">◐</span>연간 목표·쪽 기록한 날 연속</td><td class="m-part"><span class="mk">◐</span>월·연 목표·스트릭(11-07)</td><td class="m-unk"><span class="mk">?</span>언급 없음</td><td class="m-unk"><span class="mk">?</span>목표 언급 없음</td><td class="m-part"><span class="mk">◐</span>월 권수·스트릭</td><td class="m-unk"><span class="mk">?</span>언급 없음</td><td class="m-unk"><span class="mk">?</span>언급 없음 · 주간 「적은 날」 표시</td><td class="m-no"><span class="mk">○</span></td><td class="m-unk"><span class="mk">?</span>언급 없음 · 권수 경쟁 없음</td></tr>
               <tr><th scope="row">건지기<small>문장 모으기</small></th>
-                <td class="m-part"><span class="mk">◐</span>여백(직접 입력)</td><td class="us m-yes"><span class="mk">●</span>텍스트 스캔(iOS 기본)·바코드</td><td class="m-yes"><span class="mk">●</span>OCR·바코드</td><td class="m-yes"><span class="mk">●</span>카메라 스캔</td><td class="m-yes"><span class="mk">●</span>찍고 끌어 고르기</td><td class="m-part"><span class="mk">◐</span>게시판에 직접 입력</td><td class="m-part"><span class="mk">◐</span>사진 OCR·직접 담기</td><td class="m-part"><span class="mk">◐</span>직접 입력·사진 첨부</td><td class="m-yes"><span class="mk">●</span>사진 OCR·쪽 번호</td><td class="m-no"><span class="mk">○</span>깃발은 반응(함께 읽기)</td><td class="m-no"><span class="mk">○</span></td></tr>
+                <td class="m-part"><span class="mk">◐</span>여백(직접 입력)</td><td class="us m-yes"><span class="mk">●</span>텍스트 스캔(iOS 기본)·바코드</td><td class="m-part"><span class="mk">◐</span>직접 입력·사진 첨부</td><td class="m-yes"><span class="mk">●</span>OCR·바코드</td><td class="m-yes"><span class="mk">●</span>사진 OCR·쪽 번호</td><td class="m-yes"><span class="mk">●</span>찍고 끌어 고르기</td><td class="m-yes"><span class="mk">●</span>카메라 스캔</td><td class="m-no"><span class="mk">○</span>깃발은 반응(함께 읽기)</td><td class="m-part"><span class="mk">◐</span>사진 OCR·직접 담기</td><td class="m-no"><span class="mk">○</span></td><td class="m-part"><span class="mk">◐</span>게시판에 직접 입력</td></tr>
               <tr><th scope="row">묻기<small>질문 받으며 쓰기</small></th>
-                <td class="m-no"><span class="mk">○</span></td><td class="us m-yes"><span class="mk">●</span>AI가 내 여백을 읽고</td><td class="m-no"><span class="mk">○</span>쓴 뒤 AI 분석</td><td class="m-part"><span class="mk">◐</span>고정 질문·공개 글</td><td class="m-no"><span class="mk">○</span></td><td class="m-part"><span class="mk">◐</span>운영자가 쓴 고정 질문</td><td class="m-part"><span class="mk">◐</span>매일 밤 질문·출처 모름</td><td class="m-no"><span class="mk">○</span>AI는 책 추천만</td><td class="m-no"><span class="mk">○</span>공개 자료에 없음</td><td class="m-no"><span class="mk">○</span></td><td class="m-no"><span class="mk">○</span>추천용 되묻기만</td></tr>
+                <td class="m-no"><span class="mk">○</span></td><td class="us m-yes"><span class="mk">●</span>AI가 내 여백을 읽고</td><td class="m-no"><span class="mk">○</span>AI는 책 추천만</td><td class="m-no"><span class="mk">○</span>쓴 뒤 AI 분석</td><td class="m-no"><span class="mk">○</span>공개 자료에 없음</td><td class="m-no"><span class="mk">○</span></td><td class="m-part"><span class="mk">◐</span>고정 질문·공개 글</td><td class="m-no"><span class="mk">○</span></td><td class="m-part"><span class="mk">◐</span>매일 밤 질문·출처 모름</td><td class="m-no"><span class="mk">○</span>추천용 되묻기만</td><td class="m-part"><span class="mk">◐</span>운영자가 쓴 고정 질문</td></tr>
               <tr><th scope="row">쓰기<small>한 편의 글</small></th>
-                <td class="m-part"><span class="mk">◐</span>여백 메모 500자</td><td class="us m-yes"><span class="mk">●</span>글쓰기 화면</td><td class="m-yes"><span class="mk">●</span>다이어리·감상평</td><td class="m-yes"><span class="mk">●</span>일기·서평(유료)</td><td class="m-part"><span class="mk">◐</span>문장별 짧은 생각</td><td class="m-part"><span class="mk">◐</span>원글 + 다시 읽기 덧붙임</td><td class="m-part"><span class="mk">◐</span>마음 한두 줄</td><td class="m-part"><span class="mk">◐</span>한줄평·게시판 서평</td><td class="m-part"><span class="mk">◐</span>자유 서식 독후감</td><td class="m-part"><span class="mk">◐</span>책별 독후감 1편</td><td class="m-no"><span class="mk">○</span></td></tr>
+                <td class="m-part"><span class="mk">◐</span>여백 메모 500자</td><td class="us m-yes"><span class="mk">●</span>글쓰기 화면</td><td class="m-part"><span class="mk">◐</span>한줄평·게시판 서평</td><td class="m-yes"><span class="mk">●</span>다이어리·감상평</td><td class="m-part"><span class="mk">◐</span>자유 서식 독후감</td><td class="m-part"><span class="mk">◐</span>문장별 짧은 생각</td><td class="m-yes"><span class="mk">●</span>일기·서평(유료)</td><td class="m-part"><span class="mk">◐</span>책별 독후감 1편</td><td class="m-part"><span class="mk">◐</span>마음 한두 줄</td><td class="m-no"><span class="mk">○</span></td><td class="m-part"><span class="mk">◐</span>원글 + 다시 읽기 덧붙임</td></tr>
               <tr><th scope="row">내보내기<small>밖으로 공유</small></th>
-                <td class="m-no"><span class="mk">○</span></td><td class="us m-yes"><span class="mk">●</span>공유 시트</td><td class="m-yes"><span class="mk">●</span>이미지 카드</td><td class="m-unk"><span class="mk">?</span>모름</td><td class="m-part"><span class="mk">◐</span>기록 이미지</td><td class="m-yes"><span class="mk">●</span>엽서·책장 PNG</td><td class="m-part"><span class="mk">◐</span>문장 카드</td><td class="m-yes"><span class="mk">●</span>완독 포토카드</td><td class="m-yes"><span class="mk">●</span>이미지·CSV</td><td class="m-unk"><span class="mk">?</span>모름</td><td class="m-no"><span class="mk">○</span></td></tr>
+                <td class="m-no"><span class="mk">○</span></td><td class="us m-yes"><span class="mk">●</span>공유 시트</td><td class="m-yes"><span class="mk">●</span>완독 포토카드</td><td class="m-yes"><span class="mk">●</span>이미지 카드</td><td class="m-yes"><span class="mk">●</span>이미지·CSV</td><td class="m-part"><span class="mk">◐</span>기록 이미지</td><td class="m-unk"><span class="mk">?</span>모름</td><td class="m-unk"><span class="mk">?</span>모름</td><td class="m-part"><span class="mk">◐</span>문장 카드</td><td class="m-no"><span class="mk">○</span></td><td class="m-yes"><span class="mk">●</span>엽서·책장 PNG</td></tr>
               <tr><th scope="row">함께 읽기<small>다른 독자</small></th>
-                <td class="m-part"><span class="mk">◐</span>팔로우·책방</td><td class="us m-part"><span class="mk">◐</span>공개 블로그·문장 댓글(설계 · 미출시)</td><td class="m-part"><span class="mk">◐</span>모임(문구뿐)</td><td class="m-yes"><span class="mk">●</span>지역 지도·챌린지</td><td class="m-no"><span class="mk">○</span></td><td class="m-part"><span class="mk">◐</span>같은 질문 답글 모아 읽기</td><td class="m-unk"><span class="mk">?</span>언급 없음</td><td class="m-yes"><span class="mk">●</span>게시판·팔로우·서재 구경</td><td class="m-yes"><span class="mk">●</span>친구·독서모임</td><td class="m-yes"><span class="mk">●</span>공개 독서모임·진도 공유</td><td class="m-part"><span class="mk">◐</span>공개 추천 페이지</td></tr>
+                <td class="m-part"><span class="mk">◐</span>팔로우·책방</td><td class="us m-part"><span class="mk">◐</span>공개 블로그·문장 댓글(설계 · 미출시)</td><td class="m-yes"><span class="mk">●</span>게시판·팔로우·서재 구경</td><td class="m-part"><span class="mk">◐</span>모임(문구뿐)</td><td class="m-yes"><span class="mk">●</span>친구·독서모임</td><td class="m-no"><span class="mk">○</span></td><td class="m-yes"><span class="mk">●</span>지역 지도·챌린지</td><td class="m-yes"><span class="mk">●</span>공개 독서모임·진도 공유</td><td class="m-unk"><span class="mk">?</span>언급 없음</td><td class="m-part"><span class="mk">◐</span>공개 추천 페이지</td><td class="m-part"><span class="mk">◐</span>같은 질문 답글 모아 읽기</td></tr>
+              <tr><th scope="row">규모<small>스토어 평가 수</small></th>
+                <td>90일 활성 1(웹)</td><td class="us">출시 전</td><td>평가 129</td><td>평가 25</td><td>평가 16</td><td>평가 9</td><td>평가 6</td><td>평가 4</td><td>평가 1</td><td>스토어 없음</td><td>스토어 없음</td></tr>
               <tr><th scope="row">플랫폼</th>
-                <td>웹 · 토스(동결)</td><td class="us">iPhone · iPad<br>(출시 전)</td><td>iOS · Android</td><td>iOS · Android · 웹</td><td>iPhone · iPad</td><td>웹</td><td>iPhone · Android</td><td>iOS · Android · 웹</td><td>iOS(iPad 겸용) · Android</td><td>iOS · Android</td><td>웹</td></tr>
+                <td>웹 · 토스(동결)</td><td class="us">iPhone · iPad<br>(출시 전)</td><td>iOS · Android · 웹</td><td>iOS · Android</td><td>iOS(iPad 겸용) · Android</td><td>iPhone · iPad</td><td>iOS · Android · 웹</td><td>iOS · Android</td><td>iPhone · Android</td><td>웹</td><td>웹</td></tr>
               <tr><th scope="row">돈</th>
-                <td>무료(미니앱 광고)</td><td class="us">무료</td><td>무료 + 광고</td><td>월 11,000원 멤버십</td><td>월 2,200원 · 평생 19,900원</td><td>30일 5,500 · 8,500원</td><td>무료 + 광고(하루 5문장)</td><td>무료(YES24 제휴 링크)</td><td>무료 + 광고 · 월 2,500원</td><td>무료</td><td>무료(교보 연결·B2B)</td></tr>
+                <td>무료(미니앱 광고)</td><td class="us">무료</td><td>무료(YES24 제휴 링크)</td><td>무료 + 광고</td><td>무료 + 광고 · 월 2,500원</td><td>월 2,200원 · 평생 19,900원</td><td>월 11,000원 멤버십</td><td>무료</td><td>무료 + 광고(하루 5문장)</td><td>무료(교보 연결·B2B)</td><td>30일 5,500 · 8,500원</td></tr>
             </tbody>
           </table>
         </div>
@@ -246,55 +300,12 @@ footer.note a { color: var(--muted); }
       </div>
 
       <div>
-        <h2 class="sec-h">앱별 — 앞선 곳과 우리가 앞선 곳</h2>
+        <h2 class="sec-h">앱별 — 앞선 곳과 우리가 앞선 곳 <small>(규모 순)</small></h2>
         <div class="cards">
           <article class="card">
-            <h3>serotiny <span class="chip wide">겹침 넓음</span></h3>
-            <p class="what">타이머·문장 스캔·일기에 지역 소셜(지도·기간 챌린지)을 얹은 iOS·Android·웹 앱. 개인사업자, 2026-07 출시.</p>
-            <div class="vs">
-              <div class="t"><b>serotiny가 앞선 곳</b><ul><li>함께 하는 기간 챌린지 · 지역 독서 지도</li><li>질문에 답하는 공개 글 · 회독 기록</li><li>세 플랫폼 + 유료 멤버십 · 독서 리마인더</li></ul></div>
-              <div class="o"><b>북타이머가 앞선 곳</b><ul><li>AI가 내 여백으로 묻고 꼬리 질문</li><li>나만 보는 여백 → 내보내기 · 문장 단위 댓글·인용(블로그 — 설계 · 미출시)</li><li>하루 목표·부채 · 공부 모드</li></ul></div>
-            </div>
-            <a class="open" href="#serotiny" data-tab="serotiny">문서 읽기 →</a>
-          </article>
-          <article class="card">
-            <h3>북트랙 <span class="chip wide">겹침 넓음</span></h3>
-            <p class="what">타이머·바코드·OCR·카드 꾸미기·다이어리·Gemini 리포트를 담은 iOS·Android 기록 앱. 2026-06-03 출시.</p>
-            <div class="vs">
-              <div class="t"><b>북트랙이 앞선 곳</b><ul><li>책생글 흐름의 네 단계를 이미 출시</li><li>이미지 카드 꾸미기 · 스트릭·뱃지·통계(1.1.2)</li><li>로그인 없이 시작(추정) · Android</li></ul></div>
-              <div class="o"><b>북타이머가 앞선 곳</b><ul><li>묻기 — AI가 묻고 사람이 쓴다(첫 출시 설계: 여백 AI는 물으면 설명도 · 블로그 AI는 맞춤법 · 제목 제안 · 본문은 대신 쓰지 않음)</li><li>하루 시간 목표·부채</li><li>공부 모드 · 웹</li></ul></div>
-            </div>
-            <a class="open" href="#booktrack" data-tab="booktrack">문서 읽기 →</a>
-          </article>
-          <article class="card">
-            <h3>SaveQuotes <span class="chip">겹침 중간</span></h3>
-            <p class="what">책 속 문장을 찍어 모으는 iPhone·iPad 앱. 법인, 2026-09 출시, 10월 말까지 버전 14개.</p>
-            <div class="vs">
-              <div class="t"><b>SaveQuotes가 앞선 곳</b><ul><li>찍고 끌어 고르는 문장 스캔</li><li>모은 문장을 다시 꺼내 주는 재발견</li><li>로그인 없이 시작 · iPad 출시</li></ul></div>
-              <div class="o"><b>북타이머가 앞선 곳</b><ul><li>모은 문장에서 글 한 편으로</li><li>하루 목표·연속</li><li>무료 · 바코드</li></ul></div>
-            </div>
-            <a class="open" href="#savequotes" data-tab="savequotes">문서 읽기 →</a>
-          </article>
-          <article class="card">
-            <h3>옛글화덕 <span class="chip">겹침 중간</span></h3>
-            <p class="what">운영자가 쓴 고정 질문으로 한 권을 여러 번 깊게 읽는 웹 「디지털 북카페」. 도서출판 제인하우스, 앱 없음, 30일 이용권.</p>
-            <div class="vs">
-              <div class="t"><b>옛글화덕이 앞선 곳</b><ul><li>관점별 · 매주 일요일 · 편지 3통 — 사람이 쓴 질문 세 갈래</li><li>다시 읽을 때마다 덧붙이기 · 같은 질문 답글 모아 읽기</li><li>엽서 · 30일 책장 PNG · 오프라인 모임</li></ul></div>
-              <div class="o"><b>북타이머가 앞선 곳</b><ul><li>AI가 내 여백을 읽고 묻고 꼬리 질문</li><li>타이머 · 목표 · 스캔 — 읽기와 건지기</li><li>무료 · 앱(iPhone · iPad)</li></ul></div>
-            </div>
-            <a class="open" href="#textoven" data-tab="textoven">문서 읽기 →</a>
-          </article>
-          <article class="card">
-            <h3>Pagers <span class="chip">겹침 중간</span></h3>
-            <p class="what">마음을 적으면 AI가 등록된 600여 문장 중 닮은 책 문장을 골라 주는 iPhone·Android 앱. 개인 개발, 2026-06 출시.</p>
-            <div class="vs">
-              <div class="t"><b>Pagers가 앞선 곳</b><ul><li>마음을 적으면 책 문장을 골라 줌</li><li>매일 밤 「오늘의 질문」 · 알림이 쓰기를 부름</li><li>로그인 없이 시작 · Android</li></ul></div>
-              <div class="o"><b>북타이머가 앞선 곳</b><ul><li>내가 건진 문장에서 나오는 질문 · 꼬리 질문</li><li>한 편의 글을 내가 쓴다(여백 · 블로그)</li><li>타이머 · 하루 목표 · 위젯 · iPad</li></ul></div>
-            </div>
-            <a class="open" href="#pagers" data-tab="pagers">문서 읽기 →</a>
-          </article>
-          <article class="card">
-            <h3>책인아웃 <span class="chip">겹침 중간</span></h3>
+            <h3><span><span class="rk">1</span>책인아웃</span> <span class="chip">겹침 중간</span></h3>
+            <div class="shots"><img src="shots/checkinout-1.jpg" alt="책인아웃 App Store 스크린샷 1" loading="lazy"><img src="shots/checkinout-2.jpg" alt="책인아웃 App Store 스크린샷 2" loading="lazy"><img src="shots/checkinout-3.jpg" alt="책인아웃 App Store 스크린샷 3" loading="lazy"></div>
+            <p class="scale"><b>평가 129</b> · iOS 88 · Play 41 · Android 1,000+ 설치 · 인스타 2,370</p>
             <p class="what">3D 책장 전시 · 완독 포토카드 · 게시판 커뮤니티를 묶은 iOS·Android·웹 독서 기록 앱. Hail Moon, 2026-08 출시, iOS 도서 차트 41위.</p>
             <div class="vs">
               <div class="t"><b>책인아웃이 앞선 곳</b><ul><li>서재 전시 · 남의 서재 구경</li><li>완독 포토카드 · 게시판 · 팔로우</li><li>세 플랫폼 · 위젯 · 이용자 규모</li></ul></div>
@@ -303,7 +314,20 @@ footer.note a { color: var(--muted); }
             <a class="open" href="#checkinout" data-tab="checkinout">문서 읽기 →</a>
           </article>
           <article class="card">
-            <h3>북로그온 <span class="chip">겹침 중간</span></h3>
+            <h3><span><span class="rk">2</span>북트랙</span> <span class="chip wide">겹침 넓음</span></h3>
+            <div class="shots"><img src="shots/booktrack-1.jpg" alt="북트랙 App Store 스크린샷 1" loading="lazy"><img src="shots/booktrack-2.jpg" alt="북트랙 App Store 스크린샷 2" loading="lazy"><img src="shots/booktrack-3.jpg" alt="북트랙 App Store 스크린샷 3" loading="lazy"></div>
+            <p class="scale"><b>평가 25</b> · iOS 6 · Play 19 · Android 1,000+ 설치</p>
+            <p class="what">타이머·바코드·OCR·카드 꾸미기·다이어리·Gemini 리포트를 담은 iOS·Android 기록 앱. 2026-06-03 출시.</p>
+            <div class="vs">
+              <div class="t"><b>북트랙이 앞선 곳</b><ul><li>책생글 흐름의 네 단계를 이미 출시</li><li>이미지 카드 꾸미기 · 스트릭·뱃지·통계(1.1.2)</li><li>로그인 없이 시작(추정) · Android</li></ul></div>
+              <div class="o"><b>북타이머가 앞선 곳</b><ul><li>묻기 — AI가 묻고 사람이 쓴다(첫 출시 설계: 여백 AI는 물으면 설명도 · 블로그 AI는 맞춤법 · 제목 제안 · 본문은 대신 쓰지 않음)</li><li>하루 시간 목표·부채</li><li>공부 모드 · 웹</li></ul></div>
+            </div>
+            <a class="open" href="#booktrack" data-tab="booktrack">문서 읽기 →</a>
+          </article>
+          <article class="card">
+            <h3><span><span class="rk">3</span>북로그온</span> <span class="chip">겹침 중간</span></h3>
+            <div class="shots"><img src="shots/booklogon-1.jpg" alt="북로그온 App Store 스크린샷 1" loading="lazy"><img src="shots/booklogon-2.jpg" alt="북로그온 App Store 스크린샷 2" loading="lazy"><img src="shots/booklogon-3.jpg" alt="북로그온 App Store 스크린샷 3" loading="lazy"></div>
+            <p class="scale"><b>평가 16</b> · iOS 3 · Play 13 · Android 500+ 설치 · 인스타 46</p>
             <p class="what">독서 기록 · 등장인물 관계도 · 독서모임을 담은 iOS·Android 앱. 1인 운영, 2026-08 출시, 월 2,500원 구독.</p>
             <div class="vs">
               <div class="t"><b>북로그온이 앞선 곳</b><ul><li>등장인물 · 관계도 · 인물 타임라인</li><li>친구 소식 · 독서모임(토론 · 투표)</li><li>사진 OCR(쪽 번호 함께) · CSV 내보내기 · 가져오기</li></ul></div>
@@ -312,7 +336,31 @@ footer.note a { color: var(--muted); }
             <a class="open" href="#booklogon" data-tab="booklogon">문서 읽기 →</a>
           </article>
           <article class="card">
-            <h3>탐식이네 <span class="chip">겹침 거의 없음</span></h3>
+            <h3><span><span class="rk">4</span>SaveQuotes</span> <span class="chip">겹침 중간</span></h3>
+            <div class="shots"><img src="shots/savequotes-1.jpg" alt="SaveQuotes App Store 스크린샷 1" loading="lazy"><img src="shots/savequotes-2.jpg" alt="SaveQuotes App Store 스크린샷 2" loading="lazy"><img src="shots/savequotes-3.jpg" alt="SaveQuotes App Store 스크린샷 3" loading="lazy"></div>
+            <p class="scale"><b>평가 9</b> · iOS 9 · iPhone·iPad 전용(Android 없음) · 인스타 24</p>
+            <p class="what">책 속 문장을 찍어 모으는 iPhone·iPad 앱. 법인, 2026-09 출시, 10월 말까지 버전 14개.</p>
+            <div class="vs">
+              <div class="t"><b>SaveQuotes가 앞선 곳</b><ul><li>찍고 끌어 고르는 문장 스캔</li><li>모은 문장을 다시 꺼내 주는 재발견</li><li>로그인 없이 시작 · iPad 출시</li></ul></div>
+              <div class="o"><b>북타이머가 앞선 곳</b><ul><li>모은 문장에서 글 한 편으로</li><li>하루 목표·연속</li><li>무료 · 바코드</li></ul></div>
+            </div>
+            <a class="open" href="#savequotes" data-tab="savequotes">문서 읽기 →</a>
+          </article>
+          <article class="card">
+            <h3><span><span class="rk">5</span>serotiny</span> <span class="chip wide">겹침 넓음</span></h3>
+            <div class="shots"><img src="shots/serotiny-1.jpg" alt="serotiny App Store 스크린샷 1" loading="lazy"><img src="shots/serotiny-2.jpg" alt="serotiny App Store 스크린샷 2" loading="lazy"><img src="shots/serotiny-3.jpg" alt="serotiny App Store 스크린샷 3" loading="lazy"></div>
+            <p class="scale"><b>평가 6</b> · iOS 6 · Play 평점 미표시 · Android 500+ 설치 · 인스타 62</p>
+            <p class="what">타이머·문장 스캔·일기에 지역 소셜(지도·기간 챌린지)을 얹은 iOS·Android·웹 앱. 개인사업자, 2026-07 출시.</p>
+            <div class="vs">
+              <div class="t"><b>serotiny가 앞선 곳</b><ul><li>함께 하는 기간 챌린지 · 지역 독서 지도</li><li>질문에 답하는 공개 글 · 회독 기록</li><li>세 플랫폼 + 유료 멤버십 · 독서 리마인더</li></ul></div>
+              <div class="o"><b>북타이머가 앞선 곳</b><ul><li>AI가 내 여백으로 묻고 꼬리 질문</li><li>나만 보는 여백 → 내보내기 · 문장 단위 댓글·인용(블로그 — 설계 · 미출시)</li><li>하루 목표·부채 · 공부 모드</li></ul></div>
+            </div>
+            <a class="open" href="#serotiny" data-tab="serotiny">문서 읽기 →</a>
+          </article>
+          <article class="card">
+            <h3><span><span class="rk">6</span>탐식이네</span> <span class="chip">겹침 거의 없음</span></h3>
+            <div class="shots"><img src="shots/tamsikine-1.jpg" alt="탐식이네 App Store 스크린샷 1" loading="lazy"><img src="shots/tamsikine-2.jpg" alt="탐식이네 App Store 스크린샷 2" loading="lazy"><img src="shots/tamsikine-3.jpg" alt="탐식이네 App Store 스크린샷 3" loading="lazy"></div>
+            <p class="scale"><b>평가 4</b> · iOS 4 · Android 100+ 설치 · 인스타 209</p>
             <p class="what">장르소설 팬을 위한 iOS·Android 독서모임 앱. 법인, 2026-10 출시.</p>
             <div class="vs">
               <div class="t"><b>탐식이네가 앞선 곳</b><ul><li>같은 책 독자의 진도를 한 화면에</li><li>쪽에 꽂는 반응 「깃발」 · 공개 독서모임 찾기(1.2.3)</li><li>Android · 오픈 이벤트</li></ul></div>
@@ -321,7 +369,20 @@ footer.note a { color: var(--muted); }
             <a class="open" href="#tamsikine" data-tab="tamsikine">문서 읽기 →</a>
           </article>
           <article class="card">
-            <h3>topa <span class="chip">겹침 거의 없음</span></h3>
+            <h3><span><span class="rk">7</span>Pagers</span> <span class="chip">겹침 중간</span></h3>
+            <div class="shots"><img src="shots/pagers-1.jpg" alt="Pagers App Store 스크린샷 1" loading="lazy"><img src="shots/pagers-2.jpg" alt="Pagers App Store 스크린샷 2" loading="lazy"><img src="shots/pagers-3.jpg" alt="Pagers App Store 스크린샷 3" loading="lazy"></div>
+            <p class="scale"><b>평가 1</b> · iOS 1 · Android 10+ 설치 · 인스타 40</p>
+            <p class="what">마음을 적으면 AI가 등록된 600여 문장 중 닮은 책 문장을 골라 주는 iPhone·Android 앱. 개인 개발, 2026-06 출시.</p>
+            <div class="vs">
+              <div class="t"><b>Pagers가 앞선 곳</b><ul><li>마음을 적으면 책 문장을 골라 줌</li><li>매일 밤 「오늘의 질문」 · 알림이 쓰기를 부름</li><li>로그인 없이 시작 · Android</li></ul></div>
+              <div class="o"><b>북타이머가 앞선 곳</b><ul><li>내가 건진 문장에서 나오는 질문 · 꼬리 질문</li><li>한 편의 글을 내가 쓴다(여백 · 블로그)</li><li>타이머 · 하루 목표 · 위젯 · iPad</li></ul></div>
+            </div>
+            <a class="open" href="#pagers" data-tab="pagers">문서 읽기 →</a>
+          </article>
+          <article class="card">
+            <h3><span><span class="rk">8</span>topa</span> <span class="chip">겹침 거의 없음</span></h3>
+            <div class="shots web"><img src="shots/topa-1.jpg" alt="topa 웹 첫 화면" loading="lazy"></div>
+            <p class="scale"><b>스토어 없음</b> · 웹 전용 · 인스타 340 · 사용자 수 비공개</p>
             <p class="what">기분·상황을 적으면 AI가 되물어 책을 골라 주는 웹 서비스. 법인, 앱 없음.</p>
             <div class="vs">
               <div class="t"><b>topa가 앞선 곳</b><ul><li>대화로 책 고르기 · 추천 이유와 리뷰</li><li>검색에 걸리는 공개 추천 페이지</li><li>도서관·교보 B2B</li></ul></div>
@@ -329,19 +390,30 @@ footer.note a { color: var(--muted); }
             </div>
             <a class="open" href="#topa" data-tab="topa">문서 읽기 →</a>
           </article>
+          <article class="card">
+            <h3><span><span class="rk">9</span>옛글화덕</span> <span class="chip">겹침 중간</span></h3>
+            <div class="shots web"><img src="shots/textoven-1.jpg" alt="옛글화덕 웹 첫 화면" loading="lazy"></div>
+            <p class="scale"><b>스토어 없음</b> · 웹 전용 · 인스타 46 · 회원 수 비공개</p>
+            <p class="what">운영자가 쓴 고정 질문으로 한 권을 여러 번 깊게 읽는 웹 「디지털 북카페」. 도서출판 제인하우스, 앱 없음, 30일 이용권.</p>
+            <div class="vs">
+              <div class="t"><b>옛글화덕이 앞선 곳</b><ul><li>관점별 · 매주 일요일 · 편지 3통 — 사람이 쓴 질문 세 갈래</li><li>다시 읽을 때마다 덧붙이기 · 같은 질문 답글 모아 읽기</li><li>엽서 · 30일 책장 PNG · 오프라인 모임</li></ul></div>
+              <div class="o"><b>북타이머가 앞선 곳</b><ul><li>AI가 내 여백을 읽고 묻고 꼬리 질문</li><li>타이머 · 목표 · 스캔 — 읽기와 건지기</li><li>무료 · 앱(iPhone · iPad)</li></ul></div>
+            </div>
+            <a class="open" href="#textoven" data-tab="textoven">문서 읽기 →</a>
+          </article>
         </div>
       </div>
     </section>
 
-    <section class="view" id="view-serotiny" data-view="serotiny" hidden><article class="doc" data-doc="serotiny"></article></section>
-    <section class="view" id="view-booktrack" data-view="booktrack" hidden><article class="doc" data-doc="booktrack"></article></section>
-    <section class="view" id="view-savequotes" data-view="savequotes" hidden><article class="doc" data-doc="savequotes"></article></section>
-    <section class="view" id="view-textoven" data-view="textoven" hidden><article class="doc" data-doc="textoven"></article></section>
-    <section class="view" id="view-pagers" data-view="pagers" hidden><article class="doc" data-doc="pagers"></article></section>
     <section class="view" id="view-checkinout" data-view="checkinout" hidden><article class="doc" data-doc="checkinout"></article></section>
+    <section class="view" id="view-booktrack" data-view="booktrack" hidden><article class="doc" data-doc="booktrack"></article></section>
     <section class="view" id="view-booklogon" data-view="booklogon" hidden><article class="doc" data-doc="booklogon"></article></section>
+    <section class="view" id="view-savequotes" data-view="savequotes" hidden><article class="doc" data-doc="savequotes"></article></section>
+    <section class="view" id="view-serotiny" data-view="serotiny" hidden><article class="doc" data-doc="serotiny"></article></section>
     <section class="view" id="view-tamsikine" data-view="tamsikine" hidden><article class="doc" data-doc="tamsikine"></article></section>
+    <section class="view" id="view-pagers" data-view="pagers" hidden><article class="doc" data-doc="pagers"></article></section>
     <section class="view" id="view-topa" data-view="topa" hidden><article class="doc" data-doc="topa"></article></section>
+    <section class="view" id="view-textoven" data-view="textoven" hidden><article class="doc" data-doc="textoven"></article></section>
   </main>
 
   <footer class="note">
@@ -354,7 +426,7 @@ footer.note a { color: var(--muted); }
 <script src="https://cdn.jsdelivr.net/npm/marked@12.0.2/marked.min.js"></script>
 <script>
 (function () {
-  var DOCS = ['serotiny', 'booktrack', 'savequotes', 'textoven', 'pagers', 'checkinout', 'booklogon', 'tamsikine', 'topa'];
+  var DOCS = ['checkinout', 'booktrack', 'booklogon', 'savequotes', 'serotiny', 'tamsikine', 'pagers', 'topa', 'textoven'];
   var TABS = ['overview'].concat(DOCS);
   var GH = 'https://github.com/Goospel/booktimer/blob/main/claude-docs/competitors/';
 
@@ -404,6 +476,21 @@ footer.note a { color: var(--muted); }
   // build.mjs가 md 속 스크립트 닫는 태그에 역슬래시를 넣어 막았다 — 읽을 때 되돌린다.
   function mdOf(el) { return el ? el.textContent.replace(/<\\\/script/gi, '<\/script') : ''; }
 
+  // 스크린샷은 레포에 두지 않고 아티팩트의 게시 파일(shots/)로만 둔다 — 공개 레포에 남의 앱 화면을 싣지 않으려고. 다시 게시할 때 files를 빼면 그대로 남는다.
+  var SHOTS = { checkinout: 3, booktrack: 3, booklogon: 3, savequotes: 3, serotiny: 3, tamsikine: 3, pagers: 3, topa: 1, textoven: 1 };
+  var WEB = { topa: 1, textoven: 1 };
+  function addShots(id, art) {
+    var n = SHOTS[id]; if (!n) return;
+    var fig = document.createElement('figure'); fig.className = 'doc-shots';
+    var row = document.createElement('div'); row.className = 'shots' + (WEB[id] ? ' web' : '');
+    for (var i = 1; i <= n; i++) { var im = document.createElement('img'); im.src = 'shots/' + id + '-' + i + '.jpg'; im.alt = WEB[id] ? '웹 첫 화면' : 'App Store 스크린샷 ' + i; im.loading = 'lazy'; row.appendChild(im); }
+    var cap = document.createElement('figcaption');
+    cap.textContent = WEB[id] ? '웹 화면 캡처(2026-11-13, 휴대폰 폭)' : 'App Store 스크린샷 앞 세 장(2026-11-13 내려받음 — 개발자가 만든 홍보 이미지라 실제 화면과 다를 수 있다)';
+    fig.appendChild(row); fig.appendChild(cap);
+    var h1 = art.querySelector('h1');
+    if (h1) h1.insertAdjacentElement('afterend', fig); else art.prepend(fig);
+  }
+
   function render() {
     if (!window.marked) return false;
     DOCS.forEach(function (id) {
@@ -413,6 +500,7 @@ footer.note a { color: var(--muted); }
       art.innerHTML = marked.parse(mdOf(src), { gfm: true });
       wrapSections(art);
       decorate(art);
+      addShots(id, art);
     });
     return true;
   }
