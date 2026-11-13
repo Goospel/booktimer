@@ -1,4 +1,4 @@
-import { boxGoalText, goalChoices, goalProgress, type GoalProgress, goalStatus, isStaleDay, libraryGoalLine, midnightRereadDelay, nextMidnightOf, progressOf, REREAD_MS, shouldReread, todayDashboard } from './goalProgress';
+import { boxGoalText, goalChoices, goalProgress, type GoalProgress, goalStatus, isStaleDay, libraryGoalLine, midnightRereadDelay, nextMidnightOf, progressOf, REREAD_MS, shouldReread, textChunks, todayDashboard } from './goalProgress';
 import type { ContributionDay, Dashboard } from '../api/types';
 
 // 범위 보충 §3.4 · REQ-90 — 오늘 초 = 끝난 몫 + 진행 중 몫(기기 자정부터 · 6시간 상한).
@@ -114,6 +114,11 @@ test('REQ-270 · 측정 중 작은 글 = 「오늘 1시간 12분」(today 조각
   expect(boxGoalText({ progress: P({ todaySeconds: 72 * MIN }), goal: 90 * MIN, measuring: true })).toBe('오늘 1시간 12분');
   expect(boxGoalText({ progress: P({ todaySeconds: 72 * MIN }), goal: 0, measuring: true })).toBe('오늘 1시간 12분');
   expect(boxGoalText({ progress: P({ todaySeconds: 20 }), goal: 30 * MIN, measuring: true })).toBe('오늘 0분'); // 측정 첫 1분 — 측정 중 0분은 지금 규칙 그대로
+});
+test('REQ-270 · 박스 작은 글은 「 · 」 조각째 접힌다 — 조각마다 따로 그린다(2026-11-13 기기 「목표 1시간 / 30분」 · 「목표 1 / 시간 30분」)', () => {
+  expect(textChunks('오늘 1시간 12분 · 목표 1시간 30분')).toEqual(['오늘 1시간 12분 ·', '목표 1시간 30분']);
+  expect(textChunks('하루 목표 30분')).toEqual(['하루 목표 30분']);
+  expect(textChunks('오늘 12분 · 목표 30분 · 5일째')).toEqual(['오늘 12분 ·', '목표 30분 ·', '5일째']);
 });
 test('REQ-271 · 서재 목표 줄 — 읽은 날 「하루 목표 30분 · 5일째」 · 안 읽은 날 연속 없음 · 목표 없음 「하루 목표 없음」 · 연속 0이면 연속 없음', () => {
   const lines = [

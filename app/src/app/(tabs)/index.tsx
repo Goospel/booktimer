@@ -10,7 +10,7 @@ import type { BlogPostRow } from '../../api/types';
 import { Cover } from '../../components/Cover';
 import { Button, Notice, Row, Screen, Txt, useStacked } from '../../components/ui';
 import { clockLabel, durationLabel } from '../../lib/format';
-import { boxGoalText, progressOf, SESSION_CAP_MS } from '../../lib/goalProgress';
+import { boxGoalText, progressOf, SESSION_CAP_MS, textChunks } from '../../lib/goalProgress';
 import { blogSection, type HomeBox, homeBox } from '../../lib/home';
 import { noteHref, savedNotice } from '../../lib/marginSave';
 import { ALREADY_STOPPED, startMeasure, stopMeasure } from '../../lib/measureStart';
@@ -161,9 +161,13 @@ function Box(p: { box: HomeBox; text: string; elapsed: number | null; busy: bool
                 <Button kind="outline" label={elapsed === null ? '읽기 시작' : '측정 종료'} busy={p.busy} onPress={p.onMeasure} />
               </View>
               {elapsed === null ? (
-                <Txt v="T2" style={[{ color: color.muted }, !p.stacked && { flex: 1 }]} accessible={false}>
-                  {text}
-                </Txt>
+                <View style={[{ flexDirection: 'row', flexWrap: 'wrap', columnGap: space[1] }, !p.stacked && { flex: 1 }]}>
+                  {textChunks(text).map((s) => (
+                    <Txt key={s} v="T2" style={{ color: color.muted }} accessible={false}>
+                      {s}
+                    </Txt>
+                  ))}
+                </View>
               ) : (
                 <View style={p.stacked ? undefined : { flex: 1 }}>
                   <Txt v="H3" accessibilityLabel={`측정 중, ${durationLabel(elapsed)}`} style={{ fontVariant: ['tabular-nums'] }}>

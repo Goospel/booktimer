@@ -642,6 +642,7 @@ const WIRES: { id: string; rel: string; needle: string; n: number; mutant: strin
   // 책생글 A2 — 홈 박스 · 서재 목표 줄 · 블로그 칸 · 책 화면 [읽기 시작](앱 하니스는 화면을 렌더하지 않는다 — 연결은 이 줄들이 잠근다)
   { id: 'REQ-270 홈 박스(측정 전) = homeBox(dash, false)', rel: join('app', '(tabs)', 'index.tsx'), needle: 'homeBox(dash, false)', n: 1, mutant: 'homeBox(dash, true)' },
   { id: 'REQ-270 홈 박스(측정 중 — 재는 책) = homeBox(dash, true)', rel: join('app', '(tabs)', 'index.tsx'), needle: 'homeBox(dash, true)', n: 1, mutant: 'homeBox(dash, false)' },
+  { id: 'REQ-270 박스 작은 글은 「 · 」에서만 접힌다', rel: join('app', '(tabs)', 'index.tsx'), needle: '{textChunks(text).map(', n: 1, mutant: '{[text].map(' },
   { id: 'REQ-275 박스 [읽기 시작] = 박스 책으로 시작', rel: join('app', '(tabs)', 'index.tsx'), needle: '() => start(rest.bookId, rest.title)', n: 1, mutant: '() => start(null, null)' },
   { id: 'REQ-270 박스 작은 글 = boxGoalText', rel: join('app', '(tabs)', 'index.tsx'), needle: 'boxGoalText({ progress, goal: dash.todayGoalSeconds, measuring })', n: 1, mutant: 'goalStatus({ progress, goal: dash.todayGoalSeconds, measuring })' },
   { id: 'REQ-272 홈 여백에 글쓰기 = 박스 책(없으면 책 없는 쪽지)', rel: join('app', '(tabs)', 'index.tsx'), needle: 'router.push(noteHref(box?.bookId ?? null))', n: 1, mutant: 'router.push(`/margin/${box?.bookId}`)' },
