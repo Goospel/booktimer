@@ -284,3 +284,26 @@ test('REQ-371 · (T2) 원장 얹기 — 새 값이면 측정 중 채우는 순�
   expect(cachedOf({ ...base(oct30), seq: 0 })).toBe(true);
   expect(cachedOf(base(oct30))).toBe(false);
 });
+
+// ── 책생글 A2(REQ-275) — 책 화면 [읽기 시작]이 다 읽은 책 · 홈 박스 책이 아닌 책을 잰다 ──
+test('REQ-275 · 다 읽은 책을 기기에서 재는 중이어도 그 책을 찾는다(박스 표지)', () => {
+  const b = base(oct30, { finishedBooks: [book(3, '수레바퀴 아래서')] });
+  const l = ledger({ active: { mode: 'reading', startedAt: new Date(at(oct30, 20, 50)).toISOString(), bookId: 3, bookTitle: '수레바퀴 아래서' } });
+  expect(effectiveDashboard(b, l, at(oct30, 21, 1), true).d.activeBook).toEqual(book(3, '수레바퀴 아래서'));
+});
+
+test('REQ-275 · 끝낸 뒤 보내기 전에도 최근 책 = 기기 원장에서 가장 늦게 시작한 독서 책 칸 — 받은 칸 · 공부 칸 · 책 없는 칸은 보지 않는다 · 그런 칸이 없으면 서버 값 그대로(같은 객체)', () => {
+  const b = base(oct30); // 서버 recentBookId 1
+  const l = ledger({
+    done: [
+      part(at(oct30, 20, 30), at(oct30, 20, 40), { bookId: 5 }), // 더 일찍 시작한 안 받은 독서 책 칸 — 「가장 늦게」 비교를 잠근다
+      part(at(oct30, 21, 10), at(oct30, 21, 20), { bookId: 2 }), // 안 받은 독서 책 칸 — 이것
+      part(at(oct30, 21, 30), at(oct30, 21, 35), { bookId: null }), // 책 없이 잰 칸
+      part(at(oct30, 21, 40), at(oct30, 21, 45), { mode: 'study', bookId: 9 }), // 공부 칸
+      part(at(oct30, 20), at(oct30, 20, 5), { bookId: 3, settledAt: b.sentAt - 1 }), // 기준 값보다 먼저 받은 칸 — 이미 들어 있다
+    ],
+  });
+  expect(effectiveDashboard(b, l, at(oct30, 22), true).d.recentBookId).toBe(2);
+  const settledOnly = ledger({ done: [part(at(oct30, 20), at(oct30, 20, 5), { bookId: 3, settledAt: b.sentAt - 1 })] });
+  expect(effectiveDashboard(b, settledOnly, at(oct30, 22), true).d).toBe(b.d);
+});

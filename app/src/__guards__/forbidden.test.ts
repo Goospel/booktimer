@@ -252,29 +252,45 @@ test('REQ-221 · 쪽지 화면 문구에 「이 글」 · 「내 글」 0 — �
   expect(at(join('lib', 'questions.ts'), '// 꼬리 질문은 내 글을 읽는다')).toEqual([]); // 주석은 걸리지 않는다
 });
 
-// 책 화면 단추는 「여백에 글쓰기」 하나다(D9 · 사용자 확인 질문 1) — 옛 [이 책으로 글쓰기] · 「이 책의 글」 단은 없다.
+// 책 화면 검정 단추는 「여백에 글쓰기」 하나다(D9 · 사용자 확인 질문 1) — 옛 [이 책으로 글쓰기] · 「이 책의 글」 단은 없다.
+// 그 아래 외곽선 [읽기 시작]이 둘째 단추다(REQ-275 · F1 확인 질문 2 — 2026-10-31 사용자 확정).
 const bookButtons = (src: string) => {
   const s = stripComments(src);
   return {
     buttons: s.match(/<Button\b/g)?.length ?? 0,
+    ink: s.match(/<Button kind="ink"/g)?.length ?? 0,
     presses: s.match(/\bonPress=/g)?.length ?? 0, // Pressable · Row로 만든 둘째 동작도 센다(A1 리뷰 17)
     write: /label="여백에 글쓰기"/.test(s),
+    start: /<Button kind="outline" label="읽기 시작"/.test(s),
     old: /이 책으로\s*\S*쓰기|이 책의 글/.test(s),
   };
 };
-test('REQ-220 · 책 화면 단추 하나 — 「여백에 글쓰기」 · 「이 책의 글」 없음(옛 화면 꼴을 심으면 잡힌다)', () => {
+test('REQ-220 · REQ-275 · 책 화면 단추 둘 — 검정 「여백에 글쓰기」 하나 + 외곽선 「읽기 시작」 · 「이 책의 글」 없음(옛 화면 꼴 · 둘째 검정을 심으면 잡힌다)', () => {
   const src = ALL.find((f) => f.rel === join('app', 'book', '[id].tsx'));
   expect(src).toBeDefined();
-  expect(bookButtons(src!.text)).toEqual({ buttons: 1, presses: 3, write: true, old: false });
+  expect(bookButtons(src!.text)).toEqual({ buttons: 2, ink: 1, presses: 4, write: true, start: true, old: false });
   expect(bookButtons('<Button kind="ink" label="여백 남기기" />\n<Button kind="outline" label="이 책으로 글쓰기" />')).toMatchObject({ buttons: 2, write: false, old: true });
   // A1 리뷰 17 — 누르는 것은 onPress= 수로 센다(상태 세 칸 map 1 · 단추 1 · 쪽지 줄 1 = 3). Button이 아닌 둘째 동작도 잡는다
   const real = src!.text;
   const at = '<Button kind="ink" label="여백에 글쓰기"';
   expect(real.includes(at)).toBe(true);
   const plant = (jsx: string) => bookButtons(real.replace(at, `${jsx}\n      ${at}`));
-  expect(plant('<Pressable onPress={() => go()}><Txt>이 책으로 쓰기</Txt></Pressable>')).toMatchObject({ presses: 4, old: true }); // G220d
-  expect(plant('<Row title="이 책으로 쓰기" onPress={() => go()} />')).toMatchObject({ presses: 4, old: true }); // 하우스 Row 변형
-  expect(plant('<Button kind="outline" label="쓰기" onPress={() => go()} />')).toMatchObject({ buttons: 2, presses: 4 }); // G220a 꼴
+  expect(plant('<Pressable onPress={() => go()}><Txt>이 책으로 쓰기</Txt></Pressable>')).toMatchObject({ presses: 5, old: true }); // G220d
+  expect(plant('<Row title="이 책으로 쓰기" onPress={() => go()} />')).toMatchObject({ presses: 5, old: true }); // 하우스 Row 변형
+  expect(plant('<Button kind="outline" label="쓰기" onPress={() => go()} />')).toMatchObject({ buttons: 3, presses: 5 }); // G220a 꼴
+  expect(plant('<Button kind="ink" label="이어 쓰기" onPress={() => go()} />')).toMatchObject({ buttons: 3, ink: 2 }); // 검정 둘째
+});
+
+// 「블로그」 글자는 lib/names.ts에만(D2 · REQ-295 — A2가 화면에 처음 싣는다). 주석과 테스트 파일(이름 · 기대 글자)은 보지 않는다
+const spaceLiterals = (all = ALL) =>
+  all.filter((f) => !f.rel.startsWith(SELF) && f.rel !== join('lib', 'names.ts') && !/\.test\.tsx?$/.test(f.rel)).filter((f) => /블로그/.test(stripComments(f.text))).map((f) => f.rel);
+test('REQ-295 · 「블로그」 글자는 names.ts에만 — 화면은 SPACE로 조립한다(심은 픽스처는 잡힌다)', () => {
+  expect(spaceLiterals()).toEqual([]);
+  expect(ALL.some((f) => f.rel === join('lib', 'names.ts') && f.text.includes("SPACE = '블로그'"))).toBe(true); // 이름 한 곳이 실제로 있다
+  const at = (rel: string, text: string) => spaceLiterals([{ rel, text }]);
+  expect(at(join('app', 'planted.tsx'), '<Txt v="H3">블로그</Txt>')).toHaveLength(1); // 양성 대조
+  expect(at(join('app', 'planted.tsx'), '// 블로그 칸\n{/* 블로그 */}')).toEqual([]); // 주석
+  expect(at(join('lib', 'planted.test.ts'), "test('REQ-273 · 블로그 3편', () => {})")).toEqual([]); // 테스트 파일
 });
 
 test('REQ-177 · 목표 줄 단서는 「바꾸기」 하나다 — 앱 소스에 「정하기」가 없다(심은 픽스처는 잡힌다)', () => {
@@ -623,6 +639,26 @@ const WIRES: { id: string; rel: string; needle: string; n: number; mutant: strin
   // 2차 리뷰 반영(addendum-2 §6.F — R24 · R25). 문구 글자는 잠그지 않는다
   { id: 'REQ-399 지운 쪽지 표시의 처음 값(거짓)', rel: NOTE, needle: 'const gone = useRef(false);', n: 1, mutant: 'const gone = useRef(true);' },
   { id: 'REQ-399 지운 쪽지 알림의 돌아가기 단추', rel: NOTE, needle: 'onPress: () => router.back() } };', n: 1, mutant: '};' },
+  // 책생글 A2 — 홈 박스 · 서재 목표 줄 · 블로그 칸 · 책 화면 [읽기 시작](앱 하니스는 화면을 렌더하지 않는다 — 연결은 이 줄들이 잠근다)
+  { id: 'REQ-270 홈 박스(측정 전) = homeBox(dash, false)', rel: join('app', '(tabs)', 'index.tsx'), needle: 'homeBox(dash, false)', n: 1, mutant: 'homeBox(dash, true)' },
+  { id: 'REQ-270 홈 박스(측정 중 — 재는 책) = homeBox(dash, true)', rel: join('app', '(tabs)', 'index.tsx'), needle: 'homeBox(dash, true)', n: 1, mutant: 'homeBox(dash, false)' },
+  { id: 'REQ-270 박스 작은 글은 「 · 」에서만 접힌다', rel: join('app', '(tabs)', 'index.tsx'), needle: '{textChunks(text).map(', n: 1, mutant: '{[text].map(' },
+  { id: 'REQ-275 박스 [읽기 시작] = 박스 책으로 시작', rel: join('app', '(tabs)', 'index.tsx'), needle: '() => start(rest.bookId, rest.title)', n: 1, mutant: '() => start(null, null)' },
+  { id: 'REQ-270 박스 작은 글 = boxGoalText', rel: join('app', '(tabs)', 'index.tsx'), needle: 'boxGoalText({ progress, goal: dash.todayGoalSeconds, measuring })', n: 1, mutant: 'goalStatus({ progress, goal: dash.todayGoalSeconds, measuring })' },
+  { id: 'REQ-272 홈 여백에 글쓰기 = 박스 책(없으면 책 없는 쪽지)', rel: join('app', '(tabs)', 'index.tsx'), needle: 'router.push(noteHref(box?.bookId ?? null))', n: 1, mutant: 'router.push(`/margin/${box?.bookId}`)' },
+  { id: 'REQ-274 측정 단추 · ⌥P · 위젯 = measureButton 하나', rel: join('app', '(tabs)', 'index.tsx'), needle: 'button: measureButton', n: 2, mutant: 'button: null' },
+  { id: 'REQ-273 홈 블로그 = 최신 3편 · 못 읽으면 null', rel: join('app', '(tabs)', 'index.tsx'), needle: 'blog.posts(3).then((r) => setPosts(r.posts), () => setPosts(null))', n: 1, mutant: 'blog.posts(20).then((r) => setPosts(r.posts), () => setPosts(null))' },
+  { id: 'REQ-273 블로그 칸 = blogSection', rel: join('app', '(tabs)', 'index.tsx'), needle: 'blogSection(posts)', n: 1, mutant: 'blogSection([])' },
+  {
+    id: 'REQ-273 블로그 줄 = 제목 + 「이름 · 날짜」 · 누르면 그 글',
+    rel: join('app', '(tabs)', 'index.tsx'),
+    needle: '<Row key={r.id} title={r.title} meta={r.meta} onPress={() => router.push(`/blog/${r.id}`)} />',
+    n: 1,
+    mutant: '<Row key={r.id} title={r.title} onPress={() => router.push(`/blog/${r.id}`)} />',
+  },
+  { id: 'REQ-271 서재 목표 줄 = libraryGoalLine', rel: LIBRARY, needle: 'libraryGoalLine(', n: 1, mutant: 'goalStatus(' },
+  { id: 'REQ-275 책 화면 읽기 시작 = startFromBook', rel: BOOK, needle: 'await startFromBook({ store: measureStore, load: loadDashboard }, book)', n: 1, mutant: '({ started: false })' },
+  { id: 'REQ-275 시작하면 홈으로', rel: BOOK, needle: "else if (r.started) router.dismissTo('/')", n: 1, mutant: 'else if (r.started) undefined' },
 ];
 test.each(WIRES)('A1 리뷰 15 · $id — 화면이 lib 판정을 쓴다(돌연변이를 심으면 잡힌다)', ({ rel, needle, n, mutant }) => {
   const s = srcOf(rel);

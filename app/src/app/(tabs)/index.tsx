@@ -1,24 +1,26 @@
-// 홈(시각 보충 §1.4 · 범위 보충 §3.4). 세 모양 — 새 계정 빈 홈 · 측정 전(홈-안A/B) · 측정 중(낮 팔레트 — REQ-107).
-// 측정 전의 표제는 「읽는 책」이고 시계가 아니다(REQ-61). 진입 직후 화면을 덮는 것은 0이다 — 시트는 목표 줄을 눌러야 열린다.
-// 밀린 시간(부채)은 읽지도 그리지도 않는다(REQ-91).
+// 홈(책생글 A2 — F1 §4.1 안A · §4.6). 한 틀: 맨 위 얇은 종이 박스(표지 · 제목 · 「›」 · 외곽선 [읽기 시작]/[측정 종료] · 작은 글 — 빈 곳은 서재 탭)
+// → 알림 → 검정 「여백에 글쓰기」(박스 책 · 없으면 책 없는 쪽지) → 블로그 최신 3편 + 「더 보기」. 책이 하나도 없으면 박스 대신 소개 · 담기 단추(측정 중이면 박스가 위).
+// 날짜 줄 · 목표 줄 · 목표 시트 · 「다른 책」 · 큰 시계는 없다(목표 줄 · 시트는 서재 맨 위 — J66). 진입 직후 화면을 덮는 것은 0이다. 밀린 시간(부채)은 읽지도 그리지도 않는다(REQ-91).
 import { router, useFocusEffect } from 'expo-router';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, Pressable, View } from 'react-native';
 
-import { reading } from '../../api/client';
+import { blog, reading } from '../../api/client';
+import type { BlogPostRow } from '../../api/types';
 import { Cover } from '../../components/Cover';
-import { Sheet } from '../../components/Sheet';
 import { Button, Notice, Row, Screen, Txt, useStacked } from '../../components/ui';
-import { clockLabel, dateLabel, durationLabel } from '../../lib/format';
-import { goalChoices, goalProgress, goalStatus, nextMidnightOf, SESSION_CAP_MS } from '../../lib/goalProgress';
-import { savedNotice } from '../../lib/marginSave';
+import { clockLabel, durationLabel } from '../../lib/format';
+import { boxGoalText, progressOf, SESSION_CAP_MS, textChunks } from '../../lib/goalProgress';
+import { blogSection, type HomeBox, homeBox } from '../../lib/home';
+import { noteHref, savedNotice } from '../../lib/marginSave';
 import { ALREADY_STOPPED, startMeasure, stopMeasure } from '../../lib/measureStart';
 import { measureStore } from '../../lib/measureSync';
+import { SPACE } from '../../lib/names';
 import { goalNoticeStep } from '../../lib/reminders';
 import { useMeasureDashboard } from '../../lib/useMeasureDashboard';
 import { useMeasureShortcut } from '../../lib/useMeasureShortcut';
 import { useWidgetIntent } from '../../lib/useWidgetIntent';
-import { color, layout, space } from '../../theme/tokens';
+import { color, cover, layout, space } from '../../theme/tokens';
 
 type NoticeState = { message: string; tone?: 'info' | 'error' } | null;
 
@@ -28,29 +30,20 @@ export default function Home() {
   const [notice, setNotice] = useState<NoticeState>(null);
   const { dash, now, rolled, cached, loadError, load, gate } = useMeasureDashboard({ mode: 'reading', onNotice: (message) => setNotice({ message }) });
   const [busy, setBusy] = useState(false);
-  const [goalOpen, setGoalOpen] = useState(false);
-  const [pickedId, setPickedId] = useState<number | null>(null);
+  const [posts, setPosts] = useState<BlogPostRow[] | null>(null); // null = 아직 못 읽음(줄 · 빈 문구 없음 — F1 §4.1-3)
   const stacked = useStacked();
 
-  // 여백 쓰기에서 남기고 돌아오면 맨 위 흐름 안 알림(REQ-135)
+  // 여백 쓰기에서 남기고 돌아오면 맨 위 흐름 안 알림(REQ-135) · 블로그 최신 3편을 포커스마다 다시 읽는다(읽는 동안은 앞 값 그대로 — D8)
   useFocusEffect(
     useCallback(() => {
       if (savedNotice.take()) setNotice({ message: '여백을 남겼어요' });
+      void blog.posts(3).then((r) => setPosts(r.posts), () => setPosts(null)); // 못 읽으면 null = 머리 + 「더 보기」만(F1 §4.1-3 · D8) — 기다리지 않아 홈을 막지 않는다
     }, []),
   );
 
   const measuring = !!dash?.hasActiveSession && !!dash.activeStartedAt;
   const startedAt = measuring && dash?.activeStartedAt ? Date.parse(dash.activeStartedAt) : null;
-  const progress = dash
-    ? goalProgress({
-        todayRead: dash.todayReadSeconds,
-        goal: dash.todayGoalSeconds,
-        activeStartedAt: startedAt,
-        now,
-        nextMidnight: nextMidnightOf(now),
-        goalStreak: dash.graph.goalStreak ?? 0,
-      })
-    : null;
+  const progress = dash ? progressOf(dash, now) : null;
 
   // 달성 순간 — 앱이 앞에 있을 때 흐름 안 Notice(모달 · 축하 효과 없음). 처음 읽은 값이 이미 채움이면 알리지 않는다.
   // 굴린 값(지난날 기준 값)과 디스크 값으로는 판정하지 않는다 — 그다음 새 값이 다시 「처음 읽은 값」이다(goalNoticeStep — REQ-371).
@@ -85,23 +78,13 @@ export default function Home() {
     setBusy(false);
   }
 
-  async function chooseGoal(seconds: number) {
-    setGoalOpen(false);
-    try {
-      await reading.setGoal(seconds);
-    } catch (e) {
-      setNotice({ message: e instanceof Error ? e.message : String(e), tone: 'error' });
-    }
-    await load();
-  }
-
-  // 읽는 책 — 이른 반환보다 위(아래 단축키 훅이 쓴다)
-  const books = dash ? (dash.readingBooks.length > 0 ? dash.readingBooks : dash.wantToReadBooks) : [];
-  const book = books.find((b) => b.id === pickedId) ?? books.find((b) => b.id === dash?.recentBookId) ?? books[0];
-  // Option+P = 지금 보이는 측정 버튼(REQ-105): 측정 중 「측정 종료」 · 빈 홈 「책 없이 시간만 재기」 · 측정 전 「읽기 시작」
-  const measureButton = !dash || !progress ? null : measuring ? stop : books.length === 0 ? () => start(null, null) : () => start(book.id, book.title);
-  useMeasureShortcut({ button: measureButton, busy, covered: goalOpen });
-  // 위젯 [읽기 시작] · [측정 종료](위젯 확장 REQ-183 · 타이머 오프라인 REQ-370) — 보이는 대시보드로 판정해 같은 버튼을 누른다. 목표 시트가 열려 있어도 누른다(판단 J8)
+  // 박스 — 이른 반환보다 위(아래 단축키 훅이 쓴다)
+  const rest = dash ? homeBox(dash, false) : null; // 측정 전 박스 — null이면 책이 하나도 없다(빈 홈 소개 — F1 §7-2 · §4.6)
+  const box = dash && measuring ? homeBox(dash, true) : rest;
+  // Option+P · 위젯 = 지금 보이는 측정 버튼(REQ-105 · REQ-274): 측정 중 박스 [측정 종료] · 빈 홈 「책 없이 시간만 재기」 · 측정 전 박스 [읽기 시작]
+  const measureButton = !dash || !progress ? null : measuring ? stop : rest === null ? () => start(null, null) : () => start(rest.bookId, rest.title);
+  useMeasureShortcut({ button: measureButton, busy, covered: false }); // 홈엔 시트가 없다(목표 시트는 서재로 — J66)
+  // 위젯 [읽기 시작] · [측정 종료](위젯 확장 REQ-183 · 타이머 오프라인 REQ-370) — 보이는 대시보드로 판정해 같은 버튼을 누른다
   useWidgetIntent({ mode: 'reading', ready: dash !== null, measuring, button: measureButton, onAlreadyStopped: () => setNotice({ message: ALREADY_STOPPED }) });
 
   if (!dash || !progress) {
@@ -121,132 +104,142 @@ export default function Home() {
     );
   }
 
-  const status = goalStatus({ progress, goal: dash.todayGoalSeconds, measuring });
-  const goalLine = (
-    <Pressable
-      accessibilityRole="button"
-      accessibilityLabel={`${status}, 바꾸기`} // 보이는 단서를 이름에도 — 음성 제어가 「바꾸기」로 찾는다
-      accessibilityHint="하루 목표를 바꿔요"
-      onPress={() => setGoalOpen(true)}
-      style={({ pressed }) => [
-        { minHeight: layout.hit, justifyContent: 'center', gap: stacked ? space[1] : space[3] },
-        !stacked && { flexDirection: 'row', alignItems: 'center' },
-        pressed && { backgroundColor: color.pressed },
-      ]}
-    >
-      {/* 줄이 글처럼만 보여 목표 바꾸는 곳을 못 찾았다(2026-10-25 실기기) — 오른쪽 「바꾸기 ›」 단서(질문 띠 꺾쇠와 같은 L1 · muted). 큰 글자면 아래로 쌓는다 */}
-      <Txt v="Q2" style={[{ color: color.text }, !stacked && { flex: 1 }]}>
-        {status}
-      </Txt>
-      <Txt v="L1" style={{ color: color.muted }} accessible={false}>
-        바꾸기 ›
-      </Txt>
-    </Pressable>
-  );
-  const goalSheet = (
-    <Sheet open={goalOpen} onClose={() => setGoalOpen(false)}>
-      <Txt v="H2">하루 목표</Txt>
-      <Txt v="L1" style={{ color: color.text }}>
-        오늘부터 바뀌어요 — 오늘 채웠는지도 새 목표로 봐요
-      </Txt>
-      <View>
-        {goalChoices(dash.todayGoalSeconds).map((c) => (
-          <Row key={c.seconds} title={c.title} meta={c.meta} selected={c.selected} onPress={() => void chooseGoal(c.seconds)} />
-        ))}
-      </View>
-    </Sheet>
-  );
+  const text = boxGoalText({ progress, goal: dash.todayGoalSeconds, measuring });
+  const elapsed = startedAt === null ? null : Math.min(now - startedAt, SESSION_CAP_MS) / 1000;
   const noticeBand = notice ? <Notice message={notice.message} tone={notice.tone} /> : null;
-
-  // ── 측정 중 — 큰 시계는 이 화면에만(§1.4-1) ──────────────────────────────
-  if (measuring && startedAt !== null) {
-    const elapsed = Math.min(now - startedAt, SESSION_CAP_MS) / 1000;
-    return (
-      <Screen>
-        <Txt v="L2" style={{ color: color.muted }}>
-          읽는 중
-        </Txt>
-        {dash.activeBookTitle ? (
-          <Txt v="H2" numberOfLines={2}>
-            {dash.activeBookTitle}
-          </Txt>
-        ) : null}
-        <Txt
-          v="D1"
-          numberOfLines={1}
-          adjustsFontSizeToFit
-          accessibilityLabel={`측정 중, ${durationLabel(elapsed)}`}
-          style={{ fontVariant: ['tabular-nums'], marginVertical: space[4] }}
-        >
-          {clockLabel(elapsed)}
-        </Txt>
-        {goalLine}
-        {noticeBand}
-        <Button kind="ink" label="측정 종료" busy={busy} onPress={() => void stop()} />
-        {goalSheet}
-      </Screen>
-    );
-  }
-
-  // ── 새 계정 빈 홈 — 심사자가 보는 화면(§1.4-4). 타이머 숫자는 없다 ─────────
-  if (books.length === 0) {
-    return (
-      <Screen scroll>
-        <Txt v="D2">읽은 것을 내 글로</Txt>
-        <Txt v="Q1" style={{ color: color.text }}>
-          읽다가 마음에 남은 문장을 여백에 옮겨 두면, AI가 그 여백을 읽고 질문을 건네요. 글은 내가 써요
-        </Txt>
-        <View style={{ gap: space[2], marginVertical: space[2] }}>
-          <Txt v="B2">1 읽는 책을 서재에 담아요</Txt>
-          <Txt v="B2">2 남은 문장을 여백에 옮겨요</Txt>
-          <Txt v="B2">3 질문을 받아 내 글을 써요</Txt>
-        </View>
-        {noticeBand}
-        <Button kind="ink" label="첫 책 담기" onPress={() => router.push('/add')} />
-        <Button kind="outline" label="바코드로 담기" onPress={() => router.push('/add?scan=1')} />
-        <View style={{ height: layout.sectionGap }} />
-        <Button kind="text" label="책 없이 시간만 재기" busy={busy} onPress={() => void start(null, null)} />
-      </Screen>
-    );
-  }
-
-  // ── 측정 전 — 표제는 읽는 책. 홈-안A(2026-10-23 사용자 선택): 쓰기가 검정 알약 · 읽기 시작은 외곽선 ──
-  const others = books.filter((b) => b.id !== book.id);
+  // 한 return — 갈래마다 다른 틀이면 fiber 재사용 함정(T-256). 알림 칸은 하나이고 자리만 둘이다(박스가 있으면 박스 바로 아래 — F1 §4.1-1)
   return (
     <Screen scroll>
-      <Txt v="L1" style={{ color: color.muted }}>
-        {dateLabel(new Date(now))}
-      </Txt>
-      <View style={{ flexDirection: 'row', gap: space[4], alignItems: 'flex-start' }}>
-        <Cover title={book.title} coverUrl={book.coverUrl} size="card" />
-        <View style={{ flex: 1, gap: space[1] }}>
-          <Txt v="H2" numberOfLines={3}>
-            {book.title}
-          </Txt>
-          {book.author ? (
-            <Txt v="L1" style={{ color: color.text }}>
-              {book.author}
-            </Txt>
-          ) : null}
+      {box ? <Box box={box} text={text} elapsed={elapsed} busy={busy} stacked={stacked} onMeasure={() => void measureButton?.()} /> : null}
+      {box ? noticeBand : null}
+      {rest === null ? <Intro /> : null}
+      {box ? null : noticeBand}
+      <Button kind="ink" label="여백에 글쓰기" onPress={() => router.push(noteHref(box?.bookId ?? null))} />
+      {rest === null ? <AddRow stacked={stacked} /> : null}
+      {rest === null && !measuring ? (
+        <>
+          <View style={{ height: layout.sectionGap }} />
+          <Button kind="text" label="책 없이 시간만 재기" busy={busy} onPress={() => void start(null, null)} />
+        </>
+      ) : null}
+      <Blog posts={posts} />
+    </Screen>
+  );
+}
+
+const toLibrary = () => router.navigate('/library');
+
+/**
+ * 홈 맨 위 박스(F1 §4.1 안A — paper2 · 모서리 0 · 안쪽 12 · 사이 16 · 높이 114). 면 전체 = 서재 탭, 안의 단추는 따로.
+ * VoiceOver: 바깥 면은 요소가 아니고 제목 줄(제목 · 작은 글) · 단추 · (측정 중) 시계가 요소다(D7). 단추 둘레 8은 박스 누르기에서 뺀다(빗나간 탭 — hitSlop 금지).
+ */
+function Box(p: { box: HomeBox; text: string; elapsed: number | null; busy: boolean; stacked: boolean; onMeasure: () => void }) {
+  const { box, text, elapsed } = p;
+  return (
+    <Pressable accessible={false} onPress={toLibrary} style={{ backgroundColor: color.paper2 }}>
+      {({ pressed }) => (
+        <View style={[{ flexDirection: 'row', gap: space[4], padding: space[3] }, pressed && { backgroundColor: color.pressed }]}>
+          {box.cover ? <Cover title={box.title} coverUrl={box.coverUrl} size="card" /> : null}
+          <View style={{ flex: 1, minHeight: cover.card.height, justifyContent: 'space-between', gap: space[3] }}>
+            <View
+              accessible
+              accessibilityRole="button"
+              accessibilityLabel={`${box.title}, ${text}`}
+              accessibilityHint="서재를 열어요"
+              onAccessibilityTap={toLibrary}
+              style={{ flexDirection: 'row', alignItems: 'center', gap: space[2] }}
+            >
+              <Txt v="H3" numberOfLines={1} style={{ flex: 1 }}>
+                {box.title}
+              </Txt>
+              <Txt v="L1" style={{ color: color.muted }} accessible={false}>
+                ›
+              </Txt>
+            </View>
+            <View style={p.stacked ? { gap: space[3], alignItems: 'flex-start' } : { flexDirection: 'row', alignItems: 'center', gap: space[3] }}>
+              <View onStartShouldSetResponder={() => true} style={{ padding: space[2], margin: -space[2] }}>
+                <Button kind="outline" label={elapsed === null ? '읽기 시작' : '측정 종료'} busy={p.busy} onPress={p.onMeasure} />
+              </View>
+              {elapsed === null ? (
+                <View style={[{ flexDirection: 'row', flexWrap: 'wrap', columnGap: space[1] }, !p.stacked && { flex: 1 }]}>
+                  {textChunks(text).map((s) => (
+                    <Txt key={s} v="T2" style={{ color: color.muted }} accessible={false}>
+                      {s}
+                    </Txt>
+                  ))}
+                </View>
+              ) : (
+                <View style={p.stacked ? undefined : { flex: 1 }}>
+                  <Txt v="H3" accessibilityLabel={`측정 중, ${durationLabel(elapsed)}`} style={{ fontVariant: ['tabular-nums'] }}>
+                    {clockLabel(elapsed)}
+                  </Txt>
+                  <Txt v="T2" style={{ color: color.muted }} accessible={false}>
+                    {text}
+                  </Txt>
+                </View>
+              )}
+            </View>
+          </View>
         </View>
+      )}
+    </Pressable>
+  );
+}
+
+/** 새 계정 빈 홈 소개(결정 라 안A — F1 §4.1 「새 계정 빈 홈」) */
+function Intro() {
+  return (
+    <>
+      <Txt v="D2">읽은 것을 내 글로</Txt>
+      <Txt v="Q1" style={{ color: color.text }}>
+        {`마음에 남은 문장과 생각을 여백에 적어 두세요. AI가 질문을 건네고, 다듬은 글은 ${SPACE}에 올려요`}
+      </Txt>
+      <View style={{ gap: space[2], marginVertical: space[2] }}>
+        <Txt v="B2">1 읽는 책을 서재에 담아요</Txt>
+        <Txt v="B2">2 남은 문장과 생각을 여백에 적어요</Txt>
+        <Txt v="B2">{`3 다듬은 글을 ${SPACE}에 올려요`}</Txt>
       </View>
-      {goalLine}
-      {noticeBand}
-      <View style={{ gap: space[3] }}>
-        <Button kind="ink" label="여백 남기기" onPress={() => router.push(`/margin/${book.id}`)} />
-        <Button kind="outline" label="읽기 시작" busy={busy} onPress={() => void start(book.id, book.title)} />
+    </>
+  );
+}
+
+/** 빈 홈 담기 입구 — 외곽선 둘 나란히(큰 글자면 세로 — 서재 담기 입구와 같은 꼴) */
+function AddRow({ stacked }: { stacked: boolean }) {
+  return (
+    <View style={{ flexDirection: stacked ? 'column' : 'row', gap: stacked ? space[3] : space[4] }}>
+      <View style={stacked ? undefined : { flex: 1 }}>
+        <Button kind="outline" label="첫 책 담기" onPress={() => router.push('/add')} />
       </View>
-      {others.length > 0 ? (
-        <View style={{ marginTop: space[4] }}>
-          <Txt v="H3" accessibilityRole="header">
-            다른 책
-          </Txt>
-          {others.map((b) => (
-            <Row key={b.id} title={b.title} meta={b.author ?? undefined} accessibilityHint="이 책으로 바꿔요" onPress={() => setPickedId(b.id)} />
+      <View style={stacked ? undefined : { flex: 1 }}>
+        <Button kind="outline" label="바코드로 담기" onPress={() => router.push('/add?scan=1')} />
+      </View>
+    </View>
+  );
+}
+
+/** 블로그 칸(D14 · REQ-273 — F1 §4.1-3). 「더 보기」는 0편 · 못 읽음에도 조건 없이 단다(블로그 페이지가 글쓰기 입구다) */
+function Blog({ posts }: { posts: BlogPostRow[] | null }) {
+  const s = blogSection(posts);
+  return (
+    <View style={{ gap: space[2] }}>
+      <Txt v="H3" accessibilityRole="header">
+        {SPACE}
+      </Txt>
+      {s.rows.length > 0 ? (
+        <View>
+          {s.rows.map((r) => (
+            <Row key={r.id} title={r.title} meta={r.meta} onPress={() => router.push(`/blog/${r.id}`)} />
           ))}
         </View>
       ) : null}
-      {goalSheet}
-    </Screen>
+      {s.empty ? (
+        <Txt v="L1" style={{ color: color.text }}>
+          {s.empty}
+        </Txt>
+      ) : null}
+      <View style={{ alignItems: 'flex-start' }}>
+        <Button kind="text" label="더 보기" onPress={() => router.push('/blog')} />
+      </View>
+    </View>
   );
 }

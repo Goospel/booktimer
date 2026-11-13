@@ -76,6 +76,30 @@ export function goalStatus(p: { progress: GoalProgress; goal: number; measuring:
   return [s.today && `오늘 ${s.today}`, s.goal, s.streak].filter(Boolean).join(' · ');
 }
 
+/** 보이는 대시보드의 오늘 목표 진행 — 홈 · 서재가 같은 입력(REQ-90). 진행 중 몫은 독서 측정 중일 때만 */
+export function progressOf(d: Dashboard, now: number): GoalProgress {
+  const startedAt = d.hasActiveSession && d.activeStartedAt ? Date.parse(d.activeStartedAt) : null;
+  return goalProgress({ todayRead: d.todayReadSeconds, goal: d.todayGoalSeconds, activeStartedAt: startedAt, now, nextMidnight: nextMidnightOf(now), goalStreak: d.graph.goalStreak ?? 0 });
+}
+
+/** 홈 박스 작은 글(REQ-270 · F1 §4.1) — 측정 전 = today · goal 조각(연속 빼고 — 결정 다), 측정 중 = today 조각만(목표를 붙이면 두 줄이 되어 박스가 커진다 — F1 §7-13) */
+export function boxGoalText(p: { progress: GoalProgress; goal: number; measuring: boolean }): string {
+  const s = goalParts(p);
+  return p.measuring ? `오늘 ${s.today}` : [s.today && `오늘 ${s.today}`, s.goal].filter(Boolean).join(' · ');
+}
+
+/** 박스 작은 글을 「 · 」 조각으로 — 화면이 조각마다 따로 그려 줄 넘김 상자에 담는다. iOS는 한 글자 안에선 숫자 · 한글 사이도 끊는다(2026-11-13 기기: 「목표 1시간 / 30분」 → 줄바꿈 없는 칸으로도 「목표 1 / 시간 30분」) */
+export function textChunks(text: string): string[] {
+  const parts = text.split(' · ');
+  return parts.map((s, i) => (i < parts.length - 1 ? `${s} ·` : s));
+}
+
+/** 서재 맨 위 목표 줄(REQ-271 · F1 §4.2-2) — 「하루 목표 30분 · 5일째」. goalParts.goal은 안 읽은 날 이미 「하루 …」라 쓰지 않는다(「하루 하루」) · 연속은 goalParts가 줄 때만(읽은 날 · 측정 중 · 목표 > 0 · 연속 > 0) */
+export function libraryGoalLine(p: { progress: GoalProgress; goal: number; measuring: boolean }): string {
+  const streak = goalParts(p).streak;
+  return `하루 ${p.goal > 0 ? `목표 ${durationLabel(p.goal)}` : NO_GOAL}${streak ? ` · ${streak}` : ''}`;
+}
+
 export interface GoalParts {
   today?: string;
   goal: string;
