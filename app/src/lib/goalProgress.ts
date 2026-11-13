@@ -82,16 +82,29 @@ export function progressOf(d: Dashboard, now: number): GoalProgress {
   return goalProgress({ todayRead: d.todayReadSeconds, goal: d.todayGoalSeconds, activeStartedAt: startedAt, now, nextMidnight: nextMidnightOf(now), goalStreak: d.graph.goalStreak ?? 0 });
 }
 
-/** 홈 박스 작은 글(REQ-270 · F1 §4.1) — 측정 전 = today · goal 조각(연속 빼고 — 결정 다), 측정 중 = today 조각만(목표를 붙이면 두 줄이 되어 박스가 커진다 — F1 §7-13) */
+/**
+ * 홈 박스 작은 글(REQ-270 · 2026-11-13 피그마 187:12225 확정) — 읽은 날 「1시간 12분 / 1시간 30분」, 안 읽은 날 「하루 목표 30분」(0/목표 꼴은 쓰지 않는다 — 10-28),
+ * 목표 없음 「오늘 12분」 · 「오늘 0분」, 측정 중 「오늘 1시간 11분」(목표를 붙이면 재는 동안 박스가 들썩인다 — F1 §7-13 그대로). 연속은 빼고(결정 다). VoiceOver는 boxGoalLabel.
+ */
 export function boxGoalText(p: { progress: GoalProgress; goal: number; measuring: boolean }): string {
   const s = goalParts(p);
-  return p.measuring ? `오늘 ${s.today}` : [s.today && `오늘 ${s.today}`, s.goal].filter(Boolean).join(' · ');
+  if (p.measuring) return `오늘 ${s.today}`;
+  if (p.goal <= 0) return `오늘 ${durationLabel(p.progress.todaySeconds)}`;
+  return s.today ? `${s.today} / ${durationLabel(p.goal)}` : s.goal;
 }
 
-/** 박스 작은 글을 「 · 」 조각으로 — 화면이 조각마다 따로 그려 줄 넘김 상자에 담는다. iOS는 한 글자 안에선 숫자 · 한글 사이도 끊는다(2026-11-13 기기: 「목표 1시간 / 30분」 → 줄바꿈 없는 칸으로도 「목표 1 / 시간 30분」) */
+/** 박스 제목 줄 VoiceOver 라벨 몫 — 「/」를 읽지 않게 「오늘 1시간 12분, 목표 1시간 30분」 · 목표 없음은 화면에서 빠진 「목표 없음」을 계속 읽는다 */
+export function boxGoalLabel(p: { progress: GoalProgress; goal: number; measuring: boolean }): string {
+  const s = goalParts(p);
+  if (p.measuring) return `오늘 ${s.today}`;
+  if (p.goal <= 0) return `오늘 ${durationLabel(p.progress.todaySeconds)}, ${NO_GOAL}`;
+  return s.today ? `오늘 ${s.today}, ${s.goal}` : s.goal;
+}
+
+/** 박스 작은 글을 「 / 」 조각으로 — 화면이 조각마다 따로 그려 줄 넘김 상자에 담는다. iOS는 한 글자 안에선 숫자 · 한글 사이도 끊는다(2026-11-13 기기: 「목표 1 / 시간 30분」) */
 export function textChunks(text: string): string[] {
-  const parts = text.split(' · ');
-  return parts.map((s, i) => (i < parts.length - 1 ? `${s} ·` : s));
+  const parts = text.split(' / ');
+  return parts.map((s, i) => (i < parts.length - 1 ? `${s} /` : s));
 }
 
 /** 서재 맨 위 목표 줄(REQ-271 · F1 §4.2-2) — 「하루 목표 30분 · 5일째」. goalParts.goal은 안 읽은 날 이미 「하루 …」라 쓰지 않는다(「하루 하루」) · 연속은 goalParts가 줄 때만(읽은 날 · 측정 중 · 목표 > 0 · 연속 > 0) */

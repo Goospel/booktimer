@@ -10,7 +10,7 @@ import type { BlogPostRow } from '../../api/types';
 import { Cover } from '../../components/Cover';
 import { Button, Notice, Row, Screen, Txt, useStacked } from '../../components/ui';
 import { clockLabel, durationLabel } from '../../lib/format';
-import { boxGoalText, progressOf, SESSION_CAP_MS, textChunks } from '../../lib/goalProgress';
+import { boxGoalLabel, boxGoalText, progressOf, SESSION_CAP_MS, textChunks } from '../../lib/goalProgress';
 import { blogSection, type HomeBox, homeBox } from '../../lib/home';
 import { noteHref, savedNotice } from '../../lib/marginSave';
 import { ALREADY_STOPPED, startMeasure, stopMeasure } from '../../lib/measureStart';
@@ -104,13 +104,15 @@ export default function Home() {
     );
   }
 
-  const text = boxGoalText({ progress, goal: dash.todayGoalSeconds, measuring });
+  const goalArgs = { progress, goal: dash.todayGoalSeconds, measuring };
+  const text = boxGoalText(goalArgs);
+  const label = boxGoalLabel(goalArgs);
   const elapsed = startedAt === null ? null : Math.min(now - startedAt, SESSION_CAP_MS) / 1000;
   const noticeBand = notice ? <Notice message={notice.message} tone={notice.tone} /> : null;
   // 한 return — 갈래마다 다른 틀이면 fiber 재사용 함정(T-256). 알림 칸은 하나이고 자리만 둘이다(박스가 있으면 박스 바로 아래 — F1 §4.1-1)
   return (
     <Screen scroll>
-      {box ? <Box box={box} text={text} elapsed={elapsed} busy={busy} stacked={stacked} onMeasure={() => void measureButton?.()} /> : null}
+      {box ? <Box box={box} text={text} label={label} elapsed={elapsed} busy={busy} stacked={stacked} onMeasure={() => void measureButton?.()} /> : null}
       {box ? noticeBand : null}
       {rest === null ? <Intro /> : null}
       {box ? null : noticeBand}
@@ -133,7 +135,7 @@ const toLibrary = () => router.navigate('/library');
  * 홈 맨 위 박스(F1 §4.1 안A — paper2 · 모서리 0 · 안쪽 12 · 사이 16 · 높이 114). 면 전체 = 서재 탭, 안의 단추는 따로.
  * VoiceOver: 바깥 면은 요소가 아니고 제목 줄(제목 · 작은 글) · 단추 · (측정 중) 시계가 요소다(D7). 단추 둘레 8은 박스 누르기에서 뺀다(빗나간 탭 — hitSlop 금지).
  */
-function Box(p: { box: HomeBox; text: string; elapsed: number | null; busy: boolean; stacked: boolean; onMeasure: () => void }) {
+function Box(p: { box: HomeBox; text: string; label: string; elapsed: number | null; busy: boolean; stacked: boolean; onMeasure: () => void }) {
   const { box, text, elapsed } = p;
   return (
     <Pressable accessible={false} onPress={toLibrary} style={{ backgroundColor: color.paper2 }}>
@@ -144,7 +146,7 @@ function Box(p: { box: HomeBox; text: string; elapsed: number | null; busy: bool
             <View
               accessible
               accessibilityRole="button"
-              accessibilityLabel={`${box.title}, ${text}`}
+              accessibilityLabel={`${box.title}, ${p.label}`}
               accessibilityHint="서재를 열어요"
               onAccessibilityTap={toLibrary}
               style={{ flexDirection: 'row', alignItems: 'center', gap: space[2] }}
