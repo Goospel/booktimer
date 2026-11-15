@@ -9,6 +9,7 @@
 #   3) 무관한 프롬프트 → 무주입
 #   4) 한글 UTF-8 프롬프트가 깨지지 않고 매칭 (stdin을 [Console]::In으로 읽으면 CP949로 깨져 실패)
 #   5) 출력은 ASCII만 (PowerShell 5.1 한글 stdout 깨짐 회피 — 글로벌 훅 remind-korean.ps1과 같은 이유)
+#   6) REQ-413 · 리마인더가 npm 경유 목 모드를 권하지 않는다(T-264)
 
 HOOK=".claude/hooks/remind-screenshot-on-review.ps1"
 FAILED=0
@@ -62,6 +63,15 @@ if printf '%s' "$out" | LC_ALL=C grep -q '[^ -~]'; then
     FAILED=1
 else
     echo "  PASS: 5) 출력은 ASCII만"
+fi
+
+# 6) REQ-413 · 리마인더가 npm 경유 목 모드 명령을 권하지 않는다(T-264) — 마커가 있어야 판정한다(빈 출력의 거짓 PASS 방지)
+out=$(run "심사 제출")
+if printf '%s' "$out" | grep -qF "$MARKER" && ! printf '%s' "$out" | grep -qF 'run dev:mock'; then
+    echo "  PASS: 6) REQ-413 · 리마인더가 npm 경유 목 모드를 권하지 않는다"
+else
+    echo "  FAIL: 6) REQ-413 · 마커가 없거나 npm 경유 목 모드(run dev:mock)를 권한다 (T-264)"
+    FAILED=1
 fi
 
 if [ $FAILED -eq 0 ]; then echo "ALL PASS"; else echo "SOME FAILED"; fi
