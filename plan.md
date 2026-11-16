@@ -4475,7 +4475,7 @@ package-private static이라 호출이 공짜였고, 복제하면 0초 조각 �
 - ✅ hookify 러너 폴백(결정 3) — 세션 폴더에 `.claude\hookify`가 없으면 편집 파일·cwd 쪽 프로젝트 룰로 폴백한다(사고 세션에서 V98 DROP 경고 2종이 빠졌던 구멍). 러너 테스트 434건
 - ✅ 실러너 E1(머지 전) · 배포(settings.json 런북, `~/.claude`·`.claude-b` 각 1줄, `-Check` exit 0) · E3(배포 뒤 실제 등록): 스크래치 시작 = deny/all-missing · 워크트리 시작 = allow/ok · 러너 폴백 `[hookify:fx-pdg]` 차단. 원장 7/8 + ABANDON U5(데스크톱 `change_directory` 실물 E2는 사용자 세션 필요 — 같은 판정 경로를 사고 기록 env 값과 E1·E3a가 덮는다)
 - ⏸ 조기 경고(UserPromptSubmit·CwdChanged) — **왜 지금 안 하나**: 서브에이전트는 UserPromptSubmit을 안 거치고, `change_directory`가 CwdChanged를 쏘는지 미실측이다. 거부만으로 「무검사 커밋」은 0이 된다. 재개: 막힌 세션이 다시 생겨 재시작 비용이 문제가 될 때
-- ⏸ 1주 뒤 기록 대조(2026-10-19~) — `~/.claude/logs/block-projdir-mismatch.jsonl`을 `Group-Object decision,reason`으로 집계해, `deny`마다 정말 어긋난 세션인지(project ≠ 대상 레포 계열), `new-hook-not-in-session`·`some-missing` 건수와 처방 마찰을 본다
+- ⏸ 1주 뒤 기록 대조(2026-10-19~) — `~/claude-logs/block-projdir-mismatch.jsonl*`을 `Group-Object decision,reason`으로 집계해, `deny`마다 정말 어긋난 세션인지(project ≠ 대상 레포 계열), `new-hook-not-in-session`·`some-missing` 건수와 처방 마찰을 본다
 - **다음 세션 시작점**: 이 절은 완료 — 1주 뒤 기록 대조만 남았다. ⚠️ git 커밋·푸시가 `[block-projdir-mismatch]`로 막히면 우회하지 말고 레포 폴더(또는 그 워크트리)에서 새 세션을 연다. 한계(체크아웃 X에서 시작해 더 새 훅이 있는 체크아웃 Y로 옮긴 세션 · 다른 프로젝트 세션의 히어독 본문 속 커밋 명령 글자 오탐)는 설정 레포 `docs/claude-md-reference.md` 「block-projdir-mismatch.ps1」 절
 
 ### ✅ 운영 users 스키마 수렴 — V98 · User `@DynamicUpdate` (2026-10-12, T-263)

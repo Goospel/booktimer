@@ -79,7 +79,7 @@
 - **어디에**:
   - 계획 md(큰 작업만): 상단 blockquote에 `> 🧭 세션 메타: model=… · effort=…` 한 줄. **여기선 effort도 적는다** — 계획 md를 쓰는 서브에이전트는 자기 effort를 정의 파일 frontmatter(`effort:`)에서 안다.
   - 커밋(모든 세션): trailer에 `Session-Model: …`(`Co-authored-by` 옆). squash 머지 후에도 `main`에 텍스트로 보존된다 — 단 구조 조회(`%(trailers)`)로는 안 잡히니 `git log --grep='Session-Model'`으로 읽는다(T-104).
-- ⚠️ **커밋 trailer에 `Session-Effort`는 적지 않는다 (2026-08-13 폐지)**: 분업 커밋엔 여러 모델·effort가 섞여 한 값을 적으면 틀린 기록이 되고, 서브에이전트 모델은 벨트 로그(`~/.claude/logs/subagent-model.jsonl`)가 자동으로 남긴다. 역할 분담이 남길 가치가 있으면 **PR body에 자연어로**.
+- ⚠️ **커밋 trailer에 `Session-Effort`는 적지 않는다 (2026-08-13 폐지)**: 분업 커밋엔 여러 모델·effort가 섞여 한 값을 적으면 틀린 기록이 되고, 서브에이전트 모델은 벨트 로그(`~/claude-logs/subagent-model.jsonl`)가 자동으로 남긴다. 역할 분담이 남길 가치가 있으면 **PR body에 자연어로**.
 - soft 규칙이라 내가 누락할 수 있다 — 누락이 2회+ 재발하면 hard(훅)로 승격한다(해당 T 파일의 회차 줄).
 
 ### 예외 (계획 생략 가능)
