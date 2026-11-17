@@ -588,7 +588,8 @@ class AppBlogCommentApiTest {
     void bannedBookAttributionPublish() throws Exception {
         String me = ready("cbanbook");
         long banned = bookBoxPost(me, "책 " + SIBAL + " 제목");
-        publishCall(me, banned, 1).andExpect(status().isBadRequest()).andExpect(content().string("이 표현은 올릴 수 없어요"));
+        publishCall(me, banned, 1).andExpect(status().isBadRequest()) // 본문 문구와 갈라 — 사용자가 어느 인용인지 안다(r3)
+                .andExpect(content().string("⟦인용 1⟧ 책 제목 · 저자에 올릴 수 없는 표현이 있어요 — 그 인용을 빼 주세요"));
         assertThat(sentenceRepository.findByPostId(banned)).isEmpty();
         long clean = bookBoxPost(me, "책 제목"); // 양성 대조 — 같은 길에 평범한 제목
         publishCall(me, clean, 1).andExpect(status().isOk());

@@ -11,12 +11,14 @@ import org.junit.jupiter.params.provider.MethodSource;
 import java.io.IOException;
 import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
+import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 import java.util.stream.Stream;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.junit.jupiter.api.Assertions.assertTimeoutPreemptively;
 
 /**
  * 걸러내기(계획 2026-11-16-blog-b2 §6.1 · §6.2 — 순수). 보이지 않는 글자 · 이모지는 코드 포인트로 조립한다 — 소스에 맨 글자로
@@ -160,6 +162,26 @@ class ContentFilterTest {
             assertThat(ContentFilter.violation(text, Kind.POST)).as(text).contains(BANNED);
         }
         assertThat(ContentFilter.violation("Morishita · Oshita · Kinoshita", Kind.COMMENT)).isEmpty(); // 대조 — 모음 + shita
+    }
+
+    @Test
+    @DisplayName("REQ-251 · 성씨 예외(모음 + shita)는 단어 끝에서만 — 뒤에 글자가 붙은 우회(youshitass · Oshitass)는 막힘")
+    void surnameExceptionOnlyAtWordEnd() {
+        for (String text : List.of("shitass", "shita", "shit a", "you shitass", "youshitass", "Oshitass", "yamashitass")) {
+            assertThat(ContentFilter.violation(text, Kind.COMMENT)).as(text).contains(BANNED);
+        }
+        for (String text : List.of("Yamashita", "Kinoshita Tatsuro", "Matsushita, Morishita.", "oshita")) {
+            assertThat(ContentFilter.violation(text, Kind.COMMENT)).as(text).isEmpty(); // 대조 — 성씨는 그대로
+        }
+    }
+
+    @Test
+    @DisplayName("REQ-251 · 예외 단어로 봐주는 자리가 많은 긴 글(약 11만 자)도 3초 안에 판정 — 글 끝까지 다시 훑지 않는다(r3)")
+    void manyExcusedSpotsStayLinear() {
+        assertTimeoutPreemptively(Duration.ofSeconds(3), () -> {
+            assertThat(ContentFilter.violation("제목\n" + "oshita ".repeat(15_000) + "\nbitch", Kind.POST)).contains(BANNED);
+            assertThat(ContentFilter.violation("제목\n" + "oshita".repeat(18_000) + "\nbitch", Kind.POST)).contains(BANNED);
+        });
     }
 
     static Stream<Arguments> nfkcBypasses() {

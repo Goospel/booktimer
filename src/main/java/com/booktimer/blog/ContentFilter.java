@@ -62,9 +62,9 @@ public final class ContentFilter {
      * 예외 단어 — 금지어를 품은 멀쩡한 낱말. 금지어 자리가 예외 단어 하나 안에 통째로 들 때만 봐준다(옆 금지어 글자를 먹지 않게 —
      * 「전염병」+「신」은 막힌다). 거짓 양성 시험이 빨개질 때만 더한다. 맞바꿈: 띄지 않은 「감염병신고서」는 막힌다.
      */
-    private static final List<String> EXCEPTIONS = folded(List.of("시발점", "시발역", "감염병", "전염병",
-            // 일본 성씨 로마자(Yamashita · Morishita · Matsushita · Kinoshita) — 모음 + shita만(shitass · bullshita는 막힌다)
-            "ashita", "ishita", "ushita", "eshita", "oshita"));
+    private static final List<String> EXCEPTIONS = folded(List.of("시발점", "시발역", "감염병", "전염병"));
+    /** 일본 성씨 로마자 꼬리(Yamashita · Morishita · Matsushita · Kinoshita) — 모음 + shita가 단어 끝일 때만(shitass · youshitass는 막힌다). */
+    private static final List<String> SURNAME_ENDINGS = folded(List.of("ashita", "ishita", "ushita", "eshita", "oshita"));
 
     private ContentFilter() {
     }
@@ -168,11 +168,18 @@ public final class ContentFilter {
         return false;
     }
 
-    /** 금지어 자리 [from, to)를 통째로 덮는 예외 단어가 있나 — 덮는 자리 j는 to - 길이 ≤ j ≤ from이고, 그중 가장 앞을 찾으면 된다. */
+    /** 금지어 자리 [from, to)를 통째로 덮는 예외 단어가 있나. */
     private static boolean excused(String t, int from, int to) {
-        for (String e : EXCEPTIONS) {
-            int j = t.indexOf(e, Math.max(0, to - e.length()));
-            if (j >= 0 && j <= from) return true;
+        return covers(t, from, to, EXCEPTIONS, false) || covers(t, from, to, SURNAME_ENDINGS, true);
+    }
+
+    /** 덮을 수 있는 자리 j(to - 길이 ≤ j ≤ from)만 본다 — 글 끝까지 다시 훑으면 봐주는 자리가 많은 긴 글에서 O(n²)이다(r3). */
+    private static boolean covers(String t, int from, int to, List<String> words, boolean atWordEnd) {
+        for (String e : words) {
+            for (int j = Math.max(0, to - e.length()); j <= from; j++) {
+                int end = j + e.length();
+                if (t.startsWith(e, j) && (!atWordEnd || end == t.length() || t.charAt(end) == ' ')) return true;
+            }
         }
         return false;
     }

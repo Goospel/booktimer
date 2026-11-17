@@ -108,6 +108,26 @@ class OAuthUserProvisioningServiceTest {
     }
 
     @Test
+    @DisplayName("REQ-265 · provision: 표시 이름이 이름 규칙에 걸리면 가입은 그대로 — 이메일 local part, 그것도 걸리면 「독자」")
+    void provision_ruleBreakingName_fallsBackAndStillRegisters() {
+        when(userRepository.findByEmail(any())).thenReturn(Optional.empty());
+        when(registrationService.registerOAuth(any(), any(), any(), any(), any()))
+                .thenAnswer(inv -> registered.updateAndGet(ignored -> User.ofOAuth(inv.getArgument(0), inv.getArgument(1),
+                        inv.getArgument(2), Role.USER, inv.getArgument(3))));
+        when(userRepository.findById(any())).thenAnswer(inv -> Optional.of(registered.get()));
+
+        String zwsp = String.valueOf((char) 0x200B);
+        assertThat(service.provision("g-1", "reader@booktimer.com", null, "가" + zwsp + "나", true).getNickname())
+                .isEqualTo("reader");
+        assertThat(service.provision("g-2", "shitlord@booktimer.com", null, "씨발놈", true).getNickname())
+                .isEqualTo("독자");
+        assertThat(service.provision("g-3", "longname@booktimer.com", null, "가".repeat(31), true).getNickname())
+                .isEqualTo("longname"); // 30자 초과도 대체값
+        assertThat(service.provision("g-4", "plain@booktimer.com", null, " 구글러 ", true).getNickname())
+                .isEqualTo("구글러"); // 대조 — 멀쩡한 이름은 그대로
+    }
+
+    @Test
     @DisplayName("provision: 표시 이름이 이미 쓰여도 그대로 닉네임으로 쓴다 (nickname 중복 허용 — 자동 유일화 없음)")
     void provision_duplicateDisplayName_usedAsIs() {
         when(userRepository.findByEmail("dupname@booktimer.com")).thenReturn(Optional.empty());

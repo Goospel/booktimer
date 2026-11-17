@@ -302,9 +302,7 @@ public class User extends BaseTimeEntity {
         if (authProvider == AuthProvider.LOCAL && (passwordHash == null || passwordHash.isBlank())) {
             throw new IllegalArgumentException("passwordHash must not be blank for LOCAL account");
         }
-        if (nickname == null || nickname.isBlank()) {
-            throw new IllegalArgumentException("nickname must not be blank");
-        }
+        String n = checkNickname(nickname); // 가입도 이름 규칙 한 곳을 지난다(B2a REQ-265)
         if (timezone == null || timezone.isBlank()) {
             throw new IllegalArgumentException("timezone must not be blank");
         }
@@ -318,7 +316,7 @@ public class User extends BaseTimeEntity {
         }
         this.email = email;
         this.passwordHash = passwordHash;
-        this.nickname = nickname;
+        this.nickname = n;
         this.timezone = timezone;
         this.role = role;
         this.authProvider = authProvider;
@@ -353,6 +351,38 @@ public class User extends BaseTimeEntity {
         return new User(email, null, nickname, timezone, role, provider);
     }
 
+    /** 이름 규칙을 지나는가 — 제공자 이름을 그대로 쓸지 대체값으로 바꿀지 가르는 OAuth 가입용(가입이 이름 때문에 실패하지 않게). */
+    public static boolean isAcceptableNickname(String nickname) {
+        try {
+            checkNickname(nickname);
+            return true;
+        } catch (IllegalArgumentException e) {
+            return false;
+        }
+    }
+
+    /**
+     * 이름 규칙 한 곳(B2a REQ-265) — 가입(생성자)과 {@link #updateProfile}이 함께 쓴다. 앞뒤 공백 · NBSP를 걷은 이름을 돌려준다.
+     *
+     * @throws IllegalArgumentException 공백 · {@value #NICKNAME_MAX_LENGTH}자 초과
+     * @throws InvalidNicknameException 보이지 않는 글자 · 링크 · 금지어({@link ContentFilter} NAME — NBSP뿐인 이름 포함)
+     */
+    private static String checkNickname(String nickname) {
+        if (nickname == null || nickname.isBlank()) {
+            throw new IllegalArgumentException("nickname must not be blank");
+        }
+        String n = ContentFilter.strip(nickname);
+        if (n.length() > NICKNAME_MAX_LENGTH) {
+            throw new IllegalArgumentException(
+                    "nickname must be at most " + NICKNAME_MAX_LENGTH + " chars");
+        }
+        Optional<String> violation = ContentFilter.violation(n, ContentFilter.Kind.NAME);
+        if (violation.isPresent()) {
+            throw new InvalidNicknameException(violation.get());
+        }
+        return n;
+    }
+
     /**
      * 사용자가 변경 가능한 프로필 속성(닉네임, 타임존)을 갱신한다.
      * 식별/인증 속성(email, passwordHash, role)은 여기서 바꾸지 않는다.
@@ -366,18 +396,7 @@ public class User extends BaseTimeEntity {
      * @throws InvalidNicknameException 이름 규칙 위반(NBSP뿐인 이름 포함 — 문구가 사용자 안내)
      */
     public void updateProfile(String nickname, String timezone) {
-        if (nickname == null || nickname.isBlank()) {
-            throw new IllegalArgumentException("nickname must not be blank");
-        }
-        String n = ContentFilter.strip(nickname);
-        if (n.length() > NICKNAME_MAX_LENGTH) {
-            throw new IllegalArgumentException(
-                    "nickname must be at most " + NICKNAME_MAX_LENGTH + " chars");
-        }
-        Optional<String> violation = ContentFilter.violation(n, ContentFilter.Kind.NAME);
-        if (violation.isPresent()) {
-            throw new InvalidNicknameException(violation.get());
-        }
+        String n = checkNickname(nickname);
         if (timezone == null || timezone.isBlank()) {
             throw new IllegalArgumentException("timezone must not be blank");
         }
