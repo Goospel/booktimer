@@ -24,7 +24,9 @@ import org.springframework.web.server.ResponseStatusException;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.format.DateTimeParseException;
+import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -145,10 +147,33 @@ public class BlogPostService {
 
     @Transactional(readOnly = true)
     public List<MyPostRow> mine(User user) {
+        Map<Long, Integer> fresh = new HashMap<>();
+        for (Object[] r : commentRepository.newCounts(user)) {
+            fresh.put((Long) r[0], ((Number) r[1]).intValue());
+        }
         return postRepository.findTop200ByUserOrderByUpdatedAtDescIdDesc(user).stream()
                 .map(p -> new MyPostRow(p.getId(), p.getTitle(), p.getDraftTitle(), p.getPublishedAt(),
-                        p.getRepublishedAt(), p.getUpdatedAt()))
+                        p.getRepublishedAt(), p.getUpdatedAt(), fresh.getOrDefault(p.getId(), 0)))
                 .toList();
+    }
+
+    /** 새 댓글 확인(REQ-298) — 내 글만(404). 허용 목록과 무관 · 일괄 UPDATE라 updatedAt이 바뀌지 않는다({@link BlogPostRepository#markSeen}). */
+    public void seen(User user, long id) {
+        if (postRepository.markSeen(id, user, clock.instant().truncatedTo(ChronoUnit.MICROS)) == 0) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, NOT_FOUND);
+        }
+    }
+
+    /**
+     * 예전 판 지우기(REQ-258 · Q10) — 내 글의 산 문장만(남 · 지운 · 합친 · 없는 sid 404). 지금 판 행 · 문장의 rev는 그대로라
+     * 「고쳐짐」은 남는다. 허용 목록과 무관(내 데이터 지우기). 잠그지 않는다 — 다른 기기 올리기와 겹치면 판 하나가 남을 수 있다(드묾).
+     */
+    public void deleteRevs(User user, String sid) {
+        BlogSentence sentence = (Sid.valid(sid) ? sentenceRepository.findBySid(sid) : Optional.<BlogSentence>empty())
+                .filter(BlogSentence::live)
+                .filter(x -> isOwner(user, x.getPost()))
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "문장을 찾을 수 없어요"));
+        revRepository.deleteOlder(sentence, sentence.getRev());
     }
 
     /** 글 하나 — {@code s}는 한 문장 주소(§6.4 — 이 글의 문장이 아니거나 꼴이 틀리면 강조 없음). */
@@ -182,6 +207,10 @@ public class BlogPostService {
     PostView view(User viewer, BlogPost post, String s) {
         boolean mine = isOwner(viewer, post);
         PostSentences sentences = new PostSentences(Layout.parse(post.getLayoutJson()), sentenceRepository.findByPostId(post.getId()));
+        Map<String, Integer> comments = new HashMap<>(); // 문장 뒤 수 — 각 sid의 수를 그 묶음의 끝에 더한다(§6.3 · REQ-266)
+        for (Object[] r : commentRepository.countBySid(post.getId())) {
+            comments.merge(sentences.end((String) r[0]), ((Number) r[1]).intValue(), Integer::sum);
+        }
         List<QuoteBoxView> quotes = quoteBoxService.views(QuoteBox.Owner.POST, post.getId(), viewer);
         Map<Integer, QuoteBoxView> byLabel = quotes.stream().collect(Collectors.toMap(QuoteBoxView::label, v -> v));
         List<Block> blocks = new ArrayList<>();
@@ -196,7 +225,8 @@ public class BlogPostService {
                 for (int i = 0; i < line.size(); i++) {
                     BlogSentence row = sentences.get(line.get(i)).orElseThrow();
                     boolean br = i == line.size() - 1 && l < item.p().size() - 1;
-                    views.add(new SentenceView(row.getSid(), row.getText(), row.getRev() > 1, br));
+                    views.add(new SentenceView(row.getSid(), row.getText(), row.getRev() > 1, br,
+                            comments.getOrDefault(row.getSid(), 0)));
                 }
             }
             blocks.add(new Block("P", views, null));

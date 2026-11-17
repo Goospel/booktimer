@@ -232,6 +232,22 @@ class SettingsControllerTest {
     }
 
     @Test
+    @DisplayName("REQ-265 · 웹 설정 닉네임에 보이지 않는 글자 → 필드 오류로 다시 그림(500 아님) · 닉네임 그대로")
+    void postSettings_invisibleNickname_rerenders() throws Exception {
+        register("zwspnick@booktimer.com");
+        String before = userRepository.findByEmail("zwspnick@booktimer.com").orElseThrow().getNickname();
+
+        mockMvc.perform(post("/settings").with(user("zwspnick@booktimer.com")).with(csrf())
+                        .param("nickname", "가" + (char) 0x200B + "나")
+                        .param("timezone", "Asia/Seoul")
+                        .param("incrementMinutes", "60"))
+                .andExpect(status().isOk())
+                .andExpect(view().name("settings"))
+                .andExpect(model().attributeHasFieldErrors("settingsForm", "nickname"));
+        assertThat(userRepository.findByEmail("zwspnick@booktimer.com").orElseThrow().getNickname()).isEqualTo(before);
+    }
+
+    @Test
     @DisplayName("POST /settings: 하루 목표 분이 음수면 필드 에러로 화면을 다시 그린다")
     void postSettings_negativeMinutes_rerenders() throws Exception {
         register("neg@booktimer.com");

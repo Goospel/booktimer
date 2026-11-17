@@ -1,6 +1,8 @@
 package com.booktimer.blog;
 
 import com.booktimer.blog.BlogViews.PostView;
+import com.booktimer.security.RateLimitAction;
+import com.booktimer.security.RateLimitService;
 import com.booktimer.user.User;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
@@ -34,11 +36,13 @@ public class BlogPublishService {
     private final BlogSentenceRevRepository revRepository;
     private final BlogPostService postService;
     private final QuoteBoxRepository quoteBoxRepository;
+    private final RateLimitService rateLimitService;
     private final Clock clock;
 
     public BlogPublishService(BlogAccess access, BlogIdentityService identity, BlogPostRepository postRepository,
                               BlogSentenceRepository sentenceRepository, BlogSentenceRevRepository revRepository,
-                              BlogPostService postService, QuoteBoxRepository quoteBoxRepository, Clock clock) {
+                              BlogPostService postService, QuoteBoxRepository quoteBoxRepository,
+                              RateLimitService rateLimitService, Clock clock) {
         this.access = access;
         this.identity = identity;
         this.postRepository = postRepository;
@@ -46,6 +50,7 @@ public class BlogPublishService {
         this.revRepository = revRepository;
         this.postService = postService;
         this.quoteBoxRepository = quoteBoxRepository;
+        this.rateLimitService = rateLimitService;
         this.clock = clock;
     }
 
@@ -58,7 +63,7 @@ public class BlogPublishService {
             throw new ResponseStatusException(HttpStatus.CONFLICT, BlogPostService.STALE);
         }
         String title = post.getDraftTitle() == null ? "" : SentenceSplitter.strip(post.getDraftTitle()); // 5.
-        if (title.isEmpty()) {
+        if (!ContentFilter.hasVisible(title)) { // 보이지 않는 글자뿐인 제목도 빈 제목(B2a)
             throw new IllegalArgumentException("제목을 적어 주세요");
         }
         // 5. 표시 줄 → 박스: 문장 하나뿐인 줄이 통째로 ⟦인용 N⟧이고 그 label의 박스가 있고 처음 쓰는 번호면 Q 항목 —
@@ -91,12 +96,23 @@ public class BlogPublishService {
         if (texts.size() + used.size() > LAYOUT_MAX) { // 배치 항목 = 문장 + 박스
             throw new IllegalArgumentException("문장이 너무 많아요 — 1,500개까지 올릴 수 있어요");
         }
+        // 6b. 걸러내기(B2a REQ-251) — 제목 + 문장 + 이번 배치에 쓰는 박스 글을 한 글로
+        StringBuilder whole = new StringBuilder(title);
+        texts.forEach(t -> whole.append("\n").append(t));
+        boxes.stream().filter(q -> used.contains(q.getLabel())).forEach(q -> whole.append("\n").append(q.getText()));
+        ContentFilter.violation(whole.toString(), ContentFilter.Kind.POST).ifPresent(m -> {
+            throw new IllegalArgumentException(m);
+        });
 
         // 7. 옛 문장 = 지금 배치의 산 문장
         PostSentences current = new PostSentences(Layout.parse(post.getLayoutJson()), sentenceRepository.findByPostId(id));
         List<SentenceAligner.Old> old = current.live().stream()
                 .map(s -> new SentenceAligner.Old(s.getSid(), s.getText())).toList();
         SentenceAligner.Alignment a = SentenceAligner.align(old, texts);
+        // 7b. 하루 상한(B2a REQ-256) — 검사를 다 지난 뒤 · 쓰기 직전(409 · 400으로 막힌 시도는 세지 않는다)
+        if (!rateLimitService.allow(RateLimitAction.BLOG_PUBLISH, user.getId())) {
+            throw new ResponseStatusException(HttpStatus.TOO_MANY_REQUESTS, "오늘은 글을 너무 많이 올렸어요 — 내일 다시 올려 주세요");
+        }
 
         // 8. 적용
         Instant now = clock.instant().truncatedTo(ChronoUnit.MICROS); // MySQL datetime(6)은 반올림한다 — 커서 같음 비교가 어긋나지 않게

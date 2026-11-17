@@ -91,6 +91,18 @@ class MiniappNicknameApiControllerTest {
     }
 
     @Test
+    @DisplayName("REQ-265 · 미니앱 닉네임 보이지 않는 글자 400")
+    void updateNickname_invisible_400() throws Exception {
+        User me = tossUser("miniapp-nickname-zwsp@noreply.booktimer.app");
+        String token = apiTokenService.issue(me);
+
+        for (String bad : new String[]{"가" + (char) 0x200B + "나", (char) 0x202E + "독자", "가\\n나"}) { // JSON 이스케이프 — 몸은 올바른 JSON이어야 이름 규칙이 잰다
+            updateNickname(token, bad).andExpect(status().isBadRequest());
+        }
+        assertThat(userRepository.findById(me.getId()).orElseThrow().getNickname()).isEqualTo("토스유저");
+    }
+
+    @Test
     @DisplayName("길이 상한 경계 — 30자는 저장되고 31자는 400(도메인 단일 출처를 그대로 탄다)")
     void updateNickname_lengthBoundary() throws Exception {
         User me = tossUser("miniapp-nickname-length@noreply.booktimer.app");

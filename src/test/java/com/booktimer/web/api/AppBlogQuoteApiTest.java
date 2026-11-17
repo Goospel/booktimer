@@ -441,6 +441,36 @@ class AppBlogQuoteApiTest {
     }
 
     @Test
+    @DisplayName("REQ-267 · 원 글 배치가 깨져도 그 글을 인용한 남의 글 보기 200 · 박스 글 그대로 · 판정 없음")
+    void brokenSourceDoesNotBreakQuotingPost() throws Exception {
+        String a = ready("q267a");
+        String b = ready("q267b");
+        String c = ready("q267c");
+        long src = published(a, "원 글", "봄에는 꽃이 핀다.");
+        List<String> s = sidsOf(a, src);
+        long mine = create(b, "내 글", "내 문장.");
+        box(b, mine, blog(src, s.get(0), s.get(0)));
+        place(b, mine, "내 문장.\n⟦인용 1⟧");
+        assertThat(firstQuote(read(c, mine, null)).get("sourceLink")).isNotNull(); // 양성 대조 — 깨지기 전엔 판정이 있다
+        sql("update blog_post set layout_json = ? where id = ?", "{broken", src);
+
+        Map<String, Object> q = firstQuote(read(c, mine, null));
+        assertThat(q.get("text")).isEqualTo("봄에는 꽃이 핀다.");
+        assertThat(q.get("sourceLink")).isNull();
+        assertThat(q.get("sourceDeleted")).isNull();
+        assertThat(q.get("updatable")).isNull();
+        assertThat(q.get("attribution")).isEqualTo("닉_q267a · 「원 글」");
+        // 양성 대조 — 깨진 글 자신의 보기는 덮지 않는다(5xx)
+        int status;
+        try {
+            status = call(get("/api/app/blog/posts/" + src), c).andReturn().getResponse().getStatus();
+        } catch (Exception e) {
+            status = 500; // 처리기 없는 예외가 MockMvc 밖으로 나왔다 = 서버 오류
+        }
+        assertThat(status).isGreaterThanOrEqualTo(500);
+    }
+
+    @Test
     @DisplayName("REQ-238 · 여백 박스는 남에게 updatable 없음")
     void marginBoxHidesUpdatableFromOthers() throws Exception {
         String b = ready("q238m");
