@@ -306,6 +306,25 @@ class AppBlogCommentApiTest {
                 .extracting(x -> ((Number) x.get("id")).longValue()).containsExactly(c);
     }
 
+    @Test
+    @DisplayName("REQ-250 · 댓글 300개 넘는 문장 — 최근 300개 · 오래된 순")
+    void sheetKeepsLatest300() throws Exception {
+        String me = ready("c300");
+        long id = published(me, "제목", "한 문장이다.");
+        String sid = sidsOf(me, id).get(0);
+        com.booktimer.blog.BlogPost post = em.find(com.booktimer.blog.BlogPost.class, id);
+        User author = user("c300");
+        for (int i = 0; i < 301; i++) { // 상한(20/시간)을 비켜 저장소로 직접 — 시트 자르기만 잰다
+            commentRepository.save(com.booktimer.blog.BlogComment.of(post, sid, author, "댓글 " + i));
+        }
+        commentRepository.flush();
+
+        List<Map<String, Object>> rows = sheet(me, id, sid);
+        assertThat(rows).hasSize(300);
+        assertThat(rows.get(0).get("body")).isEqualTo("댓글 1"); // 가장 오래된 「댓글 0」이 빠진다
+        assertThat(rows.get(299).get("body")).isEqualTo("댓글 300");
+    }
+
     // ── REQ-246 · 259 첫 설정 ───────────────────────────────────────────────
 
     @Test
