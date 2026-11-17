@@ -110,7 +110,7 @@ public final class ContentFilter {
 
     private static boolean visible(int cp) {
         int t = Character.getType(cp);
-        return !SentenceSplitter.space(cp) && !BLANK_LOOKING.contains(cp)
+        return !SentenceSplitter.space(cp) && !BLANK_LOOKING.contains(cp) && t != Character.SPACE_SEPARATOR
                 && t != Character.NON_SPACING_MARK && t != Character.ENCLOSING_MARK && t != Character.FORMAT
                 && t != Character.CONTROL && t != Character.LINE_SEPARATOR && t != Character.PARAGRAPH_SEPARATOR;
     }
@@ -180,7 +180,9 @@ public final class ContentFilter {
         for (String e : words) {
             for (int j = Math.max(0, to - e.length()); j <= from; j++) {
                 int end = j + e.length();
-                if (t.startsWith(e, j) && (!atWordEnd || end == t.length() || t.charAt(end) == ' ')) return true;
+                // 단어 끝 = 다음 글자가 로마자 소문자가 아님 — 「Yamashita의」처럼 한글 조사는 붙어도 성씨로 본다(r5)
+                if (t.startsWith(e, j) && (!atWordEnd || end == t.length()
+                        || t.charAt(end) < 'a' || t.charAt(end) > 'z')) return true;
             }
         }
         return false;

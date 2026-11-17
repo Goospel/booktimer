@@ -170,17 +170,30 @@ class ContentFilterTest {
         for (String text : List.of("shitass", "shita", "shit a", "you shitass", "youshitass", "Oshitass", "yamashitass")) {
             assertThat(ContentFilter.violation(text, Kind.COMMENT)).as(text).contains(BANNED);
         }
-        for (String text : List.of("Yamashita", "Kinoshita Tatsuro", "Matsushita, Morishita.", "oshita")) {
-            assertThat(ContentFilter.violation(text, Kind.COMMENT)).as(text).isEmpty(); // 대조 — 성씨는 그대로
+        for (String text : List.of("Yamashita", "Kinoshita Tatsuro", "Matsushita, Morishita.", "oshita",
+                "Yamashita의 책", "Kinoshita님")) {
+            assertThat(ContentFilter.violation(text, Kind.COMMENT)).as(text).isEmpty(); // 대조 — 성씨는 그대로(한글 조사가 붙어도)
         }
+        assertThat(ContentFilter.violation("shita야", Kind.COMMENT)).contains(BANNED); // 성씨 몸통이 없으면 조사가 붙어도 막힘
+    }
+
+    @Test
+    @DisplayName("REQ-265 · 공백류 글자(U+2007 · U+202F)만 있는 이름은 보이지 않는 이름이다(r5)")
+    void spaceSeparatorOnlyNames() {
+        for (String name : List.of(" ", " ", "  ")) {
+            assertThat(ContentFilter.violation(name, Kind.NAME)).as(name).contains(INVISIBLE);
+        }
+        assertThat(ContentFilter.violation("책 읽는 독자", Kind.NAME)).isEmpty(); // 대조 — 이름 안의 보통 공백은 허용
     }
 
     @Test
     @DisplayName("REQ-251 · 예외 단어로 봐주는 자리가 많은 긴 글(약 11만 자)도 3초 안에 판정 — 글 끝까지 다시 훑지 않는다(r3)")
     void manyExcusedSpotsStayLinear() {
+        // 띄어 쓴 성씨만 느린 길을 탄다(붙여 쓰면 첫 자리에서 막힌다) — 5번 반복해 O(n²)이면 3초를 넘게(r5 실측 여유 약 45배)
         assertTimeoutPreemptively(Duration.ofSeconds(3), () -> {
-            assertThat(ContentFilter.violation("제목\n" + "oshita ".repeat(15_000) + "\nbitch", Kind.POST)).contains(BANNED);
-            assertThat(ContentFilter.violation("제목\n" + "oshita".repeat(18_000) + "\nbitch", Kind.POST)).contains(BANNED);
+            for (int k = 0; k < 5; k++) {
+                assertThat(ContentFilter.violation("제목\n" + "oshita ".repeat(15_000) + "\nbitch", Kind.POST)).contains(BANNED);
+            }
         });
     }
 
