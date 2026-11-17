@@ -21,6 +21,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
 
+import java.time.Clock;
 import java.time.Instant;
 import java.time.format.DateTimeParseException;
 import java.util.ArrayList;
@@ -54,11 +55,13 @@ public class BlogPostService {
     private final RateLimitService rateLimitService;
     private final QuoteBoxService quoteBoxService;
     private final QuoteBoxRepository quoteBoxRepository;
+    private final BlogCommentRepository commentRepository;
+    private final Clock clock;
 
     public BlogPostService(BlogPostRepository postRepository, BlogSentenceRepository sentenceRepository,
                            BlogSentenceRevRepository revRepository, BlogAccess access, BlockService blockService,
                            RateLimitService rateLimitService, QuoteBoxService quoteBoxService,
-                           QuoteBoxRepository quoteBoxRepository) {
+                           QuoteBoxRepository quoteBoxRepository, BlogCommentRepository commentRepository, Clock clock) {
         this.postRepository = postRepository;
         this.sentenceRepository = sentenceRepository;
         this.revRepository = revRepository;
@@ -67,6 +70,8 @@ public class BlogPostService {
         this.rateLimitService = rateLimitService;
         this.quoteBoxService = quoteBoxService;
         this.quoteBoxRepository = quoteBoxRepository;
+        this.commentRepository = commentRepository;
+        this.clock = clock;
     }
 
     // ── 쓰기 ─────────────────────────────────────────────────────────────────
@@ -99,6 +104,7 @@ public class BlogPostService {
         BlogPost post = postRepository.findForUpdate(id, user)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, NOT_FOUND));
         quoteBoxRepository.deleteByOwner(QuoteBox.Owner.POST, id); // 이 글이 가진 박스(FK 없음 — 안 지우면 고아) · 남의 박스는 그대로
+        commentRepository.deleteByPost(post);      // blog_comment.post_id FK — 글보다 앞(REQ-243 · B2a)
         revRepository.deleteBySentencePost(post);  // blog_sentence_rev.sentence_id FK — 문장보다 앞
         sentenceRepository.deleteByPost(post);     // blog_sentence.post_id FK — 글보다 앞
         postRepository.delete(post);

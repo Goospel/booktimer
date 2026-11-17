@@ -4,6 +4,7 @@ import com.booktimer.auth.ApiTokenRepository;
 import com.booktimer.blog.BlogPostRepository;
 import com.booktimer.blog.BlogSentenceRepository;
 import com.booktimer.blog.BlogSentenceRevRepository;
+import com.booktimer.blog.BlogCommentRepository;
 import com.booktimer.blog.QuoteBoxRepository;
 import com.booktimer.block.BlockRepository;
 import com.booktimer.chat.ChatMessageRepository;
@@ -80,6 +81,7 @@ public class AccountService {
     private final BlogSentenceRepository blogSentenceRepository;
     private final BlogSentenceRevRepository blogSentenceRevRepository;
     private final QuoteBoxRepository quoteBoxRepository;
+    private final BlogCommentRepository blogCommentRepository;
     private final SessionInvalidator sessionInvalidator;
     private final PasswordEncoder passwordEncoder;
     private final GoogleAccountResolver googleAccountResolver;
@@ -115,6 +117,7 @@ public class AccountService {
                           BlogSentenceRepository blogSentenceRepository,
                           BlogSentenceRevRepository blogSentenceRevRepository,
                           QuoteBoxRepository quoteBoxRepository,
+                          BlogCommentRepository blogCommentRepository,
                           SessionInvalidator sessionInvalidator,
                           PasswordEncoder passwordEncoder,
                           GoogleAccountResolver googleAccountResolver) {
@@ -149,6 +152,7 @@ public class AccountService {
         this.blogSentenceRepository = blogSentenceRepository;
         this.blogSentenceRevRepository = blogSentenceRevRepository;
         this.quoteBoxRepository = quoteBoxRepository;
+        this.blogCommentRepository = blogCommentRepository;
         this.sessionInvalidator = sessionInvalidator;
         this.passwordEncoder = passwordEncoder;
         this.googleAccountResolver = googleAccountResolver;
@@ -438,6 +442,8 @@ public class AccountService {
         // 인용 박스(FK 없음 — 안 지우면 고아): 내 글 · 내 쪽지가 가진 것. 하위 질의가 주인을 찾게 글 · 쪽지보다 앞이다(REQ-204)
         quoteBoxRepository.deleteOwnedBy(user);
         quoteBoxRepository.detachSourceUser(user.getId()); // 남의 박스의 원 글쓴이 참조 → 「탈퇴한 사용자」(REQ-209)
+        blogCommentRepository.deleteByUser(user);      // 내가 단 댓글 — 남의 글에 단 것 포함(blog_comment.user_id FK · REQ-257)
+        blogCommentRepository.deleteByPostUser(user);  // 내 글에 달린 남의 댓글 — blog_comment.post_id FK라 글보다 앞
         blogSentenceRevRepository.deleteBySentencePostUser(user); // blog_post.user_id FK — 유저보다 앞 · 문장 · 판이 글보다 앞
         blogSentenceRepository.deleteByPostUser(user);
         blogPostRepository.deleteByUser(user);

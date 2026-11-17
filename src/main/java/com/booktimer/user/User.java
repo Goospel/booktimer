@@ -1,5 +1,6 @@
 package com.booktimer.user;
 
+import com.booktimer.blog.ContentFilter;
 import com.booktimer.common.BaseTimeEntity;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
@@ -15,6 +16,7 @@ import org.hibernate.annotations.DynamicUpdate;
 import java.time.DateTimeException;
 import java.time.ZoneId;
 import java.util.Locale;
+import java.util.Optional;
 import java.util.Set;
 import java.util.regex.Pattern;
 
@@ -357,15 +359,24 @@ public class User extends BaseTimeEntity {
      *
      * @param nickname 새 표시 닉네임(공백 불가, {@value #NICKNAME_MAX_LENGTH}자 이내)
      * @param timezone 새 IANA 타임존 ID(예: "Asia/Seoul")
+     * <p>닉네임을 바꾸는 길(블로그 첫 설정 · 웹 설정 · 웹 온보딩 · 미니앱)이 모두 여기를 지난다 — 그래서 이름 규칙(보이지 않는
+     * 글자 · 링크 · 금지어 — {@link ContentFilter} NAME)도 여기 한 곳이다(B2a REQ-265). 앞뒤 공백 · NBSP는 걷어 저장한다.
+     *
      * @throws IllegalArgumentException 닉네임이 공백·상한 초과이거나 타임존이 유효한 IANA ID가 아닌 경우
+     * @throws InvalidNicknameException 이름 규칙 위반(NBSP뿐인 이름 포함 — 문구가 사용자 안내)
      */
     public void updateProfile(String nickname, String timezone) {
         if (nickname == null || nickname.isBlank()) {
             throw new IllegalArgumentException("nickname must not be blank");
         }
-        if (nickname.length() > NICKNAME_MAX_LENGTH) {
+        String n = ContentFilter.strip(nickname);
+        if (n.length() > NICKNAME_MAX_LENGTH) {
             throw new IllegalArgumentException(
                     "nickname must be at most " + NICKNAME_MAX_LENGTH + " chars");
+        }
+        Optional<String> violation = ContentFilter.violation(n, ContentFilter.Kind.NAME);
+        if (violation.isPresent()) {
+            throw new InvalidNicknameException(violation.get());
         }
         if (timezone == null || timezone.isBlank()) {
             throw new IllegalArgumentException("timezone must not be blank");
@@ -375,7 +386,7 @@ public class User extends BaseTimeEntity {
         } catch (DateTimeException e) {
             throw new IllegalArgumentException("timezone is not a valid IANA zone id: " + timezone, e);
         }
-        this.nickname = nickname;
+        this.nickname = n;
         this.timezone = timezone;
     }
 

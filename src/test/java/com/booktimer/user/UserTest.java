@@ -135,6 +135,31 @@ class UserTest {
     }
 
     @Test
+    @DisplayName("REQ-265 · updateProfile은 앞뒤 공백 · NBSP를 걷어 저장 · 「가」×30은 그대로 통과")
+    void updateProfile_stripsAndKeepsRepeatedNames() {
+        User user = User.of(EMAIL, HASH, NICK, TZ, Role.USER);
+        String nbsp = String.valueOf((char) 0xA0);
+
+        user.updateProfile(nbsp + " 새닉네임 " + nbsp, TZ);
+        assertThat(user.getNickname()).isEqualTo("새닉네임");
+        user.updateProfile(" " + "가".repeat(User.NICKNAME_MAX_LENGTH) + " ", TZ); // 걷은 뒤 30자
+        assertThat(user.getNickname()).isEqualTo("가".repeat(User.NICKNAME_MAX_LENGTH));
+    }
+
+    @Test
+    @DisplayName("REQ-265 · updateProfile — 보이지 않는 글자 · NBSP뿐 · 금지어 이름은 InvalidNicknameException · 닉네임 그대로")
+    void updateProfile_invalidNameRejected() {
+        User user = User.of(EMAIL, HASH, NICK, TZ, Role.USER);
+        String zwsp = String.valueOf((char) 0x200B);
+        String nbsp = String.valueOf((char) 0xA0);
+
+        for (String bad : new String[]{"가" + zwsp + "나", nbsp + nbsp, "가\n나", "씨발놈"}) {
+            assertThatThrownBy(() -> user.updateProfile(bad, TZ)).isInstanceOf(InvalidNicknameException.class);
+        }
+        assertThat(user.getNickname()).isEqualTo(NICK);
+    }
+
+    @Test
     @DisplayName("updateProfile: 타임존이 유효한 IANA ID가 아니면 예외")
     void updateProfile_invalidTimezone_throws() {
         User user = User.of(EMAIL, HASH, NICK, TZ, Role.USER);
