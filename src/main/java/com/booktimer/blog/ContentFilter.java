@@ -58,9 +58,13 @@ public final class ContentFilter {
             // 영어
             "fuck", "shit", "bitch", "cunt", "nigger", "nigga", "faggot", "asshole", "motherfucker"));
 
-    /** 예외 단어 — 금지어를 품은 멀쩡한 낱말. 금지어를 보기 전에 공백으로 바꾼다(거짓 양성 시험이 빨개질 때만 더한다). */
+    /**
+     * 예외 단어 — 금지어를 품은 멀쩡한 낱말. 금지어 자리가 예외 단어 하나 안에 통째로 들 때만 봐준다(옆 금지어 글자를 먹지 않게 —
+     * 「전염병」+「신」은 막힌다). 거짓 양성 시험이 빨개질 때만 더한다. 맞바꿈: 띄지 않은 「감염병신고서」는 막힌다.
+     */
     private static final List<String> EXCEPTIONS = folded(List.of("시발점", "시발역", "감염병", "전염병",
-            "shita")); // shita = 일본 성씨 로마자(Yamashita · Kinoshita) — shitty · bullshit은 그대로 막힌다
+            // 일본 성씨 로마자(Yamashita · Morishita · Matsushita · Kinoshita) — 모음 + shita만(shitass · bullshita는 막힌다)
+            "ashita", "ishita", "ushita", "eshita", "oshita"));
 
     private ContentFilter() {
     }
@@ -156,9 +160,19 @@ public final class ContentFilter {
 
     private static boolean banned(String nfkc) {
         String t = fold(nfkc);
-        for (String e : EXCEPTIONS) t = t.replace(e, " ");
         for (String b : BANNED) {
-            if (t.contains(b)) return true;
+            for (int i = t.indexOf(b); i >= 0; i = t.indexOf(b, i + 1)) {
+                if (!excused(t, i, i + b.length())) return true;
+            }
+        }
+        return false;
+    }
+
+    /** 금지어 자리 [from, to)를 통째로 덮는 예외 단어가 있나 — 덮는 자리 j는 to - 길이 ≤ j ≤ from이고, 그중 가장 앞을 찾으면 된다. */
+    private static boolean excused(String t, int from, int to) {
+        for (String e : EXCEPTIONS) {
+            int j = t.indexOf(e, Math.max(0, to - e.length()));
+            if (j >= 0 && j <= from) return true;
         }
         return false;
     }

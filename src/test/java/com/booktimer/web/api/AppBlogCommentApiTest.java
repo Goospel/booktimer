@@ -9,6 +9,9 @@ import com.booktimer.blog.QuoteBox;
 import com.booktimer.blog.QuoteBoxRepository;
 import com.booktimer.block.Block;
 import com.booktimer.block.BlockRepository;
+import com.booktimer.book.Book;
+import com.booktimer.book.BookRepository;
+import com.booktimer.book.BookStatus;
 import com.booktimer.security.RateLimitService;
 import com.booktimer.story.Story;
 import com.booktimer.story.StoryRepository;
@@ -76,6 +79,7 @@ class AppBlogCommentApiTest {
     @Autowired BlogCommentRepository commentRepository;
     @Autowired QuoteBoxRepository quoteBoxRepository;
     @Autowired StoryRepository storyRepository;
+    @Autowired BookRepository bookRepository;
     @Autowired BlockRepository blockRepository;
     @Autowired RateLimitService rateLimitService;
     @Autowired JdbcTemplate jdbc;
@@ -577,6 +581,29 @@ class AppBlogCommentApiTest {
         }
         long clean = create(me, "제목", "멀쩡한 문장이다.\n⟦인용 9⟧"); // 양성 대조 — 모르는 표시는 평범한 글
         publishCall(me, clean, 0).andExpect(status().isOk());
+    }
+
+    @Test
+    @DisplayName("REQ-251 · 책 문장 박스의 출처(『제목』 · 저자)에 금지어가 있으면 올리기 400 · 문장 행 0 · 평범한 제목은 200")
+    void bannedBookAttributionPublish() throws Exception {
+        String me = ready("cbanbook");
+        long banned = bookBoxPost(me, "책 " + SIBAL + " 제목");
+        publishCall(me, banned, 1).andExpect(status().isBadRequest()).andExpect(content().string("이 표현은 올릴 수 없어요"));
+        assertThat(sentenceRepository.findByPostId(banned)).isEmpty();
+        long clean = bookBoxPost(me, "책 제목"); // 양성 대조 — 같은 길에 평범한 제목
+        publishCall(me, clean, 1).andExpect(status().isOk());
+    }
+
+    /** 책 문장 박스 하나를 배치한 초안 — 옮긴 문장 · 본문은 평범하고 책 제목만 다르다. */
+    private long bookBoxPost(String me, String bookTitle) throws Exception {
+        Book book = bookRepository.saveAndFlush(
+                Book.register(user("cbanbook"), bookTitle, "저자", null, null, null, null, BookStatus.READING));
+        Story note = storyRepository.saveAndFlush(Story.of(user("cbanbook"), "생각", book, null, "평범한 문장이다."));
+        long id = create(me, "제목", "멀쩡한 문장이다.");
+        json(post("/api/app/blog/posts/" + id + "/quotes"), me, "{\"kind\":\"BOOK\",\"storyId\":" + note.getId() + "}")
+                .andExpect(status().isCreated());
+        edit(me, id, "제목", "멀쩡한 문장이다.\n⟦인용 1⟧", 0);
+        return id;
     }
 
     @Test

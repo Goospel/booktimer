@@ -151,6 +151,17 @@ class ContentFilterTest {
         assertThat(ContentFilter.violation("bullshit", Kind.COMMENT)).contains(BANNED);
     }
 
+    @Test
+    @DisplayName("REQ-251 · 예외 단어가 옆 금지어 글자를 먹지 않는다(shitass · shit-ass · bullshita · 전염병+신) · 성씨는 그대로 통과")
+    void exceptionDoesNotSwallowNeighbour() {
+        for (String text : List.of("shitass", "you shit-ass", "shit.a", "bullshita",
+                "감염병" + "신", "넌 전염병" + "신이야")) {
+            assertThat(ContentFilter.violation(text, Kind.COMMENT)).as(text).contains(BANNED);
+            assertThat(ContentFilter.violation(text, Kind.POST)).as(text).contains(BANNED);
+        }
+        assertThat(ContentFilter.violation("Morishita · Oshita · Kinoshita", Kind.COMMENT)).isEmpty(); // 대조 — 모음 + shita
+    }
+
     static Stream<Arguments> nfkcBypasses() {
         return Stream.of(
                 Arguments.of("nfd-hangul", s(0x1109, 0x1175, 0x1107, 0x1161, 0x11AF)),

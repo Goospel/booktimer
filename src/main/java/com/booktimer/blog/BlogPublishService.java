@@ -96,10 +96,13 @@ public class BlogPublishService {
         if (texts.size() + used.size() > LAYOUT_MAX) { // 배치 항목 = 문장 + 박스
             throw new IllegalArgumentException("문장이 너무 많아요 — 1,500개까지 올릴 수 있어요");
         }
-        // 6b. 걸러내기(B2a REQ-251) — 제목 + 문장 + 이번 배치에 쓰는 박스 글을 한 글로
+        // 6b. 걸러내기(B2a REQ-251) — 제목 + 문장 + 이번 배치에 쓰는 박스 글 · 책 문장 박스의 출처(사용자가 넣은 책 제목 · 저자)를 한 글로
         StringBuilder whole = new StringBuilder(title);
         texts.forEach(t -> whole.append("\n").append(t));
-        boxes.stream().filter(q -> used.contains(q.getLabel())).forEach(q -> whole.append("\n").append(q.getText()));
+        boxes.stream().filter(q -> used.contains(q.getLabel())).forEach(q -> {
+            whole.append("\n").append(q.getText());
+            if (q.getKind() == QuoteBox.Kind.BOOK && q.getAttribution() != null) whole.append("\n").append(q.getAttribution());
+        });
         ContentFilter.violation(whole.toString(), ContentFilter.Kind.POST).ifPresent(m -> {
             throw new IllegalArgumentException(m);
         });
