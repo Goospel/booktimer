@@ -5,6 +5,7 @@ import com.booktimer.blog.BlogCommentRepository;
 import com.booktimer.blog.BlogSentence;
 import com.booktimer.blog.BlogSentenceRepository;
 import com.booktimer.blog.BlogSentenceRevRepository;
+import com.booktimer.blog.QuoteBox;
 import com.booktimer.blog.QuoteBoxRepository;
 import com.booktimer.block.Block;
 import com.booktimer.block.BlockRepository;
@@ -607,6 +608,29 @@ class AppBlogCommentApiTest {
         assertThat(quoteBoxRepository.findById(marginBox).orElseThrow().getText()).isEqualTo("멀쩡한 생각이다.");
         json(put("/api/app/blog/quotes/" + marginBox + "/source"), b, "{\"revision\":0,\"from\":0,\"to\":0}")
                 .andExpect(status().isOk()); // 양성 대조
+    }
+
+    @Test
+    @DisplayName("REQ-251 · 쪽지 박스 반영은 걸러내지 않는다(비공개) — 원문이 금지어여도 200 · 같은 원문의 글 박스는 400")
+    void noteBoxRefreshNotFiltered() throws Exception {
+        String a = ready("cbannote");
+        String b = ready("cbannoteb");
+        long source = published(a, "원 글", "원래 문장이다.");
+        String sid = sidsOf(a, source).get(0);
+        long mine = create(b, "내 글", "내 문장이다.");
+        String link = "{\"postId\":" + source + ",\"fromSid\":" + str(sid) + ",\"toSid\":" + str(sid) + "}";
+        long postBox = ((Number) JsonPath.read(json(post("/api/app/blog/posts/" + mine + "/quotes"), b,
+                "{\"kind\":\"BLOG\"," + link.substring(1)).andExpect(status().isCreated())
+                .andReturn().getResponse().getContentAsString(), "$.id")).longValue();
+        Story note = storyRepository.saveAndFlush(Story.of(user("cbannoteb"), "내 생각이다.", null, null, null));
+        json(post("/api/app/margins/" + note.getId() + "/quotes"), b, link).andExpect(status().isCreated());
+        long noteBox = quoteBoxRepository.findByOwnerTypeAndOwnerIdOrderByLabel(QuoteBox.Owner.NOTE, note.getId())
+                .get(0).getId();
+        sql("update blog_sentence set text = ?, rev = 2 where sid = ?", "원래 " + SIBAL + " 문장이다.", sid);
+
+        json(post("/api/app/blog/quotes/" + noteBox + "/refresh"), b, "{}").andExpect(status().isOk());
+        assertThat(quoteBoxRepository.findById(noteBox).orElseThrow().getText()).isEqualTo("원래 " + SIBAL + " 문장이다.");
+        json(post("/api/app/blog/quotes/" + postBox + "/refresh"), b, "{}").andExpect(status().isBadRequest()); // 양성 대조
     }
 
     @Test

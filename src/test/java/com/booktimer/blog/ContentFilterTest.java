@@ -136,6 +136,21 @@ class ContentFilterTest {
         assertThat(ContentFilter.violation("시발점은 좋은데 " + SIBAL, Kind.COMMENT)).contains(BANNED); // 예외 단어가 옆 금지어를 덮지 않는다
     }
 
+    @Test
+    @DisplayName("REQ-251 · 금지어를 품은 흔한 낱말(감염병 · 전염병 · 일본 성씨 -shita) 통과 · 금지어 자체는 막힘")
+    void embeddedWordFalsePositives() {
+        for (Kind kind : Kind.values()) {
+            assertThat(ContentFilter.violation("감염병 예방법을 다룬 책이다", kind)).isEmpty();
+            assertThat(ContentFilter.violation("전염병의 역사", kind)).isEmpty();
+            assertThat(ContentFilter.violation("Yamashita Tatsuro", kind)).isEmpty();
+            assertThat(ContentFilter.violation("matsushita konosuke · kinoshita", kind)).isEmpty();
+        }
+        assertThat(ContentFilter.violation("염병하네", Kind.COMMENT)).contains(BANNED); // 양성 대조
+        assertThat(ContentFilter.violation("감염병 말고 염병", Kind.COMMENT)).contains(BANNED); // 예외 단어가 옆 금지어를 덮지 않는다
+        assertThat(ContentFilter.violation("shitty book", Kind.COMMENT)).contains(BANNED);
+        assertThat(ContentFilter.violation("bullshit", Kind.COMMENT)).contains(BANNED);
+    }
+
     static Stream<Arguments> nfkcBypasses() {
         return Stream.of(
                 Arguments.of("nfd-hangul", s(0x1109, 0x1175, 0x1107, 0x1161, 0x11AF)),

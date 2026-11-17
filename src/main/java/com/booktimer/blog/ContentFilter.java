@@ -17,6 +17,9 @@ import java.util.regex.Pattern;
  * <p>천장(일부러 막지 않는 것): 띄운 우회(「시 발」 — 「오늘 시 발표」를 살리려고 띄어쓰기를 지우지 않는다) · 자모 분해
  * (「ㅅㅣㅂㅏㄹ」 — NFKC 뒤 「시바ᄅ」) · 닮은 글자(키릴 · 그리스 — NFKC가 접지 않는다) · 맨 도메인(「bit.ly/…」 — 「3.5점」과
  * 가를 규칙이 없다). 뒤는 신고 · 운영자 가리기가 받친다.
+ *
+ * <p>거짓 양성 천장: 숫자 · 기호를 경계 없이 지워 붙은 낱말(「3시발」 · 「도시·발전」 · 「기존(나의」)은 막힌다(§6.1의 맞바꿈 —
+ * 기호로 끊는 우회를 막는 값). 관측되면 예외 단어로 받는다.
  */
 public final class ContentFilter {
 
@@ -56,7 +59,8 @@ public final class ContentFilter {
             "fuck", "shit", "bitch", "cunt", "nigger", "nigga", "faggot", "asshole", "motherfucker"));
 
     /** 예외 단어 — 금지어를 품은 멀쩡한 낱말. 금지어를 보기 전에 공백으로 바꾼다(거짓 양성 시험이 빨개질 때만 더한다). */
-    private static final List<String> EXCEPTIONS = folded(List.of("시발점", "시발역"));
+    private static final List<String> EXCEPTIONS = folded(List.of("시발점", "시발역", "감염병", "전염병",
+            "shita")); // shita = 일본 성씨 로마자(Yamashita · Kinoshita) — shitty · bullshit은 그대로 막힌다
 
     private ContentFilter() {
     }
