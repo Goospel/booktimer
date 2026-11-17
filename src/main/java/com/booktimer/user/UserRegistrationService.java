@@ -86,6 +86,8 @@ public class UserRegistrationService {
         if (userRepository.isLoginIdTaken(normalizedLoginId)) {
             throw new LoginIdAlreadyExistsException(normalizedLoginId);
         }
+        // 이름 규칙도 이메일 존재 검사보다 먼저 — 뒤에 두면 기존 이메일은 성공으로 흡수되고 새 이메일만 이름 오류를 받아 열거가 된다.
+        User.checkNickname(nickname);
         if (User.isSyntheticEmailAddress(email) || userRepository.existsByEmail(email)) {
             // DB 유니크 제약(uk_users_email) 위반이 500으로 새기 전에 미리 막는다. 컨트롤러는 열거 완화를 위해
             // 이 예외를 가입 성공과 동일한 응답으로 흡수한다(이메일 존재 여부를 응답으로 구분할 수 없게).

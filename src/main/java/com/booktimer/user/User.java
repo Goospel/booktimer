@@ -367,7 +367,7 @@ public class User extends BaseTimeEntity {
      * @throws IllegalArgumentException 공백 · {@value #NICKNAME_MAX_LENGTH}자 초과
      * @throws InvalidNicknameException 보이지 않는 글자 · 링크 · 금지어({@link ContentFilter} NAME — NBSP뿐인 이름 포함)
      */
-    private static String checkNickname(String nickname) {
+    static String checkNickname(String nickname) { // package-private — 가입이 이메일 존재 검사 전에 부른다(열거 차단)
         if (nickname == null || nickname.isBlank()) {
             throw new IllegalArgumentException("nickname must not be blank");
         }
