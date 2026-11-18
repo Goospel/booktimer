@@ -188,8 +188,6 @@ class AccountServiceTest {
         ordered.verify(blockRepository).deleteByBlocked(user);
         ordered.verify(reportRepository).deleteByReporter(user);   // FK: 유저 삭제 전에 신고 관계 정리
         ordered.verify(reportRepository).deleteByReported(user);
-        ordered.verify(blogReportRepository).deleteByReporter(user);           // FK: 내가 한 블로그 신고(REQ-257 · B2b)
-        ordered.verify(blogReportRepository).clearTargetUser(user.getId());    // 남이 내 글을 신고한 행 — 대상 글쓴이 id만 비운다
         ordered.verify(chatMessageRepository).deleteByRoomMember(user); // FK: 메시지가 방을 참조한다 — 방보다 앞
         ordered.verify(chatRoomRepository).deleteByMember(user);
         ordered.verify(storyLikeRepository).deleteByUser(user);        // FK: 내가 남에게 누른 좋아요
@@ -208,6 +206,10 @@ class AccountServiceTest {
         ordered.verify(personalityCacheRepository).deleteByUser(user); // FK: 책BTI 캐시도 유저 전에 정리
         ordered.verify(feedbackRepository).deleteByAuthor(user);  // FK: 문의도 유저 전에 정리
         ordered.verify(emailTokenRepository).deleteByUser(user);  // FK: 이메일 토큰도 유저 전에 정리
+        // 블로그 신고는 내 users 행을 잠근 뒤 — 신고 저장과 같은 잠금 순서(users → blog_report)라 겹친 신고가 끝난 뒤 비운다
+        ordered.verify(userRepository).lockById(user.getId());
+        ordered.verify(blogReportRepository).deleteByReporter(user);           // FK: 내가 한 블로그 신고(REQ-257 · B2b)
+        ordered.verify(blogReportRepository).clearTargetUser(user.getId());    // 남이 내 글을 신고한 행 — 대상 글쓴이 id만 비운다
         ordered.verify(userRepository).delete(user);
     }
 

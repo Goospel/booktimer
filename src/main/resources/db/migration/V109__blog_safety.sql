@@ -16,6 +16,8 @@ alter table blog_comment add column hide_note varchar(2000) null;
 alter table quote_box add column hidden_at datetime(6) null;
 alter table quote_box add column hide_kind varchar(10) null;
 alter table quote_box add column hide_note varchar(2000) null;
+-- 관리자 신고함 「이 글을 인용한 박스」(행마다 한 번 — V107엔 source_post_id 색인이 없다). 있던 표라 이것도 기다릴 수 있다.
+create index idx_quote_box_source_post on quote_box (source_post_id);
 create table blog_report (
     id             bigint       not null auto_increment,
     reporter_id    bigint       not null,
@@ -37,8 +39,8 @@ create index idx_blog_report_target_user on blog_report (target_user_id);
 -- 열린 신고 수(신고마다 · 관리자 홈 · 매일 09:00)와 신고함의 오래된 열린 신고 · 같은 대상의 열린 신고(resolve — 글 행 잠금을 쥔 채 돈다).
 create index idx_blog_report_status on blog_report (status, created_at);
 create index idx_blog_report_target on blog_report (target_type, target_id, status);
--- 관리자 신고함 「이 글을 인용한 박스」(행마다 한 번 — V107엔 source_post_id 색인이 없다).
-create index idx_quote_box_source_post on quote_box (source_post_id);
+-- 신고함에서 열린 신고 뒤에 붙는 최근 처리분(resolved_at 내림차순 100개 — RESOLVED 전부를 filesort하지 않게).
+create index idx_blog_report_resolved on blog_report (status, resolved_at);
 create table blog_moderation_log (
     id         bigint        not null auto_increment,
     unit       varchar(8)    not null,

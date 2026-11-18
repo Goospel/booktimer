@@ -6,6 +6,7 @@ import com.booktimer.security.RateLimitAction;
 import com.booktimer.security.RateLimitService;
 import com.booktimer.user.Role;
 import com.booktimer.user.User;
+import com.booktimer.user.UserRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -30,8 +31,9 @@ class BlogReportServiceTest {
     private final BlogReportRepository reports = mock(BlogReportRepository.class);
     private final BlogTargets targets = mock(BlogTargets.class);
     private final BlogNotifier notifier = mock(BlogNotifier.class);
+    private final UserRepository users = mock(UserRepository.class);
     private final BlogReportService service = new BlogReportService(access, rateLimit, reports, targets,
-            mock(BlogSentenceRepository.class), mock(QuoteBoxRepository.class), notifier);
+            mock(BlogSentenceRepository.class), mock(QuoteBoxRepository.class), notifier, users);
 
     private final User reporter = withId(User.of("r@booktimer.com", "h", "신고자", "Asia/Seoul", Role.USER), 1L);
     private final User author = withId(User.of("a@booktimer.com", "h", "글쓴이", "Asia/Seoul", Role.USER), 2L);
@@ -45,6 +47,7 @@ class BlogReportServiceTest {
     void allow() {
         when(rateLimit.allow(RateLimitAction.REPORT, 1L)).thenReturn(true);
         when(targets.publicAuthor(any(), anyLong())).thenReturn(Optional.of(author));
+        when(users.lockById(2L)).thenReturn(Optional.of(author));
     }
 
     @Test

@@ -7,6 +7,7 @@ import com.booktimer.report.ReportReason;
 import com.booktimer.security.RateLimitAction;
 import com.booktimer.security.RateLimitService;
 import com.booktimer.user.User;
+import com.booktimer.user.UserRepository;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -38,10 +39,12 @@ public class BlogReportService {
     private final BlogSentenceRepository sentenceRepository;
     private final QuoteBoxRepository quoteBoxRepository;
     private final BlogNotifier notifier;
+    private final UserRepository userRepository;
 
     BlogReportService(BlogAccess access, RateLimitService rateLimitService, BlogReportRepository reportRepository,
                       BlogTargets targets, BlogSentenceRepository sentenceRepository, QuoteBoxRepository quoteBoxRepository,
-                      BlogNotifier notifier) {
+                      BlogNotifier notifier, UserRepository userRepository) {
+        this.userRepository = userRepository;
         this.access = access;
         this.rateLimitService = rateLimitService;
         this.reportRepository = reportRepository;
@@ -81,6 +84,11 @@ public class BlogReportService {
         Optional<Prefix> prefix = prefix(d);
         if (prefix.isPresent() && (type != Target.POST || !belongs(prefix.get(), targetId))) {
             throw new IllegalArgumentException(BAD_PREFIX);
+        }
+        // 글쓴이 행을 잠그고 다시 읽는다 — 위의 읽기 뒤 그 사람의 탈퇴가 커밋됐으면 없고(404), 탈퇴가 오는 중이면 이 저장이 끝난 뒤에야
+        // purge가 그 행을 잠그고 target_user_id를 비운다(purge도 users 행 → blog_report 순서라 교착이 없다 · 처리방침 5절)
+        if (userRepository.lockById(author.getId()).isEmpty()) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "신고할 대상을 찾을 수 없어요");
         }
         reportRepository.saveAndFlush(BlogReport.of(user, type, targetId, author.getId(), ReportReason.from(reason), d));
         if (reportRepository.countByStatus(Status.OPEN) == 1) {

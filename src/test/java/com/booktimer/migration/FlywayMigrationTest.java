@@ -417,10 +417,11 @@ class FlywayMigrationTest {
      * 엔티티엔 색인 선언이 없어 메인 스위트로는 안 보인다(V107 · V108과 같은 까닭).
      */
     @Test
-    @DisplayName("B2b · V109: blog_report (status, created_at) · (target_type, target_id, status) · quote_box (source_post_id) 색인")
+    @DisplayName("B2b · V109: blog_report (status, created_at) · (status, resolved_at) · (target_type, target_id, status) · quote_box (source_post_id) 색인")
     void v109_blog_report_and_quote_source_indexes() {
         Map<String, List<String>> expected = Map.of(
                 "BLOG_REPORT.IDX_BLOG_REPORT_STATUS", List.of("STATUS", "CREATED_AT"),
+                "BLOG_REPORT.IDX_BLOG_REPORT_RESOLVED", List.of("STATUS", "RESOLVED_AT"), // 신고함의 최근 처리분(filesort 없이)
                 "BLOG_REPORT.IDX_BLOG_REPORT_TARGET", List.of("TARGET_TYPE", "TARGET_ID", "STATUS"),
                 "QUOTE_BOX.IDX_QUOTE_BOX_SOURCE_POST", List.of("SOURCE_POST_ID"));
         expected.forEach((key, cols) -> assertThat(jdbcTemplate.queryForList("""

@@ -437,8 +437,6 @@ public class AccountService {
         blockRepository.deleteByBlocked(user);
         reportRepository.deleteByReporter(user);
         reportRepository.deleteByReported(user);
-        blogReportRepository.deleteByReporter(user);           // 내가 한 블로그 신고(blog_report.reporter_id FK · 처리방침 5절)
-        blogReportRepository.clearTargetUser(user.getId());    // 남이 내 글 · 댓글을 신고한 행은 남기고 대상 글쓴이 id만 비운다(FK 없음)
         // 맞팔 DM(V95): 메시지 → 방 순서. 상대가 보낸 메시지도 방 FK로 방 삭제를 막으므로 방 기준으로 지운다.
         // 상대 쪽에서도 방이 통째로 사라진다(반쪽 방을 남기지 않는다).
         chatMessageRepository.deleteByRoomMember(user);
@@ -462,6 +460,11 @@ public class AccountService {
         emailTokenRepository.deleteByUser(user);             // 이메일 토큰도 user_id FK 참조 → 유저 전에 정리
         apiTokenRepository.deleteByUser(user);                // 미니앱 Bearer 토큰(api_token.user_id FK)
         tossLinkCodeRepository.deleteByUser(user);            // 토스 연결 코드(toss_link_code.user_id FK)
+        // 블로그 신고는 맨 끝 · 내 users 행을 잠근 뒤 — 신고 저장(BlogReportService.report)도 대상 글쓴이 행 → blog_report 순서로 잠근다.
+        // 그래서 겹친 신고는 커밋된 뒤 아래 비우기가 보거나, 이 커밋 뒤 행이 없어 404다(교착 없음 · 앞의 표들과의 순서는 예전 users 삭제 자리 그대로)
+        userRepository.lockById(user.getId());
+        blogReportRepository.deleteByReporter(user);           // 내가 한 블로그 신고(blog_report.reporter_id FK · 처리방침 5절)
+        blogReportRepository.clearTargetUser(user.getId());    // 남이 내 글 · 댓글을 신고한 행은 남기고 대상 글쓴이 id만 비운다(FK 없음)
         userRepository.delete(user);
         // 세션은 users를 FK 참조하지 않아 계정을 지워도 남는다 — 그대로 두면 계정 없는 principal이
         // 인증된 채 떠다닌다(운영 실측: 계정 하나 삭제에 616건 잔존). 남길 창이 없으므로 전부 끊는다.

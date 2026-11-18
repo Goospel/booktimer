@@ -19,6 +19,7 @@ import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.TransactionDefinition;
 import org.springframework.transaction.support.TransactionTemplate;
+import org.springframework.web.server.ResponseStatusException;
 
 import java.time.Instant;
 import java.time.LocalDate;
@@ -62,6 +63,7 @@ class BlogSafetyRaceTest {
     @Autowired BlogModerationService moderation;
     @Autowired BlogPostRepository postRepository;
     @Autowired BlogCommentRepository commentRepository;
+    @Autowired BlogTargets targets;
     @Autowired PlatformTransactionManager txManager;
     @Autowired JdbcTemplate jdbc;
 
@@ -155,6 +157,29 @@ class BlogSafetyRaceTest {
 
         assertThat(outcomes).as("유일 위반이 500으로 샜다").containsOnly("ok");
         assertThat(blockRepository.findByBlockerOrderByCreatedAtDesc(me)).hasSize(1);
+    }
+
+    @Test
+    @DisplayName("처리방침 5절 · 신고가 대상 글쓴이를 읽은 뒤 그 사람의 탈퇴가 커밋되면 저장은 404 — 탈퇴한 사람 id를 지닌 신고 행 0")
+    void reportAfterTargetPurgeLeavesNoTargetUser() {
+        User author = readyUser("bsrauthor");
+        User reporter = readyUser("bsrreporter");
+        long post = publishedPost(author);
+        long authorId = author.getId();
+        Object[] outcome = new Object[1];
+
+        try {
+            interleaved(() -> assertThat(targets.publicAuthor(BlogReport.Target.POST, post)).isPresent(), // 양성 대조 — 읽을 땐 있다
+                    () -> accountService.deleteAccount("bsrauthor@booktimer.com", PASSWORD),
+                    () -> reportService.report(reporter, BlogReport.Target.POST, post, "SPAM", null));
+        } catch (RuntimeException e) {
+            outcome[0] = e;
+        }
+
+        assertThat(jdbc.queryForObject("select count(*) from blog_report where target_user_id = ?", Integer.class, authorId))
+                .as("탈퇴한 사람 id가 신고 행에 남았다").isZero();
+        assertThat(outcome[0]).isInstanceOfSatisfying(ResponseStatusException.class,
+                e -> assertThat(e.getStatusCode().value()).isEqualTo(404));
     }
 
     @Test
