@@ -203,6 +203,11 @@ public interface UserRepository extends JpaRepository<User, Long> {
     @Query("select u from User u where u.id = :id")
     Optional<User> lockById(@Param("id") Long id);
 
+    /** 한 사용자 행 공유 잠금(FOR SHARE) — 블로그 신고 저장이 대상 글쓴이의 탈퇴(배타 잠금)와 겹치지 않게. 공유끼리는 막지 않아 맞신고가 교착하지 않는다. */
+    @Lock(LockModeType.PESSIMISTIC_READ)
+    @Query("select u from User u where u.id = :id")
+    Optional<User> lockForShareById(@Param("id") Long id);
+
     /** 역할 + 온보딩 완료 여부별 사용자 수 — 운영 통계의 "온보딩 완료자" 카드. */
     long countByRoleAndOnboarded(Role role, boolean onboarded);
 

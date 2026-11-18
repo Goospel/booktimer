@@ -85,9 +85,10 @@ public class BlogReportService {
         if (prefix.isPresent() && (type != Target.POST || !belongs(prefix.get(), targetId))) {
             throw new IllegalArgumentException(BAD_PREFIX);
         }
-        // 글쓴이 행을 잠그고 다시 읽는다 — 위의 읽기 뒤 그 사람의 탈퇴가 커밋됐으면 없고(404), 탈퇴가 오는 중이면 이 저장이 끝난 뒤에야
-        // purge가 그 행을 잠그고 target_user_id를 비운다(purge도 users 행 → blog_report 순서라 교착이 없다 · 처리방침 5절)
-        if (userRepository.lockById(author.getId()).isEmpty()) {
+        // 글쓴이 행을 공유 잠금으로 다시 읽는다 — 위의 읽기 뒤 그 사람의 탈퇴가 커밋됐으면 없고(404), 탈퇴가 오는 중이면 이 저장이 끝난 뒤에야
+        // purge(배타 잠금)가 그 행을 잡고 target_user_id를 비운다(처리방침 5절). 배타 잠금이면 INSERT의 FK 공유 잠금(신고자 행)과 엇갈려
+        // 맞신고가 교착한다(MySQL 1213 실측 · r3) — 공유끼리는 막지 않는다
+        if (userRepository.lockForShareById(author.getId()).isEmpty()) {
             throw new ResponseStatusException(HttpStatus.NOT_FOUND, "신고할 대상을 찾을 수 없어요");
         }
         reportRepository.saveAndFlush(BlogReport.of(user, type, targetId, author.getId(), ReportReason.from(reason), d));

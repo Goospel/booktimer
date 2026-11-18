@@ -460,8 +460,8 @@ public class AccountService {
         emailTokenRepository.deleteByUser(user);             // 이메일 토큰도 user_id FK 참조 → 유저 전에 정리
         apiTokenRepository.deleteByUser(user);                // 미니앱 Bearer 토큰(api_token.user_id FK)
         tossLinkCodeRepository.deleteByUser(user);            // 토스 연결 코드(toss_link_code.user_id FK)
-        // 블로그 신고는 맨 끝 · 내 users 행을 잠근 뒤 — 신고 저장(BlogReportService.report)도 대상 글쓴이 행 → blog_report 순서로 잠근다.
-        // 그래서 겹친 신고는 커밋된 뒤 아래 비우기가 보거나, 이 커밋 뒤 행이 없어 404다(교착 없음 · 앞의 표들과의 순서는 예전 users 삭제 자리 그대로)
+        // 블로그 신고는 맨 끝 · 내 users 행을 배타 잠금한 뒤 — 신고 저장(BlogReportService.report)은 대상 글쓴이 행을 공유 잠금으로 읽는다.
+        // 그래서 겹친 신고는 커밋된 뒤 아래 비우기가 보거나, 이 커밋 뒤 행이 없어 404다(앞의 표들과의 순서는 예전 users 삭제 자리 그대로)
         userRepository.lockById(user.getId());
         blogReportRepository.deleteByReporter(user);           // 내가 한 블로그 신고(blog_report.reporter_id FK · 처리방침 5절)
         blogReportRepository.clearTargetUser(user.getId());    // 남이 내 글 · 댓글을 신고한 행은 남기고 대상 글쓴이 id만 비운다(FK 없음)

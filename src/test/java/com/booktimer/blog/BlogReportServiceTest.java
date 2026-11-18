@@ -47,7 +47,16 @@ class BlogReportServiceTest {
     void allow() {
         when(rateLimit.allow(RateLimitAction.REPORT, 1L)).thenReturn(true);
         when(targets.publicAuthor(any(), anyLong())).thenReturn(Optional.of(author));
-        when(users.lockById(2L)).thenReturn(Optional.of(author));
+        when(users.lockForShareById(2L)).thenReturn(Optional.of(author));
+    }
+
+    @Test
+    @DisplayName("처리방침 5절 · 신고 저장은 대상 글쓴이 행을 공유 잠금으로 다시 읽는다 — RR 스냅숏 재읽기는 탈퇴를 못 보고, 배타 잠금은 맞신고가 교착한다(r3)")
+    void reportLocksTargetAuthorForShare() {
+        when(reports.existsByReporterAndTargetTypeAndTargetId(reporter, Target.POST, 10L)).thenReturn(false);
+        service.report(reporter, Target.POST, 10L, "SPAM", null);
+        verify(users).lockForShareById(2L);
+        verify(users, never()).lockById(anyLong());
     }
 
     @Test

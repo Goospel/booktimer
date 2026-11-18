@@ -159,6 +159,7 @@ class BlogSafetyRaceTest {
         assertThat(blockRepository.findByBlockerOrderByCreatedAtDesc(me)).hasSize(1);
     }
 
+    // 음성 판정 전용: H2는 READ COMMITTED라 잠그지 않는 재읽기도 통과한다 — 잠금(공유) 여부는 BlogReportServiceTest가 지킨다
     @Test
     @DisplayName("처리방침 5절 · 신고가 대상 글쓴이를 읽은 뒤 그 사람의 탈퇴가 커밋되면 저장은 404 — 탈퇴한 사람 id를 지닌 신고 행 0")
     void reportAfterTargetPurgeLeavesNoTargetUser() {
