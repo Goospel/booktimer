@@ -40,6 +40,30 @@ public final class PostSentences {
         return s != null && s.live() ? Optional.of(s) : Optional.empty();
     }
 
+    /**
+     * 댓글 묶음의 끝(B2a §6.3) — 죽은 행이 이 글의 행으로 합쳐졌으면 따라간다(고리면 멈춤). 멈춘 행의 sid — 산 문장 · 묘비 · 이 글
+     * 밖으로 합쳐진 행이면 그 자신. {@link #resolve}와 달리 묘비에서도 끝을 낸다(지운 문장의 댓글은 그 옛 주소로 부르면 보인다).
+     */
+    String end(String sid) {
+        Set<String> seen = new HashSet<>();
+        BlogSentence s = bySid.get(sid);
+        while (s != null && !s.live() && s.getMergedInto() != null && bySid.containsKey(s.getMergedInto()) && seen.add(s.getSid())) {
+            s = bySid.get(s.getMergedInto());
+        }
+        return s == null ? sid : s.getSid();
+    }
+
+    /** 끝이 {@code sid}의 끝과 같은 이 글의 sid 전부 — 이 글의 행이 아니면 빈 묶음. */
+    Set<String> group(String sid) {
+        if (!bySid.containsKey(sid)) return Set.of();
+        String target = end(sid);
+        Set<String> out = new HashSet<>();
+        for (String x : bySid.keySet()) {
+            if (end(x).equals(target)) out.add(x);
+        }
+        return out;
+    }
+
     /** 산 문장 — 배치 순서. */
     public List<BlogSentence> live() {
         List<BlogSentence> out = new ArrayList<>();

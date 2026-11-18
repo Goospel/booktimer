@@ -15,6 +15,8 @@ import com.booktimer.story.StoryRepository;
 import com.booktimer.story.StoryService;
 import com.booktimer.user.User;
 import com.booktimer.user.UserRepository;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -62,6 +64,7 @@ public class QuoteBoxService {
     private static final String OUT_OF_RANGE = "고른 범위가 쪽지의 생각 밖이에요";
     private static final String TOO_LONG = "인용은 1,000자까지예요";
     private static final String GONE_USER = "탈퇴한 사용자";
+    private static final Logger log = LoggerFactory.getLogger(QuoteBoxService.class);
 
     private final BlogPostRepository postRepository;
     private final BlogSentenceRepository sentenceRepository;
@@ -166,6 +169,9 @@ public class QuoteBoxService {
         if (cur.crossesBox() || cur.text().length() > TEXT_MAX) {
             throw new ResponseStatusException(HttpStatus.CONFLICT, "원문이 바뀌어 박스에 다 담을 수 없어요 — 인용을 다시 골라 주세요");
         }
+        if (box.getOwnerType() == Owner.POST) { // 올리기를 거치지 않고 공개 글을 바꾸는 길(B2a) — 쪽지 박스는 비공개라 걸지 않는다
+            filter(cur.text());
+        }
         box.refresh(cur.sids(), cur.text(), sentences.maxRowId(), post.getTitle(), now());
         return single(box, user);
     }
@@ -183,7 +189,9 @@ public class QuoteBoxService {
         if (revision != source.getRevision()) {
             throw new ResponseStatusException(HttpStatus.CONFLICT, NOTE_CHANGED);
         }
-        box.repick(thought(source.getText(), from, to), now());
+        String text = thought(source.getText(), from, to);
+        filter(text); // 다시 고르기는 늘 글 박스다(MARGIN 박스는 글에만 있다 · B2a)
+        box.repick(text, now());
         return single(box, user);
     }
 
@@ -335,8 +343,16 @@ public class QuoteBoxService {
         if (post != null && !post.quotable()) {
             return view(q, attribution, null, false, null, null);
         }
-        QuoteRange.Current cur = post == null ? null
-                : QuoteRange.current(q.members(), sentences.computeIfAbsent(post.getId(), k -> sentencesOf(post)), q.getSeenSentenceId());
+        QuoteRange.Current cur;
+        try {
+            cur = post == null ? null
+                    : QuoteRange.current(q.members(), sentences.computeIfAbsent(post.getId(), k -> sentencesOf(post)), q.getSeenSentenceId());
+        } catch (RuntimeException e) {
+            // DF-03(B2a): 깨진 원 글 하나가 그 글을 인용한 글 · 쪽지를 500으로 만들지 않게 이 박스만 판정 없음으로 — 「지워짐」이라
+            // 속이지 않는다(박스 글은 스냅샷이라 멀쩡하다). 원 글 자신의 보기는 그대로 500(BlogPostService.view — 덮지 않는다)
+            log.error("quote box {} — source post {} layout/sentences broken", q.getId(), post.getId(), e);
+            return view(q, attribution, null, null, null, null);
+        }
         if (cur == null || cur.allDeleted()) {
             return view(q, attribution, null, true, null, null);
         }
@@ -463,6 +479,13 @@ public class QuoteBoxService {
             }
         }
         return out;
+    }
+
+    /** 걸러내기(POST — B2a REQ-251) — 막히면 400. */
+    private static void filter(String text) {
+        ContentFilter.violation(text, ContentFilter.Kind.POST).ifPresent(m -> {
+            throw new IllegalArgumentException(m);
+        });
     }
 
     private PostSentences sentencesOf(BlogPost post) {

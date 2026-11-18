@@ -182,9 +182,9 @@ public class OAuthUserProvisioningService {
     private User createOAuthUser(String sub, String email, String displayName) {
         // 닉네임은 단순 표시 이름(중복 허용) — provider가 준 이름을 그대로 쓴다. 식별/검색 핸들은
         // 온보딩에서 정하는 불변 login_id가 담당한다.
-        String nickname = (displayName == null || displayName.isBlank())
-                ? emailLocalPart(email)
-                : displayName.trim();
+        // 이름 규칙(B2a REQ-265)에 걸리는 이름(비었음 포함)은 local part로, 그것도 걸리면 「독자」(앱 소셜 가입 기본값과 같음) — 가입은 실패하지 않는다.
+        String nickname = User.isAcceptableNickname(displayName) ? displayName.trim()
+                : User.isAcceptableNickname(emailLocalPart(email)) ? emailLocalPart(email) : "독자";
         LocalDate today = LocalDate.ofInstant(clock.instant(), ZoneId.of(DEFAULT_TIMEZONE));
         User created = registrationService.registerOAuth(
                 email, nickname, DEFAULT_TIMEZONE, AuthProvider.GOOGLE, today);

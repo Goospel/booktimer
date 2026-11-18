@@ -4,6 +4,7 @@ import com.booktimer.security.CurrentUserService;
 import com.booktimer.security.SessionInvalidator;
 import com.booktimer.timer.ReadingTimer;
 import com.booktimer.timer.ReadingTimerRepository;
+import com.booktimer.user.InvalidNicknameException;
 import com.booktimer.user.AccountDeletionConfirmationException;
 import com.booktimer.user.AppleLinkConflictException;
 import com.booktimer.user.AccountService;
@@ -187,12 +188,18 @@ public class SettingsController {
             return "settings";
         }
 
-        settingsService.updateSettings(
-                currentUser(principal).getEmail(), // 서비스는 email로 조회 — principal(login_id)을 User로 해석해 넘긴다
-                form.getNickname(),
-                form.getTimezone(),
-                form.getIncrementMinutes() * (long) SECONDS_PER_MINUTE,
-                form.isDebtCarryover());
+        try {
+            settingsService.updateSettings(
+                    currentUser(principal).getEmail(), // 서비스는 email로 조회 — principal(login_id)을 User로 해석해 넘긴다
+                    form.getNickname(),
+                    form.getTimezone(),
+                    form.getIncrementMinutes() * (long) SECONDS_PER_MINUTE,
+                    form.isDebtCarryover());
+        } catch (InvalidNicknameException e) {
+            // 이름 규칙(보이지 않는 글자 · 링크 · 금지어 — B2a REQ-265)은 폼 검증이 못 거른다 — 500 대신 필드 오류로 다시 그린다
+            bindingResult.rejectValue("nickname", "nickname.invalid", e.getMessage());
+            return "settings";
+        }
 
         redirectAttributes.addFlashAttribute("message", "설정을 저장했습니다.");
         return "redirect:/settings";

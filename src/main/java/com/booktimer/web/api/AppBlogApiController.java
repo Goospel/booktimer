@@ -1,9 +1,11 @@
 package com.booktimer.web.api;
 
+import com.booktimer.blog.BlogCommentService;
 import com.booktimer.blog.BlogIdentityService;
 import com.booktimer.blog.BlogPost;
 import com.booktimer.blog.BlogPostService;
 import com.booktimer.blog.BlogPublishService;
+import com.booktimer.blog.BlogViews.CommentView;
 import com.booktimer.blog.BlogViews.MeView;
 import com.booktimer.blog.BlogViews.MyPostRow;
 import com.booktimer.blog.BlogViews.Page;
@@ -14,6 +16,7 @@ import com.booktimer.blog.QuoteBoxService;
 import com.booktimer.blog.QuoteBoxService.QuoteRequest;
 import com.booktimer.security.CurrentUserService;
 import com.booktimer.user.User;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
@@ -48,15 +51,17 @@ public class AppBlogApiController {
     private final BlogPostService postService;
     private final BlogPublishService publishService;
     private final QuoteBoxService quoteBoxService;
+    private final BlogCommentService commentService;
 
     public AppBlogApiController(CurrentUserService currentUserService, BlogIdentityService identityService,
                                 BlogPostService postService, BlogPublishService publishService,
-                                QuoteBoxService quoteBoxService) {
+                                QuoteBoxService quoteBoxService, BlogCommentService commentService) {
         this.currentUserService = currentUserService;
         this.identityService = identityService;
         this.postService = postService;
         this.publishService = publishService;
         this.quoteBoxService = quoteBoxService;
+        this.commentService = commentService;
     }
 
     @GetMapping("/api/app/blog/me")
@@ -143,6 +148,50 @@ public class AppBlogApiController {
         return postService.revs(currentUserService.resolve(principal), sid);
     }
 
+    /** 「예전 판 지우기」(B2a REQ-258) — 내 글의 산 문장만. @return 204 / 404 — 허용 목록과 무관 */
+    @DeleteMapping("/api/app/blog/sentences/{sid}/revs")
+    public ResponseEntity<Void> deleteRevs(@PathVariable String sid, Principal principal) {
+        postService.deleteRevs(currentUserService.resolve(principal), sid);
+        return ResponseEntity.noContent().build();
+    }
+
+    /** 새 댓글 확인(B2a REQ-298). @return 204 / 404 내 글 아님 — 허용 목록과 무관 */
+    @PostMapping("/api/app/blog/posts/{id}/seen")
+    public ResponseEntity<Void> seen(@PathVariable long id, Principal principal) {
+        postService.seen(currentUserService.resolve(principal), id);
+        return ResponseEntity.noContent().build();
+    }
+
+    /** 한 문장의 댓글 묶음(B2a REQ-250). @return 200 / 404 글을 볼 수 없음 · 그 글의 문장 아님 */
+    @GetMapping("/api/app/blog/posts/{id}/sentences/{sid}/comments")
+    public List<CommentView> comments(@PathVariable long id, @PathVariable String sid, Principal principal) {
+        return commentService.list(currentUserService.resolve(principal), id, sid);
+    }
+
+    /**
+     * 댓글 쓰기(B2a). @return 201 / 403 허용 목록 · 차단 관계 / 409 첫 설정 전 / 429 / 404 올리지 않음 · 가림 · 산 문장 아님 / 400
+     *
+     * <p>FK 경합(§4.1): 댓글 쓰기는 글 행을 잠그지 않아 그사이 글쓴이 지우기 · 탈퇴가 커밋되면 INSERT가 FK 위반으로 끝난다 —
+     * <b>이 문에서만</b> 404로 바꾼다(클래스 전역 처리기로 두면 다른 유일 위반 500 신호 — AUTH-6 — 를 가린다).
+     */
+    @PostMapping("/api/app/blog/posts/{id}/sentences/{sid}/comments")
+    public ResponseEntity<CommentView> comment(@PathVariable long id, @PathVariable String sid,
+                                               @RequestBody CommentRequest request, Principal principal) {
+        User user = currentUserService.resolve(principal);
+        try {
+            return ResponseEntity.status(HttpStatus.CREATED).body(commentService.create(user, id, sid, request.body()));
+        } catch (DataIntegrityViolationException e) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "글을 찾을 수 없어요");
+        }
+    }
+
+    /** 내 댓글 지우기(B2a REQ-255 · C6). @return 204 / 404 없음 / 403 내 댓글 아님 — 허용 목록과 무관 */
+    @DeleteMapping("/api/app/blog/comments/{id}")
+    public ResponseEntity<Void> deleteComment(@PathVariable long id, Principal principal) {
+        commentService.delete(currentUserService.resolve(principal), id);
+        return ResponseEntity.noContent().build();
+    }
+
     /** IAE 문구가 그대로 400 본문(text/plain — 반사 XSS 방지, charset 명시는 한글 깨짐 방지). */
     @ExceptionHandler(IllegalArgumentException.class)
     public ResponseEntity<String> badRequest(IllegalArgumentException e) {
@@ -172,4 +221,6 @@ public class AppBlogApiController {
     public record SourceRequest(int revision, int from, int to) {}
 
     public record Saved(int revision, Instant updatedAt) {}
+
+    public record CommentRequest(String body) {}
 }

@@ -39,7 +39,48 @@ class BlogFkIntegrationTest {
     @Autowired QuoteBoxRepository quoteBoxRepository;
     @Autowired QuoteBoxService quoteBoxService;
     @Autowired StoryRepository storyRepository;
+    @Autowired BlogCommentRepository commentRepository;
     @Autowired EntityManager em;
+
+    // ── B2a 댓글(blog_comment.post_id · user_id FK — 부모 삭제는 실 H2로만 잰다) ─────────────────────
+
+    @Test
+    @DisplayName("REQ-243 · 남의 댓글이 달린 글 지우기 → 댓글 행 0 · FK 위반 0(실 H2)")
+    void deletePostClearsComments() {
+        User author = user("cmtdelete");
+        User reader = user("cmtreader");
+        BlogPost post = publishedPost(author);
+        BlogPost keeper = publishedPostWithSid(author, "KKKKKKKK");
+        commentRepository.saveAndFlush(BlogComment.of(post, "AAAAAAAA", reader, "남의 댓글"));
+        commentRepository.saveAndFlush(BlogComment.of(post, "BBBBBBBB", author, "내 댓글"));
+        BlogComment kept = commentRepository.saveAndFlush(BlogComment.of(keeper, "KKKKKKKK", reader, "남는 댓글"));
+        Long postId = post.getId();
+
+        assertThatCode(() -> {
+            postService.delete(author, postId);
+            postRepository.flush();
+        }).doesNotThrowAnyException();
+        assertThat(postRepository.findById(postId)).isEmpty();
+        assertThat(commentRepository.findAll()).extracting(BlogComment::getId).containsExactly(kept.getId());
+    }
+
+    @Test
+    @DisplayName("REQ-257 · 남의 글에 단 댓글 · 내 글에 달린 남의 댓글이 있는 계정의 탈퇴 — FK 위반 0 · 그 댓글 행 0(실 H2)")
+    void purgeClearsComments() {
+        User leaver = user("cmtpurge");
+        User other = user("cmtother");
+        BlogPost mine = publishedPost(leaver);
+        BlogPost theirs = publishedPostWithSid(other, "KKKKKKKK");
+        commentRepository.saveAndFlush(BlogComment.of(theirs, "KKKKKKKK", leaver, "남의 글에 단 내 댓글"));
+        commentRepository.saveAndFlush(BlogComment.of(mine, "AAAAAAAA", other, "내 글에 달린 남의 댓글"));
+        BlogComment kept = commentRepository.saveAndFlush(BlogComment.of(theirs, "KKKKKKKK", other, "남의 글 남의 댓글"));
+
+        assertThatCode(() -> accountService.deleteAccount("cmtpurge@booktimer.com", "rawpw1234")).doesNotThrowAnyException();
+        em.flush();
+        em.clear();
+        assertThat(userRepository.findByEmail("cmtpurge@booktimer.com")).isEmpty();
+        assertThat(commentRepository.findAll()).extracting(BlogComment::getId).containsExactly(kept.getId());
+    }
 
     private User user(String loginId) {
         User u = User.of(loginId + "@booktimer.com", passwordEncoder.encode("rawpw1234"), "글쓴이", "Asia/Seoul", Role.USER);

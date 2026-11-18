@@ -75,6 +75,24 @@ class UserTest {
     }
 
     @Test
+    @DisplayName("REQ-265 · 가입(of · ofOAuth)도 updateProfile과 같은 이름 규칙 — 보이지 않는 글자 · NBSP뿐 · 금지어 · 링크 거절 · 30자 초과 거절")
+    void constructors_applyNameRule() {
+        String zwsp = String.valueOf((char) 0x200B);
+        String nbsp = String.valueOf((char) 0xA0);
+        for (String bad : new String[]{"가" + zwsp + "나", nbsp + nbsp, "가\n나", "씨발놈", "https://spam.example"}) {
+            assertThatThrownBy(() -> User.of(EMAIL, HASH, bad, TZ, Role.USER)).as(bad).isInstanceOf(InvalidNicknameException.class);
+            assertThatThrownBy(() -> User.ofOAuth(EMAIL, bad, TZ, Role.USER, AuthProvider.GOOGLE)).as(bad)
+                    .isInstanceOf(InvalidNicknameException.class);
+        }
+        assertThatThrownBy(() -> User.of(EMAIL, HASH, "가".repeat(User.NICKNAME_MAX_LENGTH + 1), TZ, Role.USER))
+                .isInstanceOf(IllegalArgumentException.class);
+        assertThat(User.of(EMAIL, HASH, nbsp + " 책벌레 ", TZ, Role.USER).getNickname()).isEqualTo("책벌레"); // 걷어 저장
+        assertThat(User.isAcceptableNickname("책벌레")).isTrue();
+        assertThat(User.isAcceptableNickname("씨발놈")).isFalse();
+        assertThat(User.isAcceptableNickname(null)).isFalse();
+    }
+
+    @Test
     @DisplayName("타임존이 유효한 IANA ID가 아니면 예외")
     void of_invalidTimezone_throws() {
         assertThatThrownBy(() -> User.of(EMAIL, HASH, NICK, "Mars/Phobos", Role.USER))
@@ -132,6 +150,31 @@ class UserTest {
         user.updateProfile(exactly, TZ);
 
         assertThat(user.getNickname()).isEqualTo(exactly);
+    }
+
+    @Test
+    @DisplayName("REQ-265 · updateProfile은 앞뒤 공백 · NBSP를 걷어 저장 · 「가」×30은 그대로 통과")
+    void updateProfile_stripsAndKeepsRepeatedNames() {
+        User user = User.of(EMAIL, HASH, NICK, TZ, Role.USER);
+        String nbsp = String.valueOf((char) 0xA0);
+
+        user.updateProfile(nbsp + " 새닉네임 " + nbsp, TZ);
+        assertThat(user.getNickname()).isEqualTo("새닉네임");
+        user.updateProfile(" " + "가".repeat(User.NICKNAME_MAX_LENGTH) + " ", TZ); // 걷은 뒤 30자
+        assertThat(user.getNickname()).isEqualTo("가".repeat(User.NICKNAME_MAX_LENGTH));
+    }
+
+    @Test
+    @DisplayName("REQ-265 · updateProfile — 보이지 않는 글자 · NBSP뿐 · 금지어 이름은 InvalidNicknameException · 닉네임 그대로")
+    void updateProfile_invalidNameRejected() {
+        User user = User.of(EMAIL, HASH, NICK, TZ, Role.USER);
+        String zwsp = String.valueOf((char) 0x200B);
+        String nbsp = String.valueOf((char) 0xA0);
+
+        for (String bad : new String[]{"가" + zwsp + "나", nbsp + nbsp, "가\n나", "씨발놈"}) {
+            assertThatThrownBy(() -> user.updateProfile(bad, TZ)).isInstanceOf(InvalidNicknameException.class);
+        }
+        assertThat(user.getNickname()).isEqualTo(NICK);
     }
 
     @Test

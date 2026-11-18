@@ -35,11 +35,22 @@ public enum RateLimitAction {
     STUDY_NOTE_CREATE(30, Duration.ofHours(1)),
 
     /**
-     * 블로그 초안 <b>만들기</b>({@code POST /api/app/blog/posts} — 책생글 B1a). 저장 · 올리기에는 걸지 않는다(올리기 상한은 B2).
+     * 블로그 초안 <b>만들기</b>({@code POST /api/app/blog/posts} — 책생글 B1a). 저장에는 걸지 않는다(올리기는 {@link #BLOG_PUBLISH}).
      * 까닭은 {@link #STUDY_NOTE_CREATE}와 같다: 「첫 저장 때 행」은 순수 클라 상태기계라 id 배선이 어긋나면 디바운스마다 새
      * 1만 자 행이 생긴다(A4). E2 뒤엔 허용 목록이 {@code *}라 아무나 부를 수 있다(비평 SEC-7).
      */
     BLOG_DRAFT_CREATE(30, Duration.ofHours(1)),
+
+    /**
+     * 블로그 문장 댓글 쓰기(B2a · J63) — 허용 목록 · 첫 설정 뒤 첫 줄이라 실패한 시도도 센다(도배 방어). 지우기 · 읽기에는 걸지 않는다.
+     */
+    BLOG_COMMENT(20, Duration.ofHours(1)),
+
+    /**
+     * 블로그 올리기(B2a · J63) — <b>검사를 다 지난 뒤에만 센다</b>(낡은 판 409 · 걸러내기 400으로 고치며 다시 누른 시도가 하루 몫을
+     * 깎지 않게). 인메모리라 「잠금이 첫 DB 문장」 규칙과 부딪히지 않는다.
+     */
+    BLOG_PUBLISH(10, Duration.ofDays(1)),
 
     /**
      * 공부 필기 <b>사진 올리기</b>({@code POST /api/study/notes/images}). 공부 한 시간에 스크린샷 수십 장이 정상 —

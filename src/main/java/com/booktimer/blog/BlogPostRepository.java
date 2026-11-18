@@ -5,6 +5,7 @@ import jakarta.persistence.LockModeType;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Lock;
+import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
@@ -47,6 +48,16 @@ public interface BlogPostRepository extends JpaRepository<BlogPost, Long> {
 
     /** 내 글 목록 — 최근 고친 순 200개(ponytail: 넘으면 페이지를 붙인다). */
     List<BlogPost> findTop200ByUserOrderByUpdatedAtDescIdDesc(User user);
+
+    /**
+     * 새 댓글 확인(B2a REQ-298) — <b>일괄 UPDATE라 JPA 감사를 거치지 않는다</b>. 엔티티 필드로 쓰면 {@code @LastModifiedDate
+     * updatedAt}도 바뀌어 「내 글」(최근 고친 순)에서 그 글이 맨 위로 올라가고 {@code MyPostRow.updatedAt}(초안 저장 시각)이 거짓이 된다.
+     *
+     * @return 바뀐 행 수 — 0이면 내 글이 아니다
+     */
+    @Modifying(flushAutomatically = true)
+    @Query("update BlogPost p set p.authorSeenCommentsAt = :now where p.id = :id and p.user = :user")
+    int markSeen(@Param("id") Long id, @Param("user") User user, @Param("now") Instant now);
 
     /** 탈퇴 정리 — blog_post.user_id FK라 유저보다 앞 · 문장 · 판이 글보다 앞(AccountService.purge). */
     void deleteByUser(User user);

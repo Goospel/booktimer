@@ -111,7 +111,7 @@ public class AppMarginApiController {
     public MarginView edit(@PathVariable Long id, @RequestBody EditMargin request, Principal principal) {
         User user = currentUserService.resolve(principal);
         return view(user, storyService.editNote(user, id, request.quote(), request.text(), request.revision(),
-                request.exported()));
+                request.exported()), false);
     }
 
     /**
@@ -162,12 +162,17 @@ public class AppMarginApiController {
     }
 
     private MarginView view(User user, Story s) {
+        return view(user, s, true);
+    }
+
+    /** @param withQuotes 거짓이면 {@code quotes} null — 자동저장 PUT은 박스를 다시 그리지 않는다(RK-02 · B2a REQ-268) */
+    private MarginView view(User user, Story s, boolean withQuotes) {
         Book book = s.getBook();
         return new MarginView(s.getId(), book == null ? null : book.getId(), book == null ? null : book.getTitle(),
                 s.getQuote(), s.getQuoteSource(), s.getText(), s.getRevision(), QuestionLog.parse(s.getAiLog()),
                 s.getAiUpdatedAt(), aiService.remainingToday(user), writingService.aiConsent(user),
                 s.getExportedAt() != null, s.getCreatedAt(), s.getUpdatedAt(),
-                quoteBoxService.views(QuoteBox.Owner.NOTE, s.getId(), user));
+                withQuotes ? quoteBoxService.views(QuoteBox.Owner.NOTE, s.getId(), user) : null);
     }
 
     /** IAE 문구가 그대로 400 본문(text/plain — 반사 XSS 방지, charset 명시는 한글 깨짐 방지). */
@@ -220,7 +225,8 @@ public class AppMarginApiController {
      * @param questions        받은 질문 기록 — 없으면 rounds = []
      * @param aiRemainingToday 오늘 남은 글쓰기 AI 몫({@code Kind.WRITE})
      * @param exported         한 번이라도 내보냈나(C8)
-     * @param quotes           이 쪽지에 건 블로그 문장 박스 — label 순(B1b · REQ-207)
+     * @param quotes           이 쪽지에 건 블로그 문장 박스 — label 순(B1b · REQ-207). PUT(자동저장) 응답은 null = 바뀌지 않음 —
+     *                         박스를 다시 그리지 않는다(RK-02 · B2a REQ-268). GET · 만들기 · 붙이기 · 빼기 응답만 싣는다
      */
     public record MarginView(Long id, Long bookId, String bookTitle, String quote, String quoteSource, String text,
                              int revision, QuestionLog questions, Instant aiUpdatedAt, int aiRemainingToday,

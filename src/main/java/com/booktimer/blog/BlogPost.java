@@ -67,6 +67,10 @@ public class BlogPost extends BaseTimeEntity {
     @Column(name = "hidden_at")
     private Instant hiddenAt;
 
+    /** 글쓴이가 새 댓글을 마지막으로 확인한 시각(B2a · V108) — 엔티티로 쓰지 않는다: {@link BlogPostRepository#markSeen}(감사 0). */
+    @Column(name = "author_seen_comments_at") // 바꾸는 메서드 0 + @DynamicUpdate — 엔티티 저장이 이 열을 쓰지 않는다
+    private Instant authorSeenCommentsAt;
+
     protected BlogPost() {
     }
 
@@ -176,6 +180,10 @@ public class BlogPost extends BaseTimeEntity {
 
     public Instant getHiddenAt() {
         return hiddenAt;
+    }
+
+    public Instant getAuthorSeenCommentsAt() {
+        return authorSeenCommentsAt;
     }
 
     public static class StaleBlogDraftException extends RuntimeException {

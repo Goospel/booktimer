@@ -311,4 +311,45 @@ class SignupControllerTest {
 
         assertThat(userRepository.findByEmail("taker@booktimer.com")).isEmpty();  // 생성 안 됨
     }
+
+    @Test
+    @DisplayName("REQ-265 · POST /signup: 닉네임이 이름 규칙(보이지 않는 글자 · 금지어)에 걸리면 nickname 필드 에러 · 생성 없음(500 아님)")
+    void postSignup_ruleBreakingNickname_rerendersWithNicknameError() throws Exception {
+        for (String bad : new String[]{"가" + (char) 0x200B + "나", "씨발놈"}) {
+            mockMvc.perform(post("/signup").with(csrf())
+                            .param("email", "badname@booktimer.com")
+                            .param("loginId", "badnameid")
+                            .param("password", "rawpw1234")
+                            .param("nickname", bad)
+                            .param("timezone", "Asia/Seoul")
+                            .param("ageConfirmed", "true"))
+                    .andExpect(status().isOk())
+                    .andExpect(view().name("signup"))
+                    .andExpect(model().attributeHasFieldErrors("signupForm", "nickname"))
+                    .andExpect(model().errorCount(1)); // 아이디 필드로 새지 않는다
+        }
+        assertThat(userRepository.findByEmail("badname@booktimer.com")).isEmpty();
+    }
+
+    @Test
+    @DisplayName("REQ-265 · POST /signup: 이미 가입된 이메일 + 규칙 위반 닉네임도 새 이메일과 같은 응답(nickname 필드 에러) — 이름 검사가 이메일 존재 검사보다 먼저라 열거 불가 · 통지 없음")
+    void postSignup_ruleBreakingNickname_existingEmail_sameResponseNoEnumeration() throws Exception {
+        userRepository.save(User.of("dup@booktimer.com", "$2a$10$alreadyhasheddummy", "기존", "Asia/Seoul", Role.USER));
+
+        for (String email : new String[]{"dup@booktimer.com", "fresh@booktimer.com"}) {
+            mockMvc.perform(post("/signup").with(csrf())
+                            .param("email", email)
+                            .param("loginId", "badnameid")
+                            .param("password", "rawpw1234")
+                            .param("nickname", "씨발놈")
+                            .param("timezone", "Asia/Seoul")
+                            .param("ageConfirmed", "true"))
+                    .andExpect(status().isOk())
+                    .andExpect(view().name("signup"))
+                    .andExpect(model().attributeHasFieldErrors("signupForm", "nickname"))
+                    .andExpect(model().errorCount(1));
+        }
+        assertThat(userRepository.count()).isEqualTo(1);
+        verify(signupNotificationService, never()).notifyExistingAccount(org.mockito.ArgumentMatchers.anyString());
+    }
 }

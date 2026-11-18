@@ -6,6 +6,7 @@ import com.booktimer.email.SignupNotificationService;
 import com.booktimer.security.RateLimitAction;
 import com.booktimer.security.RateLimitService;
 import com.booktimer.user.EmailAlreadyExistsException;
+import com.booktimer.user.InvalidNicknameException;
 import com.booktimer.user.LoginIdAlreadyExistsException;
 import com.booktimer.user.Role;
 import com.booktimer.user.User;
@@ -129,6 +130,10 @@ public class SignupController {
         } catch (LoginIdAlreadyExistsException e) {
             // 이미 쓰이는 로그인 아이디 — 다른 아이디를 받도록 필드 에러로 안내(생성 없음)
             bindingResult.rejectValue("loginId", "loginId.duplicate", "이미 사용 중인 아이디입니다");
+            return "signup";
+        } catch (InvalidNicknameException e) {
+            // 이름 규칙(보이지 않는 글자 · 링크 · 금지어 — B2a REQ-265) — 문구가 곧 안내다
+            bindingResult.rejectValue("nickname", "nickname.invalid", e.getMessage());
             return "signup";
         } catch (IllegalArgumentException e) {
             // 예약어 등 @Pattern으로 못 거른 형식/규칙 위반(도메인 검증) — 필드 에러로 안내

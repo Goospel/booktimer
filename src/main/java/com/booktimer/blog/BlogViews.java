@@ -22,9 +22,12 @@ public final class BlogViews {
     public record Page(List<PostRow> posts, String next) {
     }
 
-    /** @param title 올린 제목 — 아직 올리지 않은 초안이면 null */
+    /**
+     * @param title       올린 제목 — 아직 올리지 않은 초안이면 null
+     * @param newComments 글쓴이가 마지막으로 확인한 뒤 남이 단 댓글 수(B2a REQ-298 — 차단 · 신고한 사람의 댓글도 센다)
+     */
     public record MyPostRow(long id, String title, String draftTitle, Instant publishedAt, Instant republishedAt,
-                            Instant updatedAt) {
+                            Instant updatedAt, int newComments) {
     }
 
     /**
@@ -75,10 +78,23 @@ public final class BlogViews {
     }
 
     /**
-     * @param edited 판 &gt; 1
-     * @param br     이 문장 뒤에서 줄이 바뀐다(문단 안 줄바꿈 — 문단 끝 문장은 거짓)
+     * @param edited   판 &gt; 1
+     * @param br       이 문장 뒤에서 줄이 바뀐다(문단 안 줄바꿈 — 문단 끝 문장은 거짓)
+     * @param comments 이 문장 묶음(합쳐진 옛 문장 포함)의 댓글 수 — 보는 사람과 무관하게 모두에게 같다(B2a REQ-266 · J39)
      */
-    public record SentenceView(String sid, String text, boolean edited, boolean br) {
+    public record SentenceView(String sid, String text, boolean edited, boolean br, int comments) {
+    }
+
+    /**
+     * 문장 댓글 하나(B2a REQ-250) — 평평한 목록 · 오래된 순.
+     *
+     * @param sid      댓글이 달린 문장 주소(합쳐진 옛 문장이면 그 옛 주소)
+     * @param isAuthor 그 글의 글쓴이가 단 댓글
+     * @param mine     보는 사람이 단 댓글(지우기 단추)
+     * @param merged   부른 문장과 다른 옛 문장(합쳐지기 전)에 달린 댓글
+     */
+    public record CommentView(long id, String sid, String authorName, boolean isAuthor, boolean mine, String body,
+                              Instant createdAt, boolean merged) {
     }
 
     /** @param status {@code LIVE} · {@code EDITED} · {@code MERGED} · {@code DELETED} */

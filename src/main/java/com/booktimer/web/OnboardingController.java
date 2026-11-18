@@ -3,6 +3,7 @@ package com.booktimer.web;
 import com.booktimer.security.CurrentUserService;
 import com.booktimer.timer.ReadingTimer;
 import com.booktimer.timer.ReadingTimerRepository;
+import com.booktimer.user.InvalidNicknameException;
 import com.booktimer.user.LoginIdAlreadyExistsException;
 import com.booktimer.user.OnboardingService;
 import com.booktimer.user.User;
@@ -94,6 +95,10 @@ public class OnboardingController {
         } catch (LoginIdAlreadyExistsException e) {
             // 이미 쓰이는 공개 핸들 — 다른 아이디를 받도록 필드 에러로 알리고 재렌더(온보딩 미완료 유지).
             bindingResult.rejectValue("loginId", "loginId.duplicate", "이미 사용 중인 아이디입니다");
+            return "onboarding";
+        } catch (InvalidNicknameException e) {
+            // 이름 규칙(B2a REQ-265) — 아래 IAE(아이디 규칙)보다 먼저 잡아 닉네임 칸 오류로 안내한다
+            bindingResult.rejectValue("nickname", "nickname.invalid", e.getMessage());
             return "onboarding";
         } catch (IllegalArgumentException e) {
             // 예약어 등 @Pattern으로 못 거른 형식/규칙 위반(도메인 검증) — 필드 에러로 안내.

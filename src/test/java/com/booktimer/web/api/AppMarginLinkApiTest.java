@@ -371,10 +371,26 @@ class AppMarginLinkApiTest {
         Story plain = note("lk207pb", "박스 없는 쪽지.");
         String empty = "{\"quote\":null,\"text\":\"\",\"revision\":0}";
 
-        json(put("/api/app/margins/" + n), b, empty).andExpect(status().isOk()).andExpect(jsonPath("$.text").value(""))
-                .andExpect(jsonPath("$.quotes", hasSize(1)));
+        json(put("/api/app/margins/" + n), b, empty).andExpect(status().isOk()).andExpect(jsonPath("$.text").value(""));
+        // 박스가 살아 있는지는 같은 쪽지 GET으로 잰다 — PUT 응답은 박스를 다시 그리지 않는다(RK-02 · REQ-268)
+        call(get("/api/app/margins/" + n), b).andExpect(status().isOk()).andExpect(jsonPath("$.quotes", hasSize(1)));
         json(put("/api/app/margins/" + plain.getId()), b, empty).andExpect(status().isBadRequest())
                 .andExpect(content().string("옮긴 문장이나 생각을 하나는 적어 주세요"));
+    }
+
+    @Test
+    @DisplayName("REQ-268 · PUT /api/app/margins/{id} 응답의 quotes는 null · 같은 쪽지 GET은 박스를 싣는다")
+    void putResponseDoesNotRenderQuotes() throws Exception {
+        String a = ready("lk268");
+        String b = ready("lk268b");
+        Src src = source(a, "봄에는 꽃이 핀다.");
+        long n = hung(b, "생각이다.", src, 0, 0);
+
+        json(put("/api/app/margins/" + n), b, "{\"quote\":null,\"text\":\"고친 생각이다.\",\"revision\":0}")
+                .andExpect(status().isOk()).andExpect(jsonPath("$.text").value("고친 생각이다."))
+                .andExpect(jsonPath("$.quotes").value(org.hamcrest.Matchers.nullValue()));
+        call(get("/api/app/margins/" + n), b).andExpect(status().isOk()).andExpect(jsonPath("$.quotes", hasSize(1)))
+                .andExpect(jsonPath("$.quotes[0].text").value("봄에는 꽃이 핀다."));
     }
 
     // ── REQ-289 붙이기 · 빼기 ───────────────────────────────────────────────

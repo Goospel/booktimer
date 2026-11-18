@@ -189,6 +189,27 @@ class OnboardingControllerTest {
     }
 
     @Test
+    @DisplayName("REQ-265 · 웹 온보딩 닉네임 금지어 → nickname 필드 오류(loginId 오류 아님)")
+    void postOnboarding_bannedNickname_isNicknameError() throws Exception {
+        register("bannick@booktimer.com");
+
+        mockMvc.perform(post("/onboarding").with(user("bannick@booktimer.com")).with(csrf())
+                        .param("loginId", "bannick_user")
+                        .param("nickname", new String(new int[]{0xC2DC, 0xBC1C}, 0, 2) + "독자")
+                        .param("incrementMinutes", "60"))
+                .andExpect(status().isOk())
+                .andExpect(view().name("onboarding"))
+                .andExpect(model().attributeHasFieldErrors("onboardingForm", "nickname"))
+                .andExpect(result -> {
+                    var errors = (org.springframework.validation.BindingResult) result.getModelAndView().getModel()
+                            .get("org.springframework.validation.BindingResult.onboardingForm");
+                    assertThat(errors.hasFieldErrors("loginId")).as("loginId 오류로 바꾸지 않는다").isFalse();
+                });
+
+        assertThat(userRepository.findByEmail("bannick@booktimer.com").orElseThrow().isOnboarded()).isFalse();
+    }
+
+    @Test
     @DisplayName("POST /onboarding: 음수 목표(분)면 검증 실패로 화면을 다시 그린다")
     void postOnboarding_negativeGoal_rerenders() throws Exception {
         register("neg@booktimer.com");

@@ -37,14 +37,11 @@ public class BlogIdentityService {
     /**
      * 이름 확인 + 규칙 동의를 한 번에. 길이는 UTF-16 {@code length()}(앱 JS {@code length}와 같은 단위 — 이모지는 2).
      *
-     * @throws IllegalArgumentException 이름 길이 · 제어 문자 · 동의 없음(→ 400)
+     * @throws IllegalArgumentException 이름 길이 · 동의 없음 · 이름 규칙(→ 400 — {@code User.updateProfile})
      */
     public MeView confirm(User user, String name, Boolean agreeTerms) {
         access.check(user);
-        String n = name == null ? "" : name.strip();
-        if (n.chars().anyMatch(Character::isISOControl)) {
-            throw new IllegalArgumentException("이름에 줄바꿈이나 보이지 않는 글자는 쓸 수 없어요");
-        }
+        String n = name == null ? "" : ContentFilter.strip(name); // 보이지 않는 글자 · 금지어는 updateProfile 한 곳(REQ-265)
         if (n.length() < 2 || n.length() > 20) {
             throw new IllegalArgumentException("이름은 2~20자로 적어 주세요");
         }

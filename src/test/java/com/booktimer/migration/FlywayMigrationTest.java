@@ -349,6 +349,28 @@ class FlywayMigrationTest {
                 .isPositive();
     }
 
+    /**
+     * V108 — 문장 댓글. 시트 조회({@code where post_id = ? and sid in (…)})와 탈퇴 · 글 지우기가 표 전체를 훑지 않게 (post_id, sid)
+     * 색인 · 본문 1,000자(UTF-16 상한을 서버가 먼저 막지만 DB도 같은 폭). 엔티티엔 색인 선언이 없어 메인 스위트로는 안 보인다(V91 · V107).
+     */
+    @Test
+    @DisplayName("B2a · V108: blog_comment 본문 1,000자 · (post_id, sid) 색인 · blog_post.author_seen_comments_at")
+    void v108_blog_comment_schema() {
+        assertThat(jdbcTemplate.queryForObject("""
+                SELECT CHARACTER_MAXIMUM_LENGTH FROM INFORMATION_SCHEMA.COLUMNS
+                WHERE UPPER(TABLE_NAME) = 'BLOG_COMMENT' AND UPPER(COLUMN_NAME) = 'BODY'
+                """, Integer.class)).isEqualTo(1000);
+        assertThat(jdbcTemplate.queryForList("""
+                SELECT UPPER(COLUMN_NAME) FROM INFORMATION_SCHEMA.INDEX_COLUMNS
+                WHERE UPPER(TABLE_NAME) = 'BLOG_COMMENT' AND UPPER(INDEX_NAME) = 'IDX_BLOG_COMMENT_POST_SID'
+                ORDER BY ORDINAL_POSITION
+                """, String.class)).containsExactly("POST_ID", "SID");
+        assertThat(jdbcTemplate.queryForObject("""
+                SELECT IS_NULLABLE FROM INFORMATION_SCHEMA.COLUMNS
+                WHERE UPPER(TABLE_NAME) = 'BLOG_POST' AND UPPER(COLUMN_NAME) = 'AUTHOR_SEEN_COMMENTS_AT'
+                """, String.class)).isEqualTo("YES");
+    }
+
     // ── 토스 미니앱(V61) — users.toss_user_key 유니크 + api_token·toss_link_code 스키마↔엔티티 일치 ──
 
     @Test
@@ -559,7 +581,7 @@ class FlywayMigrationTest {
             "READING_GOAL_CHANGE", "READING_GOAL_WAIVER", "READING_PERSONALITY", "READING_SESSION",
             "READING_TIMER", "REPORT", "STORY", "STORY_LIKE", "STUDY_AI_USAGE", "STUDY_BOOK",
             "STUDY_DAILY_CHECK", "STUDY_NOTE", "STUDY_NOTE_IMAGE", "STUDY_PLAN_ITEM", "STUDY_RECALL", "STUDY_SESSION",
-            "TOSS_LINK_CODE", "CHAT_ROOM", "CHAT_MESSAGE", "WRITING_DRAFT", "BLOG_POST");
+            "TOSS_LINK_CODE", "CHAT_ROOM", "CHAT_MESSAGE", "WRITING_DRAFT", "BLOG_POST", "BLOG_COMMENT");
 
     /**
      * <b>users를 FK 참조하는 테이블 집합 == purge()가 지우는 집합</b>을 못 박는다.
