@@ -246,6 +246,8 @@ class PrivacyControllerTest {
     private static final Pattern NOTICE = Pattern.compile("(\\d{4}-\\d{2}-\\d{2}) 개정 공지");
     /** PR-M 즉시 시행 개정일(KST) — 머지일이 바뀌면 두 문서의 그 날짜 자리와 함께 고친다. */
     private static final String IMMEDIATE_REVISION = "2026-10-23";
+    /** `*` 전환 전 문서 PR의 즉시 시행 개정일(KST) — 처리방침에만 「개정 —」 줄 하나로 있다. 머지일이 바뀌면 privacy 개정 이력·위 시험의 글자와 함께 고친다. */
+    private static final String PRIVACY_IMMEDIATE_REVISION_2 = "2026-11-18";
     private static final Pattern KOREAN_DATE = Pattern.compile("\\d+월 \\d+일");
 
     /**
@@ -273,10 +275,13 @@ class PrivacyControllerTest {
             assertThat(notices).as(path + " 개정 공지일").containsExactlyInAnyOrder(prk, k2);
             assertThat(KOREAN_DATE.matcher(html).find()).as(path + " 「N월 N일」 꼴 날짜").isFalse();
             assertThat(html.split(IMMEDIATE_REVISION + " 개정 —", -1)).as(path + " 즉시 시행 개정 줄은 하나").hasSize(2);
+            assertThat(html.split(PRIVACY_IMMEDIATE_REVISION_2 + " 개정 —", -1)).as(path + " 문서 PR 개정 줄").hasSize(path.equals("/privacy") ? 2 : 1);
             Matcher d = DATE.matcher(html);
             while (d.find()) {
                 LocalDate date = LocalDate.parse(d.group());
-                if (date.isAfter(prk)) assertThat(date).as(path + " 공지일 뒤 날짜").isIn(effective, e2, k2, immediate);
+                if (date.isAfter(prk)) assertThat(date).as(path + " 공지일 뒤 날짜")
+                        .isIn(path.equals("/privacy") ? List.of(effective, e2, k2, immediate, LocalDate.parse(PRIVACY_IMMEDIATE_REVISION_2))
+                                                      : List.of(effective, e2, k2, immediate));
             }
         }
         assertThat(ChronoUnit.DAYS.between(prk, effective)).as("E − PR-K 공지일").isGreaterThanOrEqualTo(31);
@@ -549,6 +554,36 @@ class PrivacyControllerTest {
         assertThat(between(html, "<h2>제2조", "<h2>제3조")).contains("아이폰 앱");
         assertThat(between(html, "<h2>제3조", "<h2>제4조")).contains("구글 로그인 계정").contains("Apple 로그인 계정(아이폰 앱)");
         assertThat(html).contains("제3조 구글·Apple 로그인 계정(즉시)");
+    }
+
+    /** `*` 전환 전 문서 PR(2026-11-18) — 사용자 결정 3 · U-156 ③ · B2b `blog_report.target_user_id`. */
+    @Test
+    @DisplayName("U-156 ③ · B2b · GET /privacy: 2절 앱 글쓰기 AI 사용 횟수·원가 · 신고된 글쓴이(2절 수집 · 5절 탈퇴 시 지움)")
+    void getPrivacy_appWritingAiUsageAndReportedAuthor() throws Exception {
+        String html = squash(render("/privacy"));
+        String s2 = between(html, "<h2>2. 수집하는 개인정보 항목</h2>", "<h2>3.");
+        String appWriting = between(s2, "<strong>앱 글쓰기</strong>", "</li>");
+        assertThat(appWriting).contains("AI 질문의 하루 사용 횟수와 AI 사용에 든 원가(서비스가 부담)");
+        assertThat(s2).contains("신고된 글·댓글의 글쓴이도 그 신고 내역에 함께 적습니다");
+        String s5 = between(html, "<h2>5. 보관 및 파기</h2>", "<h2>6.");
+        assertThat(s5).contains("신고된 글·댓글의 글쓴이가 회원 탈퇴하면 그 신고 내역에서 글쓴이를 지웁니다");
+    }
+
+    /** U-156 ② — 사용자 결정 (다): 8절 머리를 사실대로 + 국외 이전 근거(법 제28조의8 제1항) 문단. */
+    @Test
+    @DisplayName("U-156 ② · GET /privacy: 8절 머리가 「문서로 정하고」를 주장하지 않고 Gmail 개인 계정을 밝힌다 · 국외 이전 근거가 여섯 곳을 동의(1호)와 처리방침 공개(3호 가목)로 나눈다")
+    void getPrivacy_transferLegalBasis() throws Exception {
+        String s8 = between(squash(render("/privacy")), "<h2>8. 개인정보 처리의 위탁</h2>", "<h2>9.");
+        assertThat(s8).doesNotContain("문서로 정하고")
+                .contains("운영자 메일함(Gmail)은 개인 계정이라");
+        String basis = between(s8, "<strong>국외 이전의 근거</strong>", "</p>");
+        assertThat(basis).contains("제28조의8 제1항")
+                .contains("6-3절").contains("6-5절").contains("별도 동의</strong>(제1호)")
+                .contains("6-1절").contains("6-2절").contains("6-4절").contains("7절").contains("운영자 메일함")
+                .contains("제3호 가목");
+        assertThat(between(squash(render("/privacy")), "<h2>13. 처리방침의 변경</h2>", "</section>"))
+                .contains("2026-11-18 개정 — 2절 앱 글쓰기 AI 질문의 하루 사용 횟수·원가")
+                .contains("8절 위탁 조건 문장을 사실대로 · 국외 이전의 근거(즉시)");
     }
 
     /** 음성 판정 전용 — 지금도 초록이다. v1 설계의 예시 날짜를 문안에 베껴 넣는 회귀만 잡는다(REQ-74 수동 확인의 자동화). */
