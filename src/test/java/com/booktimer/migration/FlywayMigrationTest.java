@@ -411,6 +411,24 @@ class FlywayMigrationTest {
                 """, Integer.class)).as("처리 기록엔 FK 0").isZero();
     }
 
+    /**
+     * V109 — 신고함 · 처리 · 관리자 「이 글을 인용한 박스」가 표를 훑지 않게: 열린 신고 수 · 오래된 열린 신고({@code status, created_at}) ·
+     * 같은 대상의 열린 신고(글 행 잠금을 쥔 채 도는 resolve — {@code target_type, target_id, status}) · {@code source_post_id}.
+     * 엔티티엔 색인 선언이 없어 메인 스위트로는 안 보인다(V107 · V108과 같은 까닭).
+     */
+    @Test
+    @DisplayName("B2b · V109: blog_report (status, created_at) · (target_type, target_id, status) · quote_box (source_post_id) 색인")
+    void v109_blog_report_and_quote_source_indexes() {
+        Map<String, List<String>> expected = Map.of(
+                "BLOG_REPORT.IDX_BLOG_REPORT_STATUS", List.of("STATUS", "CREATED_AT"),
+                "BLOG_REPORT.IDX_BLOG_REPORT_TARGET", List.of("TARGET_TYPE", "TARGET_ID", "STATUS"),
+                "QUOTE_BOX.IDX_QUOTE_BOX_SOURCE_POST", List.of("SOURCE_POST_ID"));
+        expected.forEach((key, cols) -> assertThat(jdbcTemplate.queryForList("""
+                SELECT UPPER(COLUMN_NAME) FROM INFORMATION_SCHEMA.INDEX_COLUMNS
+                WHERE UPPER(TABLE_NAME) = ? AND UPPER(INDEX_NAME) = ? ORDER BY ORDINAL_POSITION
+                """, String.class, key.split("[.]")[0], key.split("[.]")[1])).as(key).containsExactlyElementsOf(cols));
+    }
+
     // ── 토스 미니앱(V61) — users.toss_user_key 유니크 + api_token·toss_link_code 스키마↔엔티티 일치 ──
 
     @Test

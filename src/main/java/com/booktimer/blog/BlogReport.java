@@ -15,6 +15,7 @@ import jakarta.persistence.JoinColumn;
 import jakarta.persistence.ManyToOne;
 import jakarta.persistence.Table;
 import jakarta.persistence.UniqueConstraint;
+import org.hibernate.annotations.DynamicUpdate;
 
 import java.time.Instant;
 
@@ -22,8 +23,12 @@ import java.time.Instant;
  * 블로그 신고 한 건(B2b · V109 · J50 — 사람 신고 {@code report}와 다른 표). 대상은 글 · 댓글 둘(J94) — 문장 · 박스 신고는 글 대상에
  * detail 접두({@code sid:} · {@code quote:})로. 대상 · 대상 글쓴이는 논리 참조(FK 없음 — 대상이 지워져도 신고자의 기록으로 남는다).
  * 유일 제약은 엔티티에도 같은 이름으로 둔다 — 메인 스위트는 엔티티 스키마라 마이그레이션에만 있으면 멱등 동시성 시험이 공허하다.
+ *
+ * <p><b>{@code @DynamicUpdate}</b>: 처리(resolve)가 바뀐 열만 쓴다 — 전 열 UPDATE면 운영자가 읽은 뒤 대상 글쓴이 탈퇴 정리가 비운
+ * {@code target_user_id}를 옛 값으로 되쓴다(처리방침 5절 「탈퇴 시 즉시 삭제」).
  */
 @Entity
+@DynamicUpdate
 @Table(name = "blog_report", uniqueConstraints = @UniqueConstraint(name = "uq_blog_report_target",
         columnNames = {"reporter_id", "target_type", "target_id"}))
 public class BlogReport extends BaseTimeEntity {

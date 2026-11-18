@@ -294,7 +294,7 @@ public class QuoteBoxService {
     @Transactional(readOnly = true)
     public HangBook hangBook(User viewer, BlogPost post, Layout layout) {
         Map<Integer, QuoteBox> books = repository.findByOwnerTypeAndOwnerIdOrderByLabel(Owner.POST, post.getId()).stream()
-                .filter(q -> q.getKind() == Kind.BOOK && q.getSourceIsbn13() != null)
+                .filter(q -> q.getKind() == Kind.BOOK && q.getSourceIsbn13() != null && !q.hidden()) // 가린 박스의 출처 책 0(§6.4)
                 .collect(Collectors.toMap(QuoteBox::getLabel, Function.identity()));
         for (Layout.Item item : layout.items()) {
             QuoteBox q = item.q() == null ? null : books.get(item.q().intValue());

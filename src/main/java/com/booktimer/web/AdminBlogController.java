@@ -3,6 +3,7 @@ package com.booktimer.web;
 import com.booktimer.blog.BlogModerationService;
 import com.booktimer.blog.BlogModerationService.Unit;
 import com.booktimer.blog.Moderation.Action;
+import org.springframework.dao.OptimisticLockingFailureException;
 import org.springframework.stereotype.Controller;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -21,6 +22,8 @@ public class AdminBlogController {
 
     private static final String BACK = "redirect:/admin/reports";
     private static final String SAME = "바뀐 것이 없어요";
+    /** 처리하는 사이 그 행이 지워졌다(글쓴이의 댓글 지우기 · 신고자 탈퇴 등 — 커밋의 0행 UPDATE). 롤백됐으니 다시 누르면 된다. */
+    private static final String STALE = "처리하는 사이 게시물이나 신고가 바뀌었어요 — 다시 불러와 주세요";
 
     private final BlogModerationService moderation;
 
@@ -38,6 +41,8 @@ public class AdminBlogController {
                     unitId, note);
         } catch (IllegalArgumentException e) {
             redirect.addFlashAttribute("error", e.getMessage());
+        } catch (OptimisticLockingFailureException e) {
+            redirect.addFlashAttribute("error", STALE);
         }
         return BACK;
     }
@@ -52,6 +57,8 @@ public class AdminBlogController {
             }
         } catch (IllegalArgumentException e) {
             redirect.addFlashAttribute("error", e.getMessage());
+        } catch (OptimisticLockingFailureException e) {
+            redirect.addFlashAttribute("error", STALE);
         }
         return BACK;
     }
@@ -62,6 +69,8 @@ public class AdminBlogController {
             moderation.restrict(id, on);
         } catch (IllegalArgumentException e) {
             redirect.addFlashAttribute("error", e.getMessage());
+        } catch (OptimisticLockingFailureException e) {
+            redirect.addFlashAttribute("error", STALE);
         }
         return BACK;
     }

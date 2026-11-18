@@ -312,16 +312,18 @@ class AppBlogSafetyApiTest {
         long hiddenComment = commented(author, post, sid, "가려질 댓글");
         long draft = create(author, "초안", "아직 안 올린 글.");
         long hiddenPost = published(author, "가려질 글", "문장이다.");
+        long onHiddenPost = commented(author, hiddenPost, sidsOf(author, hiddenPost).get(0), "가린 글의 보이는 댓글");
         moderation.apply(Unit.POST, hiddenPost, Action.POLICY, null);
         moderation.apply(Unit.COMMENT, hiddenComment, Action.TEMP, null);
 
         report(author, "POST", post, "SPAM", null).andExpect(status().isBadRequest())
                 .andExpect(content().string("내 글이나 댓글은 신고할 수 없어요"));
         report(reporter, "COMMENT", mine, "SPAM", null).andExpect(status().isBadRequest());
-        for (long[] t : new long[][]{{0, draft}, {0, hiddenPost}, {1, hiddenComment}, {0, 987_654_321L}, {1, 987_654_321L}}) {
+        for (long[] t : new long[][]{{0, draft}, {0, hiddenPost}, {1, hiddenComment}, {1, onHiddenPost}, {0, 987_654_321L}, {1, 987_654_321L}}) {
             report(reporter, t[0] == 0 ? "POST" : "COMMENT", t[1], "SPAM", null).andExpect(status().isNotFound())
                     .andExpect(content().string("신고할 대상을 찾을 수 없어요"));
         }
+        rateLimitService.clearForTest(); // 위 7번이 신고 상한(시간 10)을 먹는다 — 아래 대조가 429로 가려지지 않게
         report(reporter, "SENTENCE", post, "SPAM", null).andExpect(status().isBadRequest())
                 .andExpect(content().string("신고할 대상을 골라 주세요"));
         String head = "sid:" + sid + "\n";
@@ -329,6 +331,8 @@ class AppBlogSafetyApiTest {
                 .andExpect(content().string("부가 설명은 500자까지 쓸 수 있어요"));
         report(reporter, "POST", post, "SPAM", head + "가".repeat(500 - head.length() + 1)).andExpect(status().isBadRequest());
         report(reporter, "POST", post, "SPAM", head + "가".repeat(500 - head.length())).andExpect(status().isOk()); // 양성 대조
+        moderation.apply(Unit.POST, hiddenPost, Action.RESTORE, null);
+        report(reporter, "COMMENT", onHiddenPost, "SPAM", null).andExpect(status().isOk()); // 양성 대조 — 글을 다시 보이면 그 댓글도 대상
     }
 
     @Test
@@ -367,6 +371,8 @@ class AppBlogSafetyApiTest {
                 .andExpect(status().is2xxSuccessful());
         long noteBox = jdbc.queryForObject("select max(id) from quote_box where owner_type = 'NOTE' and owner_id = ?",
                 Long.class, note.getId());
+        flushClear();
+        jdbc.update("update quote_box set owner_id = ? where id = ?", post, noteBox); // 쪽지 id가 우연히 글 id와 같은 꼴 — 종류 검사만 막는다
         String sid = sidsOf(author, post).get(0);
         long c = commented(author, post, sid, "댓글");
         String bad = "신고할 문장이나 인용을 찾을 수 없어요 — 글을 다시 불러와 주세요";
@@ -426,6 +432,23 @@ class AppBlogSafetyApiTest {
                 .andExpect(jsonPath("$.moderation.note").value("게시자만 보는 글"));
         call(get("/api/app/blog/posts/mine"), author)
                 .andExpect(jsonPath("$[?(@.id == " + hidden + ")].moderation.kind").value(org.hamcrest.Matchers.contains("TEMP")));
+    }
+
+    @Test
+    @DisplayName("REQ-253 · 가린 글을 글쓴이와 차단 관계인 사람 · 그 글을 신고한 사람이 열면 「글을 찾을 수 없어요」(가렸다는 신호 0) · 남은 「운영 정책으로 가려진 글이에요」")
+    void hiddenNoticeNotForBlockedOrReporter() throws Exception {
+        String author = ready("rq253a");
+        String blocked = ready("rq253b");
+        String reporter = ready("rq253r");
+        String other = ready("rq253o");
+        long post = published(author, "가릴 글", "첫 문장이다.");
+        blockRepository.saveAndFlush(Block.of(user("rq253b"), user("rq253a")));
+        report(reporter, "POST", post, "SPAM", null).andExpect(status().isOk());
+        moderation.apply(Unit.POST, post, Action.TEMP, null);
+
+        call(get("/api/app/blog/posts/" + post), blocked).andExpect(status().isNotFound()).andExpect(content().string(NOT_FOUND));
+        call(get("/api/app/blog/posts/" + post), reporter).andExpect(status().isNotFound()).andExpect(content().string(NOT_FOUND));
+        call(get("/api/app/blog/posts/" + post), other).andExpect(status().isNotFound()).andExpect(content().string(HIDDEN_POST)); // 양성 대조
     }
 
     @Test
@@ -744,13 +767,16 @@ class AppBlogSafetyApiTest {
         String sid = sidsOf(author, post).get(0);
         long c = commented(writer, post, sid, "가려질 댓글");
         long hiddenPost = published(writer, "가릴 글", "문장이다.");
+        long onHiddenPost = commented(writer, hiddenPost, sidsOf(writer, hiddenPost).get(0), "가린 글의 보이는 댓글");
         moderation.apply(Unit.COMMENT, c, Action.POLICY, null);
         moderation.apply(Unit.POST, hiddenPost, Action.TEMP, null);
 
-        for (ResultActions r : List.of(blockBy(me, "COMMENT", c), blockBy(me, "POST", hiddenPost))) {
+        for (ResultActions r : List.of(blockBy(me, "COMMENT", c), blockBy(me, "POST", hiddenPost), blockBy(me, "COMMENT", onHiddenPost))) {
             r.andExpect(status().isNotFound()).andExpect(content().string(not(containsString("닉_bh254w"))));
         }
         assertThat(blockRepository.findByBlockerOrderByCreatedAtDesc(user("bh254m"))).isEmpty();
+        moderation.apply(Unit.POST, hiddenPost, Action.RESTORE, null);
+        blockBy(me, "COMMENT", onHiddenPost).andExpect(status().isOk()).andExpect(jsonPath("$.name").value("닉_bh254w")); // 양성 대조
         moderation.apply(Unit.COMMENT, c, Action.RESTORE, null);
         blockBy(me, "COMMENT", c).andExpect(status().isOk()).andExpect(jsonPath("$.name").value("닉_bh254w")); // 양성 대조
     }

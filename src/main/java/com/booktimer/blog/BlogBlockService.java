@@ -53,7 +53,11 @@ public class BlogBlockService {
         return new BlockedUser(author.getId(), author.getNickname());
     }
 
-    /** 내가 차단한 사람 — 최근 차단 순(설정 「차단한 사람」). */
+    /**
+     * 내가 차단한 사람 — 최근 차단 순(설정 「차단한 사람」).
+     * shortcut: 상한 없음 · 행마다 차단 대상을 따로 읽는다(N+1 — 웹 {@code BlockService.list}와 같은 꼴), 한 사람의 차단이 수백을
+     * 넘는 날 fetch join + 상한으로 바꾼다.
+     */
     @Transactional(readOnly = true)
     public List<BlockedUser> list(User viewer) {
         return blockRepository.findByBlockerOrderByCreatedAtDesc(viewer).stream().map(Block::getBlocked)

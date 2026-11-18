@@ -43,17 +43,27 @@ public final class Moderation {
         return new View(k.name(), k == Kind.TEMP ? hiddenAt.plus(TEMP) : null, note);
     }
 
-    static boolean expired(Instant hiddenAt, Kind kind, Instant now) {
-        return kindOf(hiddenAt, kind) == Kind.TEMP && !hiddenAt.plus(TEMP).isAfter(now);
+    /**
+     * 운영자가 적은 글 — 앞뒤 공백을 걷고 빈 값은 null. 처리 기록 열 폭(2,000자)을 넘으면 400 — 다시 보이기 글도(그 글은 기록에만 남는다).
+     *
+     * @throws IllegalArgumentException 2,000자 초과
+     */
+    static String cleanNote(String note) {
+        String n = note == null || note.isBlank() ? null : note.strip();
+        if (n != null && n.length() > NOTE_MAX) {
+            throw new IllegalArgumentException("게시자에게 보일 글은 2,000자까지예요");
+        }
+        return n;
     }
 
     /**
      * §6.5 전이 표. TEMP로 갈 때만 {@code hidden_at}을 지금으로(30일을 새로 센다) · 다른 가림으로 갈 때는 처음 가린 시각 그대로.
      * note는 비우지 않으면 덮어쓰고 RESTORE는 지운다.
      *
-     * @throws IllegalArgumentException REMOVED에서 가림 · 다시 보이기(내용이 없다 — 400)
+     * @throws IllegalArgumentException REMOVED에서 가림 · 다시 보이기(내용이 없다 — 400) · note 2,000자 초과
      */
     static Next next(Instant hiddenAt, Kind kind, String oldNote, Action action, String note, Instant now) {
+        String given = cleanNote(note);
         Kind cur = kindOf(hiddenAt, kind);
         if (cur == Kind.REMOVED) {
             if (action != Action.REMOVE) {
@@ -69,10 +79,6 @@ public final class Moderation {
         if (to == cur) {
             return new Next(hiddenAt, kind, oldNote, false);
         }
-        String n = note == null || note.isBlank() ? oldNote : note.strip();
-        if (n != null && n.length() > NOTE_MAX) {
-            throw new IllegalArgumentException("게시자에게 보일 글은 2,000자까지예요");
-        }
-        return new Next(cur == null || to == Kind.TEMP ? now : hiddenAt, to, n, true);
+        return new Next(cur == null || to == Kind.TEMP ? now : hiddenAt, to, given == null ? oldNote : given, true);
     }
 }

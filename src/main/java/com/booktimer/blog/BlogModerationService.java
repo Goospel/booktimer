@@ -116,7 +116,8 @@ public class BlogModerationService {
             return false;
         }
         // 처리 기록의 note = 그때의 hide_note(다시 보이기는 운영자가 적은 글 — 열에선 지워진다)
-        logRepository.save(BlogModerationLog.of(unit.name(), id, action.name(), reportId, action == Action.RESTORE ? note : n.note()));
+        logRepository.save(BlogModerationLog.of(unit.name(), id, action.name(), reportId,
+                action == Action.RESTORE ? Moderation.cleanNote(note) : n.note()));
         if (poster != null) {
             Moderation.View v = Moderation.of(n.hiddenAt(), n.kind(), n.note());
             notifier.poster(poster, action, label, v == null ? null : v.until(), title, n.note());
@@ -203,13 +204,22 @@ public class BlogModerationService {
     }
 
     /**
-     * 관리자 신고함의 블로그 행 — 열린 것 먼저 · 최근 100개. 대상이 지워졌어도 대상 글쓴이(신고할 때 적은 id)와 막힘 여부를 보인다.
-     * detail 접두는 서버가 그 글의 것인지 확인해 저장했으므로 믿고 풀어 보인다.
+     * 관리자 신고함의 블로그 행 — 열린 것을 <b>오래된 순</b>으로(24시간 검토가 가장 급한 것이 맨 위 · 새 신고가 옛 것을 밀어내지 않게) 먼저,
+     * 남는 자리에 최근 처리한 것. 모두 합쳐 {@link #ADMIN_ROWS}개(ponytail: 열린 것이 넘으면 화면이 「오래된 100건만」이라 적는다 —
+     * 페이지는 그때). 대상이 지워졌어도 대상 글쓴이(신고할 때 적은 id)와 막힘 여부를 보인다. detail 접두는 서버가 그 글의 것인지 확인해
+     * 저장했으므로 믿고 풀어 보인다.
      */
     @Transactional(readOnly = true)
     public List<AdminRow> adminRows() {
-        return reportRepository.findTop100ByOrderByStatusAscCreatedAtDescIdDesc().stream().map(this::row).toList();
+        List<BlogReport> rows = new ArrayList<>(reportRepository.findTop100ByStatusOrderByCreatedAtAscIdAsc(Status.OPEN));
+        if (rows.size() < ADMIN_ROWS) {
+            reportRepository.findTop100ByStatusOrderByResolvedAtDescIdDesc(Status.RESOLVED).stream()
+                    .limit(ADMIN_ROWS - rows.size()).forEach(rows::add);
+        }
+        return rows.stream().map(this::row).toList();
     }
+
+    public static final int ADMIN_ROWS = 100;
 
     public record AdminRow(long id, Instant createdAt, String reason, String status, String result, String targetType, long targetId,
                            boolean targetExists, String excerpt, String prefixText, String detail, Long authorId, String authorName,

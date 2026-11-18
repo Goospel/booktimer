@@ -21,8 +21,11 @@ public interface BlogReportRepository extends JpaRepository<BlogReport, Long> {
 
     long countByStatus(Status status);
 
-    /** 관리자 신고함 — 열린 것 먼저(OPEN &lt; RESOLVED) · 최근 순 100개(ponytail: 넘으면 페이지). */
-    List<BlogReport> findTop100ByOrderByStatusAscCreatedAtDescIdDesc();
+    /** 관리자 신고함 — 열린 것은 오래된 순(색인 idx_blog_report_status). */
+    List<BlogReport> findTop100ByStatusOrderByCreatedAtAscIdAsc(Status status);
+
+    /** 관리자 신고함 — 열린 것 뒤에 최근 처리한 것. */
+    List<BlogReport> findTop100ByStatusOrderByResolvedAtDescIdDesc(Status status);
 
     /** 탈퇴 정리 — 내가 한 신고(blog_report.reporter_id FK · 처리방침 5절 「신고 내역은 신고자 탈퇴까지」). */
     @Modifying(flushAutomatically = true, clearAutomatically = true)

@@ -57,6 +57,7 @@
     <p class="status-line muted">신고는 24시간 안에 검토합니다. 처리하면 같은 대상의 열린 신고가 모두 닫히고 신고자 · 게시자에게 알립니다.
         단위는 신고 대상(그 글 · 그 글의 인용 · 그 댓글)에만 묶입니다 — 다른 게시물은 아래 「id로 처리」를 쓰세요.</p>
     <p class="status-line muted" th:if="${blogReports.isEmpty()}">접수된 블로그 신고가 없습니다.</p>
+    <p class="status-line" th:if="${blogOpenCount > 100}">열린 신고가 <span th:text="${blogOpenCount}">101</span>건이에요 — 오래된 100건만 보입니다. 처리하면 다음 것이 올라옵니다.</p>
 
     <section class="card fb-admin-item" th:each="b : ${blogReports}">
         <div class="fb-head">

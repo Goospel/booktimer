@@ -218,6 +218,65 @@ class AdminBlogControllerTest {
     }
 
     @Test
+    @DisplayName("REQ-338 · 신고함은 열린 신고를 오래된 것부터 100건 · 넘으면 「오래된 100건만 보입니다」 · 처리한 신고는 그 뒤에")
+    void oldestOpenReportsFirst() throws Exception {
+        User reporter = person("adboreporter");
+        Instant base = Instant.parse("2026-01-01T00:00:00Z"); // 다른 시험이 남긴 열린 신고보다 앞서게
+        String insert = "insert into blog_report (reporter_id, target_type, target_id, reason, status, result, resolved_at, created_at, updated_at) "
+                + "values (?, 'POST', ?, 'SPAM', ?, ?, ?, ?, ?)";
+        Timestamp resolvedAt = Timestamp.from(base.plus(Duration.ofDays(2)));
+        jdbc.update(insert, reporter.getId(), 970_999L, "RESOLVED", "NONE", resolvedAt, Timestamp.from(base.minusSeconds(60)), resolvedAt);
+        for (int i = 0; i < 101; i++) {
+            Timestamp at = Timestamp.from(base.plusSeconds(i));
+            jdbc.update(insert, reporter.getId(), 970_000L + i, "OPEN", null, null, at, at);
+        }
+
+        List<BlogModerationService.AdminRow> rows = moderation.adminRows();
+        assertThat(rows).hasSize(100).allSatisfy(r -> assertThat(r.status()).isEqualTo("OPEN"));
+        assertThat(rows.get(0).targetId()).as("24시간 검토가 가장 급한 것 — 가장 오래된 열린 신고가 맨 위").isEqualTo(970_000L);
+        assertThat(rows).extracting(BlogModerationService.AdminRow::targetId).doesNotContain(970_100L, 970_999L);
+        mvc.perform(get("/admin/reports").with(user("boss").roles("ADMIN"))).andExpect(status().isOk())
+                .andExpect(content().string(containsString("오래된 100건만 보입니다")));
+
+        jdbc.update("update blog_report set status = 'RESOLVED', result = 'NONE', resolved_at = ? where target_id between ? and ?",
+                Timestamp.from(base.plus(Duration.ofDays(1))), 970_002L, 970_100L); // 970_999가 가장 최근 처리
+        em.clear();
+        rows = moderation.adminRows();
+        assertThat(rows).extracting(BlogModerationService.AdminRow::targetId).as("열린 것 뒤에 처리한 것 — 양성 대조")
+                .startsWith(970_000L, 970_001L).contains(970_999L);
+        mvc.perform(get("/admin/reports").with(user("boss").roles("ADMIN"))).andExpect(status().isOk())
+                .andExpect(content().string(not(containsString("오래된 100건만 보입니다"))));
+    }
+
+    @Test
+    @DisplayName("REQ-333 · 30일 지난 임시조치만 만료 목록(29일 23:59는 아니다) · 저작권 중단 · 정책 가림은 만료 목록에 없다")
+    void expiryBoundaryOnRealPath() {
+        User author = person("adbxauthor");
+        Instant now = Instant.now().truncatedTo(java.time.temporal.ChronoUnit.MICROS);
+        BlogPost thirty = postOf(author, "30일 된 임시조치");
+        BlogPost almost = postOf(author, "29일 23:59 된 임시조치");
+        BlogPost copyright = postOf(author, "오래된 저작권 중단");
+        BlogPost policy = postOf(author, "오래된 정책 가림");
+        moderation.apply(BlogModerationService.Unit.POST, thirty.getId(), Moderation.Action.TEMP, null);
+        moderation.apply(BlogModerationService.Unit.POST, almost.getId(), Moderation.Action.TEMP, null);
+        moderation.apply(BlogModerationService.Unit.POST, copyright.getId(), Moderation.Action.COPYRIGHT, null);
+        moderation.apply(BlogModerationService.Unit.POST, policy.getId(), Moderation.Action.POLICY, null);
+        em.flush();
+        long before = moderation.expiredCount(now);
+        Instant cutoff = now.minus(Duration.ofDays(30));
+        jdbc.update("update blog_post set hidden_at = ? where id = ?", Timestamp.from(cutoff), thirty.getId());
+        jdbc.update("update blog_post set hidden_at = ? where id = ?", Timestamp.from(cutoff.plusSeconds(60)), almost.getId());
+        jdbc.update("update blog_post set hidden_at = ? where id in (?, ?)", Timestamp.from(now.minus(Duration.ofDays(400))),
+                copyright.getId(), policy.getId());
+        em.clear();
+
+        assertThat(moderation.expiredCount(now)).isEqualTo(before + 1);
+        assertThat(moderation.expired(now)).filteredOn(e -> e.unit().equals("POST"))
+                .extracting(BlogModerationService.Expired::id).contains(thirty.getId())
+                .doesNotContain(almost.getId(), copyright.getId(), policy.getId());
+    }
+
+    @Test
     @DisplayName("REQ-338 · note 칸 옆에 「게시자에게 그대로 보입니다 — 저작권 중단 요구(COPYRIGHT)가 아니면」 리터럴")
     void noteWarningLiteral() throws Exception {
         mvc.perform(get("/admin/reports").with(user("boss").roles("ADMIN"))).andExpect(status().isOk())

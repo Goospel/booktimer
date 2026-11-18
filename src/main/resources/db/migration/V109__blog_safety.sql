@@ -34,6 +34,11 @@ create table blog_report (
     constraint fk_blog_report_reporter foreign key (reporter_id) references users (id)
 );
 create index idx_blog_report_target_user on blog_report (target_user_id);
+-- 열린 신고 수(신고마다 · 관리자 홈 · 매일 09:00)와 신고함의 오래된 열린 신고 · 같은 대상의 열린 신고(resolve — 글 행 잠금을 쥔 채 돈다).
+create index idx_blog_report_status on blog_report (status, created_at);
+create index idx_blog_report_target on blog_report (target_type, target_id, status);
+-- 관리자 신고함 「이 글을 인용한 박스」(행마다 한 번 — V107엔 source_post_id 색인이 없다).
+create index idx_quote_box_source_post on quote_box (source_post_id);
 create table blog_moderation_log (
     id         bigint        not null auto_increment,
     unit       varchar(8)    not null,

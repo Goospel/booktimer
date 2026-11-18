@@ -34,6 +34,7 @@ public class AdminReportController {
         model.addAttribute("reportList", reportService.reportRows());
         // 블로그 신고 · 기간 끝난 임시조치(B2b) — 처리 문은 AdminBlogController
         model.addAttribute("blogReports", blogModeration.adminRows());
+        model.addAttribute("blogOpenCount", blogModeration.openCount());
         model.addAttribute("blogExpired", blogModeration.expired(clock.instant()));
         return "admin-reports";
     }

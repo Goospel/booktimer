@@ -133,8 +133,47 @@ class BlogModerationServiceTest {
         assertThatThrownBy(() -> service.resolve(43L, Action.TEMP, Unit.QUOTE, 70L, null)) // 다른 글의 박스
                 .isInstanceOf(IllegalArgumentException.class);
         assertThatThrownBy(() -> service.resolve(43L, Action.TEMP, Unit.COMMENT, 6L, null)).isInstanceOf(IllegalArgumentException.class);
+        QuoteBox noteBox = withId(QuoteBox.blog(QuoteBox.Owner.NOTE, 6L, 1, 6L, 2L, List.of("AAAAAAAA"), 1, "글", "제목", NOW), 71L);
+        when(boxes.findById(71L)).thenReturn(Optional.of(noteBox)); // 쪽지 id가 우연히 신고 대상 글 id와 같다
+        assertThatThrownBy(() -> service.resolve(43L, Action.TEMP, Unit.QUOTE, 71L, null)).hasMessage(BlogModerationService.BAD_UNIT);
         assertThat(r.getStatus()).isEqualTo(Status.OPEN);
         verify(posts, never()).findForUpdateById(any());
+        verify(boxes, never()).findForUpdate(any());
         verify(notifier, never()).reporter(any(), any(), eq("HIDDEN"));
+    }
+
+    @Test
+    @DisplayName("REQ-338 · 댓글 대상 신고는 그 댓글로만 처리된다 — 같은 글의 다른 댓글이면 오류 · 신고 OPEN · 그 댓글은 보이는 그대로")
+    void commentReportBindsToThatComment() {
+        BlogPost p = post(5L, "글");
+        BlogComment target = withId(BlogComment.of(p, "AAAAAAAA", author, "신고된 댓글"), 9L);
+        BlogComment other = withId(BlogComment.of(p, "AAAAAAAA", author, "다른 댓글"), 10L);
+        when(comments.findById(9L)).thenReturn(Optional.of(target));
+        when(comments.findById(10L)).thenReturn(Optional.of(other));
+        BlogReport r = withId(BlogReport.of(author, Target.COMMENT, 9L, 2L, ReportReason.SPAM, null), 44L);
+        when(reports.findById(44L)).thenReturn(Optional.of(r));
+        when(reports.findByTargetTypeAndTargetIdAndStatus(Target.COMMENT, 9L, Status.OPEN)).thenReturn(List.of(r));
+
+        assertThatThrownBy(() -> service.resolve(44L, Action.POLICY, Unit.COMMENT, 10L, null)).hasMessage(BlogModerationService.BAD_UNIT);
+        assertThat(r.getStatus()).isEqualTo(Status.OPEN);
+        assertThat(other.hidden()).isFalse();
+
+        service.resolve(44L, Action.POLICY, Unit.COMMENT, 9L, null); // 양성 대조
+        assertThat(target.hidden()).isTrue();
+        assertThat(r.getStatus()).isEqualTo(Status.RESOLVED);
+    }
+
+    @Test
+    @DisplayName("REQ-339 · 다시 보이기의 운영자 글도 다듬어 기록한다(앞뒤 공백 · 빈 값은 null)")
+    void restoreNoteIsCleaned() {
+        BlogPost p = post(5L, "제목");
+        when(posts.findForUpdateById(5L)).thenReturn(Optional.of(p));
+        service.apply(Unit.POST, 5L, Action.TEMP, null);
+        service.apply(Unit.POST, 5L, Action.RESTORE, "  다시 보인 까닭  ");
+        service.apply(Unit.POST, 5L, Action.TEMP, null);
+        service.apply(Unit.POST, 5L, Action.RESTORE, "   ");
+        ArgumentCaptor<BlogModerationLog> line = ArgumentCaptor.forClass(BlogModerationLog.class);
+        verify(logs, times(4)).save(line.capture());
+        assertThat(line.getAllValues()).extracting(BlogModerationLog::getNote).containsExactly(null, "다시 보인 까닭", null, null);
     }
 }

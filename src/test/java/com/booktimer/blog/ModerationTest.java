@@ -21,26 +21,21 @@ class ModerationTest {
     private static final Instant NOW = Instant.parse("2026-12-20T00:00:00Z");
 
     @Test
-    @DisplayName("REQ-333 · 임시조치 moderation.until = 가린 시각 + 30일 · 저작권 중단 · 정책 가림은 until 없음 · 만료 목록에도 없다")
+    @DisplayName("REQ-333 · 임시조치 moderation.until = 가린 시각 + 30일 · 저작권 중단 · 정책 가림은 until 없음")
     void untilOnlyForTemp() {
         assertThat(Moderation.of(HID, Kind.TEMP, "n").until()).isEqualTo(HID.plus(Duration.ofDays(30)));
         assertThat(Moderation.of(HID, Kind.COPYRIGHT, null).until()).isNull();
         assertThat(Moderation.of(HID, Kind.POLICY, null).until()).isNull();
-        Instant late = HID.plus(Duration.ofDays(400));
-        assertThat(Moderation.expired(HID, Kind.COPYRIGHT, late)).isFalse();
-        assertThat(Moderation.expired(HID, Kind.POLICY, late)).isFalse();
-        assertThat(Moderation.expired(HID, Kind.REMOVED, late)).isFalse();
         assertThat(Moderation.of(null, null, null)).as("안 가렸으면 moderation 없음").isNull();
+        // 만료 목록(30일 경계 · TEMP만)은 실제 길(cutoff · HiddenAtLessThanEqual)을 AdminBlogControllerTest가 실 H2로 잰다
     }
 
     @Test
-    @DisplayName("REQ-333 · 30일 지난 임시조치만 만료 목록(29일 23:59는 아니다)")
-    void expiryBoundary() {
-        Instant thirty = HID.plus(Duration.ofDays(30));
-        assertThat(Moderation.expired(HID, Kind.TEMP, thirty.minusSeconds(1))).isFalse();
-        assertThat(Moderation.expired(HID, Kind.TEMP, thirty)).isTrue();
-        assertThat(Moderation.expired(HID, Kind.TEMP, thirty.plusSeconds(1))).isTrue();
-        assertThat(Moderation.expired(null, Kind.TEMP, thirty)).isFalse();
+    @DisplayName("REQ-339 · 다시 보이기의 운영자 글도 2,000자까지(넘으면 400 — 처리 기록 열 폭)")
+    void restoreNoteLength() {
+        assertThatThrownBy(() -> Moderation.next(HID, Kind.TEMP, "옛 글", Action.RESTORE, "x".repeat(Moderation.NOTE_MAX + 1), NOW))
+                .isInstanceOf(IllegalArgumentException.class).hasMessage("게시자에게 보일 글은 2,000자까지예요");
+        assertThat(Moderation.next(HID, Kind.TEMP, "옛 글", Action.RESTORE, "x".repeat(Moderation.NOTE_MAX), NOW).changed()).isTrue(); // 양성 대조
     }
 
     @Test
