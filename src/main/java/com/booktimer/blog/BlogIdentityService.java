@@ -40,7 +40,7 @@ public class BlogIdentityService {
      * @throws IllegalArgumentException 이름 길이 · 동의 없음 · 이름 규칙(→ 400 — {@code User.updateProfile})
      */
     public MeView confirm(User user, String name, Boolean agreeTerms) {
-        access.check(user);
+        access.checkListed(user); // 이름은 웹 설정으로도 바뀐다 — 글쓰기 막힘으로 여기만 막아도 지키는 것이 없다(B2b)
         String n = name == null ? "" : ContentFilter.strip(name); // 보이지 않는 글자 · 금지어는 updateProfile 한 곳(REQ-265)
         if (n.length() < 2 || n.length() > 20) {
             throw new IllegalArgumentException("이름은 2~20자로 적어 주세요");

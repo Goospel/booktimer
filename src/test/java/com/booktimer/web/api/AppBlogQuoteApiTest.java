@@ -1,7 +1,10 @@
 package com.booktimer.web.api;
 
 import com.booktimer.auth.ApiTokenService;
+import com.booktimer.blog.BlogModerationService;
+import com.booktimer.blog.BlogModerationService.Unit;
 import com.booktimer.blog.BlogSentence;
+import com.booktimer.blog.Moderation.Action;
 import com.booktimer.blog.BlogSentenceRepository;
 import com.booktimer.blog.QuoteBox;
 import com.booktimer.blog.QuoteBoxRepository;
@@ -79,6 +82,7 @@ class AppBlogQuoteApiTest {
     @Autowired JdbcTemplate jdbc;
     @Autowired EntityManager em;
     @Autowired Clock clock;
+    @Autowired BlogModerationService moderation;
 
     @BeforeEach
     void clearRateLimits() {
@@ -1130,6 +1134,24 @@ class AppBlogQuoteApiTest {
         call(get("/api/app/blog/posts/" + src), b).andExpect(jsonPath("$.hangBook.bookId").value(mineBook.getId()))
                 .andExpect(jsonPath("$.hangBook.title").value("데미안(내 책)"));
         call(get("/api/app/blog/posts/" + src), c).andExpect(jsonPath("$.hangBook").value(org.hamcrest.Matchers.nullValue()));
+    }
+
+    @Test
+    @DisplayName("REQ-253 · 가린 책 박스는 hangBook을 움직이지 않는다(가린 박스의 출처 책 0)")
+    void hiddenBookBoxLeavesHangBook() throws Exception {
+        String a = ready("q253ha");
+        String b = ready("q253hb");
+        Story n = note("q253ha", bookOf("q253ha", "데미안", "헤르만 헤세", "9788937460449"), "새는 알에서 나오려고 투쟁한다", "생각");
+        long src = create(a, "원 글", "봄에는 꽃이 핀다.");
+        long boxId = box(a, src, book(n.getId()));
+        place(a, src, "봄에는 꽃이 핀다.\n⟦인용 1⟧");
+        Book mineBook = bookOf("q253hb", "데미안(내 책)", "헤르만 헤세", "9788937460449");
+        call(get("/api/app/blog/posts/" + src), b).andExpect(jsonPath("$.hangBook.bookId").value(mineBook.getId())); // 양성 대조
+
+        moderation.apply(Unit.QUOTE, boxId, Action.COPYRIGHT, null);
+
+        call(get("/api/app/blog/posts/" + src), b).andExpect(status().isOk())
+                .andExpect(jsonPath("$.hangBook").value(org.hamcrest.Matchers.nullValue()));
     }
 
     @Test

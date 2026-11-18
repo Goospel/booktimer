@@ -35,6 +35,7 @@ import java.util.Arrays;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Collectors;
@@ -371,6 +372,64 @@ class FlywayMigrationTest {
                 """, String.class)).isEqualTo("YES");
     }
 
+    /**
+     * V109 — 신고 · 가림 · 처리 기록 · 글쓰기 막기. 유일 제약(같은 신고자 · 같은 대상 하나) · detail 500자 · hide_note 2,000자 ·
+     * hide_kind에 COPYRIGHT(9자)가 들어간다 · 탈퇴의 target_user_id 비우기가 표를 훑지 않게 색인 · 처리 기록엔 users FK 0
+     * (purge가 건드리지 않는다 — 처리방침 5절 「그 처리 기록 … 3년」).
+     */
+    @Test
+    @DisplayName("B2b · V109: (reporter, target_type, target_id)가 유일 · detail 500자 · hide_note 2,000자 · hide_kind에 COPYRIGHT(9자)가 들어간다 · target_user_id 색인")
+    void v109_blog_safety_schema() {
+        Long userId = userRepository.saveAndFlush(User.of("v109-report@example.com", "hash", "닉", "Asia/Seoul", Role.USER)).getId();
+        String insert = "INSERT INTO blog_report (reporter_id, target_type, target_id, reason, status, created_at, updated_at) "
+                + "VALUES (?, ?, ?, 'SPAM', 'OPEN', NOW(), NOW())";
+        jdbcTemplate.update(insert, userId, "POST", 990001L);
+        jdbcTemplate.update(insert, userId, "COMMENT", 990001L); // 대조군 — 종류만 다르면 된다
+        assertThatThrownBy(() -> jdbcTemplate.update(insert, userId, "POST", 990001L))
+                .isInstanceOf(DataIntegrityViolationException.class);
+        jdbcTemplate.update("DELETE FROM blog_report WHERE target_id = 990001");
+        userRepository.deleteById(userId);
+        Map<String, Integer> widths = Map.of("BLOG_REPORT.DETAIL", 500, "BLOG_POST.HIDE_NOTE", 2000, "BLOG_COMMENT.HIDE_NOTE", 2000,
+                "QUOTE_BOX.HIDE_NOTE", 2000, "BLOG_POST.HIDE_KIND", 10, "BLOG_COMMENT.HIDE_KIND", 10, "QUOTE_BOX.HIDE_KIND", 10);
+        widths.forEach((col, width) -> assertThat(jdbcTemplate.queryForObject("""
+                SELECT CHARACTER_MAXIMUM_LENGTH FROM INFORMATION_SCHEMA.COLUMNS
+                WHERE UPPER(TABLE_NAME) = ? AND UPPER(COLUMN_NAME) = ?
+                """, Integer.class, col.split("[.]")[0], col.split("[.]")[1])).as(col).isEqualTo(width));
+        assertThat("COPYRIGHT".length()).isLessThanOrEqualTo(10);
+        for (String col : List.of("USERS.BLOG_RESTRICTED_AT", "BLOG_COMMENT.HIDDEN_AT", "QUOTE_BOX.HIDDEN_AT")) {
+            assertThat(jdbcTemplate.queryForObject("""
+                    SELECT IS_NULLABLE FROM INFORMATION_SCHEMA.COLUMNS WHERE UPPER(TABLE_NAME) = ? AND UPPER(COLUMN_NAME) = ?
+                    """, String.class, col.split("[.]")[0], col.split("[.]")[1])).as(col).isEqualTo("YES");
+        }
+        assertThat(jdbcTemplate.queryForList("""
+                SELECT UPPER(COLUMN_NAME) FROM INFORMATION_SCHEMA.INDEX_COLUMNS
+                WHERE UPPER(TABLE_NAME) = 'BLOG_REPORT' AND UPPER(INDEX_NAME) = 'IDX_BLOG_REPORT_TARGET_USER'
+                """, String.class)).containsExactly("TARGET_USER_ID");
+        assertThat(jdbcTemplate.queryForObject("""
+                SELECT COUNT(*) FROM INFORMATION_SCHEMA.TABLE_CONSTRAINTS
+                WHERE UPPER(TABLE_NAME) = 'BLOG_MODERATION_LOG' AND CONSTRAINT_TYPE = 'FOREIGN KEY'
+                """, Integer.class)).as("처리 기록엔 FK 0").isZero();
+    }
+
+    /**
+     * V109 — 신고함 · 처리 · 관리자 「이 글을 인용한 박스」가 표를 훑지 않게: 열린 신고 수 · 오래된 열린 신고({@code status, created_at}) ·
+     * 같은 대상의 열린 신고(글 행 잠금을 쥔 채 도는 resolve — {@code target_type, target_id, status}) · {@code source_post_id}.
+     * 엔티티엔 색인 선언이 없어 메인 스위트로는 안 보인다(V107 · V108과 같은 까닭).
+     */
+    @Test
+    @DisplayName("B2b · V109: blog_report (status, created_at) · (status, resolved_at) · (target_type, target_id, status) · quote_box (source_post_id) 색인")
+    void v109_blog_report_and_quote_source_indexes() {
+        Map<String, List<String>> expected = Map.of(
+                "BLOG_REPORT.IDX_BLOG_REPORT_STATUS", List.of("STATUS", "CREATED_AT"),
+                "BLOG_REPORT.IDX_BLOG_REPORT_RESOLVED", List.of("STATUS", "RESOLVED_AT"), // 신고함의 최근 처리분(filesort 없이)
+                "BLOG_REPORT.IDX_BLOG_REPORT_TARGET", List.of("TARGET_TYPE", "TARGET_ID", "STATUS"),
+                "QUOTE_BOX.IDX_QUOTE_BOX_SOURCE_POST", List.of("SOURCE_POST_ID"));
+        expected.forEach((key, cols) -> assertThat(jdbcTemplate.queryForList("""
+                SELECT UPPER(COLUMN_NAME) FROM INFORMATION_SCHEMA.INDEX_COLUMNS
+                WHERE UPPER(TABLE_NAME) = ? AND UPPER(INDEX_NAME) = ? ORDER BY ORDINAL_POSITION
+                """, String.class, key.split("[.]")[0], key.split("[.]")[1])).as(key).containsExactlyElementsOf(cols));
+    }
+
     // ── 토스 미니앱(V61) — users.toss_user_key 유니크 + api_token·toss_link_code 스키마↔엔티티 일치 ──
 
     @Test
@@ -581,7 +640,7 @@ class FlywayMigrationTest {
             "READING_GOAL_CHANGE", "READING_GOAL_WAIVER", "READING_PERSONALITY", "READING_SESSION",
             "READING_TIMER", "REPORT", "STORY", "STORY_LIKE", "STUDY_AI_USAGE", "STUDY_BOOK",
             "STUDY_DAILY_CHECK", "STUDY_NOTE", "STUDY_NOTE_IMAGE", "STUDY_PLAN_ITEM", "STUDY_RECALL", "STUDY_SESSION",
-            "TOSS_LINK_CODE", "CHAT_ROOM", "CHAT_MESSAGE", "WRITING_DRAFT", "BLOG_POST", "BLOG_COMMENT");
+            "TOSS_LINK_CODE", "CHAT_ROOM", "CHAT_MESSAGE", "WRITING_DRAFT", "BLOG_POST", "BLOG_COMMENT", "BLOG_REPORT");
 
     /**
      * <b>users를 FK 참조하는 테이블 집합 == purge()가 지우는 집합</b>을 못 박는다.

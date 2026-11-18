@@ -227,6 +227,109 @@ class BlogFkIntegrationTest {
         assertThat(view.text()).isEqualTo("첫 문장이다.");
     }
 
+    // ── B2b 신고 · 운영자 가리기 · 처리 기록(blog_report.reporter_id FK · 처리 기록은 FK 없음 — 실 H2로만 잰다) ─────────────
+
+    @Autowired BlogReportRepository reportRepository;
+    @Autowired BlogModerationLogRepository logRepository;
+    @Autowired BlogModerationService moderationService;
+    @Autowired org.springframework.jdbc.core.JdbcTemplate jdbc;
+
+    @Test
+    @DisplayName("REQ-257 · 블로그 신고를 한 계정의 탈퇴 — 그 신고 행 0 · 남이 내 글을 신고한 행은 남는다(실 H2)")
+    void purgeClearsMyReports() {
+        User leaver = user("rptpurge");
+        User other = user("rptother");
+        BlogPost theirs = publishedPostWithSid(other, "KKKKKKKK");
+        BlogPost mine = publishedPost(leaver);
+        reportRepository.saveAndFlush(BlogReport.of(leaver, BlogReport.Target.POST, theirs.getId(), other.getId(),
+                com.booktimer.report.ReportReason.SPAM, null));
+        BlogReport kept = reportRepository.saveAndFlush(BlogReport.of(other, BlogReport.Target.POST, mine.getId(), leaver.getId(),
+                com.booktimer.report.ReportReason.SPAM, null));
+
+        assertThatCode(() -> accountService.deleteAccount("rptpurge@booktimer.com", "rawpw1234")).doesNotThrowAnyException();
+        em.flush();
+        em.clear();
+        assertThat(userRepository.findByEmail("rptpurge@booktimer.com")).isEmpty();
+        assertThat(reportRepository.findAll()).extracting(BlogReport::getId).containsExactly(kept.getId());
+    }
+
+    @Test
+    @DisplayName("REQ-257 · 신고당한 글쓴이의 탈퇴 — 그 신고 행은 남고 target_user_id만 null · 처리 기록 행은 그대로(실 H2)")
+    void purgeDetachesReportedAuthor() {
+        User leaver = user("rptgone");
+        User reporter = user("rptkeeper");
+        User bystander = user("rptbystander");
+        BlogPost mine = publishedPost(leaver);
+        BlogPost theirs = publishedPostWithSid(bystander, "KKKKKKKK");
+        BlogReport onMine = reportRepository.saveAndFlush(BlogReport.of(reporter, BlogReport.Target.POST, mine.getId(),
+                leaver.getId(), com.booktimer.report.ReportReason.HARASSMENT, null));
+        BlogReport onOther = reportRepository.saveAndFlush(BlogReport.of(reporter, BlogReport.Target.POST, theirs.getId(),
+                bystander.getId(), com.booktimer.report.ReportReason.SPAM, null)); // 양성 대조 — 다른 글쓴이는 그대로
+        moderationService.apply(BlogModerationService.Unit.POST, mine.getId(), Moderation.Action.TEMP, "가린 까닭");
+        long logs = logRepository.count();
+
+        assertThatCode(() -> accountService.deleteAccount("rptgone@booktimer.com", "rawpw1234")).doesNotThrowAnyException();
+        em.flush();
+        em.clear();
+        assertThat(reportRepository.findById(onMine.getId()).orElseThrow().getTargetUserId()).isNull();
+        assertThat(reportRepository.findById(onOther.getId()).orElseThrow().getTargetUserId()).isEqualTo(bystander.getId());
+        assertThat(logRepository.count()).as("처리 기록은 탈퇴와 따로 3년").isEqualTo(logs).isPositive();
+    }
+
+    @Test
+    @DisplayName("REQ-333 · 운영자 삭제(글) = 문장 · 판 · 박스 · 댓글 행 0 · 제목 · 배치 null · hide_kind REMOVED · 글 행은 남는다(실 H2)")
+    void adminRemoveWipesContentKeepsRow() {
+        User author = user("rmvauthor");
+        User reader = user("rmvreader");
+        BlogPost post = publishedPost(author);
+        quoting(QuoteBox.Owner.POST, post.getId(), post);
+        commentRepository.saveAndFlush(BlogComment.of(post, "AAAAAAAA", reader, "댓글"));
+        BlogPost keeper = publishedPostWithSid(author, "KKKKKKKK"); // 양성 대조 — 다른 글은 그대로
+        Long id = post.getId();
+
+        assertThatCode(() -> {
+            moderationService.apply(BlogModerationService.Unit.POST, id, Moderation.Action.REMOVE, "지운 까닭");
+            em.flush();
+        }).doesNotThrowAnyException();
+        em.clear();
+        // 메모리의 엔티티가 아니라 DB 값 — markRemoved가 일괄 지우기의 문맥 비움에 버려지면 여기서 빨갛다(§4.5)
+        java.util.Map<String, Object> row = jdbc.queryForMap(
+                "select title, layout_json, draft_body, hidden_at, hide_kind from blog_post where id = ?", id);
+        assertThat(row.get("TITLE")).isNull();
+        assertThat(row.get("LAYOUT_JSON")).isNull();
+        assertThat(row.get("DRAFT_BODY")).isEqualTo("");
+        assertThat(row.get("HIDDEN_AT")).isNotNull();
+        assertThat(row.get("HIDE_KIND")).isEqualTo("REMOVED");
+        assertThat(sentenceRepository.findByPostId(id)).isEmpty();
+        assertThat(quoteBoxRepository.countByOwnerTypeAndOwnerId(QuoteBox.Owner.POST, id)).isZero();
+        assertThat(commentRepository.findAll()).isEmpty();
+        assertThat(jdbc.queryForObject("select count(*) from blog_sentence_rev r join blog_sentence s on s.id = r.sentence_id "
+                + "where s.post_id = ?", Integer.class, id)).isZero();
+        assertThat(sentenceRepository.findByPostId(keeper.getId())).hasSize(1);
+    }
+
+    @Test
+    @DisplayName("REQ-339 · 가리기 → 다시 보이기 → 글쓴이 지우기 → 글쓴이 탈퇴 뒤에도 처리 기록 두 줄(TEMP · RESTORE)이 남는다(실 H2)")
+    void moderationLogOutlivesEverything() {
+        User author = user("logauthor");
+        BlogPost post = publishedPost(author);
+        Long id = post.getId();
+        moderationService.apply(BlogModerationService.Unit.POST, id, Moderation.Action.TEMP, "요청서 사본");
+        moderationService.apply(BlogModerationService.Unit.POST, id, Moderation.Action.TEMP, null); // 그대로 — 기록 0
+        moderationService.apply(BlogModerationService.Unit.POST, id, Moderation.Action.RESTORE, null);
+        em.flush();
+        em.clear();
+        postService.delete(userRepository.findById(author.getId()).orElseThrow(), id);
+        accountService.deleteAccount("logauthor@booktimer.com", "rawpw1234");
+        em.flush();
+        em.clear();
+
+        assertThat(logRepository.findAll()).extracting(BlogModerationLog::getUnit, BlogModerationLog::getUnitId,
+                        BlogModerationLog::getAction, BlogModerationLog::getNote)
+                .containsExactly(org.assertj.core.groups.Tuple.tuple("POST", id, "TEMP", "요청서 사본"),
+                        org.assertj.core.groups.Tuple.tuple("POST", id, "RESTORE", null));
+    }
+
     private BlogPost publishedPostWithSid(User author, String sid) {
         BlogPost post = BlogPost.draft(author, "남는 제목", "남는 글");
         post.publish("남는 제목", "[]", true, Instant.parse("2026-11-11T00:00:00Z"));

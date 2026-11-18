@@ -283,6 +283,10 @@ public class User extends BaseTimeEntity {
     @Column(name = "ai_consent_at")
     private java.time.Instant aiConsentAt;
 
+    /** 블로그 글쓰기 · 댓글 막힘 시각(B2b · V109 · 약관 ⑧) — {@code null}이면 막힘 아님. 운영자만 쓴다({@code BlogModerationService}). */
+    @Column(name = "blog_restricted_at")
+    private java.time.Instant blogRestrictedAt;
+
     protected User() {
         // JPA
     }
@@ -1017,5 +1021,23 @@ public class User extends BaseTimeEntity {
 
     public java.time.Instant getUgcTermsAt() {
         return ugcTermsAt;
+    }
+
+    public java.time.Instant getBlogRestrictedAt() {
+        return blogRestrictedAt;
+    }
+
+    /** @return 바뀌었나(이미 막혔으면 거짓 — 처음 막은 시각 그대로) */
+    public boolean restrictBlog(java.time.Instant now) {
+        if (blogRestrictedAt != null) return false;
+        blogRestrictedAt = now;
+        return true;
+    }
+
+    /** @return 바뀌었나 */
+    public boolean liftBlogRestriction() {
+        if (blogRestrictedAt == null) return false;
+        blogRestrictedAt = null;
+        return true;
     }
 }

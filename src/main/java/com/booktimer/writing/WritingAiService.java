@@ -100,9 +100,9 @@ public class WritingAiService {
         }
         String body = note.getText();
         Book book = note.getBook();
-        // 지금 쪽지의 건 블로그 문장(label 순) — 다른 쪽지의 박스는 읽지 않는다(REQ-208 · 처리방침 6-3 :306)
+        // 지금 쪽지의 건 블로그 문장(label 순) — 다른 쪽지의 박스 · 운영자가 가린 박스는 읽지 않는다(REQ-208 · 처리방침 6-3 :306 · REQ-337)
         List<String> linked = quoteBoxRepository.findByOwnerTypeAndOwnerIdOrderByLabel(QuoteBox.Owner.NOTE, note.getId()).stream()
-                .map(QuoteBox::getText).toList();
+                .filter(q -> !q.hidden()).map(QuoteBox::getText).toList();
         WritingMaterial material = writingService.material(user, materialNotes(user, note, book, !linked.isEmpty()), linked);
         if (step == Step.ASK && material.included().isEmpty()) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "여백에 문장이나 메모를 하나 이상 남긴 뒤에 질문을 받을 수 있어요");

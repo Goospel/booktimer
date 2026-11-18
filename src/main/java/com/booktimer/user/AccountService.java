@@ -5,6 +5,7 @@ import com.booktimer.blog.BlogPostRepository;
 import com.booktimer.blog.BlogSentenceRepository;
 import com.booktimer.blog.BlogSentenceRevRepository;
 import com.booktimer.blog.BlogCommentRepository;
+import com.booktimer.blog.BlogReportRepository;
 import com.booktimer.blog.QuoteBoxRepository;
 import com.booktimer.block.BlockRepository;
 import com.booktimer.chat.ChatMessageRepository;
@@ -82,6 +83,7 @@ public class AccountService {
     private final BlogSentenceRevRepository blogSentenceRevRepository;
     private final QuoteBoxRepository quoteBoxRepository;
     private final BlogCommentRepository blogCommentRepository;
+    private final BlogReportRepository blogReportRepository;
     private final SessionInvalidator sessionInvalidator;
     private final PasswordEncoder passwordEncoder;
     private final GoogleAccountResolver googleAccountResolver;
@@ -118,6 +120,7 @@ public class AccountService {
                           BlogSentenceRevRepository blogSentenceRevRepository,
                           QuoteBoxRepository quoteBoxRepository,
                           BlogCommentRepository blogCommentRepository,
+                          BlogReportRepository blogReportRepository,
                           SessionInvalidator sessionInvalidator,
                           PasswordEncoder passwordEncoder,
                           GoogleAccountResolver googleAccountResolver) {
@@ -153,6 +156,7 @@ public class AccountService {
         this.blogSentenceRevRepository = blogSentenceRevRepository;
         this.quoteBoxRepository = quoteBoxRepository;
         this.blogCommentRepository = blogCommentRepository;
+        this.blogReportRepository = blogReportRepository;
         this.sessionInvalidator = sessionInvalidator;
         this.passwordEncoder = passwordEncoder;
         this.googleAccountResolver = googleAccountResolver;
@@ -456,6 +460,11 @@ public class AccountService {
         emailTokenRepository.deleteByUser(user);             // 이메일 토큰도 user_id FK 참조 → 유저 전에 정리
         apiTokenRepository.deleteByUser(user);                // 미니앱 Bearer 토큰(api_token.user_id FK)
         tossLinkCodeRepository.deleteByUser(user);            // 토스 연결 코드(toss_link_code.user_id FK)
+        // 블로그 신고는 맨 끝 · 내 users 행을 배타 잠금한 뒤 — 신고 저장(BlogReportService.report)은 대상 글쓴이 행을 공유 잠금으로 읽는다.
+        // 그래서 겹친 신고는 커밋된 뒤 아래 비우기가 보거나, 이 커밋 뒤 행이 없어 404다(앞의 표들과의 순서는 예전 users 삭제 자리 그대로)
+        userRepository.lockById(user.getId());
+        blogReportRepository.deleteByReporter(user);           // 내가 한 블로그 신고(blog_report.reporter_id FK · 처리방침 5절)
+        blogReportRepository.clearTargetUser(user.getId());    // 남이 내 글 · 댓글을 신고한 행은 남기고 대상 글쓴이 id만 비운다(FK 없음)
         userRepository.delete(user);
         // 세션은 users를 FK 참조하지 않아 계정을 지워도 남는다 — 그대로 두면 계정 없는 principal이
         // 인증된 채 떠다닌다(운영 실측: 계정 하나 삭제에 616건 잔존). 남길 창이 없으므로 전부 끊는다.

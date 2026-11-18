@@ -24,18 +24,22 @@ public final class BlogViews {
 
     /**
      * @param title       올린 제목 — 아직 올리지 않은 초안이면 null
-     * @param newComments 글쓴이가 마지막으로 확인한 뒤 남이 단 댓글 수(B2a REQ-298 — 차단 · 신고한 사람의 댓글도 센다)
+     * @param newComments 글쓴이가 마지막으로 확인한 뒤 남이 단 댓글 수(B2a REQ-298 — 차단 · 신고한 사람의 댓글도 센다 · 가린 댓글은 뺀다)
+     * @param moderation  운영자가 가렸으면 그 상태(B2b — 「내 글」은 늘 게시자 자신) · 아니면 null
      */
     public record MyPostRow(long id, String title, String draftTitle, Instant publishedAt, Instant republishedAt,
-                            Instant updatedAt, int newComments) {
+                            Instant updatedAt, int newComments, boolean hidden, Moderation.View moderation) {
     }
 
     /**
      * @param hangBook 글이 인용한 책 가운데 보는 사람 독서 서재에 있는 첫 책 — 없으면 null(J75)
      * @param draft    주인만(남에게는 null)
+     * @param hidden   운영자가 가렸다(B2b — 남은 이 글을 404로 받으므로 늘 게시자에게만 참)
+     * @param moderation 게시자에게만 — {@code kind} · {@code until}(임시조치만) · {@code note}(운영자 글)
      */
     public record PostView(long id, String title, String authorName, boolean mine, Instant publishedAt,
-                           Instant republishedAt, List<Block> blocks, Highlight highlight, HangBook hangBook, Draft draft) {
+                           Instant republishedAt, List<Block> blocks, Highlight highlight, HangBook hangBook, Draft draft,
+                           boolean hidden, Moderation.View moderation) {
     }
 
     /**
@@ -54,9 +58,12 @@ public final class BlogViews {
      * @param sourceDeleted 원문이 지워졌나
      * @param updatable     지금 원문이 박스 글과 다르다(반영할 수 있다)
      * @param sourceNote    여백 · 책 박스의 원 쪽지 — 박스 주인에게만
+     * @param hidden        운영자가 가렸다(B2b) — 그러면 글 · 출처 · 판정 셋 · 원 쪽지는 null(주인에게도 — 설계 280줄 「같은 글」)
+     * @param moderation    박스 주인에게만(가렸을 때)
      */
     public record QuoteBoxView(long id, int label, String kind, String text, Instant quotedAt, String attribution,
-                               String sourceLink, Boolean sourceDeleted, Boolean updatable, SourceNote sourceNote) {
+                               String sourceLink, Boolean sourceDeleted, Boolean updatable, SourceNote sourceNote,
+                               boolean hidden, Moderation.View moderation) {
     }
 
     public record SourceNote(long id, Long bookId) {
@@ -88,13 +95,25 @@ public final class BlogViews {
     /**
      * 문장 댓글 하나(B2a REQ-250) — 평평한 목록 · 오래된 순.
      *
+     * <p>가린 댓글(B2b · REQ-332)은 쓴 사람이 아니면 <b>자리만</b> — {@code authorName} · {@code isAuthor} · {@code mine} ·
+     * {@code body} · {@code moderation}이 null이다(누가 썼는지 · 무엇을 썼는지 0). 쓴 사람에겐 본문(REMOVED면 null) + {@code moderation}.
+     *
      * @param sid      댓글이 달린 문장 주소(합쳐진 옛 문장이면 그 옛 주소)
      * @param isAuthor 그 글의 글쓴이가 단 댓글
      * @param mine     보는 사람이 단 댓글(지우기 단추)
      * @param merged   부른 문장과 다른 옛 문장(합쳐지기 전)에 달린 댓글
      */
-    public record CommentView(long id, String sid, String authorName, boolean isAuthor, boolean mine, String body,
-                              Instant createdAt, boolean merged) {
+    public record CommentView(long id, String sid, String authorName, Boolean isAuthor, Boolean mine, String body,
+                              Instant createdAt, boolean merged, boolean hidden, Moderation.View moderation) {
+    }
+
+    /** 내 블로그 신고(B2b · REQ-335 — 신청인 통지). @param result {@code HIDDEN} · {@code REMOVED} · {@code NONE} — 처리 전 null */
+    public record MyReportRow(long id, String targetType, long targetId, String reason, String status, String result,
+                              Instant createdAt, Instant resolvedAt) {
+    }
+
+    /** 차단한 사람(B2b · REQ-254) — loginId 없는 앱 계정도 이름으로. */
+    public record BlockedUser(long userId, String name) {
     }
 
     /** @param status {@code LIVE} · {@code EDITED} · {@code MERGED} · {@code DELETED} */

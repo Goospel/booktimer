@@ -59,6 +59,9 @@ public class BlogPublishService {
         identity.requireReady(user);              // 2. 409 — 둘 다 이미 읽힌 User 필드만 본다(§4.11)
         BlogPost post = postRepository.findForUpdate(id, user) // 3. 첫 DB 문장 = 글 행 잠금
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, BlogPostService.NOT_FOUND));
+        if (post.removed()) { // 3b. 운영자가 지운 글(B2b) — 새 글로
+            throw new ResponseStatusException(HttpStatus.CONFLICT, BlogPostService.REMOVED);
+        }
         if (post.getDraftRevision() != revision) { // 4.
             throw new ResponseStatusException(HttpStatus.CONFLICT, BlogPostService.STALE);
         }
@@ -96,10 +99,10 @@ public class BlogPublishService {
         if (texts.size() + used.size() > LAYOUT_MAX) { // 배치 항목 = 문장 + 박스
             throw new IllegalArgumentException("문장이 너무 많아요 — 1,500개까지 올릴 수 있어요");
         }
-        // 6b. 걸러내기(B2a REQ-251) — 제목 + 문장 + 이번 배치에 쓰는 박스 글을 한 글로
+        // 6b. 걸러내기(B2a REQ-251) — 제목 + 문장 + 이번 배치에 쓰는 박스 글을 한 글로(가린 박스는 글이 보이지 않으니 뺀다 — B2b)
         StringBuilder whole = new StringBuilder(title);
         texts.forEach(t -> whole.append("\n").append(t));
-        boxes.stream().filter(q -> used.contains(q.getLabel())).forEach(q -> whole.append("\n").append(q.getText()));
+        boxes.stream().filter(q -> used.contains(q.getLabel()) && !q.hidden()).forEach(q -> whole.append("\n").append(q.getText()));
         ContentFilter.violation(whole.toString(), ContentFilter.Kind.POST).ifPresent(m -> {
             throw new IllegalArgumentException(m);
         });

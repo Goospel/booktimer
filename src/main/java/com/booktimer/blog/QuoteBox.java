@@ -75,6 +75,16 @@ public class QuoteBox extends BaseTimeEntity {
     @Column(name = "quoted_at", nullable = false)
     private Instant quotedAt;
 
+    @Column(name = "hidden_at")
+    private Instant hiddenAt;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "hide_kind", length = 10)
+    private Moderation.Kind hideKind;
+
+    @Column(name = "hide_note", length = Moderation.NOTE_MAX)
+    private String hideNote;
+
     protected QuoteBox() {
     }
 
@@ -136,6 +146,49 @@ public class QuoteBox extends BaseTimeEntity {
     /** 구성원 — 원 글쓴이 탈퇴로 비었으면 빈 목록. */
     public List<String> members() {
         return members == null || members.isEmpty() ? List.of() : Arrays.asList(members.split(","));
+    }
+
+    /** 운영자 가림 전이(§6.5 — {@link Moderation#next}가 정한 값을 그대로 쓴다). */
+    void moderate(Moderation.Next next) {
+        this.hiddenAt = next.hiddenAt();
+        this.hideKind = next.kind();
+        this.hideNote = next.note();
+    }
+
+    public boolean hidden() {
+        return hiddenAt != null;
+    }
+
+    public boolean removed() {
+        return hideKind == Moderation.Kind.REMOVED;
+    }
+
+    public Moderation.View moderation() {
+        return Moderation.of(hiddenAt, hideKind, hideNote);
+    }
+
+    public Moderation.Kind getHideKind() {
+        return hideKind;
+    }
+
+    public String getHideNote() {
+        return hideNote;
+    }
+
+    /** 운영자 삭제 — 글과 출처 참조를 비우고 자리(label)는 남긴다(§4.5 — 행째 지우면 배치의 라벨이 비어 500). */
+    void markRemoved() {
+        this.text = "";
+        this.attribution = null;
+        this.sourcePostId = null;
+        this.sourceUserId = null;
+        this.members = null;
+        this.seenSentenceId = null;
+        this.sourceStoryId = null;
+        this.sourceIsbn13 = null;
+    }
+
+    public Instant getHiddenAt() {
+        return hiddenAt;
     }
 
     public Long getId() {

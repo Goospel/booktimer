@@ -631,6 +631,26 @@ class WritingAiServiceTest {
         assertThat(sent.split("건 블로그 문장: ", -1)).as("「건 블로그 문장:」 줄 = 지금 쪽지의 박스 둘").hasSize(3);
     }
 
+    @Autowired com.booktimer.blog.BlogModerationService moderationService;
+
+    @Test
+    @DisplayName("REQ-337 · 가린 쪽지 박스는 ASK 재료에 없다 · 가리기 전엔 있다(양성 대조)")
+    void hiddenNoteBoxLeavesMaterial() {
+        User u = user(true);
+        Story d = storyRepository.saveAndFlush(Story.of(u, "지금 쪽지의 생각", null, null));
+        linkBox(d, 1, "보이는 박스 글");
+        linkBox(d, 2, "가려질 박스 글");
+        long hidden = quoteBoxRepository.findByOwnerTypeAndOwnerIdOrderByLabel(QuoteBox.Owner.NOTE, d.getId()).get(1).getId();
+        moderationService.apply(com.booktimer.blog.BlogModerationService.Unit.QUOTE, hidden,
+                com.booktimer.blog.Moderation.Action.POLICY, null);
+        ArgumentCaptor<String> material = ArgumentCaptor.forClass(String.class);
+        given(assistant.ask(material.capture())).willReturn(answer("무엇이 남았나요?"));
+
+        aiService.run(u, d.getId(), Step.ASK, d.getRevision(), null);
+
+        assertThat(material.getValue()).contains("건 블로그 문장: 보이는 박스 글").doesNotContain("가려질 박스 글");
+    }
+
     /** 올린 글 하나 — 한 문단 한 줄의 문장들(sid는 이 시험 안에서 유일). */
     private List<String> publishedSource(User author, BlogPost[] out, String... texts) {
         List<String> sids = java.util.Arrays.stream(texts).map(t -> String.format("S%07d", SEQ.incrementAndGet())).toList();

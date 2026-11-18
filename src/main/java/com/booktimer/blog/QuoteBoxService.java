@@ -57,6 +57,7 @@ public class QuoteBoxService {
     private static final int LABEL_MAX = 9_999;
 
     static final String NO_QUOTE = "인용을 찾을 수 없어요";
+    private static final String HIDDEN_QUOTE = "운영 정책으로 가려진 인용이에요";
     private static final String BLOCKED = "이 글의 문장은 인용할 수 없어요";
     private static final String BAD_SIDS = "고른 문장을 찾을 수 없어요 — 글을 다시 불러와 주세요";
     private static final String NO_NOTE = "쪽지를 찾을 수 없어요";
@@ -111,6 +112,9 @@ public class QuoteBoxService {
     public QuoteBoxView createForPost(User user, long postId, QuoteRequest req) {
         access.check(user);
         BlogPost post = postRepository.findForUpdate(postId, user).orElseThrow(() -> notFound(BlogPostService.NOT_FOUND));
+        if (post.removed()) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, BlogPostService.REMOVED);
+        }
         List<QuoteBox> boxes = repository.findByOwnerTypeAndOwnerIdOrderByLabel(Owner.POST, postId);
         if (boxes.size() >= POST_MAX) {
             throw new IllegalArgumentException("한 글에 인용은 100개까지예요");
@@ -143,11 +147,18 @@ public class QuoteBoxService {
         return single(repository.save(box), user);
     }
 
-    /** 최신으로 반영(§6.5 · §6.6) — 박스 행 잠금 → 주인 → 종류 → 차단 403 → 원문 지움 · 가림 409 → 걸침 · 1,000자 409. */
+    /**
+     * 최신으로 반영(§6.5 · §6.6) — 허용 목록 → 박스 행 잠금 → 주인 → (글 박스면) 글쓰기 막힘 403 → 가린 박스 409 → 종류 → 차단 403 →
+     * 원문 지움 · 가림 409 → 걸침 · 1,000자 409. 쪽지 박스는 본인만 보는 여백이라 막힘과 무관하다(B2b · 약관 ⑧).
+     */
     public QuoteBoxView refresh(User user, long quoteId) {
-        access.check(user);
+        access.checkListed(user);
         QuoteBox box = repository.findForUpdate(quoteId).orElseThrow(() -> notFound(NO_QUOTE));
         requireOwner(user, box);
+        if (box.getOwnerType() == Owner.POST) {
+            access.check(user);
+        }
+        requireVisible(box);
         if (box.getKind() != Kind.BLOG) {
             throw new IllegalArgumentException("최신으로 반영은 블로그 문장 인용만 돼요");
         }
@@ -181,6 +192,7 @@ public class QuoteBoxService {
         access.check(user);
         QuoteBox box = repository.findForUpdate(quoteId).orElseThrow(() -> notFound(NO_QUOTE));
         requireOwner(user, box);
+        requireVisible(box);
         if (box.getKind() != Kind.MARGIN) {
             throw new IllegalArgumentException("여백 인용만 다시 고를 수 있어요");
         }
@@ -202,7 +214,7 @@ public class QuoteBoxService {
      * 쪽지 만들기(429 · 책 404 · 길이 400). 쪽지 행은 잠그지 않는다(§1 비목표).
      */
     public Story hang(User user, Long bookId, String quote, String text, LinkRequest link) {
-        access.check(user);
+        access.checkListed(user); // 본인만 보는 여백 — 글쓰기 막힘과 무관(B2b)
         Source src = blogSource(user, link.postId(), link.fromSid(), link.toSid());
         Story note = storyService.createLinkedNote(user, bookId, quote, text);
         repository.save(src.box(Owner.NOTE, note.getId(), 1, now()));
@@ -211,7 +223,7 @@ public class QuoteBoxService {
 
     /** 쓰고 있는 쪽지에 붙이기 — 허용 목록 → 내 쪽지(404) → 10개 → BLOG 검사 → 다음 label. */
     public void addToNote(User user, long storyId, LinkRequest link) {
-        access.check(user);
+        access.checkListed(user); // 본인만 보는 여백 — 글쓰기 막힘과 무관(B2b)
         Story note = storyService.note(user, storyId);
         List<QuoteBox> boxes = repository.findByOwnerTypeAndOwnerIdOrderByLabel(Owner.NOTE, note.getId());
         if (boxes.size() >= NOTE_MAX) {
@@ -282,7 +294,7 @@ public class QuoteBoxService {
     @Transactional(readOnly = true)
     public HangBook hangBook(User viewer, BlogPost post, Layout layout) {
         Map<Integer, QuoteBox> books = repository.findByOwnerTypeAndOwnerIdOrderByLabel(Owner.POST, post.getId()).stream()
-                .filter(q -> q.getKind() == Kind.BOOK && q.getSourceIsbn13() != null)
+                .filter(q -> q.getKind() == Kind.BOOK && q.getSourceIsbn13() != null && !q.hidden()) // 가린 박스의 출처 책 0(§6.4)
                 .collect(Collectors.toMap(QuoteBox::getLabel, Function.identity()));
         for (Layout.Item item : layout.items()) {
             QuoteBox q = item.q() == null ? null : books.get(item.q().intValue());
@@ -311,6 +323,11 @@ public class QuoteBoxService {
         Map<Long, Boolean> blocked = new HashMap<>();
         List<QuoteBoxView> out = new ArrayList<>(boxes.size());
         for (QuoteBox q : boxes) {
+            if (q.hidden()) { // 운영자가 가린 박스 — 자리만(글 · 출처 · 판정 없음 · 주인에게도 · REQ-253 · 332)
+                out.add(new QuoteBoxView(q.getId(), q.getLabel(), q.getKind().name(), null, q.getQuotedAt(), null, null, null, null,
+                        null, true, mine ? q.moderation() : null));
+                continue;
+            }
             out.add(switch (q.getKind()) {
                 case BLOG -> blogView(q, viewer, posts.get(q.getSourcePostId()), users.get(q.getSourceUserId()), sentences, blocked);
                 case MARGIN -> {
@@ -340,6 +357,9 @@ public class QuoteBoxService {
         if (cut) {
             return view(q, attribution, null, null, null, null);
         }
+        if (post != null && post.removed()) { // 운영자가 지운 원 글 = 글쓴이가 지운 원 글과 같은 꼴(반영도 「원문이 지워졌어요」 — B2b)
+            return view(q, attribution, null, true, null, null);
+        }
         if (post != null && !post.quotable()) {
             return view(q, attribution, null, false, null, null);
         }
@@ -364,7 +384,7 @@ public class QuoteBoxService {
     private static QuoteBoxView view(QuoteBox q, String attribution, String link, Boolean deleted, Boolean updatable,
                                      SourceNote note) {
         return new QuoteBoxView(q.getId(), q.getLabel(), q.getKind().name(), q.getText(), q.getQuotedAt(), attribution, link,
-                deleted, updatable, note);
+                deleted, updatable, note, false, null);
     }
 
     private static SourceNote sourceNote(Story s) {
@@ -402,6 +422,13 @@ public class QuoteBoxService {
 
     private static boolean liveIn(PostSentences sentences, Set<String> laid, String sid) {
         return sid != null && laid.contains(sid) && sentences.get(sid).map(BlogSentence::live).orElse(false);
+    }
+
+    /** 가린 박스는 반영 · 다시 고르기 409(주인 판정 404 뒤 — B2b). */
+    private static void requireVisible(QuoteBox box) {
+        if (box.hidden()) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, HIDDEN_QUOTE);
+        }
     }
 
     /** 박스 주인 판정 — 글 주인 · 쪽지 주인(아니면 404 · §6.6 반영 · 다시 고르기). */
