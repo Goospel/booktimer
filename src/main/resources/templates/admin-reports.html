@@ -53,6 +53,95 @@
         </div>
     </section>
 
+    <h2>블로그 신고</h2>
+    <p class="status-line muted">신고는 24시간 안에 검토합니다. 처리하면 같은 대상의 열린 신고가 모두 닫히고 신고자 · 게시자에게 알립니다.
+        단위는 신고 대상(그 글 · 그 글의 인용 · 그 댓글)에만 묶입니다 — 다른 게시물은 아래 「id로 처리」를 쓰세요.</p>
+    <p class="status-line muted" th:if="${blogReports.isEmpty()}">접수된 블로그 신고가 없습니다.</p>
+
+    <section class="card fb-admin-item" th:each="b : ${blogReports}">
+        <div class="fb-head">
+            <span class="fb-type" th:text="${b.reason}">사유</span>
+            <span class="fb-type" th:text="${b.status == 'OPEN' ? '미처리' : '처리 완료 · ' + b.result}">상태</span>
+            <span class="fb-type" th:text="${b.targetType == 'POST' ? '글 #' + b.targetId : '댓글 #' + b.targetId}">대상</span>
+            <span class="fb-author muted" th:text="${#temporals.format(b.createdAt, 'yyyy-MM-dd HH:mm')}">시각</span>
+        </div>
+        <p class="fb-title">
+            <span th:if="${b.targetExists}" th:text="${b.excerpt}">발췌</span>
+            <span class="muted" th:unless="${b.targetExists}">대상 없음</span>
+        </p>
+        <p class="fb-content" th:if="${b.prefixText != null}" th:text="${b.prefixText}">문장 · 인용</p>
+        <p class="fb-content" th:if="${b.detail != null}" th:text="${b.detail}">부가 설명</p>
+        <p class="fb-content muted">
+            글쓴이: <span th:text="${b.authorName}">이름</span>
+            <span th:if="${b.authorRestricted}"> · 글쓰기 막힘</span>
+        </p>
+        <p class="fb-content muted" th:if="${!b.quotingBoxIds.isEmpty()}">이 글을 인용한 박스:
+            <span th:each="qid : ${b.quotingBoxIds}" th:text="'인용 #' + ${qid} + ' '">인용 #1</span></p>
+        <div class="fb-actions">
+            <form th:if="${b.status == 'OPEN'}" th:action="@{/admin/blog/reports/{id}/resolve(id=${b.id})}" method="post">
+                <select name="action">
+                    <option value="NONE">조치 없음</option>
+                    <option value="TEMP">임시조치(30일)</option>
+                    <option value="COPYRIGHT">저작권 중단 요구로 가림</option>
+                    <option value="POLICY">정책 위반으로 가림</option>
+                    <option value="REMOVE">삭제</option>
+                </select>
+                <select name="unit">
+                    <option value="POST" th:selected="${b.defaultUnit == 'POST'}">글</option>
+                    <option value="QUOTE" th:selected="${b.defaultUnit == 'QUOTE'}">인용</option>
+                    <option value="COMMENT" th:selected="${b.defaultUnit == 'COMMENT'}">댓글</option>
+                </select>
+                <input type="number" name="unitId" th:value="${b.defaultUnitId}">
+                <textarea name="note" maxlength="2000" placeholder="게시자에게 보일 글"></textarea>
+                <span class="muted">게시자에게 그대로 보입니다 — 저작권 중단 요구(COPYRIGHT)가 아니면 요청한 사람의 이름 · 연락처를 적지 마세요(처리방침 6절)</span>
+                <button type="submit" class="btn-ghost btn-small">처리</button>
+            </form>
+            <form th:if="${b.authorId != null}" th:action="@{/admin/blog/users/{id}/restriction(id=${b.authorId})}" method="post">
+                <input type="hidden" name="on" th:value="${!b.authorRestricted}">
+                <button type="submit" class="btn-danger btn-small" th:text="${b.authorRestricted ? '글쓰기 막기 풀기' : '글쓰기 막기'}">글쓰기 막기</button>
+            </form>
+        </div>
+    </section>
+
+    <h2>기간 끝난 임시조치</h2>
+    <p class="status-line muted">30일이 지났습니다 — 이의가 없었으면 삭제하고, 이의가 받아들여지면 다시 보이게 하세요(서버가 저절로 지우지 않습니다).</p>
+    <p class="status-line muted" th:if="${blogExpired.isEmpty()}">기간 끝난 임시조치가 없습니다.</p>
+    <section class="card fb-admin-item" th:each="e : ${blogExpired}">
+        <p class="fb-title">
+            <span th:text="${(e.unit == 'POST' ? '글' : (e.unit == 'COMMENT' ? '댓글' : '인용')) + ' #' + e.id}">글 #1</span>
+            <span class="muted" th:text="${#temporals.format(e.hiddenAt, 'yyyy-MM-dd')} + ' 가림'">시각</span>
+        </p>
+        <div class="fb-actions">
+            <form th:action="@{/admin/blog/moderate}" method="post" th:each="a : ${ {'REMOVE', 'RESTORE', 'POLICY'} }">
+                <input type="hidden" name="unit" th:value="${e.unit}">
+                <input type="hidden" name="unitId" th:value="${e.id}">
+                <input type="hidden" name="action" th:value="${a}">
+                <button type="submit" class="btn-ghost btn-small"
+                        th:text="${a == 'REMOVE' ? '삭제' : (a == 'RESTORE' ? '다시 보이기' : '정책 위반으로 계속 가림')}">삭제</button>
+            </form>
+        </div>
+    </section>
+
+    <h2>id로 처리</h2>
+    <form class="card" th:action="@{/admin/blog/moderate}" method="post">
+        <select name="unit">
+            <option value="POST">글</option>
+            <option value="QUOTE">인용</option>
+            <option value="COMMENT">댓글</option>
+        </select>
+        <input type="number" name="unitId" required>
+        <select name="action">
+            <option value="TEMP">임시조치(30일)</option>
+            <option value="COPYRIGHT">저작권 중단 요구로 가림</option>
+            <option value="POLICY">정책 위반으로 가림</option>
+            <option value="RESTORE">다시 보이기</option>
+            <option value="REMOVE">삭제</option>
+        </select>
+        <textarea name="note" maxlength="2000" placeholder="게시자에게 보일 글"></textarea>
+        <span class="muted">게시자에게 그대로 보입니다 — 저작권 중단 요구(COPYRIGHT)가 아니면 요청한 사람의 이름 · 연락처를 적지 마세요(처리방침 6절)</span>
+        <button type="submit" class="btn-ghost btn-small">처리</button>
+    </form>
+
     <nav class="link-row" aria-label="페이지 이동">
         <th:block th:replace="~{fragments/nav-links :: navLink(@{/admin}, 'back', '관리자 홈')}"></th:block>
     </nav>

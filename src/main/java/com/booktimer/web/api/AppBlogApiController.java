@@ -5,9 +5,12 @@ import com.booktimer.blog.BlogIdentityService;
 import com.booktimer.blog.BlogPost;
 import com.booktimer.blog.BlogPostService;
 import com.booktimer.blog.BlogPublishService;
+import com.booktimer.blog.BlogReport;
+import com.booktimer.blog.BlogReportService;
 import com.booktimer.blog.BlogViews.CommentView;
 import com.booktimer.blog.BlogViews.MeView;
 import com.booktimer.blog.BlogViews.MyPostRow;
+import com.booktimer.blog.BlogViews.MyReportRow;
 import com.booktimer.blog.BlogViews.Page;
 import com.booktimer.blog.BlogViews.PostView;
 import com.booktimer.blog.BlogViews.QuoteBoxView;
@@ -52,16 +55,19 @@ public class AppBlogApiController {
     private final BlogPublishService publishService;
     private final QuoteBoxService quoteBoxService;
     private final BlogCommentService commentService;
+    private final BlogReportService reportService;
 
     public AppBlogApiController(CurrentUserService currentUserService, BlogIdentityService identityService,
                                 BlogPostService postService, BlogPublishService publishService,
-                                QuoteBoxService quoteBoxService, BlogCommentService commentService) {
+                                QuoteBoxService quoteBoxService, BlogCommentService commentService,
+                                BlogReportService reportService) {
         this.currentUserService = currentUserService;
         this.identityService = identityService;
         this.postService = postService;
         this.publishService = publishService;
         this.quoteBoxService = quoteBoxService;
         this.commentService = commentService;
+        this.reportService = reportService;
     }
 
     @GetMapping("/api/app/blog/me")
@@ -192,6 +198,40 @@ public class AppBlogApiController {
         return ResponseEntity.noContent().build();
     }
 
+    /**
+     * 신고(B2b REQ-252 · J94 — 문장 · 박스는 글 대상 + detail 접두). @return 200(처음 · 두 번째 · 동시 두 번 같음) / 403 허용 목록 /
+     * 429 / 404 공개 대상 아님 / 400 종류 · 내 것 · detail
+     *
+     * <p>동시에 두 번 눌러 유일 제약에 걸리면 서비스 트랜잭션 <b>밖</b>인 여기서 잡아 같은 200 — 안에서 잡으면 롤백 전용 트랜잭션의
+     * 커밋이 500이다. 이 문에서만 잡는다(클래스 전역 처리기는 다른 유일 위반 500 신호를 가린다).
+     */
+    @PostMapping("/api/app/blog/reports")
+    public ResponseEntity<Void> report(@RequestBody ReportRequest request, Principal principal) {
+        User user = currentUserService.resolve(principal);
+        try {
+            reportService.report(user, target(request.targetType()),
+                    request.targetId() == null ? 0 : request.targetId(), request.reason(), request.detail());
+        } catch (DataIntegrityViolationException e) {
+            // 같은 (신고자, 대상)이 먼저 커밋됐다 — 멱등 200
+        }
+        return ResponseEntity.ok().build();
+    }
+
+    /** 내 신고(B2b REQ-335 — 신청인 통지). */
+    @GetMapping("/api/app/blog/reports")
+    public List<MyReportRow> myReports(Principal principal) {
+        return reportService.mine(currentUserService.resolve(principal));
+    }
+
+    /** 몸의 대상 종류 — POST · COMMENT 말고는 null(서비스가 허용 목록 다음에 400 — 「허용 목록이 첫 줄」을 지킨다). */
+    static BlogReport.Target target(String type) {
+        try {
+            return BlogReport.Target.valueOf(type);
+        } catch (RuntimeException e) {
+            return null;
+        }
+    }
+
     /** IAE 문구가 그대로 400 본문(text/plain — 반사 XSS 방지, charset 명시는 한글 깨짐 방지). */
     @ExceptionHandler(IllegalArgumentException.class)
     public ResponseEntity<String> badRequest(IllegalArgumentException e) {
@@ -223,4 +263,7 @@ public class AppBlogApiController {
     public record Saved(int revision, Instant updatedAt) {}
 
     public record CommentRequest(String body) {}
+
+    /** @param reason {@code ReportReason} 이름 — 틀리면 OTHER · @param detail 접두({@code sid:} · {@code quote:}) 포함 500자 */
+    public record ReportRequest(String targetType, Long targetId, String reason, String detail) {}
 }

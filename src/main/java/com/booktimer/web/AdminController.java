@@ -1,6 +1,7 @@
 package com.booktimer.web;
 
 import com.booktimer.admin.AdminStatsService;
+import com.booktimer.blog.BlogModerationService;
 import com.booktimer.chat.ChatSanctionService;
 import com.booktimer.report.ReportRepository;
 import com.booktimer.report.ReportStatus;
@@ -31,12 +32,18 @@ public class AdminController {
     private final StudyAiAccessService studyAiAccessService;
     private final ReportRepository reportRepository;
     private final ChatSanctionService chatSanctionService;
+    private final BlogModerationService blogModeration;
+    private final java.time.Clock clock;
 
     public AdminController(CurrentUserService currentUserService,
                           AdminStatsService adminStatsService,
                           StudyAiAccessService studyAiAccessService,
                           ReportRepository reportRepository,
-                          ChatSanctionService chatSanctionService) {
+                          ChatSanctionService chatSanctionService,
+                          BlogModerationService blogModeration,
+                          java.time.Clock clock) {
+        this.blogModeration = blogModeration;
+        this.clock = clock;
         this.reportRepository = reportRepository;
         this.chatSanctionService = chatSanctionService;
         this.currentUserService = currentUserService;
@@ -51,6 +58,8 @@ public class AdminController {
         // 신고 대응 배너(정책 문서 §2 「알림」) — 토스 푸시가 꺼져 있어도 운영자는 여기서 본다.
         model.addAttribute("openReportCount", reportRepository.countByStatus(ReportStatus.OPEN));
         model.addAttribute("chatSanctionedCount", chatSanctionService.sanctionedCount());
+        model.addAttribute("openBlogReportCount", blogModeration.openCount());              // B2b — 메일과 무관하게 뜬다
+        model.addAttribute("expiredTempCount", blogModeration.expiredCount(clock.instant())); // 기간 끝난 임시조치(운영자가 지운다)
         model.addAttribute("nickname", admin.getNickname());
         // 운영 통계 요약(읽기 전용 집계) — 매번 RDS에 붙지 않고 웹에서 지표 확인(N-037).
         model.addAttribute("stats", adminStatsService.summary());

@@ -46,6 +46,9 @@ import java.util.stream.Collectors;
 public class BlogPostService {
 
     static final String NOT_FOUND = "글을 찾을 수 없어요";
+    /** 운영자가 가린 글을 남이 열 때(B2b — 지운 글 · 초안과 다른 글자 · U-154 ① · 약관 179줄). */
+    static final String HIDDEN = "운영 정책으로 가려진 글이에요";
+    static final String REMOVED = "운영 정책으로 지워진 글이에요 — 새 글로 써 주세요";
     static final String STALE = "다른 기기에서 이 글이 바뀌었어요 — 그쪽을 불러와 주세요";
     private static final String BAD_CURSOR = "목록 위치가 올바르지 않아요";
 
@@ -58,12 +61,14 @@ public class BlogPostService {
     private final QuoteBoxService quoteBoxService;
     private final QuoteBoxRepository quoteBoxRepository;
     private final BlogCommentRepository commentRepository;
+    private final BlogReportRepository reportRepository;
     private final Clock clock;
 
     public BlogPostService(BlogPostRepository postRepository, BlogSentenceRepository sentenceRepository,
                            BlogSentenceRevRepository revRepository, BlogAccess access, BlockService blockService,
                            RateLimitService rateLimitService, QuoteBoxService quoteBoxService,
-                           QuoteBoxRepository quoteBoxRepository, BlogCommentRepository commentRepository, Clock clock) {
+                           QuoteBoxRepository quoteBoxRepository, BlogCommentRepository commentRepository,
+                           BlogReportRepository reportRepository, Clock clock) {
         this.postRepository = postRepository;
         this.sentenceRepository = sentenceRepository;
         this.revRepository = revRepository;
@@ -73,6 +78,7 @@ public class BlogPostService {
         this.quoteBoxService = quoteBoxService;
         this.quoteBoxRepository = quoteBoxRepository;
         this.commentRepository = commentRepository;
+        this.reportRepository = reportRepository;
         this.clock = clock;
     }
 
@@ -87,11 +93,14 @@ public class BlogPostService {
         return postRepository.save(BlogPost.draft(user, title, body));
     }
 
-    /** 초안 저장 — 잠그지 않는다(§4.11). 소유 404가 검증 400 · 판 대조 409보다 먼저. */
+    /** 초안 저장 — 잠그지 않는다(§4.11). 소유 404가 검증 400 · 판 대조 409보다 먼저 · 운영자가 지운 글이면 409(B2b). */
     public BlogPost save(User user, long id, String title, String body, int revision) {
         access.check(user);
         BlogPost post = postRepository.findByIdAndUser(id, user)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, NOT_FOUND));
+        if (post.removed()) { // 내용이 있는 REMOVED 행을 만들지 않는다 — 그 행은 다시 보이기 400이라 영영 가려진다(§4.5)
+            throw new ResponseStatusException(HttpStatus.CONFLICT, REMOVED);
+        }
         try {
             post.saveDraft(title, body, revision);
         } catch (BlogPost.StaleBlogDraftException e) {
@@ -105,11 +114,19 @@ public class BlogPostService {
     public void delete(User user, long id) {
         BlogPost post = postRepository.findForUpdate(id, user)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, NOT_FOUND));
-        quoteBoxRepository.deleteByOwner(QuoteBox.Owner.POST, id); // 이 글이 가진 박스(FK 없음 — 안 지우면 고아) · 남의 박스는 그대로
+        wipeContent(post);
+        postRepository.delete(post);
+    }
+
+    /**
+     * 글의 내용 행 지우기 — 글쓴이 지우기와 운영자 삭제(REMOVED · B2b)가 함께 쓴다. 일괄 지우기라 문맥을 비운다: 운영자 삭제는 이보다
+     * <b>먼저</b> 글 엔티티를 고쳐야 한다(첫 일괄 지우기의 flushAutomatically가 그 UPDATE를 먼저 내보낸다 — 뒤면 버려진다).
+     */
+    void wipeContent(BlogPost post) {
+        quoteBoxRepository.deleteByOwner(QuoteBox.Owner.POST, post.getId()); // 이 글이 가진 박스(FK 없음 — 안 지우면 고아) · 남의 박스는 그대로
         commentRepository.deleteByPost(post);      // blog_comment.post_id FK — 글보다 앞(REQ-243 · B2a)
         revRepository.deleteBySentencePost(post);  // blog_sentence_rev.sentence_id FK — 문장보다 앞
         sentenceRepository.deleteByPost(post);     // blog_sentence.post_id FK — 글보다 앞
-        postRepository.delete(post);
     }
 
     // ── 읽기 ─────────────────────────────────────────────────────────────────
@@ -153,7 +170,7 @@ public class BlogPostService {
         }
         return postRepository.findTop200ByUserOrderByUpdatedAtDescIdDesc(user).stream()
                 .map(p -> new MyPostRow(p.getId(), p.getTitle(), p.getDraftTitle(), p.getPublishedAt(),
-                        p.getRepublishedAt(), p.getUpdatedAt(), fresh.getOrDefault(p.getId(), 0)))
+                        p.getRepublishedAt(), p.getUpdatedAt(), fresh.getOrDefault(p.getId(), 0), p.hidden(), p.moderation()))
                 .toList();
     }
 
@@ -176,11 +193,18 @@ public class BlogPostService {
         revRepository.deleteOlder(sentence, sentence.getRev());
     }
 
-    /** 글 하나 — {@code s}는 한 문장 주소(§6.4 — 이 글의 문장이 아니거나 꼴이 틀리면 강조 없음). */
+    /**
+     * 글 하나 — {@code s}는 한 문장 주소(§6.4 — 이 글의 문장이 아니거나 꼴이 틀리면 강조 없음). 남에게 안 보이면 404 — 운영자가 가린
+     * 글은 「운영 정책으로 가려진 글이에요」, 지운 글 · 초안 · 차단 관계 · 내가 신고한 글은 「글을 찾을 수 없어요」(가렸다는 신호 0).
+     */
     @Transactional(readOnly = true)
     public PostView view(User viewer, long id, String s) {
-        BlogPost post = postRepository.findById(id).filter(p -> readable(viewer, p))
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, NOT_FOUND));
+        BlogPost post = postRepository.findById(id).orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, NOT_FOUND));
+        if (!readable(viewer, post)) {
+            boolean hiddenNotice = post.getPublishedAt() != null && post.hidden()
+                    && !blockService.isBlockedBetween(viewer, post.getUser()) && !reported(viewer, post);
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, hiddenNotice ? HIDDEN : NOT_FOUND);
+        }
         return view(viewer, post, s);
     }
 
@@ -195,13 +219,17 @@ public class BlogPostService {
                 .map(r -> new RevView(r.getRev(), r.getText(), r.getCreatedAt())).toList();
     }
 
-    /** 읽기 판정(§6.4) — 주인은 늘(초안 · 가림 포함). 남은 올림 ∧ 가리지 않음 ∧ 차단 관계 아님. */
+    /** 읽기 판정(§6.4) — 주인은 늘(초안 · 가림 포함). 남은 올림 ∧ 가리지 않음 ∧ 차단 관계 아님 ∧ 내가 신고하지 않음(B2b · C7). */
     boolean readable(User viewer, BlogPost post) {
         if (isOwner(viewer, post)) {
             return true;
         }
         return post.getPublishedAt() != null && post.getHiddenAt() == null
-                && !blockService.isBlockedBetween(viewer, post.getUser());
+                && !blockService.isBlockedBetween(viewer, post.getUser()) && !reported(viewer, post);
+    }
+
+    private boolean reported(User viewer, BlogPost post) {
+        return reportRepository.existsByReporterAndTargetTypeAndTargetId(viewer, BlogReport.Target.POST, post.getId());
     }
 
     PostView view(User viewer, BlogPost post, String s) {
@@ -235,7 +263,8 @@ public class BlogPostService {
                 quotes) : null;
         HangBook hangBook = post.getPublishedAt() == null ? null : quoteBoxService.hangBook(viewer, post, sentences.layout());
         return new PostView(post.getId(), post.getTitle(), post.getUser().getNickname(), mine, post.getPublishedAt(),
-                post.getRepublishedAt(), blocks, highlight(sentences, s), hangBook, draft);
+                post.getRepublishedAt(), blocks, highlight(sentences, s), hangBook, draft, post.hidden(),
+                mine ? post.moderation() : null);
     }
 
     private static final Pattern RANGE = Pattern.compile("^([0-9A-Za-z]{8})-([0-9A-Za-z]{8})$");

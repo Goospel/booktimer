@@ -165,6 +165,9 @@ public interface UserRepository extends JpaRepository<User, Long> {
     /** 운영자 알림 수신 대상 — 토스에 연결된 운영자(ADMIN). */
     List<User> findByRoleAndTossUserKeyIsNotNull(Role role);
 
+    /** 운영자 메일 받는 사람(블로그 신고 — B2b). 받는 주소 규칙은 부르는 쪽({@code BlogNotifier})이 건다. */
+    List<User> findByRole(Role role);
+
     /**
      * 공부 AI 승인 상태로 사용자를 모은다 — 관리자 화면의 「대기 목록」·「승인자 목록」이 이 한 줄로 끝난다.
      * 정렬 키는 마지막 전이 시각이라 <b>대기 큐는 오래 기다린 사람이 위</b>다(먼저 신청한 사람이 먼저).

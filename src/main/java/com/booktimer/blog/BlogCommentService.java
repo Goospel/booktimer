@@ -38,10 +38,12 @@ public class BlogCommentService {
     private final BlogIdentityService identity;
     private final BlockService blockService;
     private final RateLimitService rateLimitService;
+    private final BlogReportRepository reportRepository;
 
     public BlogCommentService(BlogPostRepository postRepository, BlogSentenceRepository sentenceRepository,
                               BlogCommentRepository commentRepository, BlogPostService postService, BlogAccess access,
-                              BlogIdentityService identity, BlockService blockService, RateLimitService rateLimitService) {
+                              BlogIdentityService identity, BlockService blockService, RateLimitService rateLimitService,
+                              BlogReportRepository reportRepository) {
         this.postRepository = postRepository;
         this.sentenceRepository = sentenceRepository;
         this.commentRepository = commentRepository;
@@ -50,6 +52,7 @@ public class BlogCommentService {
         this.identity = identity;
         this.blockService = blockService;
         this.rateLimitService = rateLimitService;
+        this.reportRepository = reportRepository;
     }
 
     /** 한 문장의 댓글 묶음(§6.3) — 글을 볼 수 있어야(404) · 그 글의 문장 행(산 것 · 죽은 것)이어야(404). 오래된 순. */
@@ -70,7 +73,8 @@ public class BlogCommentService {
 
     /**
      * 댓글 쓰기(§4.1 순서) — 허용 목록 403 → 첫 설정 409 → 상한 429(실패한 시도도 센다) → 올림 ∧ 가리지 않음 404(주인도) →
-     * 글쓴이와 차단 관계 403 → 산 문장 404 → 본문 400(빈 · 1,000자 · 걸러내기).
+     * 글쓴이와 차단 관계 403 → 그 글을 신고했으면 404(B2b — 신고한 글은 신고자에게 없다) → 산 문장 404 → 본문 400(빈 · 1,000자 ·
+     * 걸러내기). 허용 목록 줄은 운영자 글쓰기 막기(403)도 함께 본다({@link BlogAccess#check}).
      */
     public CommentView create(User user, long postId, String sid, String body) {
         access.check(user);
@@ -82,6 +86,9 @@ public class BlogCommentService {
                 .orElseThrow(() -> notFound(BlogPostService.NOT_FOUND));
         if (!isAuthor(user, post) && blockService.isBlockedBetween(user, post.getUser())) {
             throw new ResponseStatusException(HttpStatus.FORBIDDEN, "이 글에는 댓글을 달 수 없어요");
+        }
+        if (reportRepository.existsByReporterAndTargetTypeAndTargetId(user, BlogReport.Target.POST, post.getId())) {
+            throw notFound(BlogPostService.NOT_FOUND);
         }
         PostSentences sentences = sentencesOf(post);
         boolean live = Sid.valid(sid) && sentences.layout().sidsInOrder().contains(sid)
@@ -113,9 +120,15 @@ public class BlogCommentService {
         commentRepository.delete(c);
     }
 
+    /** 가린 댓글은 쓴 사람이 아니면 자리만(이름 · 본문 · 글쓴이 표시 0 — REQ-332) · 쓴 사람에겐 본문(REMOVED면 null) + 상태. */
     private static CommentView view(BlogComment c, BlogPost post, User viewer, String target) {
-        return new CommentView(c.getId(), c.getSid(), c.getUser().getNickname(), isAuthor(c.getUser(), post),
-                Objects.equals(c.getUser().getId(), viewer.getId()), c.getBody(), c.getCreatedAt(), !c.getSid().equals(target));
+        boolean writer = Objects.equals(c.getUser().getId(), viewer.getId());
+        boolean merged = !c.getSid().equals(target);
+        if (c.hidden() && !writer) {
+            return new CommentView(c.getId(), c.getSid(), null, null, null, null, c.getCreatedAt(), merged, true, null);
+        }
+        return new CommentView(c.getId(), c.getSid(), c.getUser().getNickname(), isAuthor(c.getUser(), post), writer,
+                c.removed() ? null : c.getBody(), c.getCreatedAt(), merged, c.hidden(), c.moderation());
     }
 
     private static boolean isAuthor(User user, BlogPost post) {

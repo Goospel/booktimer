@@ -5,6 +5,7 @@ import com.booktimer.blog.BlogPostRepository;
 import com.booktimer.blog.BlogSentenceRepository;
 import com.booktimer.blog.BlogSentenceRevRepository;
 import com.booktimer.blog.BlogCommentRepository;
+import com.booktimer.blog.BlogReportRepository;
 import com.booktimer.blog.QuoteBoxRepository;
 import com.booktimer.block.BlockRepository;
 import com.booktimer.chat.ChatMessageRepository;
@@ -82,6 +83,7 @@ public class AccountService {
     private final BlogSentenceRevRepository blogSentenceRevRepository;
     private final QuoteBoxRepository quoteBoxRepository;
     private final BlogCommentRepository blogCommentRepository;
+    private final BlogReportRepository blogReportRepository;
     private final SessionInvalidator sessionInvalidator;
     private final PasswordEncoder passwordEncoder;
     private final GoogleAccountResolver googleAccountResolver;
@@ -118,6 +120,7 @@ public class AccountService {
                           BlogSentenceRevRepository blogSentenceRevRepository,
                           QuoteBoxRepository quoteBoxRepository,
                           BlogCommentRepository blogCommentRepository,
+                          BlogReportRepository blogReportRepository,
                           SessionInvalidator sessionInvalidator,
                           PasswordEncoder passwordEncoder,
                           GoogleAccountResolver googleAccountResolver) {
@@ -153,6 +156,7 @@ public class AccountService {
         this.blogSentenceRevRepository = blogSentenceRevRepository;
         this.quoteBoxRepository = quoteBoxRepository;
         this.blogCommentRepository = blogCommentRepository;
+        this.blogReportRepository = blogReportRepository;
         this.sessionInvalidator = sessionInvalidator;
         this.passwordEncoder = passwordEncoder;
         this.googleAccountResolver = googleAccountResolver;
@@ -433,6 +437,8 @@ public class AccountService {
         blockRepository.deleteByBlocked(user);
         reportRepository.deleteByReporter(user);
         reportRepository.deleteByReported(user);
+        blogReportRepository.deleteByReporter(user);           // 내가 한 블로그 신고(blog_report.reporter_id FK · 처리방침 5절)
+        blogReportRepository.clearTargetUser(user.getId());    // 남이 내 글 · 댓글을 신고한 행은 남기고 대상 글쓴이 id만 비운다(FK 없음)
         // 맞팔 DM(V95): 메시지 → 방 순서. 상대가 보낸 메시지도 방 FK로 방 삭제를 막으므로 방 기준으로 지운다.
         // 상대 쪽에서도 방이 통째로 사라진다(반쪽 방을 남기지 않는다).
         chatMessageRepository.deleteByRoomMember(user);

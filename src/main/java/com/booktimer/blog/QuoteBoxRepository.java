@@ -28,6 +28,13 @@ public interface QuoteBoxRepository extends JpaRepository<QuoteBox, Long> {
 
     long countByOwnerTypeAndOwnerId(Owner ownerType, Long ownerId);
 
+    /** 관리자 「이 글을 인용한 박스」(B2b). shortcut: 색인 없음 — 박스가 1만 행을 넘으면 source_post_id 색인. */
+    List<QuoteBox> findBySourcePostId(Long sourcePostId);
+
+    long countByHideKindAndHiddenAtLessThanEqual(Moderation.Kind kind, java.time.Instant cutoff);
+
+    List<QuoteBox> findTop100ByHideKindAndHiddenAtLessThanEqualOrderByHiddenAt(Moderation.Kind kind, java.time.Instant cutoff);
+
     boolean existsByOwnerTypeAndOwnerId(Owner ownerType, Long ownerId);
 
     /** 목록의 {@code quoteCount} 한 번에 — [ownerId, count]. {@code ids}가 비면 부르지 않는다(비평 D6). */

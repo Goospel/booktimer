@@ -570,7 +570,8 @@ class AppBlogApiControllerTest {
             "PUT | /api/app/blog/posts/{id} | {\"draftTitle\":\"t\",\"draftBody\":\"b\",\"revision\":0}",
             "POST | /api/app/blog/posts/{id}/publish | {\"revision\":0}",
             "PUT | /api/app/blog/me | {\"name\":\"새이름\",\"agreeTerms\":true}",
-            "POST | /api/app/blog/posts/{id}/sentences/AAAAAAAA/comments | {\"body\":\"b\"}"
+            "POST | /api/app/blog/posts/{id}/sentences/AAAAAAAA/comments | {\"body\":\"b\"}",
+            "POST | /api/app/blog/reports | {\"targetType\":\"POST\",\"targetId\":1,\"reason\":\"SPAM\"}"
     })
     void closedListRejectsWrites(String method, String path, String body) throws Exception {
         User apple = appleProvisioning.register("001.blog.closed");
@@ -596,13 +597,15 @@ class AppBlogApiControllerTest {
             "PUT /api/app/blog/me",
             "POST /api/app/blog/posts/{id}/quotes", "POST /api/app/blog/quotes/{id}/refresh", "PUT /api/app/blog/quotes/{id}/source",
             "POST /api/app/margins/{id}/quotes",
-            "POST /api/app/blog/posts/{id}/sentences/{sid}/comments"); // 댓글 쓰기 — 공개 글을 만든다(B2a)
+            "POST /api/app/blog/posts/{id}/sentences/{sid}/comments", // 댓글 쓰기 — 공개 글을 만든다(B2a)
+            "POST /api/app/blog/reports"); // 신고 — 시행일(12/01) 전 신고 내역 수집 0(U-154 ④ · B2b)
     /** 내 데이터를 지우는 길은 목록과 무관하게 늘 연다(§4.8 — readsAndDeletesStayOpen · AppMarginLinkApiTest가 200을 잰다). */
     private static final Set<String> OPEN = Set.of("DELETE /api/app/blog/posts/{id}", "DELETE /api/app/margins/{id}",
             "DELETE /api/app/margins/{id}/quotes/{quoteId}",
             "DELETE /api/app/blog/comments/{id}",          // 내 댓글 지우기(B2a)
             "DELETE /api/app/blog/sentences/{sid}/revs",   // 내 문장의 예전 판 지우기(B2a · Q10)
-            "POST /api/app/blog/posts/{id}/seen");         // 새 댓글 확인 시각 — 공개 내용을 만들지 않는다(B2a)
+            "POST /api/app/blog/posts/{id}/seen",          // 새 댓글 확인 시각 — 공개 내용을 만들지 않는다(B2a)
+            "POST /api/app/blog/blocks");                   // 대상으로 차단 — 안전 기능은 늘 연다(App Store 1.2 · B2b)
     /** 문 단위로 허용 목록을 걸지 않는 쪽지 쓰기 문 — 줄마다 까닭. 새 쪽지 쓰기 문은 세 목록 가운데 하나에 넣어야 초록이다(§16 AUTH-4). */
     private static final Set<String> MARGIN_NOT_BLOG = Set.of(
             "POST /api/app/margins",           // 쪽지 만들기 — 몸에 link가 있을 때만 막는다(걸기 · 매개변수 403 시험이 잰다)
@@ -643,10 +646,12 @@ class AppBlogApiControllerTest {
     }
 
     @Test
-    @DisplayName("REQ-244 · '*'면 200 · 목록 밖도 읽기 · 지우기 · 댓글 지우기 · 예전 판 지우기 · seen 200")
+    @DisplayName("REQ-244 · '*'면 200 · 목록 밖도 읽기 · 지우기 · 댓글 지우기 · 예전 판 지우기 · seen · 차단 · 내 신고 · 차단 목록 200")
     void readsAndDeletesStayOpen() throws Exception {
         User apple = appleProvisioning.register("001.blog.open");
         String token = apiTokenService.issue(apple);
+        String other = ready("bopenother");
+        long theirs = published(other, "남의 글", "남의 문장이다.");
         long id = create(token, "글", "문장."); // '*' — 양성 대조
         apple.confirmBlogIdentity(Instant.now());
         userRepository.saveAndFlush(apple);
@@ -662,6 +667,9 @@ class AppBlogApiControllerTest {
             call(get("/api/app/blog/posts/mine"), token).andExpect(status().isOk());
             call(get("/api/app/blog/me"), token).andExpect(status().isOk());
             call(post("/api/app/blog/posts/" + id + "/seen"), token).andExpect(status().isNoContent());
+            json(post("/api/app/blog/blocks"), token, "{\"targetType\":\"POST\",\"targetId\":" + theirs + "}").andExpect(status().isOk());
+            call(get("/api/app/blocks"), token).andExpect(status().isOk());
+            call(get("/api/app/blog/reports"), token).andExpect(status().isOk());
             call(delete("/api/app/blog/sentences/" + sid + "/revs"), token).andExpect(status().isNoContent());
             call(delete("/api/app/blog/comments/" + commentId), token).andExpect(status().isNoContent());
             call(get("/api/app/blog/posts/" + id + "/sentences/" + sid + "/comments"), token).andExpect(status().isOk());

@@ -63,6 +63,12 @@
         대화 제재 중 <strong th:text="${chatSanctionedCount}">0</strong>명 —
         <a th:href="@{/admin/reports}">신고함 열기</a>
     </p>
+    <p class="alert" th:attr="data-open-blog-reports=${openBlogReportCount},data-expired-temp=${expiredTempCount}"
+       th:classappend="${openBlogReportCount == 0 and expiredTempCount == 0} ? 'muted'">
+        블로그 미처리 신고 <strong th:text="${openBlogReportCount}">0</strong>건 ·
+        기간 끝난 임시조치 <strong th:text="${expiredTempCount}">0</strong>건 —
+        <a th:href="@{/admin/reports}">신고함 열기</a>
+    </p>
 
     <section class="card">
         <h2>통계 요약</h2>

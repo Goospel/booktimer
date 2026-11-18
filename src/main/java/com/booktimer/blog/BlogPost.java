@@ -4,6 +4,8 @@ import com.booktimer.common.BaseTimeEntity;
 import com.booktimer.user.User;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
+import jakarta.persistence.EnumType;
+import jakarta.persistence.Enumerated;
 import jakarta.persistence.FetchType;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
@@ -19,7 +21,7 @@ import java.time.Instant;
  * 블로그 글 한 편(계획 2026-11-11-b1-blog-core §5.1) — 초안 글자({@code draft_*} — 자동저장)와 올린 판({@code title} ·
  * {@code layout_json} — 올릴 때만 바뀐다 · J11 · J89)이 한 행에 산다. 문장은 {@link BlogSentence}, 순서는 배치({@link Layout}).
  *
- * <p>{@code hidden_at}은 운영자 가리기(B2가 쓴다) — B1은 읽기에서 뺀다(§6.4).
+ * <p>{@code hidden_at} · {@code hide_kind} · {@code hide_note}는 운영자 가림(B2b · {@link Moderation}) — 남에게서 뺀다.
  *
  * <p><b>{@code @DynamicUpdate}</b>(§4.11): 잠그지 않는 초안 저장이 올리기와 겹치면 전 열 UPDATE가 올리기가 쓴 제목 · 배치 · 올린
  * 시각을 옛 스냅샷으로 오류 없이 덮는다 — 바뀐 열만 쓰게 해 저장({@code draft_*})과 올리기가 서로 덮지 않는다
@@ -66,6 +68,13 @@ public class BlogPost extends BaseTimeEntity {
 
     @Column(name = "hidden_at")
     private Instant hiddenAt;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "hide_kind", length = 10)
+    private Moderation.Kind hideKind;
+
+    @Column(name = "hide_note", length = Moderation.NOTE_MAX)
+    private String hideNote;
 
     /** 글쓴이가 새 댓글을 마지막으로 확인한 시각(B2a · V108) — 엔티티로 쓰지 않는다: {@link BlogPostRepository#markSeen}(감사 0). */
     @Column(name = "author_seen_comments_at") // 바꾸는 메서드 0 + @DynamicUpdate — 엔티티 저장이 이 열을 쓰지 않는다
@@ -140,6 +149,41 @@ public class BlogPost extends BaseTimeEntity {
     /** 인용 · 걸기 · 붙이기 · 반영의 원 글 판정(§6.4) — 올림 ∧ 가리지 않음. <b>주인도 예외 없다</b>(J52). */
     public boolean quotable() {
         return publishedAt != null && hiddenAt == null;
+    }
+
+    /** 운영자 가림 전이(§6.5 — {@link Moderation#next}가 정한 값을 그대로 쓴다). */
+    void moderate(Moderation.Next next) {
+        this.hiddenAt = next.hiddenAt();
+        this.hideKind = next.kind();
+        this.hideNote = next.note();
+    }
+
+    public boolean hidden() {
+        return hiddenAt != null;
+    }
+
+    public boolean removed() {
+        return hideKind == Moderation.Kind.REMOVED;
+    }
+
+    public Moderation.View moderation() {
+        return Moderation.of(hiddenAt, hideKind, hideNote);
+    }
+
+    public Moderation.Kind getHideKind() {
+        return hideKind;
+    }
+
+    public String getHideNote() {
+        return hideNote;
+    }
+
+    /** 운영자 삭제(REMOVED — §4.5) — 제목 · 초안 · 배치를 비우고 행은 남긴다. 문장 · 판 · 박스 · 댓글은 부르는 쪽이 지운다(이 다음에). */
+    void markRemoved() {
+        this.title = null;
+        this.draftTitle = null;
+        this.draftBody = "";
+        this.layoutJson = null;
     }
 
     public Long getId() {

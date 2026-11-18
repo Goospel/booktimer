@@ -1,5 +1,6 @@
 package com.booktimer.web;
 
+import com.booktimer.blog.BlogModerationService;
 import com.booktimer.report.ReportService;
 import org.springframework.stereotype.Controller;
 import org.springframework.ui.Model;
@@ -18,15 +19,22 @@ import org.springframework.web.bind.annotation.PostMapping;
 public class AdminReportController {
 
     private final ReportService reportService;
+    private final BlogModerationService blogModeration;
+    private final java.time.Clock clock;
 
-    public AdminReportController(ReportService reportService) {
+    public AdminReportController(ReportService reportService, BlogModerationService blogModeration, java.time.Clock clock) {
         this.reportService = reportService;
+        this.blogModeration = blogModeration;
+        this.clock = clock;
     }
 
     @GetMapping("/admin/reports")
     public String list(jakarta.servlet.http.HttpServletRequest request, Model model) {
         CsrfTokenUtil.precommit(request); // 신고마다 폼이 있어 목록이 길면 응답이 먼저 커밋된다(T-033·T-049)
         model.addAttribute("reportList", reportService.reportRows());
+        // 블로그 신고 · 기간 끝난 임시조치(B2b) — 처리 문은 AdminBlogController
+        model.addAttribute("blogReports", blogModeration.adminRows());
+        model.addAttribute("blogExpired", blogModeration.expired(clock.instant()));
         return "admin-reports";
     }
 
