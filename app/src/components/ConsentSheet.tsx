@@ -3,7 +3,7 @@
 import { View } from 'react-native';
 
 import { CONSENT_BUTTONS, CONSENT_ITEMS, CONSENT_TITLE, splitItem } from '../lib/consentCopy';
-import { color, space } from '../theme/tokens';
+import { color, space } from '../theme/legacy';
 import { Sheet } from './Sheet';
 import { Button, Txt } from './ui';
 

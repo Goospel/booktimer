@@ -3,7 +3,7 @@
 // 질문 글자는 고를 수 없다(RN Text 기본 — 선택 · 복사 0, REQ-47 소스 가드).
 import { ActivityIndicator, Pressable, View } from 'react-native';
 
-import { color, layout, line, space } from '../theme/tokens';
+import { color, layout, line, space } from '../theme/legacy';
 import { AiBadge, readColumn, Txt } from './ui';
 
 export function QuestionBand(p: { question: string | null; hint: string; waiting: string | null; onPress?: () => void }) {

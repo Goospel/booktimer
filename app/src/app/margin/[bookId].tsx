@@ -65,7 +65,7 @@ import {
 import { measureStore } from '../../lib/measureSync';
 import { againArgs, bandHint, pickPatch, waitingText } from '../../lib/questions';
 import { quoteOnlyBand } from '../../lib/quoteOnlyBand';
-import { color, layout, line, space, type } from '../../theme/tokens';
+import { color, layout, line, space, type } from '../../theme/legacy';
 
 type NoticeState = { message: string; tone?: 'info' | 'error'; action?: { label: string; onPress: () => void } } | null;
 type Sync = ReturnType<typeof draftSync>;

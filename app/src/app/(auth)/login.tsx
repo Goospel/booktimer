@@ -13,7 +13,7 @@ import { type LoginMode, LINK_CODE_LENGTH, loginProviders, type Provider, runLog
 import { guardOpen, isResumeFromBackground, type LoginTrack, RESUME_RELEASE_MS, shouldRelease } from '../../lib/loginResume';
 import { signedOutNotice } from '../../lib/logout';
 import { brand } from '../../theme/brand';
-import { color, space } from '../../theme/tokens';
+import { color, space } from '../../theme/legacy';
 
 const BUTTON_HEIGHT = 48;
 

@@ -7,7 +7,7 @@ import { failText, session } from '../api/client';
 import type { MarginSummary } from '../api/types';
 import { deleteNote } from '../lib/draftSync';
 import { noteRow } from '../lib/marginSave';
-import { color, line, space } from '../theme/tokens';
+import { color, line, space } from '../theme/legacy';
 import { AiBadge, Txt } from './ui';
 
 /** 쪽지 줄 지우기(F1 §4.3-3) — 확인 창 → 서버 지우기 → 기기 칸 지우기. 책 화면 · 서재가 같이 쓴다(A1 리뷰 2 · 8). */

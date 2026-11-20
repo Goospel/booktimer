@@ -15,7 +15,7 @@ import { noteHref, pendingLeave, savedNotice } from '../../lib/marginSave';
 import { startFromBook } from '../../lib/measureStart';
 import { loadDashboard, measureStore } from '../../lib/measureSync';
 import { SECTIONS } from '../../lib/shelf';
-import { color, line, space } from '../../theme/tokens';
+import { color, line, space } from '../../theme/legacy';
 
 type NoticeState = { message: string; tone?: 'info' | 'error' } | null;
 

@@ -18,7 +18,7 @@ import { studyToday } from '../../lib/studyTimer';
 import { useMeasureDashboard } from '../../lib/useMeasureDashboard';
 import { useMeasureShortcut } from '../../lib/useMeasureShortcut';
 import { useWidgetIntent } from '../../lib/useWidgetIntent';
-import { color, layout, line, space } from '../../theme/tokens';
+import { color, layout, line, space } from '../../theme/legacy';
 
 /** 알림 자리는 둘이고 상태는 하나다 — 시작 · 정지 실패는 막대 안, 빼기 실패는 공부 서재 단 맨 위(사양 §8-20). */
 type NoticeState = { message: string; tone?: 'info' | 'error'; at: 'bar' | 'shelf' } | null;
