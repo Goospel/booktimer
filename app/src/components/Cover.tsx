@@ -2,7 +2,7 @@
 import { Image, View } from 'react-native';
 
 import { coverColor, initialOf } from '../theme/cover';
-import { cover } from '../theme/tokens';
+import { cover } from '../theme/legacy';
 import { Txt } from './ui';
 
 const INITIAL = { row: 'Q1', card: 'H2', head: 'D2' } as const;

@@ -2,7 +2,7 @@
 // 띠 전체가 누르는 곳 하나 — 누를 때만 ASK를 부른다(보이는 조건은 lib/quoteOnlyBand가 정한다). 애니메이션 없음.
 import { Pressable } from 'react-native';
 
-import { color, layout, space } from '../theme/tokens';
+import { color, layout, space } from '../theme/legacy';
 import { Txt } from './ui';
 
 export function QuoteOnlyBand(p: { onPress: () => void; busy: boolean }) {

@@ -22,7 +22,7 @@ import { loadDashboard, measureStore } from '../../lib/measureSync';
 import { askPermission, permission, type PermissionState, reminderStore, syncReminders } from '../../lib/notify';
 import { clampTime, DEFAULT_REMINDER, type ReminderSetting } from '../../lib/reminders';
 import { syncSurfacesNow } from '../../lib/surfaceSync';
-import { color, line, space } from '../../theme/tokens';
+import { color, line, space } from '../../theme/legacy';
 
 // 맨 아래 줄은 지금 뜬 JS가 무엇인지 기기에서 읽는 자리다(앞당김 보충 REQ-72 · U-40).
 const BUILD_LINE = buildInfoLine({

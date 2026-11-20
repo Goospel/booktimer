@@ -14,7 +14,7 @@ import { addBody } from '../lib/bookAdd';
 import { objectParticle } from '../lib/format';
 import { toIsbn13 } from '../lib/isbn';
 import { studyAddBody, studyOwned } from '../lib/studyShelf';
-import { color, line, space } from '../theme/tokens';
+import { color, line, space } from '../theme/legacy';
 
 type NoticeState = { message: string; tone?: 'info' | 'error'; action?: { label: string; onPress: () => void } } | null;
 

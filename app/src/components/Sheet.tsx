@@ -6,7 +6,7 @@ import type { ReactNode } from 'react';
 import { ScrollView, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { color, layout, line, space } from '../theme/tokens';
+import { color, layout, line, space } from '../theme/legacy';
 
 const inner = { paddingHorizontal: layout.gutter, paddingTop: space[6], paddingBottom: space[8], gap: space[3] } as const;
 

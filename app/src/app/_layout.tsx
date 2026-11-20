@@ -1,7 +1,8 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { SplashScreen, Stack } from 'expo-router';
+import * as SystemUI from 'expo-system-ui';
 import { useEffect, useState } from 'react';
-import { AppState, LogBox, View } from 'react-native';
+import { AppState, LogBox, useColorScheme, View } from 'react-native';
 
 // 앱 시작 때 위젯·Live Activity 레이아웃을 등록한다(보충 REQ-03 「위젯 레이아웃」).
 import '../../widgets/ReadingWidget';
@@ -14,7 +15,7 @@ import { startSurfaceSync, stopSurfaceSync } from '../lib/surfaceSync';
 import { clearSurfaces } from '../lib/surfaces';
 import { logFontReport } from '../theme/fontCheck';
 import { useAppFonts } from '../theme/fonts';
-import { color } from '../theme/tokens';
+import { color, palette } from '../theme/tokens';
 
 // 개발 빌드 Metro 로그에 내장 Plex 등록을 한 줄로 찍는다(D0 U-265 ① — '[fonts] ok 4/4'). 운영 빌드는 아무것도 하지 않는다
 logFontReport();
@@ -33,11 +34,17 @@ const stacked = {
   title: '',
   headerBackButtonDisplayMode: 'minimal',
   headerTintColor: color.ink,
-  contentStyle: { backgroundColor: color.paper },
+  contentStyle: { backgroundColor: color.bg },
 } as const;
 
 export default function RootLayout() {
   const fontsOk = useAppFonts(); // 실패해도 참 — 빈 화면에 멈추지 않는다(REQ-55)
+  const scheme = useColorScheme() === 'dark' ? 'dark' : 'light';
+
+  // 루트 뷰 · 창 바탕을 지금 모드의 bg로 — 회전 · 화면 분할 가장자리에 밝은 면이 없게(REQ-469). 설정 파일 값은 라이트뿐이라 다크는 여기서 칠한다
+  useEffect(() => {
+    void SystemUI.setBackgroundColorAsync(palette[scheme].bg);
+  }, [scheme]);
   const [signedIn, setSignedIn] = useState<boolean | null>(null);
 
   useEffect(() => {
@@ -90,9 +97,9 @@ export default function RootLayout() {
     if (ready) SplashScreen.hideAsync();
   }, [ready]);
 
-  if (!ready) return <View style={{ flex: 1, backgroundColor: color.paper }} />;
+  if (!ready) return <View style={{ flex: 1, backgroundColor: color.bg }} />;
   return (
-    <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: color.paper } }}>
+    <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: color.bg } }}>
       <Stack.Protected guard={signedIn}>
         {/* 제목은 화면에 안 보이고 뒤로 기록 메뉴 · VoiceOver에만 쓰인다 — 없으면 route 이름 「(tabs)」가 뜬다(U-60) */}
         <Stack.Screen name="(tabs)" options={{ title: '책생글' }} />

@@ -21,7 +21,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
-import { color, layout, line, radius, space, type Stage, stageStyle, type } from '../theme/tokens';
+import { color, layout, line, radius, space, type Stage, stageStyle, type } from '../theme/legacy';
 
 // ── 굵은 텍스트 — 구독은 첫 Txt 렌더 때 한 번만(모듈 import에는 부작용이 없다 — ui.test가 base를 읽는다) ──
 let boldOn = false;

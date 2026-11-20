@@ -1,13 +1,17 @@
 import { readFileSync } from 'fs';
 import { join } from 'path';
 
-import { color, night } from '../src/theme/tokens';
+import { color, night } from '../src/theme/legacy';
+import { palette } from '../src/theme/tokens';
 
 // 시각 보충 §5.3 · REQ-60 — 위젯 함수는 import를 못 써 배경 색을 리터럴로 적는다. 그 값이 토큰 집합 안에 있는지 본다.
 // LA는 배경을 칠하지 않으니 색 리터럴이 0개가 정상이다.
 
 const HEX = /#[0-9A-Fa-f]{6}\b/g;
-const TOKENS = new Set([...Object.values(color), ...Object.values(night)].map((v) => v.toUpperCase()));
+// 개편 U2a — 새 palette 두 판 ∪ 옛 color · night(옛 위젯 리터럴이 U8까지 산다 — U8이 legacy 몫을 뺀다). 새 color는 DynamicColorIOS 객체라 읽지 않는다
+const TOKENS = new Set(
+  [...Object.values(palette.light), ...Object.values(palette.dark), ...Object.values(color), ...Object.values(night)].map((v) => v.toUpperCase()),
+);
 
 const read = (name: string) => readFileSync(join(__dirname, name), 'utf8');
 const literals = (text: string) => (text.match(HEX) ?? []).map((v) => v.toUpperCase());

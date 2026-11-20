@@ -14,7 +14,7 @@ import { APPLE_AGAIN_LINE, confirmFor, deleteAccount, deleteCopy, deleteVia, typ
 import { clearAll, pendingAll } from '../lib/draftSync';
 import { signedOutNotice } from '../lib/logout';
 import { measureStore } from '../lib/measureSync';
-import { color, space } from '../theme/tokens';
+import { color, space } from '../theme/legacy';
 
 const openWeb = () => void Linking.openURL(WEB_DELETE_URL);
 
