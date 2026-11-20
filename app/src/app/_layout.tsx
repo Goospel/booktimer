@@ -15,7 +15,7 @@ import { startSurfaceSync, stopSurfaceSync } from '../lib/surfaceSync';
 import { clearSurfaces } from '../lib/surfaces';
 import { logFontReport } from '../theme/fontCheck';
 import { useAppFonts } from '../theme/fonts';
-import { color, palette } from '../theme/tokens';
+import { color, font, palette } from '../theme/tokens';
 
 // 개발 빌드 Metro 로그에 내장 Plex 등록을 한 줄로 찍는다(D0 U-265 ① — '[fonts] ok 4/4'). 운영 빌드는 아무것도 하지 않는다
 logFontReport();
@@ -34,6 +34,7 @@ const stacked = {
   title: '',
   headerBackButtonDisplayMode: 'minimal',
   headerTintColor: color.ink,
+  headerTitleStyle: { fontFamily: font.sans600, fontSize: 17 }, // 내비 제목 17 600(언어 1.7-27)
   contentStyle: { backgroundColor: color.bg },
 } as const;
 

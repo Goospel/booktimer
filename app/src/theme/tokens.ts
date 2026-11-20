@@ -68,11 +68,15 @@ export const type: Record<Stage, { style: TextStyle; maxScale: number }> = {
 // 굵은 텍스트 = 한 단 굵게 — face를 바꾼다(Plex 700은 싣지 않아 600 그대로 · Mono 500 그대로)
 const BOLDER: Record<string, string> = { [font.sans400]: font.sans500, [font.sans500]: font.sans600 };
 
-/** 굵은 텍스트(시스템 설정)가 켜지면 다음 face로 — fontWeight를 더하지 않는다(REQ-433 · 470) */
-export function stageStyle(v: Stage, o: { bold: boolean }): TextStyle {
+const SANS = { 400: font.sans400, 500: font.sans500, 600: font.sans600 } as const;
+export type Weight = keyof typeof SANS;
+
+/** w = 단계 안 굵기 갈래(Sans 단계만 — Mono는 500 하나). 굵은 텍스트(시스템 설정)가 켜지면 다음 face로 — fontWeight를 더하지 않는다(REQ-433 · 470) */
+export function stageStyle(v: Stage, o: { bold: boolean; w?: Weight }): TextStyle {
   const style = type[v].style;
-  const next = o.bold ? BOLDER[style.fontFamily as string] : undefined;
-  return next ? { ...style, fontFamily: next } : style;
+  const face = o.w && style.fontFamily !== font.mono500 ? SANS[o.w] : (style.fontFamily as string);
+  const next = (o.bold && BOLDER[face]) || face;
+  return next === style.fontFamily ? style : { ...style, fontFamily: next };
 }
 
 export const radius = { s: 2, m: 8, l: 12, round: 999 } as const; // 캡슐 · 47 · 38 · 24 · 22 · 5는 시스템 몫이라 토큰에 없다(언어 1.5)

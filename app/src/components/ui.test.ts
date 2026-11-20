@@ -1,24 +1,32 @@
-import { color, layout } from '../theme/legacy';
+import { color, layout } from '../theme/tokens';
 import { base } from './ui';
 
-// 시각 보충 §3 · §4.3 — 누름 크기는 레이아웃으로 확보한다(hitSlop으로 채우지 않는다). REQ-56.
+// 언어 1.4 · 1.7 — 누름 크기는 레이아웃으로 확보한다(hitSlop으로 채우지 않는다). REQ-56.
+// 색은 toEqual로 견준다 — jest에서 color.*는 DynamicColorIOS 객체라 not.toBe는 객체 동일성만 봐서 늘 통과다.
 
-test('REQ-56 · 누름 부품 기본 스타일(Button ink·outline·text · Row · SwitchRow)의 최소 높이는 layout.hit 이상이고, 버튼 세 종류는 최소 폭도 layout.hit 이상이다', () => {
-  for (const s of [base.ink, base.outline, base.text, base.row, base.switchRow]) {
-    expect(s.minHeight).toBeGreaterThanOrEqual(layout.hit);
-  }
-  for (const s of [base.ink, base.outline, base.text]) {
+test('REQ-56 · 키 높이는 하우징 안 44 · 폭 가득 48이고, 링크 · 행 · 스위치 행 · 분할 칸도 44 이상이다', () => {
+  for (const s of [base.ink, base.outline]) {
+    expect(s.minHeight).toBe(layout.hit);
     expect(s.minWidth).toBeGreaterThanOrEqual(layout.hit);
   }
-});
-
-test('REQ-56 · 입력칸 경계 색은 muted이고 가는 선(line)이 아니다', () => {
-  expect(base.field.borderColor).toBe(color.muted);
-  expect(base.field.borderColor).not.toBe(color.line);
-  expect(base.field.borderWidth).toBeGreaterThan(0);
-});
-
-test('REQ-56 · 상태 칸(base.segment)의 최소 높이 · 폭은 layout.hit 이상이다', () => {
+  expect(layout.hit).toBe(44);
+  expect(base.full.minHeight).toBe(layout.keyFull);
+  expect(layout.keyFull).toBe(48);
+  expect(base.text.minHeight).toBeGreaterThanOrEqual(layout.hit);
+  expect(base.text.minWidth).toBeGreaterThanOrEqual(layout.hit);
+  expect(base.row.minHeight).toBeGreaterThanOrEqual(layout.hit);
+  expect(base.switchRow.minHeight).toBe(layout.keyFull);
   expect(base.segment.minHeight).toBeGreaterThanOrEqual(layout.hit);
   expect(base.segment.minWidth).toBeGreaterThanOrEqual(layout.hit);
+});
+
+test('REQ-56 · 입력칸은 높이 48 · 경계 1 mark이고 line이 아니다', () => {
+  expect(base.field.minHeight).toBe(layout.keyFull);
+  expect(base.field.borderWidth).toBe(1);
+  expect(base.field.borderColor).toEqual(color.mark);
+  expect(base.field.borderColor).not.toEqual(color.line);
+});
+
+test('REQ-56 · 글 행은 선을 그리지 않는다 — 선은 RowGroup이 행 사이에만(언어 1.7-12)', () => {
+  expect(base.row).not.toHaveProperty('borderBottomWidth');
 });
