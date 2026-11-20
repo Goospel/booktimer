@@ -2,7 +2,7 @@
 // 다리 파일(계획 D17) — 안 옮긴 화면이 옛 단계 키(D2 · B2 …)를 넘기는 동안 legacy의 type · stageStyle · Stage로 그린다(BRIDGE_NAMES가 잠근다 · U9에서 Stage만).
 // 누름 크기는 레이아웃으로 확보한다 — hitSlop으로 채우지 않는다(REQ-56). 움직이는 값은 transform · opacity뿐(REQ-434).
 import { useHeaderHeight } from 'expo-router/react-navigation';
-import { Children, Fragment, type ReactNode, useEffect, useState, useSyncExternalStore } from 'react';
+import { Children, Fragment, type ReactNode, useEffect, useState } from 'react';
 import {
   AccessibilityInfo,
   ActivityIndicator,
@@ -24,6 +24,7 @@ import {
 import Animated, { useAnimatedStyle, useSharedValue } from 'react-native-reanimated';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
+import { a11yFlag } from '../lib/a11yFlag';
 import { animateTo, useReduced } from '../lib/animate';
 import { PRESS_FADE_MS, transitionFor } from '../lib/motion';
 import { type Stage as LegacyStage, stageStyle, type } from '../theme/legacy';
@@ -36,25 +37,8 @@ const HAIR = 0.5;
 
 const useScheme = (): Scheme => (useColorScheme() === 'dark' ? 'dark' : 'light');
 
-// ── 굵은 텍스트 — 구독은 첫 Txt 렌더 때 한 번만(모듈 import에는 부작용이 없다 — ui.test가 base를 읽는다) ──
-let boldOn = false;
-let started = false;
-const listeners = new Set<() => void>();
-function setBold(v: boolean) {
-  if (v === boldOn) return;
-  boldOn = v;
-  listeners.forEach((l) => l());
-}
-function subscribeBold(cb: () => void) {
-  if (!started) {
-    started = true;
-    AccessibilityInfo.isBoldTextEnabled().then(setBold, () => {});
-    AccessibilityInfo.addEventListener('boldTextChanged', setBold);
-  }
-  listeners.add(cb);
-  return () => listeners.delete(cb);
-}
-const useBold = () => useSyncExternalStore(subscribeBold, () => boldOn);
+// ── 굵은 텍스트 — 구독은 첫 Txt 렌더 때 한 번만(a11yFlag) ──
+const useBold = a11yFlag(() => AccessibilityInfo.isBoldTextEnabled(), 'boldTextChanged');
 
 /** 개발 모드에서 누름 영역이 44 미만이면 알린다 — U-33 ④가 Metro 로그에서 센다(출시 번들엔 없다). */
 function hitCheck(label: string) {
@@ -246,7 +230,7 @@ export function Button(p: {
 
   const pressTo = (to: number) => {
     if (!link) animateTo(press, reduced ? 0 : to, transitionFor('press', { reduced, prop: 'transform' }));
-    animateTo(veil, to, { type: 'timing', duration: PRESS_FADE_MS, easing: 'linear' });
+    animateTo(veil, to, { type: 'timing', duration: reduced ? 150 : PRESS_FADE_MS, easing: 'linear' }); // 줄이기면 모든 전환이 opacity 150ms(언어 1.8)
   };
 
   const content = (fg: typeof color.ink, w?: Weight) => (
@@ -288,7 +272,8 @@ export function Button(p: {
         ) : (
           <>
             <Animated.View style={keyStyle}>{content(color.ink)}</Animated.View>
-            <Animated.View pointerEvents="none" style={[StyleSheet.absoluteFill, { alignItems: 'center', justifyContent: 'center' }, fillStyle]}>
+            {/* absolute 겹은 키의 paddingHorizontal을 받지 않는다 — 흐름 겹과 줄바꿈 폭을 맞춘다 */}
+            <Animated.View pointerEvents="none" style={[StyleSheet.absoluteFill, { alignItems: 'center', justifyContent: 'center', paddingHorizontal: space[4] }, fillStyle]}>
               {content(color.onFill)}
             </Animated.View>
           </>
@@ -384,14 +369,20 @@ export function Row(p: {
       onLayout={hitCheck(p.title)}
       style={({ pressed }) => [base.row, pressed && { backgroundColor: color.pressInk }]}
     >
-      <Txt v="row" w={p.selected ? 600 : undefined} numberOfLines={2} style={p.tone === 'danger' ? { color: color.danger } : undefined}>
-        {p.title}
-      </Txt>
-      {p.meta ? (
-        <Txt v="foot" style={{ color: color.text2, marginTop: space[1] }}>
-          {p.meta}
-        </Txt>
-      ) : null}
+      <View style={{ flexDirection: 'row', alignItems: 'center', gap: space[3] }}>
+        <View style={{ flex: 1 }}>
+          <Txt v="row" w={p.selected ? 600 : undefined} numberOfLines={2} style={p.tone === 'danger' ? { color: color.danger } : undefined}>
+            {p.title}
+          </Txt>
+          {p.meta ? (
+            <Txt v="foot" style={{ color: color.text2, marginTop: space[1] }}>
+              {p.meta}
+            </Txt>
+          ) : null}
+        </View>
+        {/* 굵은 텍스트면 보통 행도 600이라 굵기만으로는 고른 행이 갈리지 않는다 — 체크 표시를 함께 */}
+        {p.selected ? <Icon name="checkmark" /> : null}
+      </View>
     </Pressable>
   );
 }

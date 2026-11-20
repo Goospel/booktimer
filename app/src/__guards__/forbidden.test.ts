@@ -943,7 +943,8 @@ function animatedKeys(all: { rel: string; text: string }[]) {
       keys.push(seg);
     }
   }
-  return { calls, parsed, keys: keys.map((k) => /^\s*(\w+)/.exec(k)?.[1]).filter((k): k is string => !!k) };
+  // 식별자 키로 시작하지 않는 조각(펼침 `...` 등)은 버리지 않고 그대로 남긴다 — 허용 집합 밖이라 빨갛다
+  return { calls, parsed, keys: keys.map((k) => /^\s*(\w+)/.exec(k)?.[1] ?? k.trim()).filter((k) => !!k) };
 }
 test('REQ-434 · useAnimatedStyle이 돌려주는 키는 transform · opacity뿐(심은 width · backgroundColor 견본은 잡힌다)', () => {
   const real = animatedKeys(ALL);
@@ -952,6 +953,8 @@ test('REQ-434 · useAnimatedStyle이 돌려주는 키는 transform · opacity뿐
   expect(new Set(real.keys)).toEqual(new Set(['transform', 'opacity']));
   const planted = animatedKeys([{ rel: join('app', 'planted.tsx'), text: 'const s = useAnimatedStyle(() => ({ width: w.value, transform: [{ scale: k.value }], backgroundColor: color.ink }));' }]);
   expect(planted.keys).toEqual(['width', 'transform', 'backgroundColor']);
+  const spread = animatedKeys([{ rel: join('app', 'planted.tsx'), text: 'const s = useAnimatedStyle(() => ({ ...{ width: veil.value }, opacity: veil.value }));' }]);
+  expect(spread.keys.filter((k) => k !== 'transform' && k !== 'opacity')).toHaveLength(1); // 펼침 꼴은 버리지 않고 남겨 집합 비교에서 빨갛게
   expect(animatedKeys([{ rel: join('app', 'planted.tsx'), text: 'const s = useAnimatedStyle(() => { return { width: 1 }; });' }])).toMatchObject({ calls: 1, parsed: 0 });
 });
 
