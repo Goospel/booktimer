@@ -518,7 +518,7 @@ HTTP→HTTPS 301 리다이렉트 + Route 53 alias. 배경 개념 **N-021**.
   | PR | 브랜치 | 범위 | 상태 |
   |---|---|---|---|
   | U0 | `docs/app-ui-overhaul-plan` | 이 절 · 블로그 표 「추정 머지」 · 일정 줄 · 다음 시작점 · 1.3.0/1.4.0 줄 · C안 · NetInfo 줄 + changelog | ✅ 2026-11-20 |
-  | U1 | `feat/app-ui-native-130` | 네이티브 묶음 · version 1.3.0 · 지문 잠금 · Plex 내장 + 이름 대조 · 개발 글꼴 확인 로그 · 다크 스플래시 · `palette` · `font` 값 표 · 자산 테스트 — CI 초록 → reviewer → 개발 빌드 → D0 → 머지 | 대기 — 다음 |
+  | U1 | `feat/app-ui-native-130` | 네이티브 묶음 · version 1.3.0 · 지문 잠금 · Plex 내장 + 이름 대조 · 개발 글꼴 확인 로그 · 다크 스플래시 · `palette` · `font` 값 표 · 자산 테스트 — CI 초록 → reviewer → 개발 빌드 → D0 → 머지 | 🔜 2026-11-20 PR — PC 원장 U-242 · U-278 충족 · 남은 것 reviewer → 개발 빌드 → D0(U-243 ① · U-265 ① · U-273). `font` 값은 OTF에서 읽은 실제 PostScript 이름(`IBMPlexSansKR` · `-Medm` · `-SmBld` · `IBMPlexMono-Medm` — 계획 초안의 파일 이름 꼴은 틀렸다) |
   | U2a | `feat/app-ui-tokens-dark` | 새 토큰(DynamicColorIOS · 글자 단계 · radius · 그림자 문자열) · `legacy.ts` 분리 · 토큰 가드 재정의 · 루트 · 스택 바탕 · 탭 아이콘 학사모 | 대기 |
   | U2b | `feat/app-ui-parts-motion` | 부품(Txt · 키 · 링크 · 입력 칸 · 알림 띠 · 스위치 · 배지 · 글 행 · 아이콘 · 시트 유리) · 움직임 · 햅틱 · 가드 닻 — D1 = 머지 게이트 | 대기 |
   | U3a-1 | `feat/app-ui-cover-tabscreen` | `TabScreen`(큰 제목 접힘 · 위 페이드) · 표지 S~XXL(세로 조판 · 결 타일 · expo-image) | 대기 |

@@ -77,3 +77,25 @@ export const cover = {
   card: { width: 64, height: 90 },
   head: { width: 80, height: 112 },
 } as const;
+
+// ── 앱 UI 개편(언어 확정본 1.2.1) — U1은 값 표만 둔다. 화면 · 부품은 U2a부터 쓴다(지금 쓰는 곳은 테스트 · 개발 글꼴 로그뿐) ──
+// 라이트 mark = #7A7F85(사용자 결정 2026-11-20 질문 5 (가)). app.config.ts의 BG_LIGHT · BG_DARK가 bg와 같다(app-config.test.ts가 대조)
+export const palette = {
+  light: {
+    bg: '#E7E9EB', bg2: '#F4F5F6', ink: '#111315', text2: '#565B61', mark: '#7A7F85',
+    line: '#CBCFD3', tick1: '#B9B7B0', signal: '#C25600', danger: '#9E1B32',
+  },
+  dark: {
+    bg: '#0E0F10', bg2: '#18191B', ink: '#ECEBE6', text2: '#A3A099', mark: '#6F6C66',
+    line: '#2A2C2F', tick1: '#4A4844', signal: '#F18336', danger: '#FF6B7A',
+  },
+} as const;
+
+/** Plex 넷의 PostScript 이름(OTF name 표 nameID 6 — 파일 이름과 다르다: Medm · SmBld · Regular는 접미 없음) — expo-font 플러그인이
+ *  바이너리에 싣는다(app.config.ts). 굵기는 이 이름으로만 고른다(REQ-470). assets.test.ts가 OTF에서 읽어 대조한다. */
+export const font = {
+  sans400: 'IBMPlexSansKR',
+  sans500: 'IBMPlexSansKR-Medm',
+  sans600: 'IBMPlexSansKR-SmBld',
+  mono500: 'IBMPlexMono-Medm',
+} as const;

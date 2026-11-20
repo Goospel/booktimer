@@ -3,7 +3,7 @@ import type { ExpoConfig } from 'expo/config';
 import { existsSync, readFileSync } from 'fs';
 import { join } from 'path';
 import { DEV_BUNDLE_ID, GOOGLE_IOS_CLIENT_ID as KEYS_GOOGLE_CLIENT_ID, GOOGLE_IOS_URL_SCHEME, GOOGLE_REDIRECT_URI, kakaoKeyFor } from './src/lib/auth/keys';
-import { color } from './src/theme/tokens';
+import { palette } from './src/theme/tokens';
 
 // 콘솔 값(개발 변형 §18 — 비밀 아님). 구글 칸은 클라이언트 ID에서 계산한다 — 손으로 옮긴 값이 아니다(PR-L 설계 REQ-166)
 const GOOGLE_IOS_CLIENT_ID = '20889772436-j1vun6jjup350gg3l26igcc0421tanph.apps.googleusercontent.com';
@@ -97,9 +97,62 @@ test('REQ-103 · iPad를 지원하고 전체 화면을 강제하지 않으며 iP
   expect(c.orientation).toBe('portrait');
 });
 
-test('REQ-188 · REQ-192 · version은 1.2.0이고 지문 잠금 파일의 version과 같다', () => {
-  expect(configWith(undefined).version).toBe('1.2.0');
-  expect(require('./fingerprint.lock.json').version).toBe('1.2.0');
+test('REQ-188 · REQ-192 · version은 1.3.0이고 지문 잠금 파일의 version과 같다', () => {
+  expect(configWith(undefined).version).toBe('1.3.0');
+  expect(require('./fingerprint.lock.json').version).toBe('1.3.0');
+});
+
+// ── 앱 UI 개편 네이티브 묶음(U1 · 1.3.0) ──
+test("REQ-441 · iOS 최소 버전은 ios.deploymentTarget '26.0' 한 곳이고 두 변형이 같다", () => {
+  // 위젯 확장도 이 값을 읽는다(expo-widgets withIosWidgets.js — config.ios?.deploymentTarget ?? '16.4')
+  for (const v of [undefined, 'development']) {
+    const c = configWith(v);
+    expect([v, c.ios?.deploymentTarget, countKey(c, 'deploymentTarget')]).toEqual([v, '26.0', 1]);
+  }
+});
+
+test('REQ-431 · userInterfaceStyle은 automatic이고 스플래시에 dark가 있다', () => {
+  // 다크 스플래시는 Info.plist UIUserInterfaceStyle을 Automatic으로 바꾼다(withIosSplashInfoPlist) — 둘이 갈리면 경고 · 라이트 고정이 깨진다
+  for (const v of [undefined, 'development']) {
+    const c = configWith(v);
+    const splash = pluginProps(c, 'expo-splash-screen') as { dark?: unknown }[];
+    expect([v, c.userInterfaceStyle, countKey(c, 'userInterfaceStyle'), splash.length, splash[0]?.dark !== undefined]).toEqual([v, 'automatic', 1, 1, true]);
+  }
+});
+
+const UI_NATIVE = [
+  'expo-haptics', 'expo-image', 'expo-symbols', 'react-native-svg', 'react-native-reanimated', 'react-native-worklets',
+  'react-native-gesture-handler', '@react-native-masked-view/masked-view',
+];
+/** 개편 네이티브 중 직접 의존성 칸이 expo 권장 버전과 다른(빠진 것 포함) 이름 — 실제 · 심은 값이 같은 함수를 지난다. */
+function offRecommended(deps: Record<string, string>, bundled: Record<string, string>): string[] {
+  return UI_NATIVE.filter((n) => bundled[n] === undefined || deps[n] !== bundled[n]);
+}
+
+test('REQ-468 · 개편 네이티브 여덟은 직접 의존성이고 expo 권장 버전(bundledNativeModules)과 같다 — 버전 하나를 바꾼 견본은 잡힌다', () => {
+  const deps: Record<string, string> = require('./package.json').dependencies;
+  const bundled: Record<string, string> = require('expo/bundledNativeModules.json');
+  expect(offRecommended(deps, bundled)).toEqual([]);
+  expect(offRecommended({ ...deps, 'react-native-svg': '15.15.0' }, bundled)).toEqual(['react-native-svg']);
+  const { 'expo-image': _gone, ...without } = deps;
+  expect(offRecommended(without, bundled)).toEqual(['expo-image']);
+});
+
+const PLEX_FILES = [
+  './assets/fonts/IBMPlexSansKR-Regular.otf',
+  './assets/fonts/IBMPlexSansKR-Medium.otf',
+  './assets/fonts/IBMPlexSansKR-SemiBold.otf',
+  './assets/fonts/IBMPlexMono-Medium.otf',
+];
+
+test('REQ-470 · expo-font 플러그인은 Plex OTF 넷만 싣고 파일과 IBM 라이선스 원문이 있다', () => {
+  for (const v of [undefined, 'development']) {
+    const c = configWith(v);
+    expect([v, pluginProps(c, 'expo-font'), (c.plugins ?? []).includes('expo-font')]).toEqual([v, [{ fonts: PLEX_FILES }], false]);
+  }
+  for (const p of PLEX_FILES) expect([p, existsSync(join(__dirname, p))]).toEqual([p, true]);
+  const license = readFileSync(join(__dirname, 'assets/fonts/LICENSE-IBM-Plex.txt'), 'utf8');
+  expect([license.includes('SIL Open Font License'), license.includes('Plex')]).toEqual([true, true]);
 });
 
 test('REQ-192 · 두 변형 모두 ios.infoPlist.CFBundleName이 그 변형의 이름이고 Apple 한도 15자 이하다', () => {
@@ -181,13 +234,21 @@ test('REQ-173 · 구글 redirectUri는 설정 스킴 둘째 칸(역순 클라이
   expect(GOOGLE_REDIRECT_URI).toBe(`${GOOGLE_SCHEME}:/oauthredirect`);
 });
 
-test('REQ-169 · 스플래시는 expo-splash-screen 한 곳에 image · imageWidth 180 · contain · 종이색으로 있고 dark가 없으며 루트 배경도 종이색이다', () => {
+test('REQ-445 · REQ-469 · 스플래시는 그림 그대로 — 라이트 바탕 · 루트 바탕 = palette.light.bg · 다크 = splash-owl-dark.png + palette.dark.bg', () => {
+  // 옛 REQ-169(종이색 · dark 없음)를 개편 배색으로 바꿨다(사용자 결정 2026-11-20 질문 3 (가)). 다크 루트 바탕은 런타임 SystemUI(U2a)
   const c = configWith(undefined);
   expect(pluginProps(c, 'expo-splash-screen')).toEqual([
-    { image: './assets/splash-owl.png', imageWidth: 180, resizeMode: 'contain', backgroundColor: color.paper },
+    {
+      image: './assets/splash-owl.png',
+      imageWidth: 180,
+      resizeMode: 'contain',
+      backgroundColor: palette.light.bg,
+      dark: { image: './assets/splash-owl-dark.png', backgroundColor: palette.dark.bg },
+    },
   ]);
-  expect(c.backgroundColor).toBe(color.paper);
+  expect(c.backgroundColor).toBe(palette.light.bg);
   expect(c.plugins).toContain('expo-system-ui');
+  expect(existsSync(join(__dirname, 'assets/splash-owl-dark.png'))).toBe(true);
 });
 
 test('REQ-170 · ios.icon은 light · dark · tinted 세 PNG를 가리키고 그 파일이 있다', () => {

@@ -12,8 +12,12 @@ import { pending } from '../lib/measureLedger';
 import { flushMeasures, measureStore, RETRY_MS } from '../lib/measureSync';
 import { startSurfaceSync, stopSurfaceSync } from '../lib/surfaceSync';
 import { clearSurfaces } from '../lib/surfaces';
+import { logFontReport } from '../theme/fontCheck';
 import { useAppFonts } from '../theme/fonts';
 import { color } from '../theme/tokens';
+
+// 개발 빌드 Metro 로그에 내장 Plex 등록을 한 줄로 찍는다(D0 U-265 ① — '[fonts] ok 4/4'). 운영 빌드는 아무것도 하지 않는다
+logFontReport();
 
 // 스킴 둘째 칸(구글 역순 클라이언트 ID) 탓에 expo-linking이 시작마다 「multiple possible URI schemes」 경고를 낸다 —
 // 첫 칸(앱 스킴)을 쓰는 것이 맞으므로 개발 화면의 노란 막대만 숨긴다(PR-L 설계 §3.7).

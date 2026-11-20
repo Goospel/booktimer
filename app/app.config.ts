@@ -16,8 +16,9 @@ const DEV = process.env.APP_VARIANT === 'development';
 // 복귀 주소(kakao<키>://)가 두 앱에 겹쳐 TestFlight 앱의 로그인이 개발 앱으로 샐 수 있다.
 const GOOGLE_IOS_URL_SCHEME = 'com.googleusercontent.apps.20889772436-j1vun6jjup350gg3l26igcc0421tanph';
 const KAKAO_NATIVE_APP_KEY = DEV ? 'bfbfa22db12bfb12770dbac22e8215b0' : '0fb70962dd03100ad2d0efa10c947c31';
-// 종이색 = tokens.ts color.paper(app-config.test.ts가 대조한다 — 여기서 import하면 tokens.ts가 지문 원천이 된다).
-const PAPER = '#F5F0E6';
+// 바탕 = tokens.ts palette.light.bg · palette.dark.bg(app-config.test.ts가 대조한다 — 여기서 import하면 tokens.ts가 지문 원천이 된다).
+const BG_LIGHT = '#E7E9EB';
+const BG_DARK = '#0E0F10';
 // 한글 name은 Expo sanitizedName에서 'app'이 되어 CFBundleName = $(PRODUCT_NAME) = app → 구글 로그인 시스템 창에 「app」(2026-10-29) — CFBundleName을 이 값으로 덮는다.
 const NAME = DEV ? '책생글 개발' : '책생글';
 
@@ -27,13 +28,14 @@ const config: ExpoConfig = {
   slug: 'chaeksaenggeul',
   // 앱 스킴이 맨 앞이어야 한다 — expo-linking이 첫 칸으로 앱 주소를 만든다(개발 변형 §4.7). 둘째 칸 = 구글 역순 클라이언트 ID.
   scheme: [DEV ? 'booktimer-dev' : 'booktimer', GOOGLE_IOS_URL_SCHEME],
-  version: '1.2.0',
+  version: '1.3.0',
   orientation: 'portrait',
   icon: './assets/icon.png',
-  userInterfaceStyle: 'light',
-  // 루트 뷰 · 창 바탕(expo-system-ui) — iPad 회전 · 화면 분할 때 가장자리가 흰색으로 번쩍이지 않게(PR-L 설계 §4.3)
-  backgroundColor: PAPER,
+  userInterfaceStyle: 'automatic', // 다크 스플래시가 Info.plist를 Automatic으로 바꾼다 — 둘을 같이(withIosSplashInfoPlist)
+  // 루트 뷰 · 창 바탕(expo-system-ui) — iPad 회전 · 화면 분할 때 가장자리가 흰색으로 번쩍이지 않게(PR-L 설계 §4.3). 다크는 런타임 SystemUI(U2a)
+  backgroundColor: BG_LIGHT,
   ios: {
+    deploymentTarget: '26.0', // 위젯 확장도 이 값을 읽는다(expo-widgets withIosWidgets.js)
     bundleIdentifier: DEV ? 'com.goospel.chaeksaenggeul.dev' : 'com.goospel.chaeksaenggeul',
     // iPad 정식 지원(REQ-103). iPad 네 방향(UISupportedInterfaceOrientations~ipad — 화면 분할 · 매직 키보드 가로 · ITMS-90474)은
     // Expo 기본 플러그인 withRequiresFullScreen이 supportsTablet + requireFullScreen 끔(기본)에서 쓴다 — 손으로 적지 않는다.
@@ -96,8 +98,29 @@ const config: ExpoConfig = {
     ['expo-secure-store', { faceIDPermission: false }],
     'expo-updates',
     // 스플래시(아이콘 사양 §14.5) — 1024 정사각 투명 PNG를 180pt 칸 가운데에 → 올빼미 폭 119.76pt. 앱 코드는 import하지 않는다(expo-router가 부른다).
-    // dark는 넣지 않는다 — 넣으면 이 플러그인이 UIUserInterfaceStyle을 Automatic으로 바꿔 라이트 고정이 깨진다(withIosSplashInfoPlist)
-    ['expo-splash-screen', { image: './assets/splash-owl.png', imageWidth: 180, resizeMode: 'contain', backgroundColor: PAPER }],
+    // dark = 같은 그림 · 올빼미만 다크 ink(사용자 결정 2026-11-20 질문 3 (가)). dark가 있으면 이 플러그인이 UIUserInterfaceStyle을 Automatic으로 쓴다 — 위 userInterfaceStyle과 같이
+    [
+      'expo-splash-screen',
+      {
+        image: './assets/splash-owl.png',
+        imageWidth: 180,
+        resizeMode: 'contain',
+        backgroundColor: BG_LIGHT,
+        dark: { image: './assets/splash-owl-dark.png', backgroundColor: BG_DARK },
+      },
+    ],
+    // 내장 Plex 넷(REQ-470) — 원본 OTF 그대로(서브셋 · 이름 바꾸기 금지 · 라이선스 assets/fonts/LICENSE-IBM-Plex.txt). 이름은 tokens.ts font
+    [
+      'expo-font',
+      {
+        fonts: [
+          './assets/fonts/IBMPlexSansKR-Regular.otf',
+          './assets/fonts/IBMPlexSansKR-Medium.otf',
+          './assets/fonts/IBMPlexSansKR-SemiBold.otf',
+          './assets/fonts/IBMPlexMono-Medium.otf',
+        ],
+      },
+    ],
     // prebuild가 자동 적용하는 목록에도 있지만 적어 둔다 — JS가 import하지 않는 패키지라 「안 쓰는 의존성」으로 지워지지 않게
     'expo-system-ui',
     // 카카오 로그인(범위 보충 §3.1 K1 · 카카오 RN SDK 3.0.0). ios를 빼면 이 플러그인은 iOS에 아무것도 쓰지 않는다(플러그인 원문).
