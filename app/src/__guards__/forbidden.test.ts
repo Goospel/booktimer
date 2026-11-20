@@ -901,3 +901,97 @@ test('T2 재확인 · 로그아웃 확인 전엔 보내기를 기다리지 않�
   expect(moved).not.toBe(hook);
   expect(FOCUSED_TAKE.test(moved)).toBe(false);
 });
+
+// 앱 UI 개편 — PR마다 자기 닻 바로 아래에만 넣는다(계획 7.4 — 두 PR의 넣기가 다른 자리라 rebase가 저절로 합친다). U9가 빈 닻을 지운다.
+// ── UI 개편 U2b ──
+const U2B_ROWS: Row[] = [
+  // 유리는 시스템 층에만(언어 1.1-5 · REQ-476) — 콘텐츠가 유리 · 흐림 라이브러리를 쓰지 않는다
+  { id: 'REQ-476', pattern: /from\s+['"]expo-(?:glass-effect|blur)['"]/, skip: [], planted: "import { BlurView } from 'expo-blur';", strip: true },
+  // 신호 주황은 그래픽에만(REQ-451 · 언어 1.2.1 「글자에 — 안 된다」) — 글자 색으로 쓰지 않는다
+  { id: 'REQ-451', pattern: /\bcolor:\s*color\.signal\b|\bcolor=\{[^}]*\bsignal\b/, skip: [], planted: '<Txt v="aux" style={{ color: color.signal }}>목표</Txt>', strip: true },
+];
+test.each(U2B_ROWS)('$id · 앱 소스에 0 · 심은 견본은 같은 스캐너에서 잡힌다', (row) => {
+  expect(hits(row)).toEqual([]);
+  expect(hits(row, [{ rel: join('app', 'planted.tsx'), text: row.planted }])).toHaveLength(1);
+});
+
+/** useAnimatedStyle(() => ({ … }))가 돌려주는 맨 바깥 키 — 다른 꼴로 쓰면 키를 못 읽으니 그 꼴만 허용한다(수가 어긋나면 빨갛다) */
+const ANIMATED = /useAnimatedStyle\(\(\)\s*=>\s*\(\{/g;
+function animatedKeys(all: { rel: string; text: string }[]) {
+  const keys: string[] = [];
+  let calls = 0;
+  let parsed = 0;
+  for (const f of all.filter((x) => !x.rel.startsWith(SELF))) {
+    const s = stripComments(f.text);
+    calls += count(s, 'useAnimatedStyle(');
+    for (const m of s.matchAll(ANIMATED)) {
+      parsed++;
+      let depth = 0;
+      let seg = '';
+      for (let i = m.index! + m[0].length; i < s.length; i++) {
+        const ch = s[i];
+        if ('{[('.includes(ch)) depth++;
+        if ('}])'.includes(ch)) {
+          if (depth === 0) break;
+          depth--;
+        }
+        if (ch === ',' && depth === 0) {
+          keys.push(seg);
+          seg = '';
+        } else seg += ch;
+      }
+      keys.push(seg);
+    }
+  }
+  return { calls, parsed, keys: keys.map((k) => /^\s*(\w+)/.exec(k)?.[1]).filter((k): k is string => !!k) };
+}
+test('REQ-434 · useAnimatedStyle이 돌려주는 키는 transform · opacity뿐(심은 width · backgroundColor 견본은 잡힌다)', () => {
+  const real = animatedKeys(ALL);
+  expect(real.parsed).toBeGreaterThanOrEqual(1); // 부품(키 눌림)이 실제로 쓴다 — 빈 집합 초록 방지
+  expect(real.parsed).toBe(real.calls);
+  expect(new Set(real.keys)).toEqual(new Set(['transform', 'opacity']));
+  const planted = animatedKeys([{ rel: join('app', 'planted.tsx'), text: 'const s = useAnimatedStyle(() => ({ width: w.value, transform: [{ scale: k.value }], backgroundColor: color.ink }));' }]);
+  expect(planted.keys).toEqual(['width', 'transform', 'backgroundColor']);
+  expect(animatedKeys([{ rel: join('app', 'planted.tsx'), text: 'const s = useAnimatedStyle(() => { return { width: 1 }; });' }])).toMatchObject({ calls: 1, parsed: 0 });
+});
+
+// 측정 Rigid는 성공한 뒤에만(계획 D16 · REQ-475) — 시간 문 · busy에 막힌 누름은 그 줄에 오지 못하고, 막힌 시작(blocked)은 r.error라 울리지 않는다
+const RIGID = "haptic('rigid');";
+const rigidAfter = (body: string, wait: string, cond: string) =>
+  count(body, RIGID) === 1 && body.includes(`${cond} ${RIGID}`) && body.indexOf(wait) >= 0 && body.indexOf(RIGID) > body.indexOf(wait);
+test('REQ-475 · 측정 Rigid는 성공한 뒤에만 — 홈 · 공부 start · stop은 await 결과 줄 뒤 !r.error 조건 안 · 책 화면 startReading은 r.started 조건 안(앞에 둔 견본 · 조건 없는 견본은 잡힌다)', () => {
+  const sites: [string, string, string, string][] = [
+    [join('app', '(tabs)', 'index.tsx'), 'async function start(', 'await startMeasure(', 'if (!r.error)'],
+    [join('app', '(tabs)', 'index.tsx'), 'async function stop(', 'await stopMeasure(', 'if (!r.error)'],
+    [join('app', '(tabs)', 'study.tsx'), 'async function start(', 'await startMeasure(', 'if (!r.error)'],
+    [join('app', '(tabs)', 'study.tsx'), 'async function stop(', 'await stopMeasure(', 'if (!r.error)'],
+    [BOOK, 'async function startReading(', 'await startFromBook(', 'if (r.started)'],
+  ];
+  for (const [rel, head, wait, cond] of sites) {
+    const body = bodyOf(srcOf(rel), head);
+    expect(rigidAfter(body, wait, cond)).toBe(true);
+    const line = `${cond} ${RIGID}`;
+    expect(rigidAfter(cut(body, line, RIGID), wait, cond)).toBe(false); // 조건 없음
+    expect(rigidAfter(cut(cut(body, line, ''), `const r = ${wait}`, `${line}\n const r = ${wait}`), wait, cond)).toBe(false); // await 앞
+  }
+  const home = bodyOf(srcOf(join('app', '(tabs)', 'index.tsx')), 'async function start(');
+  expect(rigidAfter(cut(cut(home, 'if (!r.error) haptic(\'rigid\');', ''), 'if (busy || !gate()) return;', `if (!r.error) ${RIGID}\n if (busy || !gate()) return;`), 'await startMeasure(', 'if (!r.error)')).toBe(false); // 시간 문 앞
+});
+
+// ── UI 개편 U3a-1 ──
+
+// ── UI 개편 U3a-2 ──
+
+// ── UI 개편 U3b ──
+
+// ── UI 개편 U4 ──
+
+// ── UI 개편 U5a ──
+
+// ── UI 개편 U5b ──
+
+// ── UI 개편 U6 ──
+
+// ── UI 개편 U7 ──
+
+// ── UI 개편 U8 ──

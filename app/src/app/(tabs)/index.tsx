@@ -16,6 +16,7 @@ import { noteHref, savedNotice } from '../../lib/marginSave';
 import { ALREADY_STOPPED, startMeasure, stopMeasure } from '../../lib/measureStart';
 import { measureStore } from '../../lib/measureSync';
 import { SPACE } from '../../lib/names';
+import { haptic } from '../../lib/haptics';
 import { goalNoticeStep } from '../../lib/reminders';
 import { useMeasureDashboard } from '../../lib/useMeasureDashboard';
 import { useMeasureShortcut } from '../../lib/useMeasureShortcut';
@@ -64,6 +65,7 @@ export default function Home() {
     setBusy(true);
     setNotice(null);
     const r = await startMeasure(deps, { mode: 'reading', bookId, bookTitle, blocked: !!dash?.study.hasActiveSession });
+    if (!r.error) haptic('rigid');
     if (r.error) setNotice({ message: r.error, tone: 'error' });
     setBusy(false);
   }
@@ -73,6 +75,7 @@ export default function Home() {
     setBusy(true);
     setNotice(null); // 앞 실패 띠(오프라인)가 이번 정지 성공 뒤에 남지 않게 — 공부 탭과 같다
     const r = await stopMeasure({ ...deps, serverStop: reading.stop }, 'reading');
+    if (!r.error) haptic('rigid');
     if (r.error) setNotice({ message: r.error, tone: 'error' });
     else if (r.info) setNotice({ message: r.info });
     setBusy(false);

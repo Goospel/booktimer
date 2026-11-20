@@ -108,6 +108,17 @@ describe('글자 단계(REQ-433)', () => {
     // 네 face가 단계 표에 실제로 다 있다(빈 갈래 초록 방지)
     expect(new Set(STAGES.map((s) => type[s].style.fontFamily))).toEqual(new Set(FACES));
   });
+
+  test('REQ-433 · 굵기 갈래 w는 Sans 단계 안에서 face를 고르고(fontWeight 0) 굵은 텍스트면 그 위 한 단 · Mono 단계는 w를 무시한다', () => {
+    expect(stageStyle('aux', { bold: false, w: 600 }).fontFamily).toBe(font.sans600); // 섹션 라벨
+    expect(stageStyle('foot', { bold: false, w: 500 }).fontFamily).toBe(font.sans500); // 배지 · 칸 라벨
+    expect(stageStyle('row', { bold: false, w: 400 }).fontFamily).toBe(font.sans400); // 설정 줄
+    expect(stageStyle('aux', { bold: true, w: 500 }).fontFamily).toBe(font.sans600);
+    expect(stageStyle('aux', { bold: true, w: 600 }).fontFamily).toBe(font.sans600);
+    expect(stageStyle('tick', { bold: false, w: 400 }).fontFamily).toBe(font.mono500);
+    expect(stageStyle('aux', { bold: true, w: 400 })).not.toHaveProperty('fontWeight');
+    expect(stageStyle('aux', { bold: false, w: 600 }).fontSize).toBe(type.aux.style.fontSize); // 크기 · 줄은 단계 그대로
+  });
 });
 
 // ── 모서리 · 간격(REQ-452) ────────────────────────────────────────────────
