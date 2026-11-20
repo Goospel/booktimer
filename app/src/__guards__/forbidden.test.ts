@@ -904,15 +904,32 @@ test('T2 재확인 · 로그아웃 확인 전엔 보내기를 기다리지 않�
 
 // 앱 UI 개편 — PR마다 자기 닻 바로 아래에만 넣는다(계획 7.4 — 두 PR의 넣기가 다른 자리라 rebase가 저절로 합친다). U9가 빈 닻을 지운다.
 // ── UI 개편 U2b ──
+// 유리는 시스템 층에만(언어 1.1-5 · REQ-476) — 콘텐츠가 유리 · 흐림 라이브러리 · @expo/ui 유리 수식어를 쓰지 않고, 시트 바탕을 칠하지 않는다(계획 「presentationBackground 없음」)
+const GLASS = /from\s+['"]expo-(?:glass-effect|blur)['"]|require\(\s*['"]expo-(?:glass-effect|blur)['"]|\bglassEffect\(|\bGlassEffectContainer\b|\bpresentationBackground\(/;
+// 신호 주황은 그래픽에만(REQ-451 · 언어 1.2.1 「글자에 — 안 된다」) — 글자 색으로 쓰지 않는다(palette[scheme].signal · 삼항 갈래까지)
+const SIGNAL_TEXT = /\bcolor:\s*[^,}\n]*\bsignal\b|\bcolor=\{[^}]*\bsignal\b/;
+// 움직임은 transform · opacity만(REQ-434) — useAnimatedStyle 밖의 두 길: 레이아웃 전환(layout=) · CSS 전환 속성(transform · opacity 하나가 아니면)
+// shortcut: 배열 꼴(['opacity', 'transform'])도 잡는다 — 허용 꼴로 쓸 일이 생기면 그때 배열을 읽게 넓힌다
+const LAYOUT_ANIM = /\blayout=\{|\btransitionProperty:(?!\s*['"](?:transform|opacity)['"])/;
 const U2B_ROWS: Row[] = [
-  // 유리는 시스템 층에만(언어 1.1-5 · REQ-476) — 콘텐츠가 유리 · 흐림 라이브러리를 쓰지 않는다
-  { id: 'REQ-476', pattern: /from\s+['"]expo-(?:glass-effect|blur)['"]/, skip: [], planted: "import { BlurView } from 'expo-blur';", strip: true },
-  // 신호 주황은 그래픽에만(REQ-451 · 언어 1.2.1 「글자에 — 안 된다」) — 글자 색으로 쓰지 않는다
-  { id: 'REQ-451', pattern: /\bcolor:\s*color\.signal\b|\bcolor=\{[^}]*\bsignal\b/, skip: [], planted: '<Txt v="aux" style={{ color: color.signal }}>목표</Txt>', strip: true },
+  { id: 'REQ-476', pattern: GLASS, skip: [], planted: "import { BlurView } from 'expo-blur';", strip: true },
+  { id: 'REQ-476 require', pattern: GLASS, skip: [], planted: "const { BlurView } = require('expo-blur');", strip: true },
+  { id: 'REQ-476 glassEffect', pattern: GLASS, skip: [], planted: "<Host modifiers={[glassEffect({ glass: { variant: 'regular' } })]} />", strip: true },
+  { id: 'REQ-476 GlassEffectContainer', pattern: GLASS, skip: [], planted: '<GlassEffectContainer spacing={8}><Label /></GlassEffectContainer>', strip: true },
+  { id: 'REQ-476 presentationBackground', pattern: GLASS, skip: [], planted: 'modifiers={[presentationBackground(color.bg)]}', strip: true },
+  { id: 'REQ-451', pattern: SIGNAL_TEXT, skip: [], planted: '<Txt v="aux" style={{ color: color.signal }}>목표</Txt>', strip: true },
+  { id: 'REQ-451 palette', pattern: SIGNAL_TEXT, skip: [], planted: '<Txt v="aux" style={{ color: palette[scheme].signal }}>목표</Txt>', strip: true },
+  { id: 'REQ-451 삼항', pattern: SIGNAL_TEXT, skip: [], planted: '<Txt v="aux" style={{ color: on ? color.signal : color.ink }}>목표</Txt>', strip: true },
+  { id: 'REQ-434 layout', pattern: LAYOUT_ANIM, skip: [], planted: '<Animated.View layout={LinearTransition}>', strip: true },
+  { id: 'REQ-434 transitionProperty', pattern: LAYOUT_ANIM, skip: [], planted: "style={{ transitionProperty: 'width', transitionDuration: 200 }}", strip: true },
 ];
 test.each(U2B_ROWS)('$id · 앱 소스에 0 · 심은 견본은 같은 스캐너에서 잡힌다', (row) => {
   expect(hits(row)).toEqual([]);
   expect(hits(row, [{ rel: join('app', 'planted.tsx'), text: row.planted }])).toHaveLength(1);
+});
+test('REQ-451 · REQ-434 넓힌 패턴이 허용 꼴은 잡지 않는다(그래픽 색 · opacity 전환)', () => {
+  const ok = ["<Svg><Path fill={color.signal} /></Svg>", "style={{ backgroundColor: color.signal, tintColor: palette[scheme].signal }}", "style={{ transitionProperty: 'opacity' }}"];
+  for (const text of ok) expect([SIGNAL_TEXT, LAYOUT_ANIM].some((p) => p.test(text))).toBe(false);
 });
 
 /** useAnimatedStyle(() => ({ … }))가 돌려주는 맨 바깥 키 — 다른 꼴로 쓰면 키를 못 읽으니 그 꼴만 허용한다(수가 어긋나면 빨갛다) */
