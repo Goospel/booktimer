@@ -235,11 +235,13 @@ test('REQ-168 · 카카오 두 패키지는 같은 정확 버전 3.x이고 expo-
   const core = pkg.dependencies['@react-native-kakao/core'];
   expect(core).toBe('3.0.0'); // ^ · ~ 없음 — npm latest 태그는 2.x다. 3.0.0 선택은 설계 판단 2 — 올릴 때 설계와 함께 고친다
   expect(pkg.dependencies['@react-native-kakao/user']).toBe(core); // user peer가 core를 정확히 요구한다
-  for (const n of ['expo-font', 'expo-asset', 'expo-application']) {
+  // haptics · image · symbols: ~ 범위가 사전 빌드 표류(dyld Symbol missing — 2026-11-23 D0)를 냈다 — 정확 핀으로 잠근다
+  for (const n of ['expo-font', 'expo-asset', 'expo-application', 'expo-haptics', 'expo-image', 'expo-symbols']) {
     expect([n, pkg.dependencies[n]]).toEqual([n, expect.stringMatching(/^\d+\.\d+\.\d+$/)]);
     expect([n, lock.packages[`node_modules/${n}`]?.version]).toEqual([n, pkg.dependencies[n]]);
   }
-  for (const n of ['expo-font', 'expo-asset', 'expo-modules-core', 'expo-constants', 'expo-linking', 'expo-application', 'react-native']) {
+  for (const n of ['expo-font', 'expo-asset', 'expo-modules-core', 'expo-constants', 'expo-linking', 'expo-application', 'react-native',
+    'expo-image', 'expo-camera', 'expo-file-system', 'expo-modules-jsi', 'expo-haptics', 'expo-symbols']) { // 사전 빌드 모듈은 중첩 사본도 표류다
     const copies = Object.keys(lock.packages).filter((k) => k === `node_modules/${n}` || k.endsWith(`/node_modules/${n}`));
     expect([n, copies]).toEqual([n, [`node_modules/${n}`]]);
   }
