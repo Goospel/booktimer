@@ -97,9 +97,46 @@ test('REQ-103 · iPad를 지원하고 전체 화면을 강제하지 않으며 iP
   expect(c.orientation).toBe('portrait');
 });
 
-test('REQ-188 · REQ-192 · version은 1.3.0이고 지문 잠금 파일의 version과 같다', () => {
-  expect(configWith(undefined).version).toBe('1.3.0');
-  expect(require('./fingerprint.lock.json').version).toBe('1.3.0');
+test('REQ-188 · REQ-192 · version은 1.3.1이고 지문 잠금 파일의 version과 같다', () => {
+  expect(configWith(undefined).version).toBe('1.3.1');
+  expect(require('./fingerprint.lock.json').version).toBe('1.3.1');
+});
+
+// ── 여백 말로 쓰기 1단계 네이티브(U1b · 1.3.1) ──
+type MicProps = { microphonePermission?: unknown; speechRecognitionPermission?: unknown };
+/** 마이크 · 음성 인식 문구가 어긋난 곳 — 실제 · 심은 설정이 같은 함수를 지난다. */
+function micCopyProblems(c: ExpoConfig): string[] {
+  const cam = pluginProps(c, 'expo-camera') as MicProps[];
+  const sr = pluginProps(c, 'expo-speech-recognition') as MicProps[];
+  if (cam.length !== 1 || sr.length !== 1) return [`plugins camera=${cam.length} speech=${sr.length}`];
+  const korean = (s: unknown) => typeof s === 'string' && /[가-힣]/.test(s);
+  const out: string[] = [];
+  if (!korean(cam[0].microphonePermission)) out.push('camera mic');
+  if (cam[0].microphonePermission !== sr[0].microphonePermission) out.push('mic differs');
+  if (!korean(sr[0].speechRecognitionPermission)) out.push('speech');
+  return out;
+}
+
+test('REQ-500 · 마이크 문구는 expo-camera와 expo-speech-recognition이 같은 한국어 상수이고 false(지우기)가 없다 · 음성 인식 문구가 있다 · 두 변형이 같다(옛 꼴 — 카메라 false는 잡힌다)', () => {
+  // expo-camera의 false가 배열 앞이면 withMod가 그 동작을 마지막에 돌려 뒤 플러그인의 마이크 문구까지 지운다(2026-11-23 스파이크) — 권한을 묻는 순간 앱이 꺼진다
+  for (const v of [undefined, 'development']) expect([v, micCopyProblems(configWith(v))]).toEqual([v, []]);
+  expect(pluginProps(configWith('development'), 'expo-speech-recognition')).toEqual(pluginProps(configWith(undefined), 'expo-speech-recognition'));
+  const c = configWith(undefined);
+  const planted: ExpoConfig = {
+    ...c,
+    plugins: c.plugins?.map((p) => (Array.isArray(p) && p[0] === 'expo-camera' ? [p[0], { ...(p[1] as object), microphonePermission: false }] : p)),
+  };
+  expect(micCopyProblems(planted)).toEqual(['camera mic', 'mic differs']);
+});
+
+test('REQ-501 · expo-speech-recognition은 정확 버전 58.0.1이고 잠금 파일에 한 벌이다', () => {
+  const n = 'expo-speech-recognition';
+  const pkg = require('./package.json');
+  const lock = require('./package-lock.json');
+  expect(pkg.dependencies[n]).toBe('58.0.1'); // ^ · ~ 없음 — 올릴 때 설계(여백 말로 쓰기 V1)와 함께 고친다
+  expect(lock.packages[`node_modules/${n}`]?.version).toBe('58.0.1');
+  const copies = Object.keys(lock.packages).filter((k) => k === `node_modules/${n}` || k.endsWith(`/node_modules/${n}`));
+  expect(copies).toEqual([`node_modules/${n}`]);
 });
 
 // ── 앱 UI 개편 네이티브 묶음(U1 · 1.3.0) ──
