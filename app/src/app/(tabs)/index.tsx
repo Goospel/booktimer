@@ -20,7 +20,7 @@ import { goalNoticeStep } from '../../lib/reminders';
 import { useMeasureDashboard } from '../../lib/useMeasureDashboard';
 import { useMeasureShortcut } from '../../lib/useMeasureShortcut';
 import { useWidgetIntent } from '../../lib/useWidgetIntent';
-import { color, cover, layout, space } from '../../theme/tokens';
+import { color, cover, layout, space } from '../../theme/legacy';
 
 type NoticeState = { message: string; tone?: 'info' | 'error' } | null;
 

@@ -1,4 +1,4 @@
-import { color, layout } from '../theme/tokens';
+import { color, layout } from '../theme/legacy';
 import { base } from './ui';
 
 // 시각 보충 §3 · §4.3 — 누름 크기는 레이아웃으로 확보한다(hitSlop으로 채우지 않는다). REQ-56.

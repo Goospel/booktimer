@@ -7,7 +7,7 @@ import { Pressable, View } from 'react-native';
 import type { Question, QuestionLog, Round } from '../api/types';
 import { ROUNDS_MAX } from '../lib/aiStep';
 import { isPicked, roundTitle, sheetRounds } from '../lib/questions';
-import { color, layout, line, space } from '../theme/tokens';
+import { color, layout, line, space } from '../theme/legacy';
 import { Sheet } from './Sheet';
 import { AiBadge, Badge, Button, Txt } from './ui';
 

@@ -18,7 +18,7 @@ import { booklessSection, noteHref, pendingLeave, savedNotice } from '../../lib/
 import { confirmedOf, loadDashboard, measureStore } from '../../lib/measureSync';
 import { bookMeta, shelfSections } from '../../lib/shelf';
 import { effectiveDashboard } from '../../lib/visibleDashboard';
-import { color, layout, line, space } from '../../theme/tokens';
+import { color, layout, line, space } from '../../theme/legacy';
 
 export default function Library() {
   const [books, setBooks] = useState<MyBookSummary[] | null>(null);

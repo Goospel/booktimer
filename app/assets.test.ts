@@ -2,7 +2,8 @@
 import { readFileSync } from 'fs';
 import { join } from 'path';
 import { inflateSync } from 'zlib';
-import { color, font, night, palette } from './src/theme/tokens';
+import { color, night } from './src/theme/legacy';
+import { font, palette } from './src/theme/tokens';
 
 type Png = { width: number; height: number; colorType: number; rgba: Uint8Array };
 

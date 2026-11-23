@@ -15,7 +15,7 @@ export default function TabsLayout() {
         <NativeTabs.Trigger.Label>서재</NativeTabs.Trigger.Label>
       </NativeTabs.Trigger>
       <NativeTabs.Trigger name="study">
-        <NativeTabs.Trigger.Icon sf="pencil.line" />
+        <NativeTabs.Trigger.Icon sf="graduationcap" />
         <NativeTabs.Trigger.Label>공부</NativeTabs.Trigger.Label>
       </NativeTabs.Trigger>
       <NativeTabs.Trigger name="settings">
