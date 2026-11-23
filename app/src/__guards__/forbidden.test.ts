@@ -998,6 +998,30 @@ test('REQ-475 · 측정 Rigid는 성공한 뒤에만 — 홈 · 공부 start · 
   expect(rigidAfter(cut(cut(home, 'if (!r.error) haptic(\'rigid\');', ''), 'if (busy || !gate()) return;', `if (!r.error) ${RIGID}\n if (busy || !gate()) return;`), 'await startMeasure(', 'if (!r.error)')).toBe(false); // 시간 문 앞
 });
 
+// D1 기기 확인(2026-11-23) — 한 줄 칸의 시스템 자리표시가 Plex 수치(hhea 1085/−415 · typo 780/−220/500)로 칸 가운데보다 약 6.5pt 아래에 그려졌다(줄 높이는 처음부터 0이었다).
+// 시스템 자리표시는 숨기고(VoiceOver · 크기 계산 몫으로 글은 남긴다) 같은 face의 Txt가 그린다 · TextInput 줄 높이 0 · 입력 글자도 굵은 텍스트 face(REQ-433)
+const fieldOk = (body: string) => {
+  const at = body.indexOf('<TextInput');
+  const input = body.slice(at, body.indexOf('/>', at));
+  return (
+    at >= 0 &&
+    !/lineHeight/.test(input) &&
+    input.includes('placeholderTextColor="transparent"') &&
+    /<Txt v="body"[^>]*>\s*\{placeholder\}/.test(body) &&
+    body.includes('useBold()') &&
+    input.includes("plexStyle('body', { bold }).fontFamily")
+  );
+};
+test('D1 · Field 한 줄 칸 — 자리표시는 Txt가 그리고 시스템 자리표시는 숨긴다 · TextInput 줄 높이 0 · 입력 글자는 굵은 텍스트 face(옛 꼴 · lineHeight를 심으면 잡힌다)', () => {
+  const body = bodyOf(srcOf(join('components', 'ui.tsx')), 'export function Field(');
+  expect(fieldOk(body)).toBe(true);
+  const old = body.replace('placeholderTextColor="transparent"', 'placeholderTextColor={color.text2}');
+  const tall = body.replace("plexStyle('body', { bold }).fontFamily, fontSize: 17", "plexStyle('body', { bold }).fontFamily, fontSize: 17, lineHeight: 22");
+  expect([old, tall].every((s) => s !== body)).toBe(true);
+  expect(fieldOk(old)).toBe(false);
+  expect(fieldOk(tall)).toBe(false);
+});
+
 // ── UI 개편 U3a-1 ──
 
 // ── UI 개편 U3a-2 ──

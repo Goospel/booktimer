@@ -29,7 +29,7 @@ import { animateTo, useReduced } from '../lib/animate';
 import { PRESS_FADE_MS, transitionFor } from '../lib/motion';
 import { type Stage as LegacyStage, stageStyle, type } from '../theme/legacy';
 import { fade, shadow } from '../theme/surfaces';
-import { color, font, layout, radius, type Scheme, space, type Stage, stageStyle as plexStyle, type Weight, type as plexType } from '../theme/tokens';
+import { color, layout, radius, type Scheme, space, type Stage, stageStyle as plexStyle, type Weight, type as plexType } from '../theme/tokens';
 import { Icon, type SFSymbol } from './Icon';
 
 /** hairline(그림 치수 — 언어 1.4 · 토큰이 아니다) */
@@ -295,12 +295,17 @@ export function Field({
   aside,
   icon,
   style,
+  placeholder,
+  onChangeText,
   onFocus,
   onBlur,
   ...rest
 }: TextInputProps & { label: string; error?: string; aside?: string; icon?: SFSymbol }) {
   const scheme = useScheme();
+  const bold = useBold();
   const [focused, setFocused] = useState(false);
+  const [typed, setTyped] = useState(!!(rest.value ?? rest.defaultValue));
+  const empty = rest.value !== undefined ? !rest.value : !typed;
   useEffect(() => {
     if (error) AccessibilityInfo.announceForAccessibility(error);
   }, [error]);
@@ -318,22 +323,37 @@ export function Field({
       </View>
       <View style={[base.field, { boxShadow: shadow(scheme, 'pressed') }, focused && { borderColor: color.ink }, error ? { borderColor: color.danger } : null]}>
         {icon ? <Icon name={icon} tint={color.text2} /> : null}
-        <TextInput
-          accessibilityLabel={error ? `${label}, ${error}` : label}
-          placeholderTextColor={color.text2}
-          maxFontSizeMultiplier={2}
-          {...rest}
-          onFocus={(e) => {
-            setFocused(true);
-            onFocus?.(e);
-          }}
-          onBlur={(e) => {
-            setFocused(false);
-            onBlur?.(e);
-          }}
-          // 한 줄 칸 — 줄 높이를 두지 않아야 iOS가 글을 칸 가운데에 둔다(17pt · 본문 face)
-          style={[{ flex: 1, alignSelf: 'stretch', color: color.ink, fontFamily: font.sans400, fontSize: 17 }, style]}
-        />
+        <View style={{ flex: 1, alignSelf: 'stretch', justifyContent: 'center' }}>
+          {/* 시스템 자리표시는 Plex 수치(hhea · typo가 어긋난다)로 칸 가운데보다 약 6.5pt 아래에 그려진다(D1 기기) — 같은 face의 Txt가 대신 그린다 */}
+          {placeholder && empty ? (
+            <View pointerEvents="none" style={[StyleSheet.absoluteFill, { justifyContent: 'center' }]}>
+              <Txt v="body" numberOfLines={1} accessible={false} importantForAccessibility="no" style={{ color: color.text2 }}>
+                {placeholder}
+              </Txt>
+            </View>
+          ) : null}
+          <TextInput
+            accessibilityLabel={error ? `${label}, ${error}` : label}
+            placeholder={placeholder}
+            placeholderTextColor="transparent"
+            maxFontSizeMultiplier={2}
+            {...rest}
+            onChangeText={(t) => {
+              setTyped(t.length > 0);
+              onChangeText?.(t);
+            }}
+            onFocus={(e) => {
+              setFocused(true);
+              onFocus?.(e);
+            }}
+            onBlur={(e) => {
+              setFocused(false);
+              onBlur?.(e);
+            }}
+            // 한 줄 칸 — 줄 높이를 두지 않아야 iOS가 글을 칸 가운데에 둔다(17pt · 본문 face · 굵은 텍스트면 한 단 — REQ-433)
+            style={[{ flex: 1, color: color.ink, fontFamily: plexStyle('body', { bold }).fontFamily, fontSize: 17 }, style]}
+          />
+        </View>
       </View>
       {error ? (
         <Txt v="foot" style={{ color: color.danger }}>
