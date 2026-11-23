@@ -114,6 +114,7 @@ function micCopyProblems(c: ExpoConfig): string[] {
   if (!korean(cam[0].microphonePermission)) out.push('camera mic');
   if (cam[0].microphonePermission !== sr[0].microphonePermission) out.push('mic differs');
   if (!korean(sr[0].speechRecognitionPermission)) out.push('speech');
+  if ((c.plugins ?? []).some((p) => Array.isArray(p) && (p[1] as MicProps | undefined)?.microphonePermission === false)) out.push('mic false');
   return out;
 }
 
@@ -126,7 +127,9 @@ test('REQ-500 · 마이크 문구는 expo-camera와 expo-speech-recognition이 �
     ...c,
     plugins: c.plugins?.map((p) => (Array.isArray(p) && p[0] === 'expo-camera' ? [p[0], { ...(p[1] as object), microphonePermission: false }] : p)),
   };
-  expect(micCopyProblems(planted)).toEqual(['camera mic', 'mic differs']);
+  expect(micCopyProblems(planted)).toEqual(['camera mic', 'mic differs', 'mic false']);
+  // 셋째 플러그인의 false도 같은 함정이다(설계 15.3 (라) expo-audio — 리뷰 반영)
+  expect(micCopyProblems({ ...c, plugins: [['expo-audio', { microphonePermission: false }], ...(c.plugins ?? [])] })).toEqual(['mic false']);
 });
 
 test('REQ-501 · expo-speech-recognition은 정확 버전 58.0.1이고 잠금 파일에 한 벌이다', () => {
