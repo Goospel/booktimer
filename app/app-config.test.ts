@@ -1,6 +1,6 @@
 import config from './app.config';
 import type { ExpoConfig } from 'expo/config';
-import { existsSync, readFileSync } from 'fs';
+import { existsSync, readdirSync, readFileSync } from 'fs';
 import { join } from 'path';
 import { DEV_BUNDLE_ID, GOOGLE_IOS_CLIENT_ID as KEYS_GOOGLE_CLIENT_ID, GOOGLE_IOS_URL_SCHEME, GOOGLE_REDIRECT_URI, kakaoKeyFor } from './src/lib/auth/keys';
 import { palette } from './src/theme/tokens';
@@ -126,7 +126,8 @@ const UI_NATIVE = [
 ];
 /** 개편 네이티브 중 직접 의존성 칸이 expo 권장 버전과 다른(빠진 것 포함) 이름 — 실제 · 심은 값이 같은 함수를 지난다. */
 function offRecommended(deps: Record<string, string>, bundled: Record<string, string>): string[] {
-  return UI_NATIVE.filter((n) => bundled[n] === undefined || deps[n] !== bundled[n]);
+  // 기준 버전의 정확 고정도 허용 — 범위(~)면 npx expo install이 사전 빌드 기호가 안 맞는 새 패치를 깐다(2026-11-23 D0)
+  return UI_NATIVE.filter((n) => bundled[n] === undefined || (deps[n] !== bundled[n] && deps[n] !== bundled[n].replace(/^[~^]/, '')));
 }
 
 test('REQ-468 · 개편 네이티브 여덟은 직접 의존성이고 expo 권장 버전(bundledNativeModules)과 같다 — 버전 하나를 바꾼 견본은 잡힌다', () => {
@@ -136,6 +137,36 @@ test('REQ-468 · 개편 네이티브 여덟은 직접 의존성이고 expo 권�
   expect(offRecommended({ ...deps, 'react-native-svg': '15.15.0' }, bundled)).toEqual(['react-native-svg']);
   const { 'expo-image': _gone, ...without } = deps;
   expect(offRecommended(without, bundled)).toEqual(['expo-image']);
+});
+
+/** node_modules 안에서 prebuilds/output(사전 빌드 xcframework)을 가진 패키지 이름. */
+function prebuiltPackages(): string[] {
+  const root = join(__dirname, 'node_modules');
+  if (!existsSync(root)) return [];
+  const names = readdirSync(root).flatMap((d) => (d.startsWith('@') ? readdirSync(join(root, d)).map((s) => `${d}/${s}`) : [d]));
+  return names.filter((n) => existsSync(join(root, n, 'prebuilds/output')));
+}
+type Lock = { packages: Record<string, { version?: string; dependencies?: Record<string, string> }> };
+/** 잠긴 버전이 기준(bundledNativeModules, 없으면 그것을 의존하는 패키지의 범위)의 ~ ^ 뗀 값과 다른 이름 — 실제 · 견본이 같은 함수를 지난다. */
+function prebuildDrift(lock: Lock, bundled: Record<string, string>, names: string[]): string[] {
+  const requiredBy = (n: string) => Object.values(lock.packages).find((p) => p.dependencies?.[n])?.dependencies?.[n];
+  return names.filter((n) => {
+    const want = (bundled[n] ?? requiredBy(n))?.replace(/^[~^]/, '');
+    return want === undefined || lock.packages[`node_modules/${n}`]?.version !== want;
+  });
+}
+
+test('REQ-468 · 사전 빌드 xcframework는 같은 SDK 묶음끼리만 기호가 맞는다(dyld Symbol missing — 2026-11-23 D0) — 사전 빌드 패키지 · expo-haptics · expo-image · expo-symbols는 잠긴 버전이 권장 기준 버전과 정확히 같다', () => {
+  // expo-image 58.0.18 사전 빌드가 expo-modules-core 58.0.26에 없는 _classTypes를 참조해 개발 빌드가 시작 직후 꺼졌다
+  const lock: Lock = require('./package-lock.json');
+  const bundled: Record<string, string> = require('expo/bundledNativeModules.json');
+  const prebuilt = prebuiltPackages();
+  // node_modules가 없으면 목록이 비어 조용히 통과한다 — 지금 있는 다섯을 하한으로 못 박는다
+  expect(prebuilt).toEqual(expect.arrayContaining(['expo-camera', 'expo-file-system', 'expo-font', 'expo-image', 'expo-modules-core']));
+  const names = [...new Set([...prebuilt, 'expo-haptics', 'expo-image', 'expo-symbols'])];
+  expect(prebuildDrift(lock, bundled, names)).toEqual([]);
+  const planted: Lock = { packages: { ...lock.packages, 'node_modules/expo-image': { ...lock.packages['node_modules/expo-image'], version: '58.0.18' } } };
+  expect(prebuildDrift(planted, bundled, names)).toEqual(['expo-image']);
 });
 
 const PLEX_FILES = [
