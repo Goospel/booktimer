@@ -324,7 +324,7 @@ export function Field({
       <View style={[base.field, { boxShadow: shadow(scheme, 'pressed') }, focused && { borderColor: color.ink }, error ? { borderColor: color.danger } : null]}>
         {icon ? <Icon name={icon} tint={color.text2} /> : null}
         <View style={{ flex: 1, alignSelf: 'stretch', justifyContent: 'center' }}>
-          {/* 시스템 자리표시는 Plex 수치(hhea · typo가 어긋난다)로 칸 가운데보다 약 6.5pt 아래에 그려진다(D1 기기) — 같은 face의 Txt가 대신 그린다 */}
+          {/* 시스템 자리표시가 칸 가운데보다 약 6.5pt 아래에 그려진다(D1 기기 · 원인은 Plex 수치 쪽으로 추정) — 같은 face의 Txt가 대신 그린다 */}
           {placeholder && empty ? (
             <View pointerEvents="none" style={[StyleSheet.absoluteFill, { justifyContent: 'center' }]}>
               <Txt v="body" numberOfLines={1} accessible={false} importantForAccessibility="no" style={{ color: color.text2 }}>
@@ -335,9 +335,9 @@ export function Field({
           <TextInput
             accessibilityLabel={error ? `${label}, ${error}` : label}
             placeholder={placeholder}
-            placeholderTextColor="transparent"
             maxFontSizeMultiplier={2}
             {...rest}
+            placeholderTextColor="transparent"
             onChangeText={(t) => {
               setTyped(t.length > 0);
               onChangeText?.(t);

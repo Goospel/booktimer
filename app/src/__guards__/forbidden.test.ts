@@ -998,7 +998,7 @@ test('REQ-475 · 측정 Rigid는 성공한 뒤에만 — 홈 · 공부 start · 
   expect(rigidAfter(cut(cut(home, 'if (!r.error) haptic(\'rigid\');', ''), 'if (busy || !gate()) return;', `if (!r.error) ${RIGID}\n if (busy || !gate()) return;`), 'await startMeasure(', 'if (!r.error)')).toBe(false); // 시간 문 앞
 });
 
-// D1 기기 확인(2026-11-23) — 한 줄 칸의 시스템 자리표시가 Plex 수치(hhea 1085/−415 · typo 780/−220/500)로 칸 가운데보다 약 6.5pt 아래에 그려졌다(줄 높이는 처음부터 0이었다).
+// D1 기기 확인(2026-11-23) — 한 줄 칸의 시스템 자리표시가 칸 가운데보다 약 6.5pt 아래에 그려졌다(줄 높이는 처음부터 0이었다 · 원인은 Plex 수치 hhea 1085/−415 · typo 780/−220/500 쪽으로 추정).
 // 시스템 자리표시는 숨기고(VoiceOver · 크기 계산 몫으로 글은 남긴다) 같은 face의 Txt가 그린다 · TextInput 줄 높이 0 · 입력 글자도 굵은 텍스트 face(REQ-433)
 const fieldOk = (body: string) => {
   const at = body.indexOf('<TextInput');
@@ -1009,7 +1009,15 @@ const fieldOk = (body: string) => {
     input.includes('placeholderTextColor="transparent"') &&
     /<Txt v="body"[^>]*>\s*\{placeholder\}/.test(body) &&
     body.includes('useBold()') &&
-    input.includes("plexStyle('body', { bold }).fontFamily")
+    input.includes("plexStyle('body', { bold }).fontFamily") &&
+    // 비었을 때만 그린다(제어 = value · 비제어 = 입력 이벤트) — 깨지면 쓴 글자 밑에 자리표시가 겹친다
+    body.includes('{placeholder && empty ?') &&
+    body.includes('setTyped(t.length > 0)') &&
+    /const empty = rest\.value !== undefined \? !rest\.value : !typed;/.test(body) &&
+    // 글은 남긴다(VoiceOver · 칸 크기) · 투명은 {...rest} 뒤 — 호출자가 색을 넘겨도 시스템 자리표시가 살아나지 않는다
+    input.includes('placeholder={placeholder}') &&
+    input.indexOf('{...rest}') >= 0 &&
+    input.indexOf('placeholderTextColor="transparent"') > input.indexOf('{...rest}')
   );
 };
 test('D1 · Field 한 줄 칸 — 자리표시는 Txt가 그리고 시스템 자리표시는 숨긴다 · TextInput 줄 높이 0 · 입력 글자는 굵은 텍스트 face(옛 꼴 · lineHeight를 심으면 잡힌다)', () => {
@@ -1017,9 +1025,14 @@ test('D1 · Field 한 줄 칸 — 자리표시는 Txt가 그리고 시스템 자
   expect(fieldOk(body)).toBe(true);
   const old = body.replace('placeholderTextColor="transparent"', 'placeholderTextColor={color.text2}');
   const tall = body.replace("plexStyle('body', { bold }).fontFamily, fontSize: 17", "plexStyle('body', { bold }).fontFamily, fontSize: 17, lineHeight: 22");
-  expect([old, tall].every((s) => s !== body)).toBe(true);
-  expect(fieldOk(old)).toBe(false);
-  expect(fieldOk(tall)).toBe(false);
+  const always = body.replace('{placeholder && empty ?', '{placeholder ?');
+  const noTrack = body.replace('setTyped(t.length > 0);', '');
+  const flipped = body.replace('!rest.value : !typed;', '!rest.value : typed;');
+  const noText = body.replace('placeholder={placeholder}', '');
+  const order = body.replace('placeholderTextColor="transparent"', '').replace('{...rest}', 'placeholderTextColor="transparent"\n {...rest}');
+  const samples = [old, tall, always, noTrack, flipped, noText, order];
+  expect(samples.every((s) => s !== body)).toBe(true);
+  for (const s of samples) expect(fieldOk(s)).toBe(false);
 });
 
 // ── UI 개편 U3a-1 ──
