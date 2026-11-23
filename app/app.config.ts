@@ -21,6 +21,11 @@ const BG_LIGHT = '#E7E9EB';
 const BG_DARK = '#0E0F10';
 // 한글 name은 Expo sanitizedName에서 'app'이 되어 CFBundleName = $(PRODUCT_NAME) = app → 구글 로그인 시스템 창에 「app」(2026-10-29) — CFBundleName을 이 값으로 덮는다.
 const NAME = DEV ? '책생글 개발' : '책생글';
+// 마이크 문구는 두 플러그인이 같은 상수를 쓴다 — expo-camera의 false(지우기)가 배열 앞이면 설치본 withMod가 앞 플러그인 동작을 마지막에 돌려
+// 뒤 플러그인 문구까지 지운다(2026-11-23 스파이크). 문구는 목소리를 저장 · 전송하지 않는다는 사실만 적는다(기기 안 인식 — 여백 말로 쓰기 설계).
+const MIC_USAGE = '말로 쓰기를 누르면 목소리를 듣고 이 기기 안에서 글로 옮겨요. 목소리는 저장하거나 보내지 않아요.';
+// 음성 인식 권한은 묻지 않는다(기기 안만 — 사용자 결정 2026-11-23). 모듈 바이너리가 그 API를 참조해 문구가 없으면 업로드가 거절된다(ITMS-90683)
+const SPEECH_USAGE = '말로 쓰기에서 들은 목소리를 이 기기 안에서 글로 바꿔요.';
 
 const config: ExpoConfig = {
   owner: 'goospels-app',
@@ -28,7 +33,7 @@ const config: ExpoConfig = {
   slug: 'chaeksaenggeul',
   // 앱 스킴이 맨 앞이어야 한다 — expo-linking이 첫 칸으로 앱 주소를 만든다(개발 변형 §4.7). 둘째 칸 = 구글 역순 클라이언트 ID.
   scheme: [DEV ? 'booktimer-dev' : 'booktimer', GOOGLE_IOS_URL_SCHEME],
-  version: '1.3.0',
+  version: '1.3.1', // 1.3.0(U1) + 음성 인식 모듈 — 지문이 바뀌어 CI가 version · 잠금을 함께 요구한다
   orientation: 'portrait',
   icon: './assets/icon.png',
   userInterfaceStyle: 'automatic', // 다크 스플래시가 Info.plist를 Automatic으로 바꾼다 — 둘을 같이(withIosSplashInfoPlist)
@@ -76,9 +81,11 @@ const config: ExpoConfig = {
       'expo-camera',
       {
         cameraPermission: '책 뒤표지의 바코드를 읽어 책을 등록해요',
-        microphonePermission: false,
+        microphonePermission: MIC_USAGE,
       },
     ],
+    // 여백 말로 쓰기(기기 안 인식). JS는 U6에서 requireOptionalNativeModule로만 읽는다 — 모듈 없는 1.3.0 바이너리에서도 화면이 돈다
+    ['expo-speech-recognition', { microphonePermission: MIC_USAGE, speechRecognitionPermission: SPEECH_USAGE }],
     [
       'expo-widgets',
       {
