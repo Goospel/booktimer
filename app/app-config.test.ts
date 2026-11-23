@@ -1,9 +1,9 @@
 import config from './app.config';
 import type { ExpoConfig } from 'expo/config';
-import { existsSync, readFileSync } from 'fs';
+import { existsSync, readdirSync, readFileSync } from 'fs';
 import { join } from 'path';
 import { DEV_BUNDLE_ID, GOOGLE_IOS_CLIENT_ID as KEYS_GOOGLE_CLIENT_ID, GOOGLE_IOS_URL_SCHEME, GOOGLE_REDIRECT_URI, kakaoKeyFor } from './src/lib/auth/keys';
-import { color } from './src/theme/tokens';
+import { palette } from './src/theme/tokens';
 
 // 콘솔 값(개발 변형 §18 — 비밀 아님). 구글 칸은 클라이언트 ID에서 계산한다 — 손으로 옮긴 값이 아니다(PR-L 설계 REQ-166)
 const GOOGLE_IOS_CLIENT_ID = '20889772436-j1vun6jjup350gg3l26igcc0421tanph.apps.googleusercontent.com';
@@ -97,9 +97,93 @@ test('REQ-103 · iPad를 지원하고 전체 화면을 강제하지 않으며 iP
   expect(c.orientation).toBe('portrait');
 });
 
-test('REQ-188 · REQ-192 · version은 1.2.0이고 지문 잠금 파일의 version과 같다', () => {
-  expect(configWith(undefined).version).toBe('1.2.0');
-  expect(require('./fingerprint.lock.json').version).toBe('1.2.0');
+test('REQ-188 · REQ-192 · version은 1.3.0이고 지문 잠금 파일의 version과 같다', () => {
+  expect(configWith(undefined).version).toBe('1.3.0');
+  expect(require('./fingerprint.lock.json').version).toBe('1.3.0');
+});
+
+// ── 앱 UI 개편 네이티브 묶음(U1 · 1.3.0) ──
+test("REQ-441 · iOS 최소 버전은 ios.deploymentTarget '26.0' 한 곳이고 두 변형이 같다", () => {
+  // 위젯 확장도 이 값을 읽는다(expo-widgets withIosWidgets.js — config.ios?.deploymentTarget ?? '16.4')
+  for (const v of [undefined, 'development']) {
+    const c = configWith(v);
+    expect([v, c.ios?.deploymentTarget, countKey(c, 'deploymentTarget')]).toEqual([v, '26.0', 1]);
+  }
+});
+
+test('REQ-431 · userInterfaceStyle은 automatic이고 스플래시에 dark가 있다', () => {
+  // 다크 스플래시는 Info.plist UIUserInterfaceStyle을 Automatic으로 바꾼다(withIosSplashInfoPlist) — 둘이 갈리면 경고 · 라이트 고정이 깨진다
+  for (const v of [undefined, 'development']) {
+    const c = configWith(v);
+    const splash = pluginProps(c, 'expo-splash-screen') as { dark?: unknown }[];
+    expect([v, c.userInterfaceStyle, countKey(c, 'userInterfaceStyle'), splash.length, splash[0]?.dark !== undefined]).toEqual([v, 'automatic', 1, 1, true]);
+  }
+});
+
+const UI_NATIVE = [
+  'expo-haptics', 'expo-image', 'expo-symbols', 'react-native-svg', 'react-native-reanimated', 'react-native-worklets',
+  'react-native-gesture-handler', '@react-native-masked-view/masked-view',
+];
+/** 개편 네이티브 중 직접 의존성 칸이 expo 권장 버전과 다른(빠진 것 포함) 이름 — 실제 · 심은 값이 같은 함수를 지난다. */
+function offRecommended(deps: Record<string, string>, bundled: Record<string, string>): string[] {
+  // 기준 버전의 정확 고정도 허용 — 범위(~)면 npx expo install이 사전 빌드 기호가 안 맞는 새 패치를 깐다(2026-11-23 D0)
+  return UI_NATIVE.filter((n) => bundled[n] === undefined || (deps[n] !== bundled[n] && deps[n] !== bundled[n].replace(/^[~^]/, '')));
+}
+
+test('REQ-468 · 개편 네이티브 여덟은 직접 의존성이고 expo 권장 버전(bundledNativeModules)과 같다 — 버전 하나를 바꾼 견본은 잡힌다', () => {
+  const deps: Record<string, string> = require('./package.json').dependencies;
+  const bundled: Record<string, string> = require('expo/bundledNativeModules.json');
+  expect(offRecommended(deps, bundled)).toEqual([]);
+  expect(offRecommended({ ...deps, 'react-native-svg': '15.15.0' }, bundled)).toEqual(['react-native-svg']);
+  const { 'expo-image': _gone, ...without } = deps;
+  expect(offRecommended(without, bundled)).toEqual(['expo-image']);
+});
+
+/** node_modules 안에서 prebuilds/output(사전 빌드 xcframework)을 가진 패키지 이름. */
+function prebuiltPackages(): string[] {
+  const root = join(__dirname, 'node_modules');
+  if (!existsSync(root)) return [];
+  const names = readdirSync(root).flatMap((d) => (d.startsWith('@') ? readdirSync(join(root, d)).map((s) => `${d}/${s}`) : [d]));
+  return names.filter((n) => existsSync(join(root, n, 'prebuilds/output')));
+}
+type Lock = { packages: Record<string, { version?: string; dependencies?: Record<string, string> }> };
+/** 잠긴 버전이 기준(bundledNativeModules, 없으면 그것을 의존하는 패키지의 범위)의 ~ ^ 뗀 값과 다른 이름 — 실제 · 견본이 같은 함수를 지난다. */
+function prebuildDrift(lock: Lock, bundled: Record<string, string>, names: string[]): string[] {
+  const requiredBy = (n: string) => Object.values(lock.packages).find((p) => p.dependencies?.[n])?.dependencies?.[n];
+  return names.filter((n) => {
+    const want = (bundled[n] ?? requiredBy(n))?.replace(/^[~^]/, '');
+    return want === undefined || lock.packages[`node_modules/${n}`]?.version !== want;
+  });
+}
+
+test('REQ-468 · 사전 빌드 xcframework는 같은 SDK 묶음끼리만 기호가 맞는다(dyld Symbol missing — 2026-11-23 D0) — 사전 빌드 패키지 · expo-haptics · expo-image · expo-symbols는 잠긴 버전이 권장 기준 버전과 정확히 같다', () => {
+  // expo-image 58.0.18 사전 빌드가 expo-modules-core 58.0.26에 없는 _classTypes를 참조해 개발 빌드가 시작 직후 꺼졌다
+  const lock: Lock = require('./package-lock.json');
+  const bundled: Record<string, string> = require('expo/bundledNativeModules.json');
+  const prebuilt = prebuiltPackages();
+  // node_modules가 없으면 목록이 비어 조용히 통과한다 — 지금 있는 다섯을 하한으로 못 박는다
+  expect(prebuilt).toEqual(expect.arrayContaining(['expo-camera', 'expo-file-system', 'expo-font', 'expo-image', 'expo-modules-core']));
+  const names = [...new Set([...prebuilt, 'expo-haptics', 'expo-image', 'expo-symbols'])];
+  expect(prebuildDrift(lock, bundled, names)).toEqual([]);
+  const planted: Lock = { packages: { ...lock.packages, 'node_modules/expo-image': { ...lock.packages['node_modules/expo-image'], version: '58.0.18' } } };
+  expect(prebuildDrift(planted, bundled, names)).toEqual(['expo-image']);
+});
+
+const PLEX_FILES = [
+  './assets/fonts/IBMPlexSansKR-Regular.otf',
+  './assets/fonts/IBMPlexSansKR-Medium.otf',
+  './assets/fonts/IBMPlexSansKR-SemiBold.otf',
+  './assets/fonts/IBMPlexMono-Medium.otf',
+];
+
+test('REQ-470 · expo-font 플러그인은 Plex OTF 넷만 싣고 파일과 IBM 라이선스 원문이 있다', () => {
+  for (const v of [undefined, 'development']) {
+    const c = configWith(v);
+    expect([v, pluginProps(c, 'expo-font'), (c.plugins ?? []).includes('expo-font')]).toEqual([v, [{ fonts: PLEX_FILES }], false]);
+  }
+  for (const p of PLEX_FILES) expect([p, existsSync(join(__dirname, p))]).toEqual([p, true]);
+  const license = readFileSync(join(__dirname, 'assets/fonts/LICENSE-IBM-Plex.txt'), 'utf8');
+  expect([license.includes('SIL Open Font License'), license.includes('Plex')]).toEqual([true, true]);
 });
 
 test('REQ-192 · 두 변형 모두 ios.infoPlist.CFBundleName이 그 변형의 이름이고 Apple 한도 15자 이하다', () => {
@@ -151,11 +235,13 @@ test('REQ-168 · 카카오 두 패키지는 같은 정확 버전 3.x이고 expo-
   const core = pkg.dependencies['@react-native-kakao/core'];
   expect(core).toBe('3.0.0'); // ^ · ~ 없음 — npm latest 태그는 2.x다. 3.0.0 선택은 설계 판단 2 — 올릴 때 설계와 함께 고친다
   expect(pkg.dependencies['@react-native-kakao/user']).toBe(core); // user peer가 core를 정확히 요구한다
-  for (const n of ['expo-font', 'expo-asset', 'expo-application']) {
+  // haptics · image · symbols: ~ 범위가 사전 빌드 표류(dyld Symbol missing — 2026-11-23 D0)를 냈다 — 정확 핀으로 잠근다
+  for (const n of ['expo-font', 'expo-asset', 'expo-application', 'expo-haptics', 'expo-image', 'expo-symbols']) {
     expect([n, pkg.dependencies[n]]).toEqual([n, expect.stringMatching(/^\d+\.\d+\.\d+$/)]);
     expect([n, lock.packages[`node_modules/${n}`]?.version]).toEqual([n, pkg.dependencies[n]]);
   }
-  for (const n of ['expo-font', 'expo-asset', 'expo-modules-core', 'expo-constants', 'expo-linking', 'expo-application', 'react-native']) {
+  for (const n of ['expo-font', 'expo-asset', 'expo-modules-core', 'expo-constants', 'expo-linking', 'expo-application', 'react-native',
+    'expo-image', 'expo-camera', 'expo-file-system', 'expo-modules-jsi', 'expo-haptics', 'expo-symbols']) { // 사전 빌드 모듈은 중첩 사본도 표류다
     const copies = Object.keys(lock.packages).filter((k) => k === `node_modules/${n}` || k.endsWith(`/node_modules/${n}`));
     expect([n, copies]).toEqual([n, [`node_modules/${n}`]]);
   }
@@ -181,13 +267,21 @@ test('REQ-173 · 구글 redirectUri는 설정 스킴 둘째 칸(역순 클라이
   expect(GOOGLE_REDIRECT_URI).toBe(`${GOOGLE_SCHEME}:/oauthredirect`);
 });
 
-test('REQ-169 · 스플래시는 expo-splash-screen 한 곳에 image · imageWidth 180 · contain · 종이색으로 있고 dark가 없으며 루트 배경도 종이색이다', () => {
+test('REQ-445 · REQ-469 · 스플래시는 그림 그대로 — 라이트 바탕 · 루트 바탕 = palette.light.bg · 다크 = splash-owl-dark.png + palette.dark.bg', () => {
+  // 옛 REQ-169(종이색 · dark 없음)를 개편 배색으로 바꿨다(사용자 결정 2026-11-20 질문 3 (가)). 다크 루트 바탕은 런타임 SystemUI(U2a)
   const c = configWith(undefined);
   expect(pluginProps(c, 'expo-splash-screen')).toEqual([
-    { image: './assets/splash-owl.png', imageWidth: 180, resizeMode: 'contain', backgroundColor: color.paper },
+    {
+      image: './assets/splash-owl.png',
+      imageWidth: 180,
+      resizeMode: 'contain',
+      backgroundColor: palette.light.bg,
+      dark: { image: './assets/splash-owl-dark.png', backgroundColor: palette.dark.bg },
+    },
   ]);
-  expect(c.backgroundColor).toBe(color.paper);
+  expect(c.backgroundColor).toBe(palette.light.bg);
   expect(c.plugins).toContain('expo-system-ui');
+  expect(existsSync(join(__dirname, 'assets/splash-owl-dark.png'))).toBe(true);
 });
 
 test('REQ-170 · ios.icon은 light · dark · tinted 세 PNG를 가리키고 그 파일이 있다', () => {

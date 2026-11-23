@@ -2,7 +2,7 @@
 import { readFileSync } from 'fs';
 import { join } from 'path';
 import { inflateSync } from 'zlib';
-import { color, night } from './src/theme/tokens';
+import { color, font, night, palette } from './src/theme/tokens';
 
 type Png = { width: number; height: number; colorType: number; rgba: Uint8Array };
 
@@ -139,4 +139,70 @@ test('REQ-169 · 스플래시 PNG는 1024×1024 RGBA이고 네 모서리가 투�
     true,
     true,
   ]);
+});
+
+/** 두 PNG에서 알파가 다른 화소 수 — 크기가 다르면 던진다(같은 실루엣의 계측). */
+function alphaDiff(a: Png, b: Png): number {
+  if (a.width !== b.width || a.height !== b.height) throw new Error(`크기가 다르다 ${a.width}×${a.height} · ${b.width}×${b.height}`);
+  let n = 0;
+  for (let i = 3; i < a.rgba.length; i += 4) if (a.rgba[i] !== b.rgba[i]) n++;
+  return n;
+}
+
+test('REQ-445 · 다크 스플래시 PNG는 라이트와 크기 · 알파가 같고(같은 실루엣) 보이는 화소는 palette.dark.ink다 — 알파를 한 화소 바꾼 견본은 잡힌다', () => {
+  const L = readPng('assets/splash-owl.png'),
+    D = readPng('assets/splash-owl-dark.png');
+  expect([D.width, D.height, D.colorType]).toEqual([L.width, L.height, 6]);
+  expect(alphaDiff(L, D)).toBe(0);
+  const [ir, ig, ib] = rgb(palette.dark.ink);
+  expect(share(D, (r, g, b, a) => a > 0 && (r !== ir || g !== ig || b !== ib))).toBe(0);
+  expect(share(D, (_r, _g, _b, a) => a === 255)).toBeGreaterThan(0.15); // 빈 그림이면 위 두 줄이 공허하다(실측 19.8%)
+  const planted = { ...D, rgba: D.rgba.slice() };
+  planted.rgba[(512 * D.width + 512) * 4 + 3] ^= 0xff;
+  expect(alphaDiff(L, planted)).toBe(1);
+});
+
+// ── Plex 이름(REQ-470) — 이름 오타는 New Arch에서 로그 없이 시스템 글꼴로 떨어진다(RCTFontUtils.mm) ──
+const FONT_FILES: Record<keyof typeof font, string> = {
+  sans400: 'assets/fonts/IBMPlexSansKR-Regular.otf',
+  sans500: 'assets/fonts/IBMPlexSansKR-Medium.otf',
+  sans600: 'assets/fonts/IBMPlexSansKR-SemiBold.otf',
+  mono500: 'assets/fonts/IBMPlexMono-Medium.otf',
+};
+
+/** OTF name 표의 PostScript 이름(nameID 6) — 플랫폼마다 한 벌씩 나오므로 중복을 걷는다. 머리 · 표 목록 · name 표만 읽는다. */
+function postScriptNames(file: string): string[] {
+  const buf = readFileSync(join(__dirname, file));
+  const tag = buf.toString('latin1', 0, 4);
+  if (tag !== 'OTTO' && buf.readUInt32BE(0) !== 0x00010000) throw new Error(`${file}: OpenType이 아니다(${tag})`);
+  const numTables = buf.readUInt16BE(4);
+  let name = -1;
+  for (let i = 0; i < numTables; i++) if (buf.toString('latin1', 12 + i * 16, 16 + i * 16) === 'name') name = buf.readUInt32BE(12 + i * 16 + 8);
+  if (name < 0) throw new Error(`${file}: name 표가 없다`);
+  const count = buf.readUInt16BE(name + 2),
+    strings = name + buf.readUInt16BE(name + 4);
+  const out = new Set<string>();
+  for (let i = 0; i < count; i++) {
+    const r = name + 6 + i * 12;
+    const [platform, nameId, len, off] = [buf.readUInt16BE(r), buf.readUInt16BE(r + 6), buf.readUInt16BE(r + 8), buf.readUInt16BE(r + 10)];
+    if (nameId !== 6) continue;
+    const raw = buf.subarray(strings + off, strings + off + len);
+    out.add(platform === 1 ? raw.toString('latin1') : Buffer.from(raw).swap16().toString('utf16le'));
+  }
+  return [...out];
+}
+
+/** font 표의 이름이 그 파일의 PostScript 이름과 다른 칸 — 실제 · 심은 표가 같은 함수를 지난다. */
+function fontNameMisses(names: Record<keyof typeof font, string>): string[] {
+  return (Object.keys(FONT_FILES) as (keyof typeof font)[]).filter((k) => {
+    const ps = postScriptNames(FONT_FILES[k]);
+    return ps.length !== 1 || ps[0] !== names[k];
+  });
+}
+
+test('REQ-470 · font 넷의 이름은 실은 OTF의 PostScript 이름과 같다 — OTF name 표(nameID 6)를 읽어 대조, 한 글자 바꾼 이름은 잡힌다', () => {
+  expect(Object.keys(font).sort()).toEqual(Object.keys(FONT_FILES).sort());
+  expect(fontNameMisses(font)).toEqual([]);
+  expect(fontNameMisses({ ...font, sans500: font.sans500.slice(0, -1) + 'n' })).toEqual(['sans500']); // 끝 한 글자만 바꾼 견본
+  expect(fontNameMisses({ ...font, sans400: 'IBMPlexSansKR-Regular' })).toEqual(['sans400']); // 파일 이름을 PostScript 이름으로 착각한 견본
 });
