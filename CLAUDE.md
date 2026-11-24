@@ -116,6 +116,7 @@
      설계가 바뀌었으면 옛 기록과 화해. "plan.md에 원래 그 항목이 있었는가"와 **무관하게** 점검하고(없던 작업일수록 더),
      마무리 직전 자가 점검: **"changelog 한 줄 + plan.md 본문이 실제와 일치하는가? 안 그러면 지금 고친다."**
 5. **머지** — 사용자 확인 후. **표준 경로 = `bash .claude/scripts/pr-merge.sh <PR번호> --arm`** (레포 `allow_auto_merge=true`): `gh pr merge --auto --squash`를 걸고 → `mergeStateStatus`를 1회 점검해 **BEHIND면 `gh pr update-branch`**, DIRTY면 rebase(`--rebase` 동반 시)로 풀어준 뒤 **즉시 종료**한다 — 머지는 서버(`--auto`)가 `test` 통과 시 마저 하므로 세션을 묶지 않는다(머지 hang 클래스 제거, T-094).
+   - **main 머지 = 운영 배포** — [deploy.yml](.github/workflows/deploy.yml)이 테스트 → ECR → EC2 blue-green 전환까지 한다. 바뀐 파일이 전부 `**.md`·`claude-docs/`·`.claude/`·`app/`(앱은 EAS로 따로 게시)이면 건너뛴다. 전역 규칙의 「머지가 곧 배포인 레포」다.
    - ⚠️ **bare `gh pr merge --auto --squash` 단독은 쓰지 않는다** — 이 레포는 「머지 전 브랜치 최신화 필수」 정책 + auto-update off라 BEHIND면 영영 대기한다(T-111).
    - 스크립트 밖에서 머지하면 **`mergeStateStatus` 진단이 먼저다** — `no checks reported`는 DIRTY(충돌)여서 CI가 안 붙은 것일 수 있다(T-083). **DIRTY** → `git rebase origin/main` → `git push --force-with-lease` / **BEHIND** → `gh pr update-branch <PR>` 후 CI 재실행 / **BLOCKED** → CI 통과 후 / **CLEAN** → 즉시 머지.
    - **동기 머지(이 세션에서 끝까지 보고)** = `bash .claude/scripts/pr-merge.sh <PR번호>` (`--arm` 없이): DIRTY 즉시 차단(또는 `--rebase` 자동 해결) + BEHIND 자동 해소 + CI 폴링 + 하드 타임아웃(12분) — 머지 완료까지 확인이 필요할 때.
