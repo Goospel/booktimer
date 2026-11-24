@@ -11,6 +11,7 @@ import { Cover } from '../../components/Cover';
 import { Badge, Button, Notice, Screen, Txt, useStacked } from '../../components/ui';
 import { clockLabel, durationLabel, objectParticle } from '../../lib/format';
 import { nextMidnightOf, SESSION_CAP_MS } from '../../lib/goalProgress';
+import { haptic } from '../../lib/haptics';
 import { ALREADY_STOPPED, startMeasure, stopMeasure } from '../../lib/measureStart';
 import { measureStore } from '../../lib/measureSync';
 import { defaultStudyBook, removeStudyBook, studyMeta } from '../../lib/studyShelf';
@@ -42,6 +43,7 @@ export default function Study() {
     setBusy(true);
     setNotice(null);
     const r = await startMeasure(deps, { mode: 'study', bookId, bookTitle, blocked: !!dash?.hasActiveSession });
+    if (!r.error) haptic('rigid');
     if (r.error) setNotice({ message: r.error, tone: 'error', at: 'bar' });
     setBusy(false);
   }
@@ -51,6 +53,7 @@ export default function Study() {
     setBusy(true);
     setNotice(null);
     const r = await stopMeasure({ ...deps, serverStop: study.stop }, 'study');
+    if (!r.error) haptic('rigid');
     if (r.error) setNotice({ message: r.error, tone: 'error', at: 'bar' });
     else if (r.info) setNotice({ message: r.info, at: 'bar' });
     setBusy(false);

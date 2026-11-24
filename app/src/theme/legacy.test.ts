@@ -110,7 +110,6 @@ test('REQ-55 · fontsReady는 성공이면 참 · 실패면 참 · 진행 중이
 // (새 파일이 legacy를 읽으면 빨갛다 — 그것이 검사다). 경로는 app/ 기준.
 const LEGACY_IMPORTERS = [
   // U2b
-  'src/components/Sheet.tsx', 'src/components/ui.test.ts',
   // U3a-2
   'src/app/(tabs)/index.tsx',
   // U4
@@ -184,4 +183,38 @@ describe('legacy importer 목록(REQ-471)', () => {
     const moved = all.map((f) => (f.path === 'src/app/add.tsx' ? { ...f, text: f.text.replace(LEGACY_IMPORT, "from '../theme/tokens'") } : f));
     expect(notImporting(moved, LEGACY_IMPORTERS)).toEqual(['src/app/add.tsx']);
   });
+
+  test('REQ-471 · 다리 파일은 legacy에서 정해진 이름만 가져온다 — ui.tsx: type · stageStyle · Stage(ui.tsx에 color를 심은 견본은 잡힌다)', () => {
+    const all = scanned();
+    expect(Object.keys(BRIDGE_NAMES).every((p) => LEGACY_IMPORTERS.includes(p))).toBe(true);
+    expect(bridgeLeaks(all)).toEqual([]);
+    expect(Object.keys(BRIDGE_NAMES).every((p) => importedNames(all.find((f) => f.path === p)!.text).length > 0)).toBe(true); // 빈 이름 초록 방지
+    const planted = all.map((f) =>
+      f.path === 'src/components/ui.tsx' ? { ...f, text: f.text.replace(/import \{([^}]*)\} from '\.\.\/theme\/legacy'/, "import { color,$1} from '../theme/legacy'") } : f,
+    );
+    expect(bridgeLeaks(planted)).toEqual(['src/components/ui.tsx: color']);
+    const extra = (line: string) => bridgeLeaks(all.map((f) => (f.path === 'src/components/ui.tsx' ? { ...f, text: `${line}\n${f.text}` } : f)));
+    expect(extra("import * as L from '../theme/legacy';")).toEqual(['src/components/ui.tsx: *']); // namespace 꼴
+    expect(extra("import legacy from '../theme/legacy';")).toEqual(['src/components/ui.tsx: default']); // default 꼴
+  });
 });
+
+// 다리 파일(안 옮긴 화면의 옛 단계 · 옛 표지 크기를 그려 주는 파일)이 legacy에서 가져와도 되는 이름 — U3a-1이 Cover.tsx를 더한다 · U9에서 지운다
+const BRIDGE_NAMES: Record<string, string[]> = { 'src/components/ui.tsx': ['type', 'stageStyle', 'Stage'] };
+/** legacy import 문들이 가져오는 이름(`type X` · `X as Y`는 X · `* as X`는 '*' · default는 'default') */
+function importedNames(text: string): string[] {
+  const re = /import\s+(?:type\s+)?([^'";]*?)\s*from\s*['"](?:\.{1,2}\/)+(?:src\/)?(?:theme\/)?legacy['"]/g;
+  return [...text.matchAll(re)].flatMap((m) => {
+    const named = /\{([^}]*)\}/.exec(m[1])?.[1] ?? '';
+    const rest = m[1].replace(/\{[^}]*\}/, '');
+    return [
+      ...(/^\s*[\w$]+/.test(rest) ? ['default'] : []),
+      ...(rest.includes('*') ? ['*'] : []),
+      ...named.split(',').map((n) => n.trim().replace(/^type\s+/, '').split(/\s+as\s+/)[0]).filter(Boolean),
+    ];
+  });
+}
+const bridgeLeaks = (all: { path: string; text: string }[]) =>
+  Object.entries(BRIDGE_NAMES).flatMap(([p, ok]) =>
+    importedNames(all.find((f) => f.path === p)?.text ?? '').filter((n) => !ok.includes(n)).map((n) => `${p}: ${n}`),
+  );

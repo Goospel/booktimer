@@ -11,6 +11,7 @@ import { Cover } from '../../components/Cover';
 import { confirmRemoveNote, NoteRow } from '../../components/NoteRow';
 import { Badge, base, Button, Notice, Screen, Txt, useStacked } from '../../components/ui';
 import { durationLabel } from '../../lib/format';
+import { haptic } from '../../lib/haptics';
 import { noteHref, pendingLeave, savedNotice } from '../../lib/marginSave';
 import { startFromBook } from '../../lib/measureStart';
 import { loadDashboard, measureStore } from '../../lib/measureSync';
@@ -68,6 +69,7 @@ export default function Book() {
     setNotice(null);
     const r = await startFromBook({ store: measureStore, load: loadDashboard }, book);
     setStarting(false);
+    if (r.started) haptic('rigid');
     if (r.error) setNotice({ message: r.error, tone: 'error' });
     else if (r.started) router.dismissTo('/');
   }
