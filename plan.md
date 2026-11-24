@@ -4492,6 +4492,9 @@ package-private static이라 호출이 공짜였고, 복제하면 0초 조각 �
 
 ## 🧹 기술 부채 / 후속 정리
 
+### ✅ CLAUDE.md에 「main 머지 = 운영 배포」 한 줄 (2026-11-24)
+- ✅ 머지 절차(5번) 아래에 한 줄 — 전역 규칙이 「머지가 곧 배포인 레포」의 PR에는 「이 세션 내내 머지」 버튼을 두지 않으므로, `deploy.yml`을 읽지 않아도 BookTimer를 배포 레포로 알아보게. 근거 = `deploy.yml`의 `on.push.branches: [main]` · `paths-ignore`(`**.md`·`claude-docs/**`·`.claude/**`·`app/**`) · 테스트 → ECR → SSM blue-green 단계
+
 ### ✅ CLAUDE.md 다이어트 — 낡은 값 정정 · 배경은 참조 문서로 (2026-11-15)
 - ✅ 루트 `CLAUDE.md` 431줄 · 32,642자 → 358줄 · 26,560자(UTF-16 · CR 제외) — 규칙 문장은 두고 경위·사례는 `claude-docs/claude-md-reference.md`로(옛 원문을 여는 법과, 목적지가 본문에 안 나오는 상세의 행방은 그 문서 맨 끝)
 - ✅ 낡은 값·어긋난 규칙: designer 모델·effort 사본 삭제(정의 파일이 단일 출처) · 스토어 스크린샷 목록 · 번들 훅 「garden-only」 · 분기 기준 `origin/main` · 브라우저 단일 출처 포인터 · 「커밋/푸시 시점」 절 삭제 · 승격 목적지 보강
